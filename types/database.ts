@@ -53,6 +53,45 @@ export type Database = {
         }
         Relationships: []
       }
+      ai_processing_queue: {
+        Row: {
+          created_at: string | null
+          error_message: string | null
+          id: string
+          input_image_url: string | null
+          input_text: string | null
+          processed_at: string | null
+          result_json: Json | null
+          status: string | null
+          task_type: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          error_message?: string | null
+          id?: string
+          input_image_url?: string | null
+          input_text?: string | null
+          processed_at?: string | null
+          result_json?: Json | null
+          status?: string | null
+          task_type?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          error_message?: string | null
+          id?: string
+          input_image_url?: string | null
+          input_text?: string | null
+          processed_at?: string | null
+          result_json?: Json | null
+          status?: string | null
+          task_type?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       body_metrics: {
         Row: {
           ai_analysis: string | null
@@ -178,6 +217,7 @@ export type Database = {
       }
       exercise_library: {
         Row: {
+          aliases: string[] | null
           category: string | null
           created_at: string | null
           description: string | null
@@ -189,6 +229,7 @@ export type Database = {
           video_url: string | null
         }
         Insert: {
+          aliases?: string[] | null
           category?: string | null
           created_at?: string | null
           description?: string | null
@@ -200,6 +241,7 @@ export type Database = {
           video_url?: string | null
         }
         Update: {
+          aliases?: string[] | null
           category?: string | null
           created_at?: string | null
           description?: string | null
@@ -338,8 +380,54 @@ export type Database = {
         }
         Relationships: []
       }
+      template_exercises: {
+        Row: {
+          created_at: string | null
+          default_reps: number | null
+          default_sets: number | null
+          exercise_id: string | null
+          id: string
+          order_index: number
+          template_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          default_reps?: number | null
+          default_sets?: number | null
+          exercise_id?: string | null
+          id?: string
+          order_index: number
+          template_id: string
+        }
+        Update: {
+          created_at?: string | null
+          default_reps?: number | null
+          default_sets?: number | null
+          exercise_id?: string | null
+          id?: string
+          order_index?: number
+          template_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "template_exercises_exercise_id_fkey"
+            columns: ["exercise_id"]
+            isOneToOne: false
+            referencedRelation: "exercise_library"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "template_exercises_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "workout_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       workout_logs: {
         Row: {
+          calculated_1rm: number | null
           created_at: string | null
           exercise_id: string | null
           exercise_name: string
@@ -357,6 +445,7 @@ export type Database = {
           workout_id: string
         }
         Insert: {
+          calculated_1rm?: number | null
           created_at?: string | null
           exercise_id?: string | null
           exercise_name: string
@@ -374,6 +463,7 @@ export type Database = {
           workout_id: string
         }
         Update: {
+          calculated_1rm?: number | null
           created_at?: string | null
           exercise_id?: string | null
           exercise_name?: string
@@ -507,6 +597,7 @@ export type Database = {
           avg_rpe: number | null
           date: string | null
           exercise_name: string | null
+          max_estimated_1rm: number | null
           max_reps: number | null
           max_weight: number | null
           user_id: string | null
@@ -517,6 +608,7 @@ export type Database = {
       user_workout_summary: {
         Row: {
           average_rpe: number | null
+          best_estimated_1rm: number | null
           date: string | null
           duration_minutes: number | null
           status: string | null
