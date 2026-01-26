@@ -1,6 +1,14 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
+const redirectMap: Record<string, string> = {
+  "/signin": "/login",
+  "/sign-in": "/login",
+  "/signup": "/register",
+  "/sign-up": "/register",
+};
+
+
 export async function updateSession(request: NextRequest) {
   // 1. Create an unmodified response
   let supabaseResponse = NextResponse.next({
@@ -31,9 +39,17 @@ export async function updateSession(request: NextRequest) {
   // This will call 'setAll' above if the token needs refreshing
   const { data: { user } } = await supabase.auth.getUser()
 
+  // 3.5 Handle static redirects for signin/signup
+  const pathname = request.nextUrl.pathname.toLowerCase()
+  if (redirectMap[pathname]) {
+    const url = request.nextUrl.clone()
+    url.pathname = redirectMap[pathname]
+    return NextResponse.redirect(url)
+  }
+
   // 4. Protect Routes
   // This array contains all the paths you want to secure
-  const protectedPaths = ['/dashboard', '/workouts', '/exercises', '/progress', '/settings'];
+  const protectedPaths = ['/dashboard', '/workouts', '/exercises', '/progress', '/settings', 'programs'];
 
   // Check if the current path starts with any of the protected paths
   const isProtected = protectedPaths.some(path => request.nextUrl.pathname.startsWith(path));

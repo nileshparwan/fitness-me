@@ -380,6 +380,95 @@ export type Database = {
         }
         Relationships: []
       }
+      program_items: {
+        Row: {
+          created_at: string | null
+          day_label: string | null
+          id: string
+          item_type: string
+          nutrition_log_id: string | null
+          order_index: number | null
+          program_id: string
+          workout_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          day_label?: string | null
+          id?: string
+          item_type: string
+          nutrition_log_id?: string | null
+          order_index?: number | null
+          program_id: string
+          workout_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          day_label?: string | null
+          id?: string
+          item_type?: string
+          nutrition_log_id?: string | null
+          order_index?: number | null
+          program_id?: string
+          workout_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "program_items_nutrition_log_id_fkey"
+            columns: ["nutrition_log_id"]
+            isOneToOne: false
+            referencedRelation: "nutrition_logs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "program_items_program_id_fkey"
+            columns: ["program_id"]
+            isOneToOne: false
+            referencedRelation: "programs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "program_items_workout_id_fkey"
+            columns: ["workout_id"]
+            isOneToOne: false
+            referencedRelation: "user_workout_summary"
+            referencedColumns: ["workout_id"]
+          },
+          {
+            foreignKeyName: "program_items_workout_id_fkey"
+            columns: ["workout_id"]
+            isOneToOne: false
+            referencedRelation: "workouts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      programs: {
+        Row: {
+          created_at: string | null
+          description: string | null
+          id: string
+          is_active: boolean | null
+          name: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       template_exercises: {
         Row: {
           created_at: string | null

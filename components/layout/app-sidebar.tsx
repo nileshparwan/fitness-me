@@ -16,7 +16,9 @@ import {
   Utensils,
   TrendingUp,
   LineChart,
-  LayoutDashboard
+  LayoutDashboard,
+  ChartBarIncreasing,
+  Folder
 } from "lucide-react"
 
 import {
@@ -46,6 +48,7 @@ const data = {
   mainNav: [
     { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
     { title: "Workouts", url: "/workouts", icon: Dumbbell },
+    { title: "Programs", url: "/programs", icon: Folder },
     { title: "Exercises", url: "/exercises", icon: BookOpen },
     { title: "Progress", url: "/progress", icon: TrendingUp },
     { title: "Nutrition", url: "/progress/nutrition", icon: Utensils },

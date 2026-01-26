@@ -22,6 +22,7 @@ export const workoutFormSchema = z.object({
   notes: z.string().optional(),
   date: z.date().default(() => new Date()),
   exercises: z.array(exerciseSchema),
+  programIds: z.array(z.string()).optional(),
 });
 
 export type WorkoutFormValues = z.infer<typeof workoutFormSchema>;

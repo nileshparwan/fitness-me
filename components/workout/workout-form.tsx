@@ -4,14 +4,14 @@ import { useState } from "react";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
-import { CalendarIcon, Loader2, Save, Trash2, Sparkles } from "lucide-react";
+import { CalendarIcon, Loader2, Save, Sparkles } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Form, FormControl, FormField, FormItem, FormMessage } from "@/components/ui/form";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
@@ -21,10 +21,14 @@ import { ExerciseSelector } from "./exercise-selector";
 
 // Import Hooks & Actions
 import { useUser } from "@/hooks/use-user";
-import { saveWorkoutFromText } from "@/app/actions/workout-ai"; 
+import { saveWorkoutFromText } from "@/app/actions/workout-ai";
 import { ExerciseCard } from "./exercise-card";
 import { WorkoutFormValues, workoutFormSchema } from "@/types/workout";
 import { useWorkouts } from "@/hooks/use-workout";
+import { usePrograms } from "@/hooks/use-program";
+import { MultiSelect } from "@/components/program/multiple-select";
+import { useSearchParams } from "next/navigation";
+import { linkWorkoutToPrograms } from "@/app/actions/program";
 
 interface WorkoutFormProps {
   initialData?: WorkoutFormValues;
@@ -35,7 +39,10 @@ export function WorkoutForm({ initialData, workoutId }: WorkoutFormProps) {
   const router = useRouter();
   const { data: user } = useUser();
   const { createWorkout, updateWorkout } = useWorkouts();
-  
+  const { programs } = usePrograms();
+  const searchParams = useSearchParams();
+  const autoLinkProgramId = searchParams.get("programId");
+
   // State for Tabs
   const [mode, setMode] = useState<"form" | "text">("form");
   const [aiText, setAiText] = useState("");
@@ -57,14 +64,36 @@ export function WorkoutForm({ initialData, workoutId }: WorkoutFormProps) {
     name: "exercises",
   });
 
+  // Prepare options for MultiSelect
+  const programOptions = programs.data?.map((p: any) => ({
+    label: p.name,
+    value: p.id
+  })) || [];
+
   // --- HANDLER: Structured Form Submit ---
   async function onFormSubmit(data: WorkoutFormValues) {
     try {
+      let savedWorkout;
+
       if (workoutId) {
+        // Update Logic...
         await updateWorkout.mutateAsync({ id: workoutId, data });
-        router.push(`/workouts/${workoutId}`);
+        savedWorkout = { id: workoutId };
       } else {
-        await createWorkout.mutateAsync(data);
+        // Create Logic...
+        savedWorkout = await createWorkout.mutateAsync(data);
+      }
+
+      // --- NEW: Requirement #6 ---
+      if (autoLinkProgramId && savedWorkout?.id) {
+        await linkWorkoutToPrograms(savedWorkout.id, [autoLinkProgramId]);
+        toast.success("Linked to Program!");
+      }
+
+      // Redirect back to program if it came from there
+      if (autoLinkProgramId) {
+        router.push(`/programs/${autoLinkProgramId}`);
+      } else {
         router.push("/workouts");
       }
     } catch (error) {
@@ -81,9 +110,9 @@ export function WorkoutForm({ initialData, workoutId }: WorkoutFormProps) {
     try {
       // Use the date from the form picker even in Text Mode
       const selectedDate = form.getValues("date");
-      
+
       const result = await saveWorkoutFromText(user.id, aiText, selectedDate);
-      
+
       toast.success(`Success! Created ${result.count} workout(s)`);
       router.push("/workouts");
     } catch (error: any) {
@@ -98,7 +127,7 @@ export function WorkoutForm({ initialData, workoutId }: WorkoutFormProps) {
 
   return (
     <div className="max-w-3xl mx-auto pb-20 space-y-6">
-      
+
       {/* MODE TOGGLE */}
       <Tabs value={mode} onValueChange={(v) => setMode(v as any)} className="w-full">
         <TabsList className="grid w-full grid-cols-2">
@@ -113,7 +142,7 @@ export function WorkoutForm({ initialData, workoutId }: WorkoutFormProps) {
         <TabsContent value="form">
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onFormSubmit)} className="space-y-8">
-              
+
               {/* Header Section (Name & Date) */}
               <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                 <div className="flex-1 space-y-2">
@@ -123,16 +152,16 @@ export function WorkoutForm({ initialData, workoutId }: WorkoutFormProps) {
                     render={({ field }) => (
                       <FormItem>
                         <FormControl>
-                          <Input 
-                            placeholder="Workout Name (e.g., Pull Day)" 
+                          <Input
+                            placeholder="Workout Name (e.g., Pull Day)"
                             className="text-2xl font-bold border-none px-0 shadow-none focus-visible:ring-0 h-auto"
-                            {...field} 
+                            {...field}
                           />
                         </FormControl>
                       </FormItem>
                     )}
                   />
-                  
+
                   <FormField
                     control={form.control}
                     name="date"
@@ -155,7 +184,7 @@ export function WorkoutForm({ initialData, workoutId }: WorkoutFormProps) {
                     )}
                   />
                 </div>
-                
+
                 <Button type="submit" disabled={isSaving}>
                   {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   <Save className="mr-2 h-4 w-4" />
@@ -163,25 +192,46 @@ export function WorkoutForm({ initialData, workoutId }: WorkoutFormProps) {
                 </Button>
               </div>
 
+              <FormField
+                control={form.control}
+                name="programIds"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Add to Programs (Optional)</FormLabel>
+                    <FormControl>
+                      <MultiSelect
+                        selected={field.value || []}
+                        options={programOptions}
+                        onChange={field.onChange}
+                        placeholder="Select programs..."
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
               {/* Exercises List */}
               <div className="space-y-6">
                 {fields.map((field, index) => (
-                  <ExerciseCard 
-                    key={field.id} 
-                    index={index} 
-                    remove={() => remove(index)} 
-                    form={form} 
+                  <ExerciseCard
+                    key={field.id}
+                    index={index}
+                    remove={() => remove(index)}
+                    form={form}
                   />
                 ))}
-                
-                <ExerciseSelector 
-                  onSelect={(ex) => append({ 
-                    exercise_id: ex.id, 
-                    name: ex.name, 
+
+                <ExerciseSelector
+                  onSelect={(ex) => append({
+                    exercise_id: ex.id,
+                    name: ex.name,
                     sets: [{ set_number: 1, reps: 0, weight: 0, is_completed: false }]
-                  })} 
+                  })}
                 />
               </div>
+
+
             </form>
           </Form>
         </TabsContent>
@@ -193,34 +243,34 @@ export function WorkoutForm({ initialData, workoutId }: WorkoutFormProps) {
               <CardTitle>Paste Your Plan</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-               <p className="text-sm text-muted-foreground">
-                 Paste your full workout below. We'll automatically identify exercises, sets, reps, and weights. 
-                 <br />
-                 <strong>Tip:</strong> You can paste an entire week's schedule (Day 1... Day 5) and we will create separate workouts for each.
-               </p>
-               
-               <Textarea 
-                 placeholder={`Example:\nDay 1: Chest\nBench Press: 3 sets of 10 @ 60kg\nIncline DB Press: 3x12...`}
-                 className="min-h-[300px] font-mono text-sm"
-                 value={aiText}
-                 onChange={(e) => setAiText(e.target.value)}
-               />
+              <p className="text-sm text-muted-foreground">
+                Paste your full workout below. We'll automatically identify exercises, sets, reps, and weights.
+                <br />
+                <strong>Tip:</strong> You can paste an entire week's schedule (Day 1... Day 5) and we will create separate workouts for each.
+              </p>
 
-               <div className="flex justify-end">
-                 <Button onClick={onTextSubmit} disabled={isSaving}>
-                    {isSaving ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Analyzing & Saving...
-                      </>
-                    ) : (
-                      <>
-                        <Sparkles className="mr-2 h-4 w-4" />
-                        Process with AI
-                      </>
-                    )}
-                 </Button>
-               </div>
+              <Textarea
+                placeholder={`Example:\nDay 1: Chest\nBench Press: 3 sets of 10 @ 60kg\nIncline DB Press: 3x12...`}
+                className="min-h-[300px] font-mono text-sm"
+                value={aiText}
+                onChange={(e) => setAiText(e.target.value)}
+              />
+
+              <div className="flex justify-end">
+                <Button onClick={onTextSubmit} disabled={isSaving}>
+                  {isSaving ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Analyzing & Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="mr-2 h-4 w-4" />
+                      Process with AI
+                    </>
+                  )}
+                </Button>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
