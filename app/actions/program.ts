@@ -3,6 +3,13 @@
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 
+type ReorderItem = {
+    id: string;
+    order_index: number;
+    item_type: string; // <--- Added this
+    day_label?: string; // Optional but good to preserve
+};
+
 export async function createProgram(formData: FormData) {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
@@ -92,22 +99,29 @@ export async function removeItemsFromProgram(itemIds: string[], programId: strin
 }
 
 // 3. Reorder Items (Drag & Drop Persistence)
-export async function updateProgramItemOrder(items: { id: string; order_index: number }[], programId: string) {
+export async function updateProgramItemOrder(items: ReorderItem[], programId: string) {
     const supabase = await createClient();
-    
-    // ERROR FIX: Cast 'items' to 'any'
-    // We do this because 'upsert' types demand all required columns (like item_type) 
-    // to be present in case of an INSERT. Since we are updating by ID, 
-    // we can bypass this strict check.
+
+    // We map the incoming items to a payload that satisfies the DB constraints
+    const payload = items.map((item) => ({
+        id: item.id,
+        program_id: programId, // Required for RLS
+        item_type: item.item_type, // Required for NOT NULL constraint
+        order_index: item.order_index,
+        day_label: item.day_label || "Unscheduled" // Preserve or default
+    }));
+
     const { error } = await supabase
-      .from("program_items")
-      .upsert(items as any, { onConflict: 'id' });
-  
-    if (error) throw new Error(error.message);
-    
-    // Revalidate the specific program page to show new order
+        .from("program_items")
+        .upsert(payload, { onConflict: 'id' });
+
+    if (error) {
+        console.error("Reorder Error:", error.message);
+        throw new Error(error.message);
+    }
+
     revalidatePath(`/programs/${programId}`);
-  }
+}
 
 // 4. Reverse Link (Used in Workout Form)
 export async function linkWorkoutToPrograms(workoutId: string, programIds: string[]) {

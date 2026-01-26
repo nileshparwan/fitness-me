@@ -25,7 +25,7 @@ import { Button } from "@/components/ui/button";
 import { LayoutTemplate, PanelRightClose, PanelRightOpen } from "lucide-react";
 import { useProgramStore } from "@/stores/use-program-store";
 import { addWorkoutsToProgram, updateProgramItemOrder } from "@/app/actions/program";
-import { WorkoutPicker } from "../workout/workout-picker";
+import { WorkoutPicker } from "../workout/workout-picker"; // Verify path
 
 export function ProgramBuilder({ program, allWorkouts }: { program: any; allWorkouts: any[] }) {
   // 1. Connect to Store
@@ -36,6 +36,7 @@ export function ProgramBuilder({ program, allWorkouts }: { program: any; allWork
 
   // 2. Sync Initial DB Data to Store
   useEffect(() => {
+    // Ensure we map any missing fields if necessary, though DB should provide them
     const sorted = program.program_items?.sort((a: any, b: any) => a.order_index - b.order_index) || [];
     setItems(sorted);
   }, [program.program_items, setItems]);
@@ -77,7 +78,7 @@ export function ProgramBuilder({ program, allWorkouts }: { program: any; allWork
         const workoutData = active.data.current?.workout;
         const tempId = `temp-${Date.now()}`;
         
-        // Add to Store (Instant UI update + Removes from sidebar via filter)
+        // Add to Store (Instant UI update)
         addItem({
           id: tempId,
           workout_id: rawId,
@@ -93,9 +94,8 @@ export function ProgramBuilder({ program, allWorkouts }: { program: any; allWork
           await addWorkoutsToProgram(program.id, [rawId]);
           toast.success("Added to program");
         } catch (error) {
-          // Revert store if failed (optional, but good practice)
-          // removeItem(tempId); 
           toast.error("Failed to save");
+          // Optionally revert store here
         }
       }
       return;
@@ -106,18 +106,28 @@ export function ProgramBuilder({ program, allWorkouts }: { program: any; allWork
       const oldIndex = items.findIndex((i) => i.id === active.id);
       const newIndex = items.findIndex((i) => i.id === over.id);
       
-      // Update Store immediately
+      // 1. Update Store immediately (Optimistic UI)
       moveItem(oldIndex, newIndex);
 
-      // Sync DB
-      // We need to calculate the new order based on the array state *after* the move
-      // Use a timeout or access the state directly to get the fresh order
+      // 2. Prepare payload for DB
+      // We must get the fresh state AFTER the move to calculate correct indices
       const freshItems = useProgramStore.getState().items;
+      
+      // --- FIX IS HERE ---
+      // We map 'item_type' and 'day_label' so the Server Action accepts the data
       const updates = freshItems.map((item, index) => ({
         id: item.id,
         order_index: index,
+        item_type: item.item_type || "workout", // Required by DB Not-Null constraint
+        day_label: item.day_label,
       }));
-      updateProgramItemOrder(updates, program.id);
+
+      // 3. Call Server Action
+      try {
+        await updateProgramItemOrder(updates, program.id);
+      } catch (error) {
+        toast.error("Failed to save order");
+      }
     }
   };
 
@@ -128,7 +138,7 @@ export function ProgramBuilder({ program, allWorkouts }: { program: any; allWork
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >
-      <div className="flex h-auto gap-6">
+      <div className="flex flex-col lg:flex-row h-[calc(100vh-12rem)] gap-6">
         
         {/* LEFT: TIMELINE */}
         <div className="flex-1 flex flex-col min-w-0">
@@ -145,7 +155,7 @@ export function ProgramBuilder({ program, allWorkouts }: { program: any; allWork
              )}
           </header>
 
-          <div className="flex-1 overflow-y-auto bg-muted/10 border rounded-xl p-2 md:p-4 scroll-smooth">
+          <div className="flex-1 overflow-y-auto bg-muted/10 border rounded-xl p-2 md:p-4 scroll-smooth relative">
              <ProgramTimeline items={items} programId={program.id} />
              {!isDesktop && <div className="mt-8 flex justify-center pb-20"><WorkoutPicker programId={program.id} /></div>}
           </div>
