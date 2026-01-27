@@ -22,21 +22,23 @@ interface MultiSelectProps {
 export function MultiSelect({ options, selected, onChange, placeholder }: MultiSelectProps) {
   const [open, setOpen] = React.useState(false);
   const [inputValue, setInputValue] = React.useState("");
+  const inputRef = React.useRef<HTMLInputElement>(null); 
 
   const handleUnselect = (value: string) => {
     onChange(selected.filter((s) => s !== value));
   };
 
   const handleSelect = (value: string) => {
+    setInputValue("");
     if (selected.includes(value)) {
       handleUnselect(value);
     } else {
       onChange([...selected, value]);
     }
-    setInputValue("");
+    // Keep focus on input after selection so user can select more
+    setTimeout(() => inputRef.current?.focus(), 0);
   };
 
-  // Filter available options to hide already selected ones from the dropdown
   const selectables = options.filter((option) => !selected.includes(option.value));
 
   return (
@@ -66,11 +68,8 @@ export function MultiSelect({ options, selected, onChange, placeholder }: MultiS
               </Badge>
             );
           })}
-          {/* Avoid having the input grow too large */}
           <CommandPrimitive.Input
-            ref={(input) => {
-              if (input) input.focus();
-            }}
+            ref={inputRef} // Fixed Ref
             value={inputValue}
             onValueChange={setInputValue}
             onBlur={() => setOpen(false)}
@@ -82,7 +81,7 @@ export function MultiSelect({ options, selected, onChange, placeholder }: MultiS
       </div>
       <div className="relative mt-2">
         {open && selectables.length > 0 ? (
-          <div className="absolute w-full z-10 top-0 rounded-md border bg-popover text-popover-foreground shadow-md outline-none animate-in">
+          <div className="absolute w-full z-10 top-0 rounded-md border bg-popover text-popover-foreground shadow-md outline-none animate-in fade-in-0 zoom-in-95">
             <CommandList>
               <CommandGroup className="h-full overflow-auto max-h-60">
                 {selectables.map((option) => (

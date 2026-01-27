@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
+import { v4 as uuidv4 } from 'uuid';
 
 // Load environment variables
 dotenv.config({ path: '.env.local' });
@@ -12,7 +13,7 @@ if (!supabaseUrl || !serviceRoleKey) {
   process.exit(1);
 }
 
-// Initialize Supabase Admin Client (needed to manipulate auth.users)
+// Initialize Supabase Admin Client
 const supabase = createClient(supabaseUrl, serviceRoleKey, {
   auth: {
     autoRefreshToken: false,
@@ -20,156 +21,288 @@ const supabase = createClient(supabaseUrl, serviceRoleKey, {
   },
 });
 
+const ADMIN_EMAIL = 'admin@example.com';
+const ADMIN_PASSWORD = 'password123';
+
 const main = async () => {
-  console.log('🌱 Starting database seed...');
+  console.log('🚨 STARTING DATABASE RESET & SEED 🚨');
 
   // ==========================================
-  // 1. SEED EXERCISE LIBRARY (5+ Entries)
+  // 1. CLEANUP (DELETE EXISTING DATA)
   // ==========================================
-  console.log('💪 Seeding Exercise Library...');
-//   const exercises = [
-//     { name: 'Barbell Squat', category: 'legs', muscle_groups: ['quads', 'glutes'], equipment: 'barbell', difficulty: 'intermediate' },
-//     { name: 'Bench Press', category: 'chest', muscle_groups: ['chest', 'triceps'], equipment: 'barbell', difficulty: 'intermediate' },
-//     { name: 'Deadlift', category: 'back', muscle_groups: ['back', 'hamstrings'], equipment: 'barbell', difficulty: 'advanced' },
-//     { name: 'Overhead Press', category: 'shoulders', muscle_groups: ['shoulders'], equipment: 'barbell', difficulty: 'intermediate' },
-//     { name: 'Pull Up', category: 'back', muscle_groups: ['lats', 'biceps'], equipment: 'bodyweight', difficulty: 'intermediate' },
-//     { name: 'Dumbbell Curl', category: 'arms', muscle_groups: ['biceps'], equipment: 'dumbbell', difficulty: 'beginner' },
-//     { name: 'Tricep Extension', category: 'arms', muscle_groups: ['triceps'], equipment: 'cable', difficulty: 'beginner' },
-//   ];
+  console.log('🧹 Cleaning up existing data...');
+  
+  // Order matters due to Foreign Key constraints
+  const tables = [
+    'ai_processing_queue', 'ai_insights', 'nutrition_logs', 'body_metrics', 
+    'cardio_logs', 'workout_logs', 'template_exercises', 'program_items',
+    'workouts', 'workout_templates', 'programs', 'goals', 'profiles', 
+    'exercise_library'
+  ];
 
-  // Upsert exercises to avoid duplicates
+  for (const table of tables) {
+    const { error } = await supabase.from(table).delete().neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all
+    if (error) console.error(`Error cleaning ${table}:`, error.message);
+  }
+
+  // Clean up Auth User (if exists)
+  const { data: existingUsers } = await supabase.auth.admin.listUsers();
+  const existingAdmin = existingUsers.users.find(u => u.email === ADMIN_EMAIL);
+  
+  if (existingAdmin) {
+    console.log('🗑️ Deleting existing admin user...');
+    await supabase.auth.admin.deleteUser(existingAdmin.id);
+  }
+
+  console.log('✨ Database clean. Starting Seed...');
+
+  // ==========================================
+  // 2. SEED EXERCISE LIBRARY (15+ ENTRIES)
+  // ==========================================
+  console.log('💪 Seeding Exercise Library (15+ items)...');
+  const exercises = [
+    { name: 'Barbell Squat', category: 'legs', muscle_groups: ['quadriceps', 'glutes', 'core'], equipment: 'barbell', difficulty: 'intermediate' },
+    { name: 'Bench Press', category: 'chest', muscle_groups: ['pectorals', 'triceps'], equipment: 'barbell', difficulty: 'intermediate' },
+    { name: 'Deadlift', category: 'back', muscle_groups: ['hamstrings', 'glutes', 'lower back'], equipment: 'barbell', difficulty: 'advanced' },
+    { name: 'Overhead Press', category: 'shoulders', muscle_groups: ['anterior deltoids'], equipment: 'barbell', difficulty: 'intermediate' },
+    { name: 'Pull Up', category: 'back', muscle_groups: ['lats', 'biceps'], equipment: 'bodyweight', difficulty: 'intermediate' },
+    { name: 'Dumbbell Curl', category: 'arms', muscle_groups: ['biceps'], equipment: 'dumbbell', difficulty: 'beginner' },
+    { name: 'Tricep Rope Pushdown', category: 'arms', muscle_groups: ['triceps'], equipment: 'cable', difficulty: 'beginner' },
+    { name: 'Leg Press', category: 'legs', muscle_groups: ['quadriceps'], equipment: 'machine', difficulty: 'beginner' },
+    { name: 'Lat Pulldown', category: 'back', muscle_groups: ['lats'], equipment: 'cable', difficulty: 'beginner' },
+    { name: 'Walking Lunges', category: 'legs', muscle_groups: ['quadriceps', 'glutes'], equipment: 'dumbbell', difficulty: 'intermediate' },
+    { name: 'Face Pulls', category: 'shoulders', muscle_groups: ['rear deltoids'], equipment: 'cable', difficulty: 'beginner' },
+    { name: 'Incline Dumbbell Press', category: 'chest', muscle_groups: ['upper chest'], equipment: 'dumbbell', difficulty: 'intermediate' },
+    { name: 'Romanian Deadlift', category: 'legs', muscle_groups: ['hamstrings'], equipment: 'barbell', difficulty: 'intermediate' },
+    { name: 'Plank', category: 'core', muscle_groups: ['core'], equipment: 'bodyweight', difficulty: 'beginner' },
+    { name: 'Russian Twists', category: 'core', muscle_groups: ['obliques'], equipment: 'bodyweight', difficulty: 'beginner' },
+    { name: 'Running', category: 'cardio', muscle_groups: ['legs', 'heart'], equipment: 'bodyweight', difficulty: 'beginner' },
+    { name: 'Cycling', category: 'cardio', muscle_groups: ['legs', 'heart'], equipment: 'machine', difficulty: 'beginner' }
+  ];
+
   const { data: exerciseData, error: exError } = await supabase
     .from('exercise_library')
-    // .upsert(exercises, { onConflict: 'name' })
+    .insert(exercises)
     .select();
 
   if (exError) throw new Error(`Exercise insert failed: ${exError.message}`);
   
-  // Store IDs for later use
-  const exIds = exerciseData.map(e => e.id);
+  // Helper to find ID by Name
+  const getExId = (name: string) => exerciseData.find(e => e.name === name)?.id;
 
 
   // ==========================================
-  // 2. CREATE 5 DUMMY USERS
+  // 3. CREATE ADMIN USER
   // ==========================================
-  console.log('👥 Creating 5 Users...');
-  const users = [];
+  console.log(`👤 Creating Admin User: ${ADMIN_EMAIL}...`);
+  
+  const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+    email: ADMIN_EMAIL,
+    password: ADMIN_PASSWORD,
+    email_confirm: true,
+    user_metadata: { full_name: 'Admin User' }
+  });
 
-  for (let i = 1; i <= 5; i++) {
-    const email = `athlete${i}_${Date.now()}@example.com`;
-    const password = 'password123';
+  if (authError || !authData.user) throw new Error(`Auth create failed: ${authError?.message}`);
+  const userId = authData.user.id;
 
-    // Create Auth User
-    const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-      email,
-      password,
-      email_confirm: true,
-    });
+  // ==========================================
+  // 4. USER PROFILE & GOALS
+  // ==========================================
+  console.log('📝 Setting up Profile and Goals...');
 
-    if (authError) {
-      console.error(`Error creating user ${email}:`, authError.message);
-      continue;
-    }
+  await supabase.from('profiles').insert({
+    id: userId,
+    display_name: 'Admin Coach',
+    height: 180,
+    birth_date: '1990-01-01',
+    gender: 'male',
+    activity_level: 'very_active',
+    preferred_units: 'metric'
+  });
 
-    users.push(authData.user.id);
+  await supabase.from('goals').insert({
+    user_id: userId,
+    goal_type: 'strength',
+    target_weight: 85,
+    target_body_fat_percent: 12,
+    target_date: new Date(Date.now() + 1000 * 60 * 60 * 24 * 90).toISOString(),
+    status: 'active'
+  });
+
+  // ==========================================
+  // 5. WORKOUT TEMPLATES
+  // ==========================================
+  console.log('📋 Creating Templates...');
+  
+  const { data: template } = await supabase.from('workout_templates').insert({
+    user_id: userId,
+    name: 'Upper Body Power',
+    description: 'Heavy compound movements for upper body mass.',
+    frequency_per_week: 2,
+    is_public: true
+  }).select().single();
+
+  if (template) {
+    await supabase.from('template_exercises').insert([
+      { template_id: template.id, exercise_id: getExId('Bench Press'), order_index: 1, default_sets: 4, default_reps: 5 },
+      { template_id: template.id, exercise_id: getExId('Overhead Press'), order_index: 2, default_sets: 3, default_reps: 8 },
+      { template_id: template.id, exercise_id: getExId('Pull Up'), order_index: 3, default_sets: 3, default_reps: 10 }
+    ]);
   }
 
   // ==========================================
-  // 3. SEED USER-SPECIFIC TABLES (Loop through users)
+  // 6. PROGRAMS
   // ==========================================
+  console.log('📁 Creating Program...');
   
-  for (const userId of users) {
-    console.log(`📝 Seeding data for User ID: ${userId}`);
+  const { data: program } = await supabase.from('programs').insert({
+    user_id: userId,
+    name: 'Winter Arc 2024',
+    description: 'Strength focused block.',
+    is_active: true
+  }).select().single();
 
-    // --- A. PROFILES ---
-    await supabase.from('profiles').upsert({
-      id: userId,
-      display_name: `Athlete ${userId.slice(0, 4)}`,
-      height: 175 + Math.floor(Math.random() * 10),
-      birth_date: '1995-01-01',
-      gender: 'male',
-      activity_level: 'very_active'
-    });
+  // ==========================================
+  // 7. WORKOUTS (History & Active)
+  // ==========================================
+  console.log('🏋️ Creating Workout History (Active, Completed, Draft, Archived)...');
 
-    // --- B. GOALS ---
-    await supabase.from('goals').insert({
+  // A. COMPLETED WORKOUTS (Past) - Useful for charts
+  const historyDates = [7, 5, 2]; // Days ago
+  
+  for (const daysAgo of historyDates) {
+    const { data: w } = await supabase.from('workouts').insert({
       user_id: userId,
-      goal_type: 'muscle_gain',
-      target_weight: 85,
-      target_body_fat_percent: 12,
-      target_date: new Date(Date.now() + 1000 * 60 * 60 * 24 * 90).toISOString(), // 90 days from now
-    });
-
-    // --- C. WORKOUT TEMPLATES ---
-    const { data: template } = await supabase.from('workout_templates').insert({
-      user_id: userId,
-      name: 'Full Body A',
-      description: 'Standard full body split',
-      frequency_per_week: 3
+      name: `Upper Body - ${daysAgo} Days Ago`,
+      date: new Date(Date.now() - 86400000 * daysAgo).toISOString(),
+      status: 'completed',
+      duration_minutes: 65,
+      overall_rating: 8
     }).select().single();
 
-    if (template) {
-        // Add exercises to template
-        await supabase.from('template_exercises').insert([
-            { template_id: template.id, exercise_id: exIds[0], order_index: 1, default_sets: 3, default_reps: 8 },
-            { template_id: template.id, exercise_id: exIds[1], order_index: 2, default_sets: 3, default_reps: 10 }
-        ]);
+    if (w) {
+      // Add logs with progressive overload logic (weight increases slightly each workout)
+      const baseWeight = 80 + (7 - daysAgo) * 2.5; 
+      await supabase.from('workout_logs').insert([
+        { workout_id: w.id, exercise_id: getExId('Bench Press'), exercise_name: 'Bench Press', set_number: 1, reps: 5, weight: baseWeight, rpe: 7 },
+        { workout_id: w.id, exercise_id: getExId('Bench Press'), exercise_name: 'Bench Press', set_number: 2, reps: 5, weight: baseWeight, rpe: 8 },
+        { workout_id: w.id, exercise_id: getExId('Pull Up'), exercise_name: 'Pull Up', set_number: 1, reps: 10, weight: 0, rpe: 6 }
+      ]);
     }
-
-    // --- D. WORKOUTS (5 Past Workouts per User) ---
-    for (let j = 1; j <= 5; j++) {
-      const { data: workout } = await supabase.from('workouts').insert({
-        user_id: userId,
-        name: `Workout Session ${j}`,
-        date: new Date(Date.now() - 1000 * 60 * 60 * 24 * j).toISOString(), // j days ago
-        status: 'completed',
-        duration_minutes: 60,
-        overall_rating: 8
-      }).select().single();
-
-      if (workout) {
-        // --- E. WORKOUT LOGS (3 Logs per Workout) ---
-        const logs = [
-            { workout_id: workout.id, exercise_id: exIds[0], exercise_name: 'Barbell Squat', set_number: 1, reps: 10, weight: 100, rpe: 7 },
-            { workout_id: workout.id, exercise_id: exIds[0], exercise_name: 'Barbell Squat', set_number: 2, reps: 8, weight: 105, rpe: 8 },
-            { workout_id: workout.id, exercise_id: exIds[1], exercise_name: 'Bench Press', set_number: 1, reps: 10, weight: 60, rpe: 7 }
-        ];
-        await supabase.from('workout_logs').insert(logs);
-      }
-    }
-
-    // --- F. CARDIO LOGS ---
-    await supabase.from('cardio_logs').insert([
-        { user_id: userId, activity_type: 'running', duration_minutes: 30, distance_km: 5, date: new Date().toISOString() },
-        { user_id: userId, activity_type: 'cycling', duration_minutes: 45, distance_km: 15, date: new Date().toISOString() }
-    ]);
-
-    // --- G. BODY METRICS ---
-    await supabase.from('body_metrics').insert({
-        user_id: userId,
-        date: new Date().toISOString(),
-        weight: 80,
-        body_fat_percent: 15,
-        muscle_mass_kg: 65
-    });
-
-    // --- H. NUTRITION LOGS ---
-    await supabase.from('nutrition_logs').insert([
-        { user_id: userId, date: new Date().toISOString(), meal_type: 'breakfast', food_name: 'Oats', calories: 300, protein_g: 10, carbs_g: 50, fats_g: 5 },
-        { user_id: userId, date: new Date().toISOString(), meal_type: 'lunch', food_name: 'Chicken Rice', calories: 600, protein_g: 40, carbs_g: 60, fats_g: 10 }
-    ]);
-    
-    // --- I. AI INSIGHTS ---
-    await supabase.from('ai_insights').insert({
-        user_id: userId,
-        insight_type: 'progress_analysis',
-        title: 'Good consistency',
-        content: 'You have logged workouts 5 days in a row.',
-        priority: 'medium'
-    });
   }
 
-  console.log('✅ Seed complete!');
+  // B. ACTIVE WORKOUT (Today)
+  const { data: activeW } = await supabase.from('workouts').insert({
+    user_id: userId,
+    name: 'Leg Day (Live)',
+    date: new Date().toISOString(),
+    status: 'active',
+    duration_minutes: 20,
+    notes: 'Currently in the gym'
+  }).select().single();
+
+  if (activeW) {
+    await supabase.from('workout_logs').insert([
+      { workout_id: activeW.id, exercise_id: getExId('Barbell Squat'), exercise_name: 'Barbell Squat', set_number: 1, reps: 5, weight: 100, rpe: 6, is_warmup: true },
+      { workout_id: activeW.id, exercise_id: getExId('Barbell Squat'), exercise_name: 'Barbell Squat', set_number: 2, reps: 5, weight: 120, rpe: 8, is_warmup: false }
+    ]);
+  }
+
+  // C. DRAFT WORKOUT (Future)
+  const { data: draftW } = await supabase.from('workouts').insert({
+    user_id: userId,
+    name: 'Next Week Planning',
+    date: new Date(Date.now() + 86400000 * 3).toISOString(), // 3 days future
+    status: 'draft',
+    notes: 'Planning to attempt 1RM'
+  }).select().single();
+
+  // D. ARCHIVED WORKOUT
+  await supabase.from('workouts').insert({
+    user_id: userId,
+    name: 'Old Routine 2023',
+    date: new Date(Date.now() - 86400000 * 300).toISOString(),
+    status: 'archived',
+    notes: 'Deprecated'
+  });
+
+  // ==========================================
+  // 8. LINK WORKOUTS TO PROGRAM
+  // ==========================================
+  if (program && draftW) {
+    await supabase.from('program_items').insert([
+      {
+        program_id: program.id,
+        workout_id: draftW.id,
+        day_label: 'Monday',
+        order_index: 0,
+        item_type: 'workout'
+      },
+      {
+        program_id: program.id,
+        day_label: 'Tuesday',
+        order_index: 1,
+        item_type: 'nutrition' // Placeholder
+      }
+    ]);
+  }
+
+  // ==========================================
+  // 9. OTHER LOGS (Cardio, Body, Nutrition, AI)
+  // ==========================================
+  console.log('📊 Seeding Metrics & AI Data...');
+
+  // Cardio
+  await supabase.from('cardio_logs').insert({
+    user_id: userId,
+    date: new Date().toISOString(),
+    activity_type: 'running',
+    duration_minutes: 30,
+    distance_km: 5,
+    calories_burned: 400
+  });
+
+  // Body Metrics
+  await supabase.from('body_metrics').insert({
+    user_id: userId,
+    date: new Date().toISOString(),
+    weight: 82.5,
+    body_fat_percent: 14.5,
+    photo_front_url: 'https://placehold.co/400x600/png'
+  });
+
+  // Nutrition
+  await supabase.from('nutrition_logs').insert({
+    user_id: userId,
+    date: new Date().toISOString(),
+    meal_type: 'lunch',
+    food_name: 'Steak and Potatoes',
+    calories: 800,
+    protein_g: 60,
+    carbs_g: 50,
+    fats_g: 30
+  });
+
+  // AI Insights
+  await supabase.from('ai_insights').insert({
+    user_id: userId,
+    insight_type: 'workout_feedback',
+    title: 'Bench Press Strength Increasing',
+    content: 'Your estimated 1RM has increased by 5% over the last 3 sessions.',
+    priority: 'high'
+  });
+
+  // AI Queue
+  await supabase.from('ai_processing_queue').insert({
+    user_id: userId,
+    input_text: 'Analyze my squat form',
+    task_type: 'form_check',
+    status: 'pending'
+  });
+
+  console.log('✅ SEED COMPLETE!');
+  console.log(`👉 Login with: ${ADMIN_EMAIL} / ${ADMIN_PASSWORD}`);
 };
 
 main().catch((e) => {

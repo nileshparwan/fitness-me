@@ -11,9 +11,10 @@ import { Badge } from "@/components/ui/badge";
 export function LibrarySidebar({ workouts }: { workouts: any[] }) {
   const [search, setSearch] = useState("");
 
-  const filtered = workouts.filter((w) =>
-    w.name.toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = workouts.filter((w) => {
+    if (w.status === 'archived') return false;
+    return w.name.toLowerCase().includes(search.toLowerCase());
+  });
 
   return (
     <div className="flex flex-col h-full">

@@ -25,40 +25,61 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { useWorkouts } from "@/hooks/use-workout";
+import { useWorkouts } from "@/hooks/use-workout"; // Check your hook path
 import { groupLogsByExercise } from "@/utils/log";
 import { StatCard } from "./_components/stat-card";
 import { DetailSkeleton } from "./_components/detailed-skeleton";
+import { EditableText } from "@/components/shared/editable-text";
 
 export default function WorkoutDetailPage() {
   const { id } = useParams() as { id: string };
   const router = useRouter();
-  const { getWorkout, deleteWorkout } = useWorkouts();
+  
+  // 1. Destructure updateWorkout from the hook
+  const { getWorkout, deleteWorkout, updateWorkout } = useWorkouts();
   const { data: workout, isLoading } = getWorkout(id);
 
   if (isLoading) return <DetailSkeleton />;
   if (!workout) return <div className="p-8 text-center">Workout not found</div>;
 
-  // Transform flat logs into grouped exercises for display
   const exercises = groupLogsByExercise(workout.workout_logs);
 
-  // Calculate total volume (simple sum of weight * reps)
   const totalVolume = workout.workout_logs.reduce(
     (acc: number, log: any) => acc + (log.weight * log.reps), 
     0
   );
 
+  // 2. Handle Rename Logic
+  const handleRename = async (newName: string) => {
+    try {
+      await updateWorkout.mutateAsync({ 
+        id, 
+        data: { 
+          name: newName
+        } 
+      });
+    } catch (error) {
+      console.error("Failed to rename:", error);
+      throw error;
+    }
+  };
+
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      {/* Header with Navigation & Actions */}
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="icon" onClick={() => router.back()}>
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">{workout.name}</h1>
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            {/* 3. Replace static H1 with EditableText */}
+            <EditableText 
+              initialValue={workout.name} 
+              onSave={handleRename}
+              className="text-2xl font-bold tracking-tight"
+            />
+            
+            <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
               <Calendar className="h-3 w-3" />
               {format(new Date(workout.date), "PPP")}
             </div>
@@ -68,7 +89,7 @@ export default function WorkoutDetailPage() {
         <div className="flex items-center gap-2">
            <Button variant="outline" onClick={() => router.push(`/workouts/${id}/edit`)}>
              <Edit2 className="mr-2 h-3 w-3" />
-             Edit
+             Edit Session
            </Button>
            
            <AlertDialog>
@@ -120,9 +141,9 @@ export default function WorkoutDetailPage() {
         <h3 className="text-lg font-semibold">Session Log</h3>
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {exercises.map((ex: any, i: number) => (
-            <Card key={i} className="overflow-hidden">
+            <Card key={i} className="overflow-hidden border-l-4 border-l-primary/50">
               <CardHeader className="bg-muted/40 py-3">
-                <CardTitle className="text-base font-medium">{ex.name}</CardTitle>
+                <CardTitle className="text-base font-medium truncate">{ex.name}</CardTitle>
               </CardHeader>
               <CardContent className="p-0">
                 <table className="w-full text-sm">
@@ -136,7 +157,7 @@ export default function WorkoutDetailPage() {
                   </thead>
                   <tbody className="divide-y">
                     {ex.sets.map((set: any) => (
-                      <tr key={set.id}>
+                      <tr key={set.id} className="hover:bg-muted/10">
                         <td className="py-2 text-center font-medium text-muted-foreground">
                           {set.set_number}
                         </td>

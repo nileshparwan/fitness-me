@@ -5,8 +5,9 @@ import Link from "next/link";
 import { WorkoutPicker } from "@/components/workout/workout-picker";
 import { createClient } from "@/lib/supabase/server";
 import { ProgramBuilder } from "@/components/program/program-builder";
-// Import the new component
 import { ProgramProgressChart } from "@/components/program/program-progress-chart";
+import { EditableText } from "@/components/shared/editable-text";
+import { updateProgram } from "@/app/actions/program";
 
 interface ProgramPageProps {
   params: Promise<{ id: string }>;
@@ -15,7 +16,6 @@ interface ProgramPageProps {
 export default async function ProgramPage({ params }: ProgramPageProps) {
   const resolvedParams = await params;
   const programId = resolvedParams.id;
-
   const supabase = await createClient();
 
   // 1. Fetch Program & Items
@@ -51,28 +51,32 @@ export default async function ProgramPage({ params }: ProgramPageProps) {
     .order("date", { ascending: false });
 
   // 3. FETCH LOGS FOR ANALYTICS
-  // We extract the workout IDs associated with this program
   const workoutIds = program.program_items
-    .map((item: any) => item.workout_id)
-    .filter(Boolean);
+    ?.map((item: any) => item.workout_id)
+    .filter(Boolean) || [];
 
-  // Query your specific flat table schema
-  const { data: logs } = await supabase
-    .from("workout_logs")
-    .select(`
-      id,
-      created_at,
-      workout_id,
-      set_number,
-      reps,
-      weight,
-      rpe,
-      is_warmup,
-      calculated_1rm,
-      workouts ( name )
-    `)
-    .in("workout_id", workoutIds)
-    .order("created_at", { ascending: true });
+  // FIX: Only query logs if there are actually workouts linked
+  let logs: any[] = [];
+  if (workoutIds.length > 0) {
+    const { data } = await supabase
+      .from("workout_logs")
+      .select(`
+        id,
+        created_at,
+        workout_id,
+        set_number,
+        reps,
+        weight,
+        rpe,
+        is_warmup,
+        calculated_1rm,
+        workouts ( name )
+      `)
+      .in("workout_id", workoutIds)
+      .order("created_at", { ascending: true });
+
+    logs = data || [];
+  }
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
@@ -86,10 +90,17 @@ export default async function ProgramPage({ params }: ProgramPageProps) {
               </Link>
             </Button>
 
-            <div className="leading-tight">
-              <h1 className="text-xl md:text-2xl font-bold">{program.name}</h1>
+            <div className="leading-tight min-w-0">
+              <EditableText
+                initialValue={program.name}
+                onSave={async (newName) => {
+                  "use server";
+                  await updateProgram(programId, { name: newName });
+                }}
+                className="text-xl md:text-2xl font-bold"
+              />
               <p className="text-sm text-muted-foreground">
-                {program.description || "Program Dashboard"}
+                {program.description || "Program Detail"}
               </p>
             </div>
           </div>
@@ -99,11 +110,14 @@ export default async function ProgramPage({ params }: ProgramPageProps) {
 
       {/* Main Content */}
       <div className="flex-1 overflow-y-auto p-4 md:p-8">
+
+        {/* Builder Component */}
         <ProgramBuilder
           program={program}
           allWorkouts={allWorkouts || []}
         />
 
+        {/* Footer Actions */}
         <div className="mt-12 border-t pt-8 text-center space-y-2 pb-24">
           <p className="text-sm text-muted-foreground">Need a new workout specifically for this program?</p>
           <Button variant="outline" asChild>
@@ -113,15 +127,17 @@ export default async function ProgramPage({ params }: ProgramPageProps) {
           </Button>
         </div>
 
-        {/* NEW CHART COMPONENT */}
-        {logs && logs.length > 0 ? (
+        {logs.length > 0 ? (
           <ProgramProgressChart logs={logs} />
-        ) : (
-          /* Empty State for Chart */
+        ) : workoutIds.length > 0 ? (
+          /* Show placeholder only if workouts exist but no logs yet */
           <div className="mb-8 p-6 border border-dashed rounded-xl text-center text-muted-foreground bg-muted/10">
-            <p>Start logging workouts to see your analytics here.</p>
+            <p className="flex items-center justify-center gap-2">
+              <span className="text-xl">📊</span>
+              Start logging these workouts to see your progress chart here.
+            </p>
           </div>
-        )}
+        ) : null}
       </div>
     </div>
   );

@@ -30,9 +30,12 @@ export function WorkoutSelector({ programId, onClose }: { programId: string; onC
       return workouts.filter((w: any) => {
         const matchesSearch = w.name?.toLowerCase().includes(search.toLowerCase());
         const alreadyInProgram = items.some((item) => item.workout_id === w.id);
+
+        // Filter out Drafts
+        const isActive = w.status !== 'archived';
         
         // Only show if matches search AND is NOT in program
-        return matchesSearch && !alreadyInProgram;
+        return matchesSearch && !alreadyInProgram && isActive;
       });
     }, [workouts, search, items]);
   

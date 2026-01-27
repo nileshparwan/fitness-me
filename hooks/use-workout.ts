@@ -4,13 +4,14 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { createWorkoutAction, deleteWorkoutAction, updateWorkoutAction } from "@/app/actions/workout";
 
 export function useWorkouts() {
   const supabase = createClient();
   const queryClient = useQueryClient();
   const router = useRouter();
 
-  // 1. Fetch Workout History
+  // 1. Fetch History (Read operations usually stay client-side in hooks for React Query cache)
   const history = useQuery({
     queryKey: ["workouts"],
     queryFn: async () => {
@@ -38,106 +39,67 @@ export function useWorkouts() {
     enabled: !!id,
   });
 
-  // 3. Create Workout
+  // 3. Create Workout (Using Server Action)
   const createWorkout = useMutation({
     mutationFn: async (workoutData: any) => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Not authenticated");
-
-      // Insert Header
-      const { data: workout, error: wError } = await supabase
-        .from("workouts")
-        .insert({
-          user_id: user.id,
-          name: workoutData.name,
-          date: workoutData.date.toISOString(),
-          status: "completed",
-          notes: workoutData.notes
-        })
-        .select()
-        .single();
-
-      if (wError) throw wError;
-
-      // Insert Logs
-      const logs = workoutData.exercises.flatMap((ex: any) => 
-        ex.sets.map((set: any) => ({
-          workout_id: workout.id,
-          exercise_id: ex.exercise_id,
-          exercise_name: ex.name,
-          set_number: set.set_number,
-          reps: set.reps,
-          weight: set.weight,
-          rpe: set.rpe,
-        }))
-      );
-
-      if (logs.length > 0) {
-        const { error: lError } = await supabase.from("workout_logs").insert(logs);
-        if (lError) throw lError;
-      }
-      return workout;
+      // Pass data directly to the server action
+      return await createWorkoutAction({
+        name: workoutData.name,
+        date: workoutData.date,
+        notes: workoutData.notes,
+        exercises: workoutData.exercises,
+        status: "active" // Default per your requirement
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["workouts"] });
-      toast.success("Workout saved!");
+      toast.success("Workout created!");
     },
+    onError: (err) => {
+      toast.error(err.message);
+    }
   });
 
-  // 4. Update Workout
+  // 4. Update Workout (Using Server Action)
   const updateWorkout = useMutation({
-    mutationFn: async ({ id, data: workoutData }: { id: string; data: any }) => {
-      // Update Header
-      const { error: wError } = await supabase
-        .from("workouts")
-        .update({
-          name: workoutData.name,
-          date: workoutData.date.toISOString(),
-          notes: workoutData.notes
-        })
-        .eq("id", id);
-
-      if (wError) throw wError;
-
-      // Update Logs: Strategy -> Delete all old logs for this workout, insert new ones.
-      // This is safer than trying to diff individual sets.
-      await supabase.from("workout_logs").delete().eq("workout_id", id);
-
-      const logs = workoutData.exercises.flatMap((ex: any) => 
-        ex.sets.map((set: any) => ({
-          workout_id: id,
-          exercise_id: ex.exercise_id,
-          exercise_name: ex.name,
-          set_number: set.set_number,
-          reps: set.reps,
-          weight: set.weight,
-          rpe: set.rpe,
-        }))
-      );
-
-      if (logs.length > 0) {
-        const { error: lError } = await supabase.from("workout_logs").insert(logs);
-        if (lError) throw lError;
-      }
+    mutationFn: async ({ id, data }: { id: string; data: any }) => {
+      // Pass data directly to server action
+      // Handles both full updates (with exercises) and partial updates (name/status only)
+      await updateWorkoutAction(id, {
+        name: data.name,
+        date: data.date,
+        notes: data.notes,
+        status: data.status,
+        exercises: data.exercises 
+      });
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["workouts"] });
       queryClient.invalidateQueries({ queryKey: ["workout", variables.id] });
       toast.success("Workout updated!");
     },
+    onError: (err) => {
+      toast.error(err.message);
+    }
   });
 
-  // 5. Delete Workout
+  // 5. Delete Workout (Using Server Action)
   const deleteWorkout = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from("workouts").delete().eq("id", id);
-      if (error) throw error;
+    // Updated to accept string array for bulk delete capability
+    mutationFn: async (ids: string | string[]) => {
+      await deleteWorkoutAction(ids);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["workouts"] });
-      toast.success("Workout deleted");
-      router.push("/workouts");
+      toast.success("Deleted successfully");
+      // Optional: Only redirect if we were on the detail page, 
+      // but if deleting from list, no redirect needed.
+      // You might want to check pathname here or remove this line.
+      // router.push("/workouts"); 
     },
+    onError: (err) => {
+      toast.error(err.message);
+    }
   });
 
   return { history, getWorkout, createWorkout, updateWorkout, deleteWorkout };

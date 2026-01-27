@@ -53,9 +53,25 @@ export async function attachItemToProgram(
     revalidatePath(`/programs/${programId}`);
 }
 
-export async function deleteProgram(id: string) {
+export async function updateProgram(id: string, data: { name?: string; description?: string }) {
     const supabase = await createClient();
-    const { error } = await supabase.from("programs").delete().eq("id", id);
+    const { error } = await supabase
+        .from("programs")
+        .update(data)
+        .eq("id", id);
+
+    if (error) throw new Error(error.message);
+    revalidatePath("/programs");
+    revalidatePath(`/programs/${id}`);
+}
+
+export async function deletePrograms(ids: string[]) {
+    const supabase = await createClient();
+    const { error } = await supabase
+        .from("programs")
+        .delete()
+        .in("id", ids);
+
     if (error) throw new Error(error.message);
     revalidatePath("/programs");
 }
