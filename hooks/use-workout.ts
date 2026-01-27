@@ -30,7 +30,7 @@ export function useWorkouts() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("workouts")
-        .select(`*, workout_logs (*)`)
+        .select(`*, workout_logs (*), cardio_logs (*)`)
         .eq("id", id)
         .single();
       if (error) throw error;

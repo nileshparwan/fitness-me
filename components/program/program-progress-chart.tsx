@@ -4,202 +4,187 @@ import * as React from "react";
 import { 
   Area, 
   AreaChart, 
+  LineChart, 
+  Line, 
+  BarChart, 
+  Bar, 
   CartesianGrid, 
   XAxis, 
   YAxis, 
-  Tooltip, 
-  ResponsiveContainer, 
-  Line, 
-  ComposedChart,
-  Bar,
-  Legend
 } from "recharts";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { format, subDays, isWithinInterval, startOfWeek, endOfWeek } from "date-fns";
-import { Activity, Dumbbell, Flame, TrendingUp } from "lucide-react";
+import { 
+  ChartContainer, 
+  ChartTooltip, 
+  ChartTooltipContent, 
+  type ChartConfig 
+} from "@/components/ui/chart";
+import { format, subDays, isWithinInterval } from "date-fns";
+import { Activity, Dumbbell, TrendingUp, Heart } from "lucide-react";
 
-// --- Types based on your schema ---
+// --- Types ---
 interface WorkoutLogSet {
   id: string;
-  created_at: string | null; // <--- Changed from string to string | null
+  created_at: string | null;
   workout_id: string;
+  set_number: number;
   reps: number | null;
   weight: number | null;
   rpe: number | null;
   is_warmup: boolean | null;
   calculated_1rm: number | null;
-  workouts: {
-    name: string;
-  } | null; // Supabase joins can technically return null if relationship is broken
+  workouts: { name: string; date: string; } | null;
 }
 
-// --- Fitness Formulas ---
+interface CardioLog {
+  id: string;
+  date: string;
+  activity_type: string;
+  duration_minutes: number;
+  distance_km: number | null;
+  calories_burned: number | null;
+  average_heart_rate: number | null;
+}
+
 const calculateEpley1RM = (weight: number, reps: number) => {
-  if (reps === 1) return weight;
+  if (reps <= 1) return weight;
   return Math.round(weight * (1 + reps / 30));
 };
 
-export function ProgramProgressChart({ logs }: { logs: WorkoutLogSet[] }) {
+interface ChartProps {
+  logs: WorkoutLogSet[];
+  cardioLogs: CardioLog[];
+}
+
+const chartConfig = {
+  volume: { label: "Volume", color: "hsl(var(--primary))" },
+  strength: { label: "1RM", color: "#000" },
+  rpe: { label: "RPE", color: "hsl(var(--muted-foreground))" },
+  cardio: { label: "Distance", color: "#f97316" }, // Orange
+  duration: { label: "Duration", color: "#3b82f6" }, // Blue
+} satisfies ChartConfig;
+
+export function ProgramProgressChart({ logs = [], cardioLogs = [] }: ChartProps) {
   const [timeRange, setTimeRange] = React.useState("all");
   const [activeTab, setActiveTab] = React.useState("volume");
 
-  // --- 1. Data Aggregation (Grouping Sets into Sessions) ---
-  const chartData = React.useMemo(() => {
-    if (!logs || logs.length === 0) return [];
-
-    // Group sets by "Session" (unique combination of date + workout_id)
+  // --- 1. Strength Logic (Unchanged) ---
+  const strengthData = React.useMemo(() => {
+    if (!logs.length) return [];
     const sessions: Record<string, any> = {};
 
     logs.forEach((set) => {
-      if (!set.created_at) return;
+      const rawDate = set.workouts?.date || set.created_at;
+      if (!rawDate) return;
       
-      // Create a unique key for the session (e.g., "2023-10-25_workoutUUID")
-      const dateKey = format(new Date(set.created_at), "yyyy-MM-dd");
-      const sessionKey = `${dateKey}_${set.workout_id}`;
+      const dateKey = format(new Date(rawDate), "yyyy-MM-dd");
+      const sessionKey = `${dateKey}_${set.workout_id}`; 
 
       if (!sessions[sessionKey]) {
         sessions[sessionKey] = {
-          date: new Date(set.created_at),
-          formattedDate: format(new Date(set.created_at), "MMM d"),
-          fullDate: format(new Date(set.created_at), "PPP"),
-          workoutName: set.workouts?.name || "Unknown Workout",
+          date: new Date(rawDate),
+          formattedDate: format(new Date(rawDate), "MMM d"),
+          fullDate: format(new Date(rawDate), "PPP"),
+          workoutName: set.workouts?.name || "Strength",
           totalVolume: 0,
           max1RM: 0,
-          totalRPE: 0,
+          avgRPE: 0,
+          rpeSum: 0,
           rpeCount: 0,
           workingSets: 0,
         };
       }
 
-      // --- CALCULATIONS ---
       const weight = set.weight || 0;
       const reps = set.reps || 0;
 
-      // 1. Volume Load (Ignore warmups for accurate hypertrophy tracking)
       if (!set.is_warmup) {
         sessions[sessionKey].totalVolume += weight * reps;
         sessions[sessionKey].workingSets += 1;
       }
 
-      // 2. Estimated 1RM (Track Peak Strength)
-      // We want the HIGHEST estimated 1RM achieved in this session
       const e1RM = set.calculated_1rm || calculateEpley1RM(weight, reps);
-      if (e1RM > sessions[sessionKey].max1RM) {
-        sessions[sessionKey].max1RM = e1RM;
-      }
+      if (e1RM > sessions[sessionKey].max1RM) sessions[sessionKey].max1RM = e1RM;
 
-      // 3. RPE Stats
       if (set.rpe) {
-        sessions[sessionKey].totalRPE += set.rpe;
+        sessions[sessionKey].rpeSum += set.rpe;
         sessions[sessionKey].rpeCount += 1;
       }
     });
 
-    // Convert object back to array and compute averages
-    let processedData = Object.values(sessions).map((s: any) => ({
+    let processed = Object.values(sessions).map((s: any) => ({
       ...s,
-      avgRPE: s.rpeCount > 0 ? parseFloat((s.totalRPE / s.rpeCount).toFixed(1)) : 0,
+      avgRPE: s.rpeCount > 0 ? parseFloat((s.rpeSum / s.rpeCount).toFixed(1)) : 0,
     }));
 
-    // Sort by Date
-    processedData.sort((a, b) => a.date.getTime() - b.date.getTime());
+    processed.sort((a, b) => a.date.getTime() - b.date.getTime());
 
-    // Filter by Time Range
     const now = new Date();
-    if (timeRange === "1m") {
-      processedData = processedData.filter(s => isWithinInterval(s.date, { start: subDays(now, 30), end: now }));
-    } else if (timeRange === "3m") {
-      processedData = processedData.filter(s => isWithinInterval(s.date, { start: subDays(now, 90), end: now }));
-    }
+    if (timeRange === "1m") processed = processed.filter(s => isWithinInterval(s.date, { start: subDays(now, 30), end: now }));
+    else if (timeRange === "3m") processed = processed.filter(s => isWithinInterval(s.date, { start: subDays(now, 90), end: now }));
 
-    return processedData;
+    return processed;
   }, [logs, timeRange]);
 
-  // --- 2. Render Charts ---
-  const renderChart = () => {
-    if (activeTab === "volume") {
-      return (
-        <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={chartData} margin={{ top: 20, right: 10, left: -20, bottom: 0 }}>
-            <defs>
-              <linearGradient id="colorVolume" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3}/>
-                <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0}/>
-              </linearGradient>
-            </defs>
-            <CartesianGrid vertical={false} strokeDasharray="3 3" className="stroke-muted/30" />
-            <XAxis dataKey="formattedDate" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
-            <YAxis stroke="#888888" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(v) => `${(v/1000).toFixed(0)}k`} />
-            <Tooltip content={<CustomTooltip label="Volume Load" unit="kg" />} />
-            <Area 
-              type="monotone" 
-              dataKey="totalVolume" 
-              stroke="hsl(var(--primary))" 
-              strokeWidth={2}
-              fillOpacity={1} 
-              fill="url(#colorVolume)" 
-              name="Volume Load"
-            />
-          </AreaChart>
-        </ResponsiveContainer>
-      );
-    }
+  // --- 2. Cardio Logic (Aggregates same-day sessions) ---
+  const cardioData = React.useMemo(() => {
+    if (!cardioLogs.length) return [];
+    const sessions: Record<string, any> = {};
 
-    if (activeTab === "strength") {
-      return (
-        <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={chartData} margin={{ top: 20, right: 10, left: -20, bottom: 0 }}>
-            <CartesianGrid vertical={false} strokeDasharray="3 3" className="stroke-muted/30" />
-            <XAxis dataKey="formattedDate" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
-            <YAxis yAxisId="left" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
-            <YAxis yAxisId="right" orientation="right" domain={[0, 10]} stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
-            <Tooltip content={<CustomTooltip label="Est. 1RM" unit="kg" secondLabel="Avg RPE" secondUnit="" />} />
-            
-            <Line 
-              yAxisId="left"
-              type="monotone" 
-              dataKey="max1RM" 
-              stroke="hsl(var(--primary))" 
-              strokeWidth={3}
-              dot={{ r: 4, fill: "hsl(var(--background))", strokeWidth: 2 }}
-              activeDot={{ r: 6 }}
-              name="Max Strength (1RM)"
-            />
-            <Bar 
-              yAxisId="right"
-              dataKey="avgRPE"
-              fill="hsl(var(--secondary))"
-              opacity={0.3}
-              radius={[4, 4, 0, 0]}
-              barSize={20}
-              name="Avg RPE"
-            />
-            <Legend verticalAlign="top" height={36}/>
-          </ComposedChart>
-        </ResponsiveContainer>
-      );
-    }
-  };
+    cardioLogs.forEach((log) => {
+      if (!log.date) return;
+      const dateKey = format(new Date(log.date), "yyyy-MM-dd");
 
-  if (chartData.length === 0) return null;
+      if (!sessions[dateKey]) {
+        sessions[dateKey] = {
+          date: new Date(log.date),
+          formattedDate: format(new Date(log.date), "MMM d"),
+          fullDate: format(new Date(log.date), "PPP"),
+          totalDuration: 0,
+          totalDistance: 0,
+          totalCalories: 0,
+          activities: new Set(),
+        };
+      }
+      sessions[dateKey].totalDuration += log.duration_minutes || 0;
+      sessions[dateKey].totalDistance += log.distance_km || 0;
+      sessions[dateKey].totalCalories += log.calories_burned || 0;
+      sessions[dateKey].activities.add(log.activity_type);
+    });
+
+    let processed = Object.values(sessions).map((s: any) => ({
+        ...s,
+        activityLabel: Array.from(s.activities).join(", ")
+    }));
+    
+    processed.sort((a, b) => a.date.getTime() - b.date.getTime());
+
+    const now = new Date();
+    if (timeRange === "1m") processed = processed.filter(s => isWithinInterval(s.date, { start: subDays(now, 30), end: now }));
+    else if (timeRange === "3m") processed = processed.filter(s => isWithinInterval(s.date, { start: subDays(now, 90), end: now }));
+
+    return processed;
+  }, [cardioLogs, timeRange]);
+
+  const axisStyle = { fontSize: 11, stroke: "#888888" };
 
   return (
-    <Card className="w-full mb-8 shadow-sm">
-      <CardHeader className="pb-4">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <CardTitle className="flex items-center gap-2">
-              <Activity className="h-5 w-5 text-primary" />
-              Progress & Analytics
+    <Card className="w-full mb-8 shadow-sm border bg-card/50">
+      <CardHeader className="p-4 md:p-6 pb-2">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="space-y-1">
+            <CardTitle className="flex items-center gap-2 text-base md:text-lg">
+              <Activity className="h-4 w-4 md:h-5 md:w-5 text-primary" />
+              <span>Performance Analytics</span>
             </CardTitle>
-            <CardDescription>
-              Performance trends based on your {logs.length} logged sets.
+            <CardDescription className="text-xs md:text-sm">
+              Training load and intensity metrics.
             </CardDescription>
           </div>
           <Select value={timeRange} onValueChange={setTimeRange}>
-            <SelectTrigger className="w-[140px]">
+            <SelectTrigger className="w-full sm:w-[140px] h-9 text-xs">
               <SelectValue placeholder="Time Range" />
             </SelectTrigger>
             <SelectContent>
@@ -210,85 +195,141 @@ export function ProgramProgressChart({ logs }: { logs: WorkoutLogSet[] }) {
           </Select>
         </div>
       </CardHeader>
-      <CardContent>
+
+      <CardContent className="p-4 md:p-6 pt-2">
         <Tabs defaultValue="volume" onValueChange={setActiveTab} className="space-y-4">
-          <TabsList className="grid w-full md:w-[400px] grid-cols-2">
-            <TabsTrigger value="volume" className="flex items-center gap-2">
-              <Dumbbell className="h-4 w-4" /> Volume (Hypertrophy)
-            </TabsTrigger>
-            <TabsTrigger value="strength" className="flex items-center gap-2">
-              <TrendingUp className="h-4 w-4" /> Strength & RPE
-            </TabsTrigger>
-          </TabsList>
           
-          <div className="h-[350px] w-full mt-4">
-            {renderChart()}
+          <TabsList className="grid w-full grid-cols-3 h-9 bg-muted/50">
+            <TabsTrigger value="volume" className="text-xs py-2"><Dumbbell className="h-3.5 w-3.5 sm:mr-2" /><span className="hidden sm:inline">Volume</span></TabsTrigger>
+            <TabsTrigger value="strength" className="text-xs py-2"><TrendingUp className="h-3.5 w-3.5 sm:mr-2" /><span className="hidden sm:inline">Max Strength</span></TabsTrigger>
+            <TabsTrigger value="cardio" className="text-xs py-2"><Heart className="h-3.5 w-3.5 sm:mr-2" /><span className="hidden sm:inline">Cardio</span></TabsTrigger>
+          </TabsList>
+
+          <div className="h-[250px] md:h-[350px] w-full mt-4">
+            
+            {/* 1. VOLUME CHART (Unchanged) */}
+            {activeTab === "volume" && (
+              <ChartContainer config={chartConfig} className="h-full w-full">
+                <AreaChart data={strengthData} margin={{ left: -20, right: 10 }}>
+                  <CartesianGrid vertical={false} strokeDasharray="3 3" />
+                  <XAxis dataKey="formattedDate" {...axisStyle} tickLine={false} axisLine={false} minTickGap={30} />
+                  <YAxis {...axisStyle} tickLine={false} axisLine={false} tickFormatter={(v) => `${(v/1000).toFixed(0)}k`} />
+                  <ChartTooltip content={<ChartTooltipContent indicator="dot" />} />
+                  <Area 
+                    dataKey="totalVolume" 
+                    type="monotone" 
+                    fill={chartConfig.volume.color} 
+                    fillOpacity={0.2} 
+                    stroke={chartConfig.volume.color} 
+                    strokeWidth={2}
+                    connectNulls={true} 
+                  />
+                </AreaChart>
+              </ChartContainer>
+            )}
+
+            {/* 2. STRENGTH CHART (Unchanged) */}
+            {activeTab === "strength" && (
+              <ChartContainer config={chartConfig} className="h-full w-full">
+                <LineChart data={strengthData} margin={{ left: -20, right: 10 }}>
+                  <CartesianGrid vertical={false} strokeDasharray="3 3" />
+                  <XAxis dataKey="formattedDate" {...axisStyle} tickLine={false} axisLine={false} minTickGap={30} />
+                  <YAxis {...axisStyle} tickLine={false} axisLine={false} domain={['auto', 'auto']} />
+                  <ChartTooltip content={<ChartTooltipContent indicator="line" />} />
+                  <Line 
+                    dataKey="max1RM" 
+                    type="linear" 
+                    stroke={chartConfig.strength.color} 
+                    strokeWidth={2} 
+                    dot={{ fill: chartConfig.strength.color, r: 4 }} 
+                    activeDot={{ r: 6 }} 
+                    connectNulls={true} 
+                  />
+                </LineChart>
+              </ChartContainer>
+            )}
+
+            {/* 3. CARDIO CHART (UPDATED) */}
+            {activeTab === "cardio" && (
+              <ChartContainer config={chartConfig} className="h-full w-full">
+                <BarChart data={cardioData} margin={{ left: -20, right: 10 }}>
+                  <CartesianGrid vertical={false} strokeDasharray="3 3" />
+                  <XAxis dataKey="formattedDate" {...axisStyle} tickLine={false} axisLine={false} minTickGap={30} />
+                  
+                  {/* Left Axis: Duration (Min) - Controls the Bars */}
+                  <YAxis yAxisId="left" {...axisStyle} tickLine={false} axisLine={false} tickFormatter={(v) => `${v}m`} />
+                  
+                  {/* Right Axis: Distance (Km) - Controls the Line */}
+                  <YAxis yAxisId="right" orientation="right" {...axisStyle} tickLine={false} axisLine={false} tickFormatter={(v) => `${v}km`} />
+                  
+                  <ChartTooltip content={<ChartTooltipContent indicator="dashed" />} />
+                  
+                  {/* Bars for Duration */}
+                  <Bar 
+                    yAxisId="left" 
+                    dataKey="totalDuration" 
+                    fill={chartConfig.duration.color} 
+                    radius={[4, 4, 0, 0]} 
+                    barSize={20} 
+                    name="Duration"
+                  />
+                  
+                  {/* Line for Distance - Added dots so single days are visible */}
+                  <Line 
+                    yAxisId="right" 
+                    type="monotone" 
+                    dataKey="totalDistance" 
+                    stroke={chartConfig.cardio.color} 
+                    strokeWidth={2}
+                    dot={{ fill: chartConfig.cardio.color, r: 4, strokeWidth: 0 }} // Visible Dot
+                    activeDot={{ r: 6 }} 
+                    connectNulls={true} 
+                    name="Distance"
+                  />
+                </BarChart>
+              </ChartContainer>
+            )}
+
+            {/* EMPTY STATE */}
+            {((activeTab === "volume" || activeTab === "strength") && !strengthData.length) || 
+             (activeTab === "cardio" && !cardioData.length) ? (
+              <div className="flex h-full items-center justify-center text-muted-foreground bg-muted/5 rounded-lg border border-dashed">
+                <p className="text-sm">No logs found for this period.</p>
+              </div>
+            ) : null}
+
           </div>
         </Tabs>
 
-        {/* Footer Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6 pt-6 border-t text-sm">
-           <div>
-            <p className="text-muted-foreground">Total Workouts</p>
-            <p className="text-xl font-bold">{chartData.length}</p>
-          </div>
-          <div>
-            <p className="text-muted-foreground">Total Volume</p>
-            <p className="text-xl font-bold">{(chartData.reduce((acc, c) => acc + c.totalVolume, 0) / 1000).toFixed(1)}k <span className="text-xs font-normal text-muted-foreground">kg</span></p>
-          </div>
-           <div>
-            <p className="text-muted-foreground">Highest 1RM</p>
-            <p className="text-xl font-bold">{Math.max(...chartData.map(c => c.max1RM))} <span className="text-xs font-normal text-muted-foreground">kg</span></p>
-          </div>
-          <div>
-            <p className="text-muted-foreground">Avg Intensity</p>
-            <p className="text-xl font-bold">{
-               (chartData.reduce((acc, c) => acc + c.avgRPE, 0) / (chartData.filter(c => c.avgRPE > 0).length || 1)).toFixed(1)
-            } <span className="text-xs font-normal text-muted-foreground">RPE</span></p>
-          </div>
+        {/* STATS */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4 pt-4 border-t text-sm">
+           {(activeTab === "volume" || activeTab === "strength") && (
+             <>
+               <StatBox label="Workouts" value={strengthData.length} />
+               <StatBox label="Work Capacity" value={`${(strengthData.reduce((acc, c) => acc + c.totalVolume, 0) / 1000).toFixed(1)}k`} sub="kg" />
+               <StatBox label="Peak 1RM" value={Math.max(...strengthData.map(c => c.max1RM), 0)} sub="kg" />
+               <StatBox label="Avg Intensity" value={(strengthData.reduce((acc, c) => acc + c.avgRPE, 0) / (strengthData.length || 1)).toFixed(1)} sub="RPE" />
+             </>
+           )}
+           {activeTab === "cardio" && (
+             <>
+               <StatBox label="Sessions" value={cardioData.length} />
+               <StatBox label="Total Time" value={Math.round(cardioData.reduce((acc, c) => acc + c.totalDuration, 0) / 60)} sub="hrs" />
+               <StatBox label="Total Dist" value={cardioData.reduce((acc, c) => acc + c.totalDistance, 0).toFixed(1)} sub="km" />
+               <StatBox label="Output" value={`${(cardioData.reduce((acc, c) => acc + c.totalCalories, 0) / 1000).toFixed(1)}k`} sub="kcal" />
+             </>
+           )}
         </div>
       </CardContent>
     </Card>
   );
 }
 
-// --- Tooltip ---
-const CustomTooltip = ({ active, payload, label, unit, label: mainLabel, secondLabel, secondUnit }: any) => {
-  if (active && payload && payload.length) {
-    const data = payload[0].payload;
-    return (
-      <div className="rounded-lg border bg-background p-3 shadow-lg text-xs ring-1 ring-black/5">
-        <div className="font-bold mb-1 text-sm">{data.workoutName}</div>
-        <div className="text-muted-foreground mb-3">{data.fullDate}</div>
-        
-        <div className="space-y-1.5">
-          {/* Main Metric */}
-          <div className="flex justify-between gap-6">
-            <span className="text-primary font-medium flex items-center gap-1">
-               {mainLabel === "Volume Load" ? <Dumbbell className="h-3 w-3"/> : <TrendingUp className="h-3 w-3"/>}
-               {mainLabel}:
-            </span>
-            <span className="font-mono font-bold">{data[payload[0].dataKey].toLocaleString()} {unit}</span>
-          </div>
-
-          {/* Secondary Metric (if exists) */}
-          {secondLabel && payload[1] && (
-            <div className="flex justify-between gap-6">
-              <span className="text-secondary font-medium flex items-center gap-1">
-                 <Flame className="h-3 w-3"/> {secondLabel}:
-              </span>
-              <span className="font-mono font-bold">{data[payload[1].dataKey]} {secondUnit}</span>
-            </div>
-          )}
-
-          {/* Working Sets Count */}
-          <div className="pt-2 mt-2 border-t flex justify-between gap-6 text-muted-foreground">
-             <span>Working Sets:</span>
-             <span>{data.workingSets}</span>
-          </div>
-        </div>
-      </div>
-    );
-  }
-  return null;
-};
+const StatBox = ({ label, value, sub }: { label: string, value: string | number, sub?: string }) => (
+  <div className="bg-muted/20 p-2 rounded-lg text-center sm:text-left">
+    <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-0.5">{label}</p>
+    <p className="text-lg font-bold leading-none truncate">
+      {value} <span className="text-[10px] font-normal text-muted-foreground">{sub}</span>
+    </p>
+  </div>
+);

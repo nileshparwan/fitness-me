@@ -55,14 +55,17 @@ export default async function ProgramPage({ params }: ProgramPageProps) {
     ?.map((item: any) => item.workout_id)
     .filter(Boolean) || [];
 
-  // FIX: Only query logs if there are actually workouts linked
   let logs: any[] = [];
+  let cardioLogs: any[] = [];
+
   if (workoutIds.length > 0) {
-    const { data } = await supabase
+    // A. Fetch Strength Logs
+    const { data: strengthData } = await supabase
       .from("workout_logs")
       .select(`
         id,
         created_at,
+        updated_at,
         workout_id,
         set_number,
         reps,
@@ -70,13 +73,24 @@ export default async function ProgramPage({ params }: ProgramPageProps) {
         rpe,
         is_warmup,
         calculated_1rm,
-        workouts ( name )
-      `)
+        workouts ( name, date )  
+      `) // Added 'date' to workouts relation for better grouping
       .in("workout_id", workoutIds)
       .order("created_at", { ascending: true });
 
-    logs = data || [];
+    // B. Fetch Cardio Logs
+    const { data: cardioData } = await supabase
+      .from("cardio_logs")
+      .select("*")
+      .in("workout_id", workoutIds)
+      .order("date", { ascending: true });
+
+    logs = strengthData || [];
+    cardioLogs = cardioData || [];
   }
+
+  // Check if we have ANY data to show
+  const hasData = logs.length > 0 || cardioLogs.length > 0;
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
@@ -127,8 +141,9 @@ export default async function ProgramPage({ params }: ProgramPageProps) {
           </Button>
         </div>
 
-        {logs.length > 0 ? (
-          <ProgramProgressChart logs={logs} />
+        {/* Analytics Section */}
+        {hasData ? (
+          <ProgramProgressChart logs={logs} cardioLogs={cardioLogs} />
         ) : workoutIds.length > 0 ? (
           /* Show placeholder only if workouts exist but no logs yet */
           <div className="mb-8 p-6 border border-dashed rounded-xl text-center text-muted-foreground bg-muted/10">

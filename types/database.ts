@@ -163,6 +163,8 @@ export type Database = {
           id: string
           max_heart_rate: number | null
           notes: string | null
+          reps: number | null
+          updated_at: string | null
           user_id: string
           workout_id: string | null
         }
@@ -179,6 +181,8 @@ export type Database = {
           id?: string
           max_heart_rate?: number | null
           notes?: string | null
+          reps?: number | null
+          updated_at?: string | null
           user_id: string
           workout_id?: string | null
         }
@@ -195,6 +199,8 @@ export type Database = {
           id?: string
           max_heart_rate?: number | null
           notes?: string | null
+          reps?: number | null
+          updated_at?: string | null
           user_id?: string
           workout_id?: string | null
         }
@@ -521,6 +527,7 @@ export type Database = {
           exercise_id: string | null
           exercise_name: string
           form_video_url: string | null
+          group_id: string | null
           id: string
           is_dropset: boolean | null
           is_warmup: boolean | null
@@ -530,6 +537,7 @@ export type Database = {
           rpe: number | null
           set_number: number
           tempo: string | null
+          updated_at: string | null
           weight: number | null
           workout_id: string
         }
@@ -539,6 +547,7 @@ export type Database = {
           exercise_id?: string | null
           exercise_name: string
           form_video_url?: string | null
+          group_id?: string | null
           id?: string
           is_dropset?: boolean | null
           is_warmup?: boolean | null
@@ -548,6 +557,7 @@ export type Database = {
           rpe?: number | null
           set_number: number
           tempo?: string | null
+          updated_at?: string | null
           weight?: number | null
           workout_id: string
         }
@@ -557,6 +567,7 @@ export type Database = {
           exercise_id?: string | null
           exercise_name?: string
           form_video_url?: string | null
+          group_id?: string | null
           id?: string
           is_dropset?: boolean | null
           is_warmup?: boolean | null
@@ -566,6 +577,7 @@ export type Database = {
           rpe?: number | null
           set_number?: number
           tempo?: string | null
+          updated_at?: string | null
           weight?: number | null
           workout_id?: string
         }
@@ -711,7 +723,8 @@ export type Database = {
       }
     }
     Functions: {
-      [_ in never]: never
+      show_limit: { Args: never; Returns: number }
+      show_trgm: { Args: { "": string }; Returns: string[] }
     }
     Enums: {
       [_ in never]: never
