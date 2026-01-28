@@ -6,13 +6,15 @@ import { analyzePhoto } from "@/lib/inngest/functions/analyze-photo";
 import { sendReminders } from "@/lib/inngest/functions/send-reminders";
 import { generateInsights } from "@/lib/inngest/functions/generate-insight";
 
+export const dynamic = "force-dynamic";
+
 export const { GET, POST, PUT } = serve({
   client: inngest,
   functions: [
     analyzeWorkout,
-    generateWeeklyReport,
-    analyzePhoto,
-    generateInsights,
-    sendReminders
+    // generateWeeklyReport,
+    // analyzePhoto,
+    // generateInsights,
+    // sendReminders
   ],
 });

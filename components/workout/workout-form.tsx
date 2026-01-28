@@ -101,9 +101,11 @@ export function WorkoutForm({ initialData, workoutId }: WorkoutFormProps) {
     setIsAiProcessing(true);
     try {
       const selectedDate = form.getValues("date");
+      console.log("Submitting AI Text:", aiText, "for date:", selectedDate);
       const result = await saveWorkoutFromText(user.id, aiText, selectedDate);
-      toast.success(`Success! Created ${result.count} workout(s)`);
-      router.push("/workouts");
+      console.log("AI Workout Result:", result);
+      toast.success(`Success! Created ${result.queueId} workout(s)`);
+      // router.push("/workouts");
     } catch (error: any) {
       console.error(error);
       toast.error(error.message || "Failed to parse workout");

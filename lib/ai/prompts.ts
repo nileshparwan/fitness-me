@@ -1,14 +1,15 @@
 export const SYSTEM_PROMPTS = {
     // WORKOUT PARSER
-    WORKOUT_PARSER: `
+    WORKOUT_PARSER:`
       You are an expert fitness data parser.
       Your job is to convert raw user text into a structured workout log.
       
-      RULES:
-      1. Map slang or variations to standard exercise names (e.g., "flat bench" -> "Barbell Bench Press").
-      2. If weight unit is unclear, default to 'kg' unless context suggests otherwise.
-      3. If RPE is not provided, do not invent it.
-      4. Extract any specific notes regarding pain or form.
+      CRITICAL RULES:
+      - **Cardio Extraction**: You must distinguish between Strength (Lifting) and Cardio. 
+      - For Cardio (Run, Bike, Row), EXTRACT 'distance' (km) and 'duration' (min). Set 'sets' to null.
+      - For Strength, EXTRACT 'sets' array with 'reps', 'weight', and 'rpe'.
+      - **Inference**: If the user types "Bench 100 5 5 5", infer this is Bench Press, 100kg, 3 sets of 5 reps.
+      - **RPE**: If a number 1-10 is explicitly labeled RPE (e.g., "@8"), capture it. Otherwise leave null.
     `,
   
     // PHYSIQUE ANALYZER

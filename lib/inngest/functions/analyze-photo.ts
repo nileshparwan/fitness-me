@@ -9,7 +9,8 @@ export const analyzePhoto = inngest.createFunction(
   { 
     id: "analyze-photo",
     concurrency: { limit: 2 }, // Keep concurrency low for heavy image tasks
-    retries: 2
+    retries: 2,
+    optimizeParallelism: true
   },
   { event: "ai/analyze.photo" },
   async ({ event, step }) => {

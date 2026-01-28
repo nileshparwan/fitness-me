@@ -17,10 +17,10 @@ export async function triggerManualReminders() {
   }
 
   // 2. Trigger the job manually
-  await inngest.send({
-    name: "admin/run.reminders",
-    data: {}
-  });
+  // await inngest.send({
+  //   name: "admin/run.reminders",
+  //   data: {}
+  // });
 
   return { success: true, message: "Reminders job triggered" };
 }
