@@ -60,10 +60,10 @@ Parsing Rules:
 
 export async function analyzeWorkoutText(rawText: string) {
   try {
-    const result = openai.chat.completions.parse({ // or .parse if using a specific helper wrapper
+    const result = await openai.responses.create({ // or .parse if using a specific helper wrapper
       model: "gpt-5-mini", // Ensure this model exists in your tier
       // 1. CHANGE: 'messages' -> 'input'
-      messages: [
+      input: [
         { role: "system", content: SYSTEM_PROMPTS.WORKOUT_PARSER },
         { role: "user", content: buildSummaryPrompt(rawText) },
       ],
