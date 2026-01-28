@@ -47,10 +47,12 @@ export async function upsertCardioLog(data: Omit<CardioLogInsert, "user_id">) {
   }
 
   // 4. Revalidate
-    if (data.workout_id) {
-        revalidatePath(`/workouts/${data.workout_id}`);
-        revalidatePath(`/workouts/${data.workout_id}/cardio`); // Add this line
-    }
+  if (data.workout_id) {
+      revalidatePath(`/workouts/${data.workout_id}`);
+  }
+  
+  // <--- NEW: Update the global progress view immediately
+  revalidatePath("/progress"); 
 }
 
 export async function deleteCardioLog(id: string, workoutId: string) {
@@ -64,4 +66,7 @@ export async function deleteCardioLog(id: string, workoutId: string) {
     if (error) throw new Error(error.message);
   
     revalidatePath(`/workouts/${workoutId}`);
-  }
+    
+    // <--- NEW: Update the global progress view immediately
+    revalidatePath("/progress");
+}

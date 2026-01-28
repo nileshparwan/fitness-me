@@ -227,7 +227,6 @@ export type Database = {
           category: string | null
           created_at: string | null
           description: string | null
-          difficulty: string | null
           equipment: string | null
           id: string
           muscle_groups: string[] | null
@@ -239,7 +238,6 @@ export type Database = {
           category?: string | null
           created_at?: string | null
           description?: string | null
-          difficulty?: string | null
           equipment?: string | null
           id?: string
           muscle_groups?: string[] | null
@@ -251,7 +249,6 @@ export type Database = {
           category?: string | null
           created_at?: string | null
           description?: string | null
-          difficulty?: string | null
           equipment?: string | null
           id?: string
           muscle_groups?: string[] | null

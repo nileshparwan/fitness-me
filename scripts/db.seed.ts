@@ -61,23 +61,23 @@ const main = async () => {
   // ==========================================
   console.log('💪 Seeding Exercise Library (15+ items)...');
   const exercises = [
-    { name: 'Barbell Squat', category: 'legs', muscle_groups: ['quadriceps', 'glutes', 'core'], equipment: 'barbell', difficulty: 'intermediate' },
-    { name: 'Bench Press', category: 'chest', muscle_groups: ['pectorals', 'triceps'], equipment: 'barbell', difficulty: 'intermediate' },
-    { name: 'Deadlift', category: 'back', muscle_groups: ['hamstrings', 'glutes', 'lower back'], equipment: 'barbell', difficulty: 'advanced' },
-    { name: 'Overhead Press', category: 'shoulders', muscle_groups: ['anterior deltoids'], equipment: 'barbell', difficulty: 'intermediate' },
-    { name: 'Pull Up', category: 'back', muscle_groups: ['lats', 'biceps'], equipment: 'bodyweight', difficulty: 'intermediate' },
-    { name: 'Dumbbell Curl', category: 'arms', muscle_groups: ['biceps'], equipment: 'dumbbell', difficulty: 'beginner' },
-    { name: 'Tricep Rope Pushdown', category: 'arms', muscle_groups: ['triceps'], equipment: 'cable', difficulty: 'beginner' },
-    { name: 'Leg Press', category: 'legs', muscle_groups: ['quadriceps'], equipment: 'machine', difficulty: 'beginner' },
-    { name: 'Lat Pulldown', category: 'back', muscle_groups: ['lats'], equipment: 'cable', difficulty: 'beginner' },
-    { name: 'Walking Lunges', category: 'legs', muscle_groups: ['quadriceps', 'glutes'], equipment: 'dumbbell', difficulty: 'intermediate' },
-    { name: 'Face Pulls', category: 'shoulders', muscle_groups: ['rear deltoids'], equipment: 'cable', difficulty: 'beginner' },
-    { name: 'Incline Dumbbell Press', category: 'chest', muscle_groups: ['upper chest'], equipment: 'dumbbell', difficulty: 'intermediate' },
-    { name: 'Romanian Deadlift', category: 'legs', muscle_groups: ['hamstrings'], equipment: 'barbell', difficulty: 'intermediate' },
-    { name: 'Plank', category: 'core', muscle_groups: ['core'], equipment: 'bodyweight', difficulty: 'beginner' },
-    { name: 'Russian Twists', category: 'core', muscle_groups: ['obliques'], equipment: 'bodyweight', difficulty: 'beginner' },
-    { name: 'Running', category: 'cardio', muscle_groups: ['legs', 'heart'], equipment: 'bodyweight', difficulty: 'beginner' },
-    { name: 'Cycling', category: 'cardio', muscle_groups: ['legs', 'heart'], equipment: 'machine', difficulty: 'beginner' }
+    { name: 'Barbell Squat', category: 'legs', muscle_groups: ['quadriceps', 'glutes', 'core'], equipment: 'barbell' },
+    { name: 'Bench Press', category: 'chest', muscle_groups: ['pectorals', 'triceps'], equipment: 'barbell' },
+    { name: 'Deadlift', category: 'back', muscle_groups: ['hamstrings', 'glutes', 'lower back'], equipment: 'barbell' },
+    { name: 'Overhead Press', category: 'shoulders', muscle_groups: ['anterior deltoids'], equipment: 'barbell' },
+    { name: 'Pull Up', category: 'back', muscle_groups: ['lats', 'biceps'], equipment: 'bodyweight' },
+    { name: 'Dumbbell Curl', category: 'arms', muscle_groups: ['biceps'], equipment: 'dumbbell' },
+    { name: 'Tricep Rope Pushdown', category: 'arms', muscle_groups: ['triceps'], equipment: 'cable' },
+    { name: 'Leg Press', category: 'legs', muscle_groups: ['quadriceps'], equipment: 'machine' },
+    { name: 'Lat Pulldown', category: 'back', muscle_groups: ['lats'], equipment: 'cable' },
+    { name: 'Walking Lunges', category: 'legs', muscle_groups: ['quadriceps', 'glutes'], equipment: 'dumbbell' },
+    { name: 'Face Pulls', category: 'shoulders', muscle_groups: ['rear deltoids'], equipment: 'cable' },
+    { name: 'Incline Dumbbell Press', category: 'chest', muscle_groups: ['upper chest'], equipment: 'dumbbell' },
+    { name: 'Romanian Deadlift', category: 'legs', muscle_groups: ['hamstrings'], equipment: 'barbell' },
+    { name: 'Plank', category: 'core', muscle_groups: ['core'], equipment: 'bodyweight' },
+    { name: 'Russian Twists', category: 'core', muscle_groups: ['obliques'], equipment: 'bodyweight' },
+    { name: 'Running', category: 'cardio', muscle_groups: ['legs', 'heart'], equipment: 'bodyweight' },
+    { name: 'Cycling', category: 'cardio', muscle_groups: ['legs', 'heart'], equipment: 'machine' }
   ];
 
   const { data: exerciseData, error: exError } = await supabase
