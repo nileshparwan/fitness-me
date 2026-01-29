@@ -17,6 +17,7 @@ import { QRCodeSVG } from "qrcode.react";
 import { PDFDownloadLink } from "@react-pdf/renderer";
 import { WorkoutPDF } from "./workout-pdf-document";
 import { toast } from "sonner";
+import dynamic from "next/dynamic";
 
 interface WorkoutActionsProps {
     workout: any;
@@ -25,12 +26,23 @@ interface WorkoutActionsProps {
     isPublicPage?: boolean;
 }
 
+const DownloadPDFButton = dynamic(
+    () => import("./download-pdf-button"),
+    {
+        // 2. DISABLE SERVER RENDER (Crucial)
+        ssr: false,
+
+        // 3. LOADING STATE (Good UX)
+        loading: () => (
+            <Button variant="outline" size="sm" disabled>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading PDF...
+            </Button>
+        )
+    }
+);
+
 export function WorkoutActions({ workout, strengthLogs, cardioLogs, isPublicPage = false }: WorkoutActionsProps) {
     const [showShareDialog, setShowShareDialog] = useState(false);
-
-    // Need to ensure client-side rendering for PDF generation
-    const [isClient, setIsClient] = useState(false);
-    useEffect(() => { setIsClient(true) }, []);
 
     const handleReaderMode = () => {
         if (typeof window !== "undefined") {
@@ -51,29 +63,12 @@ export function WorkoutActions({ workout, strengthLogs, cardioLogs, isPublicPage
         <div className="flex gap-2">
 
             {/* ACTION 1: Direct PDF Download (Safe) */}
-            {isClient && (
-                <PDFDownloadLink
-                    document={
-                        <WorkoutPDF
-                            workout={workout}
-                            strengthLogs={strengthLogs}
-                            cardioLogs={cardioLogs}
-                        />
-                    }
-                    fileName={`${workout.name.replace(/\s+/g, "_")}.pdf`}
-                >
-                    {({ loading }) => (
-                        <Button variant="outline" size="sm" disabled={loading}>
-                            {loading ? (
-                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            ) : (
-                                <Download className="mr-2 h-4 w-4" />
-                            )}
-                            PDF
-                        </Button>
-                    )}
-                </PDFDownloadLink>
-            )}
+            {/* 1. PDF BUTTON (Now Safe & Lazy Loaded) */}
+            <DownloadPDFButton
+                workout={workout}
+                strengthLogs={strengthLogs}
+                cardioLogs={cardioLogs}
+            />
 
             {/* ACTION 2: Reader Mode */}
             {!isPublicPage && (
