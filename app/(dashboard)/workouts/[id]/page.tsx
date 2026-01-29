@@ -14,7 +14,8 @@ import {
   Heart,
   MoreVertical,
   Settings2,
-  HeartPulse
+  HeartPulse,
+  Share2 // Imported Share Icon
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -36,6 +37,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSeparator // Added Separator
 } from "@/components/ui/dropdown-menu";
 
 import { useWorkouts } from "@/hooks/use-workout";
@@ -43,7 +45,8 @@ import { groupLogsByExercise } from "@/utils/log";
 import { StatCard } from "./_components/stat-card";
 import { EditableText } from "@/components/shared/editable-text";
 import { WorkoutDetailSkeleton } from "./_components/workout-detailed-skeleton";
-import { AddCardioDialog } from "@/components/workout/add-cardio-dialog";
+import { WorkoutActions } from "@/components/workout/workout-actions";
+// import { AddCardioDialog } from "@/components/workout/add-cardio-dialog"; // Unused in this snippet
 
 export default function WorkoutDetailPage() {
   const { id } = useParams() as { id: string };
@@ -55,10 +58,14 @@ export default function WorkoutDetailPage() {
   if (isLoading) return <WorkoutDetailSkeleton />;
   if (!workout) return <div className="p-8 text-center">Workout not found</div>;
 
+  // Data Preparation for Display
   const exercises = groupLogsByExercise(workout.workout_logs || []);
+  
+  // Data Preparation for Printing/Actions
+  const strengthLogs = workout.workout_logs || [];
   const cardioLogs = workout.cardio_logs || [];
 
-  const totalVolume = (workout.workout_logs || []).reduce(
+  const totalVolume = strengthLogs.reduce(
     (acc: number, log: any) => acc + (log.weight * log.reps),
     0
   );
@@ -83,7 +90,7 @@ export default function WorkoutDetailPage() {
     <div className="space-y-6 animate-in fade-in duration-500 pb-20">
 
       {/* --- HEADER --- */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-3 overflow-hidden">
           <Button variant="ghost" size="icon" className="shrink-0" onClick={() => router.back()}>
             <ArrowLeft className="h-5 w-5" />
@@ -101,8 +108,18 @@ export default function WorkoutDetailPage() {
           </div>
         </div>
 
-        {/* DESKTOP ACTIONS (Hidden on Mobile) */}
+        {/* DESKTOP ACTIONS */}
         <div className="hidden md:flex items-center gap-2">
+          
+          {/* 2. NEW: Workout Actions (PDF, Reader, Share) */}
+          <WorkoutActions 
+            workout={workout}
+            strengthLogs={strengthLogs}
+            cardioLogs={cardioLogs}
+          />
+          
+          <Separator orientation="vertical" className="h-6 mx-2" />
+
           <Button variant="outline" onClick={handleManageStrength}>
             <Dumbbell className="mr-2 h-4 w-4" />
             Manage Strength
@@ -133,8 +150,8 @@ export default function WorkoutDetailPage() {
           </AlertDialog>
         </div>
 
-        {/* MOBILE ACTIONS MENU (Visible only on Mobile) */}
-        <div className="md:hidden">
+        {/* MOBILE ACTIONS MENU */}
+        <div className="md:hidden absolute top-4 right-4">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon">
@@ -142,14 +159,24 @@ export default function WorkoutDetailPage() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
+              
+              {/* 3. NEW: Mobile Share Shortcut (Redirects to Reader Mode) */}
+              <DropdownMenuItem onClick={() => window.open(`/share/workout/${id}`, '_blank')}>
+                <Share2 className="mr-2 h-4 w-4" /> Share / PDF View
+              </DropdownMenuItem>
+              
+              <DropdownMenuSeparator />
+
               <DropdownMenuItem onClick={handleManageStrength}>
                 <Dumbbell className="mr-2 h-4 w-4" /> Manage Strength
               </DropdownMenuItem>
               <DropdownMenuItem onClick={handleManageCardio}>
                 <Activity className="mr-2 h-4 w-4" /> Manage Cardio
               </DropdownMenuItem>
+              
+              <DropdownMenuSeparator />
+              
               <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => {
-                // Trigger delete logic or open a dialog state
                 if (confirm("Delete workout? This cannot be undone.")) handleDelete();
               }}>
                 <Trash2 className="mr-2 h-4 w-4" /> Delete Workout
@@ -159,10 +186,7 @@ export default function WorkoutDetailPage() {
         </div>
       </div>
 
-      {/* --- MOBILE ACTION GRID --- 
-          Large, easy-to-tap buttons for mobile/tablet users.
-          Hidden on Desktop. 
-      */}
+      {/* --- MOBILE ACTION GRID --- */}
       <div className="grid grid-cols-2 gap-3 md:hidden">
         <Button
           variant="outline"
@@ -183,7 +207,7 @@ export default function WorkoutDetailPage() {
       </div>
 
       {/* STATS */}
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
+      <div className="hidden md:grid  grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
         <StatCard label="Duration" value={`${workout.duration_minutes || "--"} min`} icon={Clock} />
         <StatCard label="Volume" value={`${(totalVolume / 1000).toFixed(1)}k kg`} icon={Dumbbell} />
         <StatCard label="Strength" value={exercises.length} icon={Dumbbell} />
@@ -239,8 +263,6 @@ export default function WorkoutDetailPage() {
       {cardioLogs.length > 0 && (
         <div className="space-y-4">
           <h3 className="text-lg font-semibold flex items-center gap-2">
-
-
             <HeartPulse />
             Cardio Logs
           </h3>
@@ -305,6 +327,12 @@ export default function WorkoutDetailPage() {
         </div>
       )}
 
+      <div className="block md:hidden grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
+        <StatCard label="Duration" value={`${workout.duration_minutes || "--"} min`} icon={Clock} />
+        <StatCard label="Volume" value={`${(totalVolume / 1000).toFixed(1)}k kg`} icon={Dumbbell} />
+        <StatCard label="Strength" value={exercises.length} icon={Dumbbell} />
+        <StatCard label="Cardio" value={cardioLogs.length} icon={Activity} />
+      </div>
     </div>
   );
 }
