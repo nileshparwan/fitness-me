@@ -51,7 +51,7 @@ const data = {
     { title: "Programs", url: "/programs", icon: Folder },
     { title: "Exercises", url: "/exercises", icon: BookOpen },
     { title: "Progress", url: "/progress", icon: TrendingUp },
-    { title: "Nutrition", url: "/progress/nutrition", icon: Utensils },
+    { title: "Nutrition", url: "/nutrition", icon: Utensils },
     { title: "Analytics", url: "/analytics", icon: LineChart },
     { title: "AI Coach", url: "/ai-coach", icon: Bot },
   ],

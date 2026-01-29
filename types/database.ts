@@ -296,50 +296,97 @@ export type Database = {
         }
         Relationships: []
       }
-      nutrition_logs: {
+      nutrition_meals: {
         Row: {
+          alternatives: string | null
           calories: number | null
           carbs_g: number | null
           created_at: string | null
-          date: string
           fats_g: number | null
-          fiber_g: number | null
-          food_name: string | null
+          food_name: string
           id: string
-          meal_type: string | null
-          notes: string | null
-          photo_url: string | null
+          instructions: string | null
+          meal_type: string
+          position: number | null
+          program_id: string
           protein_g: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          alternatives?: string | null
+          calories?: number | null
+          carbs_g?: number | null
+          created_at?: string | null
+          fats_g?: number | null
+          food_name: string
+          id?: string
+          instructions?: string | null
+          meal_type: string
+          position?: number | null
+          program_id: string
+          protein_g?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          alternatives?: string | null
+          calories?: number | null
+          carbs_g?: number | null
+          created_at?: string | null
+          fats_g?: number | null
+          food_name?: string
+          id?: string
+          instructions?: string | null
+          meal_type?: string
+          position?: number | null
+          program_id?: string
+          protein_g?: number | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nutrition_meals_program_id_fkey"
+            columns: ["program_id"]
+            isOneToOne: false
+            referencedRelation: "nutrition_programs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nutrition_programs: {
+        Row: {
+          created_at: string | null
+          description: string | null
+          end_date: string
+          id: string
+          is_public: boolean | null
+          name: string
+          notes: string | null
+          start_date: string
+          status: string
           user_id: string
         }
         Insert: {
-          calories?: number | null
-          carbs_g?: number | null
           created_at?: string | null
-          date: string
-          fats_g?: number | null
-          fiber_g?: number | null
-          food_name?: string | null
+          description?: string | null
+          end_date: string
           id?: string
-          meal_type?: string | null
+          is_public?: boolean | null
+          name: string
           notes?: string | null
-          photo_url?: string | null
-          protein_g?: number | null
+          start_date: string
+          status?: string
           user_id: string
         }
         Update: {
-          calories?: number | null
-          carbs_g?: number | null
           created_at?: string | null
-          date?: string
-          fats_g?: number | null
-          fiber_g?: number | null
-          food_name?: string | null
+          description?: string | null
+          end_date?: string
           id?: string
-          meal_type?: string | null
+          is_public?: boolean | null
+          name?: string
           notes?: string | null
-          photo_url?: string | null
-          protein_g?: number | null
+          start_date?: string
+          status?: string
           user_id?: string
         }
         Relationships: []
@@ -416,13 +463,6 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "program_items_nutrition_log_id_fkey"
-            columns: ["nutrition_log_id"]
-            isOneToOne: false
-            referencedRelation: "nutrition_logs"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "program_items_program_id_fkey"
             columns: ["program_id"]
             isOneToOne: false
@@ -471,51 +511,6 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
-      }
-      template_exercises: {
-        Row: {
-          created_at: string | null
-          default_reps: number | null
-          default_sets: number | null
-          exercise_id: string | null
-          id: string
-          order_index: number
-          template_id: string
-        }
-        Insert: {
-          created_at?: string | null
-          default_reps?: number | null
-          default_sets?: number | null
-          exercise_id?: string | null
-          id?: string
-          order_index: number
-          template_id: string
-        }
-        Update: {
-          created_at?: string | null
-          default_reps?: number | null
-          default_sets?: number | null
-          exercise_id?: string | null
-          id?: string
-          order_index?: number
-          template_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "template_exercises_exercise_id_fkey"
-            columns: ["exercise_id"]
-            isOneToOne: false
-            referencedRelation: "exercise_library"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "template_exercises_template_id_fkey"
-            columns: ["template_id"]
-            isOneToOne: false
-            referencedRelation: "workout_templates"
-            referencedColumns: ["id"]
-          },
-        ]
       }
       workout_logs: {
         Row: {
@@ -602,39 +597,6 @@ export type Database = {
           },
         ]
       }
-      workout_templates: {
-        Row: {
-          created_at: string | null
-          description: string | null
-          frequency_per_week: number | null
-          id: string
-          is_public: boolean | null
-          name: string
-          updated_at: string | null
-          user_id: string
-        }
-        Insert: {
-          created_at?: string | null
-          description?: string | null
-          frequency_per_week?: number | null
-          id?: string
-          is_public?: boolean | null
-          name: string
-          updated_at?: string | null
-          user_id: string
-        }
-        Update: {
-          created_at?: string | null
-          description?: string | null
-          frequency_per_week?: number | null
-          id?: string
-          is_public?: boolean | null
-          name?: string
-          updated_at?: string | null
-          user_id?: string
-        }
-        Relationships: []
-      }
       workouts: {
         Row: {
           ai_feedback: string | null
@@ -678,28 +640,22 @@ export type Database = {
           updated_at?: string | null
           user_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "workouts_template_id_fkey"
-            columns: ["template_id"]
-            isOneToOne: false
-            referencedRelation: "workout_templates"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
     }
     Views: {
       exercise_progress: {
         Row: {
-          avg_rpe: number | null
           date: string | null
+          distance_km: number | null
+          duration_minutes: number | null
+          estimated_1rm: number | null
           exercise_name: string | null
-          max_estimated_1rm: number | null
-          max_reps: number | null
-          max_weight: number | null
+          reps: number | null
+          rpe: number | null
+          type: string | null
           user_id: string | null
-          workout_count: number | null
+          weight: number | null
         }
         Relationships: []
       }
