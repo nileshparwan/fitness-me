@@ -65,7 +65,7 @@ export default function ProgressPage() {
   }, [exercises, exercise]);
 
   // 2. Fetch Metrics (metrics wait for 'exercise' to be set)
-  const { data: metrics, isLoading: loadingMetrics } = useQuery({
+  const { data: metrics, isLoading: loadingMetrics, isFetching: fetchingMetrics } = useQuery({
     queryKey: ["metrics", exercise, range],
     queryFn: () => getExerciseMetrics(exercise, range),
     enabled: !!exercise, // Only run if exercise is selected
@@ -91,29 +91,51 @@ export default function ProgressPage() {
     staleTime: 1000 * 60 * 30
   });
 
-  // --- LOADING STATE ---
-  // Show Skeleton while initial exercises load OR while metrics load for the first time
-  if (loadingExercises || (exercise && loadingMetrics)) {
+  // =========================================================
+  // ⚡️ PERFORMANCE FIX: ROBUST LOADING GUARD
+  // =========================================================
+
+  // Case 1: Still fetching the list of exercises
+  if (loadingExercises) {
     return <ProgressSkeleton />;
+  }
+
+  // Case 2: List loaded, but we are still initializing the default "exercise" state
+  // This prevents the "empty flash" glitch
+  if (exercises && exercises.length > 0 && !exercise) {
+    return <ProgressSkeleton />;
+  }
+
+  // Case 3: We have an exercise, but are fetching its specific metrics
+  if (loadingMetrics || fetchingMetrics) {
+    return <ProgressSkeleton />;
+  }
+
+  // Case 4: Loaded, but user has NO data at all (New Account)
+  if (exercises && exercises.length === 0) {
+    return (
+      <div className="p-12 text-center min-h-screen flex flex-col items-center justify-center text-muted-foreground">
+        <h2 className="text-2xl font-semibold mb-2">No Data Found</h2>
+        <p>Complete a workout to see your progress analytics here.</p>
+      </div>
+    );
   }
 
   const isCardio = metrics?.type === "cardio";
   const logs = metrics?.logs || [];
   const chartData = metrics?.chartData || [];
-  
-  // Safe exercise name
   const currentExerciseName = exercise || "Loading...";
 
   return (
     <div className="p-4 md:p-8 max-w-[1600px] mx-auto space-y-8 pb-24 bg-gray-50/30 min-h-screen animate-in fade-in duration-500">
-      
+
       {/* HEADER */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-gray-900">Progress Hub</h1>
           <p className="text-muted-foreground">Deep analysis of your {isCardio ? "endurance" : "strength"} journey.</p>
         </div>
-        
+
         <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
           <Select value={exercise} onValueChange={setExercise} disabled={loadingExercises}>
             <SelectTrigger className="w-full md:w-[240px] bg-white border-gray-200 shadow-sm transition-all hover:border-indigo-300">
@@ -140,23 +162,23 @@ export default function ProgressPage() {
       {isCardio ? (
         // === CARDIO VIEW ===
         <div className="space-y-6 animate-in slide-in-from-bottom-2 duration-500">
-           <CardioAnalytics logs={logs as unknown as CardioLogRow[]} /> 
+          <CardioAnalytics logs={logs as unknown as CardioLogRow[]} />
 
-           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-auto">
-              <CardioCharts data={chartData as unknown as CardioChartData[]} exerciseName={currentExerciseName} />
-              
-              <div className="col-span-1 h-full">
-                 <AthleteRadar data={radarData || []} />
-              </div>
-           </div>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-auto">
+            <CardioCharts data={chartData as unknown as CardioChartData[]} exerciseName={currentExerciseName} />
 
-           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              <CardioCoach logs={logs as unknown as CardioLogRow[]} birthDate={profile?.birth_date} />
-           </div>
-           
-           <div className="grid grid-cols-1">
-             <HistoryTable logs={logs as any[]} />
-           </div>
+            <div className="col-span-1 h-full">
+              <AthleteRadar data={radarData || []} />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <CardioCoach logs={logs as unknown as CardioLogRow[]} birthDate={profile?.birth_date} />
+          </div>
+
+          <div className="grid grid-cols-1">
+            <HistoryTable logs={logs as any[]} />
+          </div>
         </div>
       ) : (
         // === STRENGTH VIEW ===
@@ -164,30 +186,30 @@ export default function ProgressPage() {
           <AnalyticsPanel logs={logs as unknown as WorkoutLogRow[]} />
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-auto">
-             <ProgressCharts 
-                data={chartData as unknown as StrengthChartData[]} 
-                exerciseName={currentExerciseName} 
-                timeRange={range} 
-             />
-             <div className="col-span-1 h-full">
-                <AthleteRadar data={radarData || []} />
-             </div>
+            <ProgressCharts
+              data={chartData as unknown as StrengthChartData[]}
+              exerciseName={currentExerciseName}
+              timeRange={range}
+            />
+            <div className="col-span-1 h-full">
+              <AthleteRadar data={radarData || []} />
+            </div>
           </div>
-          
+
           <div className="grid grid-cols-1">
-             <PhysioChart data={chartData as unknown as StrengthChartData[]} />
+            <PhysioChart data={chartData as unknown as StrengthChartData[]} />
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-             <AdvancedCoach logs={logs as unknown as WorkoutLogRow[]} exerciseName={currentExerciseName} />
-             <div className="col-span-1 h-full">
-                <PersonalRecords logs={logs as unknown as WorkoutLogRow[]} />
-             </div>
+            <AdvancedCoach logs={logs as unknown as WorkoutLogRow[]} exerciseName={currentExerciseName} />
+            <div className="col-span-1 h-full">
+              <PersonalRecords logs={logs as unknown as WorkoutLogRow[]} />
+            </div>
           </div>
 
-           <div className="grid grid-cols-1">
-             <HistoryTable logs={logs as any[]} />
-           </div>
+          <div className="grid grid-cols-1">
+            <HistoryTable logs={logs as any[]} />
+          </div>
         </div>
       )}
     </div>
