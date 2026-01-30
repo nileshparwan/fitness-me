@@ -175,7 +175,8 @@ export function SortableProgramList({ items, programId }: { items: any[], progra
         }));
 
         // Send to Server
-        updateProgramItemOrder(updates, programId).catch(() => {
+        // TODO: check code here
+        updateProgramItemOrder(updates as any, programId).catch(() => {
           toast.error("Failed to save order");
           setLocalItems(items); // Revert on failure
         });
