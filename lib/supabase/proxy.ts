@@ -38,9 +38,22 @@ export async function updateSession(request: NextRequest) {
   // 3. Refresh Session
   // This will call 'setAll' above if the token needs refreshing
   const { data: { user } } = await supabase.auth.getUser()
+  const pathname = request.nextUrl.pathname.toLowerCase()
+
+  // ---------------------------------------------------------
+  // 3.6 NEW: Handle Root Path (localhost:3000 -> /)
+  // ---------------------------------------------------------
+  if (pathname === '/') {
+    const url = request.nextUrl.clone()
+    if (user) {
+      url.pathname = '/dashboard' // User is logged in -> Dashboard
+    } else {
+      url.pathname = '/login'     // User is guest -> Login
+    }
+    return NextResponse.redirect(url)
+  }
 
   // 3.5 Handle static redirects for signin/signup
-  const pathname = request.nextUrl.pathname.toLowerCase()
   if (redirectMap[pathname]) {
     const url = request.nextUrl.clone()
     url.pathname = redirectMap[pathname]
@@ -49,7 +62,7 @@ export async function updateSession(request: NextRequest) {
 
   // 4. Protect Routes
   // This array contains all the paths you want to secure
-  const protectedPaths = ['/dashboard', '/workouts', '/exercises', '/progress', '/settings', 'programs'];
+  const protectedPaths = ['/dashboard', '/workouts', '/exercises', '/progress', '/settings', '/programs'];
 
   // Check if the current path starts with any of the protected paths
   const isProtected = protectedPaths.some(path => request.nextUrl.pathname.startsWith(path));
