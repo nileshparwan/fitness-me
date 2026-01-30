@@ -1,5 +1,6 @@
 import { WorkoutForm } from "@/components/workout/workout-form";
 import { Separator } from "@/components/ui/separator";
+import { Suspense } from "react";
 
 export default function NewWorkoutPage() {
   return (
@@ -10,8 +11,13 @@ export default function NewWorkoutPage() {
           Record your session manually or choose a template.
         </p>
       </div>
+
       <Separator />
-      <WorkoutForm />
+
+      {/* TODO: use a skeleton */}
+      <Suspense fallback={<div>Loading form...</div>}>
+        <WorkoutForm />
+      </Suspense>
     </div>
   );
 }

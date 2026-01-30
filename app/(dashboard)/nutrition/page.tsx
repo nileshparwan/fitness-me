@@ -15,10 +15,8 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Switch } from "@/components/ui/switch";
 import { 
-  Plus, Trash2, MoreHorizontal, Search, Copy, Pencil, Loader2, ArrowRight 
+  Plus, Trash2, MoreHorizontal, Search, Copy, Pencil, ArrowRight 
 } from "lucide-react";
 import { 
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuLabel, DropdownMenuSeparator 
@@ -28,7 +26,7 @@ import { ProgramsTableSkeleton } from "./_components/nutrition-skeletons";
 
 export default function NutritionDashboard() {
   const [search, setSearch] = useState("");
-  const [editingProgram, setEditingProgram] = useState<any>(null); // For Edit Dialog
+  const [editingProgram, setEditingProgram] = useState<any>(null); 
   const [isEditOpen, setIsEditOpen] = useState(false);
 
   const { data: programs, isLoading, refetch } = useQuery({
@@ -36,7 +34,6 @@ export default function NutritionDashboard() {
     queryFn: getPrograms
   });
 
-  // Handlers
   const handleDelete = async (id: string) => {
     if(confirm("Delete this program?")) {
       await deleteProgram(id);
@@ -58,7 +55,6 @@ export default function NutritionDashboard() {
     toast.success(`Status updated to ${status}`);
   };
 
-  // Search Filter
   const filteredPrograms = programs?.filter((p: any) => 
     p.name.toLowerCase().includes(search.toLowerCase()) || 
     p.status.toLowerCase().includes(search.toLowerCase())
@@ -109,15 +105,21 @@ export default function NutritionDashboard() {
         </div>
       </div>
 
-      {/* Edit Dialog (Controlled) */}
+      {/* Edit Dialog */}
       <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
         <DialogContent>
           <DialogHeader><DialogTitle>Edit Program</DialogTitle></DialogHeader>
-          <form action={async (fd) => { await updateProgram(fd, editingProgram.id); setIsEditOpen(false); refetch(); toast.success("Updated"); }} className="space-y-4 py-4">
+          <form action={async (fd) => { 
+            if(!editingProgram) return;
+            await updateProgram(fd, editingProgram.id); 
+            setIsEditOpen(false); 
+            refetch(); 
+            toast.success("Updated"); 
+          }} className="space-y-4 py-4">
             <div className="space-y-2"><Label>Name</Label><Input name="name" defaultValue={editingProgram?.name} required /></div>
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2"><Label>Start</Label><Input name="start_date" type="date" defaultValue={editingProgram?.start_date} /></div>
-              <div className="space-y-2"><Label>End</Label><Input name="end_date" type="date" defaultValue={editingProgram?.end_date} /></div>
+              <div className="space-y-2"><Label>Start</Label><Input name="start_date" type="date" defaultValue={editingProgram?.start_date?.split('T')[0]} /></div>
+              <div className="space-y-2"><Label>End</Label><Input name="end_date" type="date" defaultValue={editingProgram?.end_date?.split('T')[0]} /></div>
             </div>
             <div className="space-y-2"><Label>Description</Label><Input name="description" defaultValue={editingProgram?.description} /></div>
             <Button type="submit" className="w-full">Save Changes</Button>
@@ -151,11 +153,20 @@ export default function NutritionDashboard() {
                         <span className="text-xs text-muted-foreground truncate max-w-[200px]">{program.description}</span>
                       </div>
                     </TableCell>
+                    
+                    {/* FIXED DATE CELL */}
                     <TableCell>
                       <div className="text-sm text-muted-foreground">
-                        {format(parseISO(program.start_date), "MMM d")} - {format(parseISO(program.end_date), "MMM d, yyyy")}
+                        {program.start_date && program.end_date ? (
+                          <>
+                            {format(parseISO(program.start_date), "MMM d")} - {format(parseISO(program.end_date), "MMM d, yyyy")}
+                          </>
+                        ) : (
+                          <span className="italic opacity-50">No dates set</span>
+                        )}
                       </div>
                     </TableCell>
+
                     <TableCell>
                       <Badge variant="outline" className={`${statusColors[program.status]} capitalize`}>
                         {program.status}
