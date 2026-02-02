@@ -23,8 +23,6 @@ export function usePrograms() {
   const getProgram = (id: string) => useQuery({
     queryKey: ["program", id],
     queryFn: async () => {
-      // We use explicit joining here. 
-      // Ensure your Supabase Foreign Keys are named correctly.
       const { data, error } = await supabase
         .from("programs")
         .select(`
@@ -40,11 +38,14 @@ export function usePrograms() {
               name,
               duration_minutes,
               status,
-              date
+              date,
+              workout_logs (count)
             )
           )
         `)
         .eq("id", id)
+        // FIX: Use 'referencedTable' instead of 'foreignTable'
+        .order("order_index", { referencedTable: "program_items", ascending: true }) 
         .single();
       
       if (error) {

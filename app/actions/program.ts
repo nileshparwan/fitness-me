@@ -2,13 +2,11 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
+import { Database } from "@/types/database";
 
-type ReorderItem = {
-    id: string;
-    order_index: number;
-    item_type: string; // <--- Added this
-    day_label?: string; // Optional but good to preserve
-};
+type ProgramInsert = Database['public']['Tables']['programs']['Insert'];
+type ProgramItemInsert = Database['public']['Tables']['program_items']['Insert'];
+type ProgramItemUpdate = Database['public']['Tables']['program_items']['Update'];
 
 export async function createProgram(formData: FormData) {
     const supabase = await createClient();
@@ -16,14 +14,14 @@ export async function createProgram(formData: FormData) {
 
     if (!user) throw new Error("Unauthorized");
 
-    const name = formData.get("name") as string;
-    const description = formData.get("description") as string;
-
-    const { error } = await supabase.from("programs").insert({
+    const payload: ProgramInsert = {
         user_id: user.id,
-        name,
-        description,
-    });
+        name: formData.get("name") as string,
+        description: (formData.get("description") as string) || null,
+        // Add other defaults if your DB requires them (e.g. is_public: false)
+    };
+
+    const { error } = await supabase.from("programs").insert(payload);
 
     if (error) throw new Error(error.message);
     revalidatePath("/programs");
@@ -37,11 +35,11 @@ export async function attachItemToProgram(
 ) {
     const supabase = await createClient();
 
-    // Verify ownership logic handled by RLS, but explicit check is good practice
-    const payload: any = {
+    const payload: ProgramItemInsert = {
         program_id: programId,
         item_type: type,
         day_label: label,
+        order_index: 999, // Will be fixed by reorder or DB default
     };
 
     if (type === "workout") payload.workout_id = itemId;
@@ -53,7 +51,7 @@ export async function attachItemToProgram(
     revalidatePath(`/programs/${programId}`);
 }
 
-export async function updateProgram(id: string, data: { name?: string; description?: string }) {
+export async function updateProgram(id: string, data: Database['public']['Tables']['programs']['Update']) {
     const supabase = await createClient();
     const { error } = await supabase
         .from("programs")
@@ -76,7 +74,7 @@ export async function deletePrograms(ids: string[]) {
     revalidatePath("/programs");
 }
 
-// 1. Bulk Add Workouts (Drag or Select)
+// 1. Bulk Add Workouts
 export async function addWorkoutsToProgram(programId: string, workoutIds: string[]) {
     const supabase = await createClient();
 
@@ -88,7 +86,7 @@ export async function addWorkoutsToProgram(programId: string, workoutIds: string
 
     const startOrder = count || 0;
 
-    const items = workoutIds.map((wid, index) => ({
+    const items: ProgramItemInsert[] = workoutIds.map((wid, index) => ({
         program_id: programId,
         workout_id: wid,
         item_type: "workout",
@@ -108,50 +106,46 @@ export async function removeItemsFromProgram(itemIds: string[], programId: strin
     const { error } = await supabase
         .from("program_items")
         .delete()
-        .in("id", itemIds); // Note: Deleting the Link, not the Workout itself
+        .in("id", itemIds);
 
     if (error) throw new Error(error.message);
     revalidatePath(`/programs/${programId}`);
 }
 
-// 3. Reorder Items (Drag & Drop Persistence)
-export async function updateProgramItemOrder(items: ReorderItem[], programId: string) {
+// 3. Reorder Items
+// FIX 2: Updated to accept strictly typed inputs and cast to ProgramItemInsert[]
+export async function updateProgramItemOrder(items: { id: string; order_index: number; day_label?: string; item_type: string }[], programId: string) {
     const supabase = await createClient();
 
-    // We map the incoming items to a payload that satisfies the DB constraints
-    const payload = items.map((item) => ({
+    const updates = items.map((item) => ({
         id: item.id,
-        program_id: programId, // Required for RLS
-        item_type: item.item_type, // Required for NOT NULL constraint
+        program_id: programId,
+        item_type: item.item_type, // Required field
         order_index: item.order_index,
-        day_label: item.day_label || "Unscheduled" // Preserve or default
+        day_label: item.day_label || "Unscheduled"
     }));
 
+    // We cast to ProgramItemInsert[] because upsert validates against the Insert schema
+    // which requires non-null fields (like item_type), even though we are updating.
     const { error } = await supabase
         .from("program_items")
-        .upsert(payload, { onConflict: 'id' });
+        .upsert(updates as ProgramItemInsert[], { onConflict: 'id' });
 
-    if (error) {
-        console.error("Reorder Error:", error.message);
-        throw new Error(error.message);
-    }
+    if (error) throw new Error(error.message);
 
     revalidatePath(`/programs/${programId}`);
 }
 
-// 4. Reverse Link (Used in Workout Form)
+// 4. Reverse Link
 export async function linkWorkoutToPrograms(workoutId: string, programIds: string[]) {
     const supabase = await createClient();
 
-    // 1. Clear existing links for this workout if needed? 
-    // Usually better to just add new ones or handle a full sync. 
-    // For safety, let's just insert new ones and ignore conflicts or duplicates if your DB allows.
-
-    const items = programIds.map(pid => ({
+    const items: ProgramItemInsert[] = programIds.map(pid => ({
         program_id: pid,
         workout_id: workoutId,
         item_type: "workout",
-        day_label: "Imported"
+        day_label: "Imported",
+        order_index: 999 // Append to end
     }));
 
     const { error } = await supabase.from("program_items").insert(items);

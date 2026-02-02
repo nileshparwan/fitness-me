@@ -5,11 +5,16 @@ import { PDFDownloadLink } from "@react-pdf/renderer";
 import { Download, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { WorkoutPDF } from "./workout-pdf-document";
+import { Database } from "@/types/database";
+
+type Workout = Database['public']['Tables']['workouts']['Row'];
+type WorkoutLog = Database['public']['Tables']['workout_logs']['Row'];
+type CardioLog = Database['public']['Tables']['cardio_logs']['Row'];
 
 interface Props {
-  workout: any;
-  strengthLogs: any[];
-  cardioLogs: any[];
+  workout: Workout & { user?: { email: string } | null };
+  strengthLogs: WorkoutLog[];
+  cardioLogs: CardioLog[];
 }
 
 export default function DownloadPDFButton({ workout, strengthLogs, cardioLogs }: Props) {

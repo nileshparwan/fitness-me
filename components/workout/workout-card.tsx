@@ -1,36 +1,31 @@
 "use client";
 
-import { useState, useEffect } from "react"; // Import useState
+import { useState, useEffect } from "react"; 
 import Link from "next/link";
 import { Calendar, Clock, Dumbbell } from "lucide-react";
 import { format } from "date-fns";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/utils";
 import { WorkoutStatusSelect } from "@/components/workout/workout-status-select"; 
+import { Database } from "@/types/database";
+
+type Workout = Database['public']['Tables']['workouts']['Row'] & {
+  workout_logs: Database['public']['Tables']['workout_logs']['Row'][];
+};
 
 interface WorkoutCardProps {
-  workout: {
-    id: string;
-    name: string;
-    status: string | null;
-    date: string | Date;
-    duration_minutes: number | null;
-    workout_logs: any[];
-  };
+  workout: Workout; // Strict Type
 }
 
 export function WorkoutCard({ workout }: WorkoutCardProps) {
-  // 1. STATE: Track status locally so UI updates instantly
   const [currentStatus, setCurrentStatus] = useState(workout.status || "draft");
 
-  // Sync state if prop changes (e.g. after router.refresh brings new server data)
   useEffect(() => {
     setCurrentStatus(workout.status || "draft");
   }, [workout.status]);
 
   const dateObj = typeof workout.date === 'string' ? new Date(workout.date) : workout.date;
 
-  // 2. LOGIC: Use 'currentStatus' (State) instead of 'workout.status' (Prop)
   const getStatusColor = (s: string) => {
     switch (s) {
       case "active": return "bg-blue-100 text-blue-700 hover:bg-blue-200 border-blue-200";
@@ -51,7 +46,7 @@ export function WorkoutCard({ workout }: WorkoutCardProps) {
       <Link href={`/workouts/${workout.id}`} className="block h-full">
         <Card className={cn(
           "hover:bg-muted/50 transition-all duration-200 cursor-pointer h-full border-l-4",
-          borderColor // This now updates instantly
+          borderColor
         )}>
           <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
             <CardTitle className="text-base font-bold truncate pr-2 leading-tight">
@@ -65,7 +60,6 @@ export function WorkoutCard({ workout }: WorkoutCardProps) {
               }}
               className="z-20 relative -mt-1 -mr-2"
             >
-              {/* 3. PASS STATE UPDATER */}
               <WorkoutStatusSelect 
                 workoutId={workout.id} 
                 status={currentStatus}
@@ -76,7 +70,6 @@ export function WorkoutCard({ workout }: WorkoutCardProps) {
           </CardHeader>
           
           <CardContent>
-             {/* ... content remains the same ... */}
             <div className="flex items-center text-sm text-muted-foreground mb-4">
               <Calendar className="mr-2 h-3 w-3 opacity-70" />
               {format(dateObj, "PPP")}

@@ -5,13 +5,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2, Timer, MapPin, Flame, Heart, Activity, Mountain, Repeat } from "lucide-react";
+import { Loader2, Activity } from "lucide-react";
 import { toast } from "sonner";
 import { upsertCardioLog } from "@/app/actions/cardio";
+import { Database } from "@/types/database";
+
+type CardioLog = Database['public']['Tables']['cardio_logs']['Row'];
+type CardioLogInsert = Database['public']['Tables']['cardio_logs']['Insert'];
 
 interface CardioLogFormProps {
   workoutId: string;
-  initialData?: any; // <--- NEW: Accepts data for editing
+  initialData?: Partial<CardioLog>; // Strict typing
   onSuccess?: () => void;
   onCancel?: () => void;
 }
@@ -19,9 +23,9 @@ interface CardioLogFormProps {
 export function CardioLogForm({ workoutId, initialData, onSuccess, onCancel }: CardioLogFormProps) {
   const [loading, setLoading] = useState(false);
   
-  // Default State
+  // Use strings for inputs to handle "empty" state better than numbers
   const defaultState = {
-    id: undefined,
+    id: undefined as string | undefined,
     activity_type: "",
     duration_minutes: "",
     distance_km: "",
@@ -30,36 +34,36 @@ export function CardioLogForm({ workoutId, initialData, onSuccess, onCancel }: C
     max_heart_rate: "",
     average_pace: "",
     elevation_gain_m: "",
-    reps: "",
+    reps: "", // Laps/Reps
     notes: ""
   };
 
   const [formData, setFormData] = useState(defaultState);
 
-  // Load initial data when editing
   useEffect(() => {
     if (initialData) {
       setFormData({
         id: initialData.id,
         activity_type: initialData.activity_type || "",
-        duration_minutes: initialData.duration_minutes || "",
-        distance_km: initialData.distance_km || "",
-        calories_burned: initialData.calories_burned || "",
-        average_heart_rate: initialData.average_heart_rate || "",
-        max_heart_rate: initialData.max_heart_rate || "",
+        duration_minutes: initialData.duration_minutes?.toString() || "",
+        distance_km: initialData.distance_km?.toString() || "",
+        calories_burned: initialData.calories_burned?.toString() || "",
+        average_heart_rate: initialData.average_heart_rate?.toString() || "",
+        max_heart_rate: initialData.max_heart_rate?.toString() || "",
         average_pace: initialData.average_pace || "",
-        elevation_gain_m: initialData.elevation_gain_m || "",
-        reps: initialData.reps || "",
+        elevation_gain_m: initialData.elevation_gain_m?.toString() || "",
+        reps: initialData.reps?.toString() || "", // Using 'reps' column for Laps if needed
         notes: initialData.notes || ""
       });
-    } else {
-      setFormData(defaultState);
     }
   }, [initialData]);
 
-  const handleChange = (field: string, value: string) => {
+  const handleChange = (field: keyof typeof defaultState, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
+
+  // Helper to convert string input -> DB Number or Null (avoid 0 for missing data)
+  const getNumber = (val: string) => (val.trim() === "" ? null : Number(val));
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -70,23 +74,26 @@ export function CardioLogForm({ workoutId, initialData, onSuccess, onCancel }: C
 
     setLoading(true);
     try {
-      await upsertCardioLog({
-        id: formData.id, // Pass ID for updates
+      // Construct Payload using strict DB types
+      const payload: Omit<CardioLogInsert, "user_id" | "created_at" | "updated_at"> = {
+        id: formData.id,
         workout_id: workoutId,
         activity_type: formData.activity_type,
-        duration_minutes: Number(formData.duration_minutes),
-        distance_km: formData.distance_km ? Number(formData.distance_km) : null,
-        calories_burned: formData.calories_burned ? Number(formData.calories_burned) : null,
-        average_heart_rate: formData.average_heart_rate ? Number(formData.average_heart_rate) : null,
-        max_heart_rate: formData.max_heart_rate ? Number(formData.max_heart_rate) : null,
-        elevation_gain_m: formData.elevation_gain_m ? Number(formData.elevation_gain_m) : null,
-        reps: formData.reps ? Number(formData.reps) : null,
+        duration_minutes: Number(formData.duration_minutes), // Required
+        distance_km: getNumber(formData.distance_km),
+        calories_burned: getNumber(formData.calories_burned),
+        average_heart_rate: getNumber(formData.average_heart_rate),
+        max_heart_rate: getNumber(formData.max_heart_rate),
+        elevation_gain_m: getNumber(formData.elevation_gain_m),
         average_pace: formData.average_pace || null,
+        reps: getNumber(formData.reps), // Optional Laps
         notes: formData.notes || null,
-      });
+      };
+
+      await upsertCardioLog(payload);
 
       toast.success(formData.id ? "Log updated" : "Log added");
-      setFormData(defaultState); // Reset form
+      if (!initialData) setFormData(defaultState); // Clear only if adding new
       if (onSuccess) onSuccess();
     } catch (err: any) {
       toast.error(err.message || "Failed to save");
@@ -102,7 +109,6 @@ export function CardioLogForm({ workoutId, initialData, onSuccess, onCancel }: C
         {initialData ? "Edit Cardio Log" : "Add Cardio Log"}
       </h3>
 
-      {/* Inputs (Same as before) */}
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
           <Label>Activity Type *</Label>
@@ -125,7 +131,6 @@ export function CardioLogForm({ workoutId, initialData, onSuccess, onCancel }: C
         </div>
       </div>
 
-      {/* Metrics Row 1 */}
       <div className="grid grid-cols-3 gap-3">
         <div className="space-y-2">
           <Label className="text-xs">Dist (km)</Label>
@@ -141,7 +146,6 @@ export function CardioLogForm({ workoutId, initialData, onSuccess, onCancel }: C
         </div>
       </div>
 
-      {/* Metrics Row 2 */}
       <div className="grid grid-cols-3 gap-3">
         <div className="space-y-2">
            <Label className="text-xs">Max HR</Label>
@@ -164,9 +168,7 @@ export function CardioLogForm({ workoutId, initialData, onSuccess, onCancel }: C
 
       <div className="flex justify-end gap-2">
         {onCancel && (
-          <Button type="button" variant="ghost" onClick={onCancel}>
-            Cancel
-          </Button>
+          <Button type="button" variant="ghost" onClick={onCancel}>Cancel</Button>
         )}
         <Button type="submit" disabled={loading}>
           {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}

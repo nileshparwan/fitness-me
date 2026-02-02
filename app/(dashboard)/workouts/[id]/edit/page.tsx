@@ -1,14 +1,16 @@
 "use client";
 
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { WorkoutForm } from "@/components/workout/workout-form";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertCircle, ArrowLeft } from "lucide-react";
 import { useWorkouts } from "@/hooks/use-workout";
 import { groupLogsByExercise } from "@/utils/log";
-import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { Database } from "@/types/database";
+
+type WorkoutLog = Database['public']['Tables']['workout_logs']['Row'];
 
 export default function EditWorkoutPage() {
   const { id } = useParams() as { id: string };
@@ -19,10 +21,7 @@ export default function EditWorkoutPage() {
   if (isLoading) {
     return (
       <div className="max-w-3xl mx-auto space-y-8 p-4">
-        <div className="flex items-center gap-4">
-           <Skeleton className="h-10 w-10 rounded-full" />
-           <Skeleton className="h-8 w-48" />
-        </div>
+        <div className="flex items-center gap-4"><Skeleton className="h-10 w-10 rounded-full" /><Skeleton className="h-8 w-48" /></div>
         <Skeleton className="h-[400px] w-full rounded-xl" />
       </div>
     );
@@ -39,7 +38,8 @@ export default function EditWorkoutPage() {
   }
 
   // --- TRANSFORMATION LOGIC ---
-  const groupedExercises = groupLogsByExercise(workout.workout_logs);
+  // Ensure we pass the logs as strictly typed rows
+  const groupedExercises = groupLogsByExercise((workout.workout_logs as WorkoutLog[]) || []);
 
   const initialData = {
     name: workout.name,
@@ -49,12 +49,12 @@ export default function EditWorkoutPage() {
       exercise_id: ex.exercise_id,
       name: ex.name,
       notes: "",
-      sets: ex.sets.map((set: any) => ({
+      sets: ex.sets.map((set: WorkoutLog) => ({
         id: set.id,
         set_number: set.set_number,
-        reps: set.reps,
-        weight: set.weight,
-        rpe: set.rpe || 0,
+        reps: set.reps, // Number
+        weight: set.weight, // Number
+        rpe: set.rpe || 0, // Handle Null
         is_completed: true
       }))
     }))
@@ -62,16 +62,13 @@ export default function EditWorkoutPage() {
 
   return (
     <div className="space-y-6 pb-24 md:pb-10">
-      {/* Mobile Back Button / Header */}
       <div className="flex items-center gap-2 px-1">
         <Button variant="ghost" size="icon" onClick={() => router.back()}>
           <ArrowLeft className="h-5 w-5" />
         </Button>
         <div>
           <h3 className="text-lg font-bold">Edit Session</h3>
-          <p className="text-xs text-muted-foreground">
-            {new Date(workout.date).toLocaleDateString()}
-          </p>
+          <p className="text-xs text-muted-foreground">{new Date(workout.date).toLocaleDateString()}</p>
         </div>
       </div>
       

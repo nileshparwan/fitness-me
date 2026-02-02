@@ -12,12 +12,12 @@ import {
   DragStartEvent,
   DragEndEvent,
   defaultDropAnimationSideEffects,
+  rectIntersection, // Use strict intersection for better drop detection
 } from "@dnd-kit/core";
 import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import { toast } from "sonner";
 import { useMediaQuery } from "@/hooks/use-media-query";
 
-// Components
 import { ProgramTimeline } from "./program-timeline";
 import { LibrarySidebar } from "./library-sidebar";
 import { Card } from "@/components/ui/card";
@@ -25,23 +25,37 @@ import { Button } from "@/components/ui/button";
 import { LayoutTemplate, PanelRightClose, PanelRightOpen } from "lucide-react";
 import { useProgramStore } from "@/stores/use-program-store";
 import { addWorkoutsToProgram, updateProgramItemOrder } from "@/app/actions/program";
-import { WorkoutPicker } from "../workout/workout-picker"; // Verify path
+import { WorkoutPicker } from "../workout/workout-picker";
+import { Database } from "@/types/database";
 
-export function ProgramBuilder({ program, allWorkouts }: { program: any; allWorkouts: any[] }) {
-  // 1. Connect to Store
+type Workout = Database['public']['Tables']['workouts']['Row'];
+type Program = Database['public']['Tables']['programs']['Row'];
+type ProgramItem = Database['public']['Tables']['program_items']['Row'] & {
+  workouts: Workout | null;
+};
+
+type ProgramWithDetails = Program & {
+  program_items: ProgramItem[];
+};
+
+interface ProgramBuilderProps {
+  program: ProgramWithDetails;
+  allWorkouts: Workout[];
+}
+
+export function ProgramBuilder({ program, allWorkouts }: ProgramBuilderProps) {
   const { items, setItems, addItem, moveItem, isSidebarOpen, toggleSidebar } = useProgramStore();
   
-  const [activeItem, setActiveItem] = useState<any>(null);
+  // Mixed type for drag item
+  const [activeItem, setActiveItem] = useState<(Workout & { source: 'library' }) | (ProgramItem & { source: 'program'; name?: string }) | null>(null);
+  
   const isDesktop = useMediaQuery("(min-width: 1024px)");
 
-  // 2. Sync Initial DB Data to Store
   useEffect(() => {
-    // Ensure we map any missing fields if necessary, though DB should provide them
-    const sorted = program.program_items?.sort((a: any, b: any) => a.order_index - b.order_index) || [];
-    setItems(sorted);
+    const sorted = program.program_items?.sort((a, b) => (a.order_index ?? 0) - (b.order_index ?? 0)) || [];
+    setItems(sorted as any); 
   }, [program.program_items, setItems]);
 
-  // 3. Filter Library: Hides workouts that are already in the timeline
   const availableWorkouts = allWorkouts.filter(
     (w) => !items.some((item) => item.workout_id === w.id)
   );
@@ -51,15 +65,16 @@ export function ProgramBuilder({ program, allWorkouts }: { program: any; allWork
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
-  // --- HANDLERS ---
-
   const handleDragStart = (event: DragStartEvent) => {
     const { active } = event;
     if (active.data.current?.type === "library-item") {
       setActiveItem({ ...active.data.current.workout, source: "library" });
     } else {
       const item = items.find((i) => i.id === active.id);
-      if (item) setActiveItem({ ...item, source: "program" });
+      if (item) {
+         // @ts-ignore
+         setActiveItem({ ...item, source: "program", name: item.workouts?.name });
+      }
     }
   };
 
@@ -69,7 +84,6 @@ export function ProgramBuilder({ program, allWorkouts }: { program: any; allWork
 
     if (!over) return;
 
-    // SCENARIO 1: Drag FROM Library -> INTO Timeline
     if (active.data.current?.type === "library-item") {
       const isOverTimeline = over.id === 'timeline-container' || items.some(i => i.id === over.id);
 
@@ -78,7 +92,6 @@ export function ProgramBuilder({ program, allWorkouts }: { program: any; allWork
         const workoutData = active.data.current?.workout;
         const tempId = `temp-${Date.now()}`;
         
-        // Add to Store (Instant UI update)
         addItem({
           id: tempId,
           workout_id: rawId,
@@ -89,40 +102,31 @@ export function ProgramBuilder({ program, allWorkouts }: { program: any; allWork
           workouts: workoutData,
         });
 
-        // Sync with DB
         try {
           await addWorkoutsToProgram(program.id, [rawId]);
           toast.success("Added to program");
         } catch (error) {
           toast.error("Failed to save");
-          // Optionally revert store here
         }
       }
       return;
     }
 
-    // SCENARIO 2: Reordering
     if (active.id !== over.id) {
       const oldIndex = items.findIndex((i) => i.id === active.id);
       const newIndex = items.findIndex((i) => i.id === over.id);
       
-      // 1. Update Store immediately (Optimistic UI)
       moveItem(oldIndex, newIndex);
 
-      // 2. Prepare payload for DB
-      // We must get the fresh state AFTER the move to calculate correct indices
       const freshItems = useProgramStore.getState().items;
       
-      // --- FIX IS HERE ---
-      // We map 'item_type' and 'day_label' so the Server Action accepts the data
       const updates = freshItems.map((item, index) => ({
         id: item.id,
         order_index: index,
-        item_type: item.item_type || "workout", // Required by DB Not-Null constraint
+        item_type: item.item_type || "workout",
         day_label: item.day_label,
       }));
 
-      // 3. Call Server Action
       try {
         await updateProgramItemOrder(updates, program.id);
       } catch (error) {
@@ -134,37 +138,55 @@ export function ProgramBuilder({ program, allWorkouts }: { program: any; allWork
   return (
     <DndContext
       sensors={sensors}
-      collisionDetection={closestCorners}
+      collisionDetection={rectIntersection} // Strict intersection prevents accidental drops
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >
-      <div className="flex flex-col lg:flex-row h-[calc(100vh-12rem)] gap-6">
+      {/* LAYOUT FIX: 
+        1. overflow-hidden on parent enforces the calculated height.
+        2. gap-6 adds spacing between columns.
+      */}
+      <div className="flex flex-col lg:flex-row h-[calc(100vh-14rem)] gap-6 overflow-hidden">
         
-        {/* LEFT: TIMELINE */}
-        <div className="flex-1 flex flex-col min-w-0">
-          <header className="flex items-center justify-between mb-4 flex-shrink-0">
+        {/* LEFT COLUMN: TIMELINE */}
+        {/* min-h-0 is CRITICAL for flex children to scroll properly */}
+        <div className="flex-1 flex flex-col min-h-0 min-w-0 bg-background rounded-xl border overflow-hidden">
+          
+          <header className="flex items-center justify-between p-3 border-b bg-muted/20 flex-shrink-0">
              <div className="flex items-center gap-2">
                 <LayoutTemplate className="h-5 w-5 text-muted-foreground" />
-                <h2 className="font-semibold text-lg">Timeline ({items.length})</h2>
+                <h2 className="font-semibold text-sm md:text-base">Timeline ({items.length})</h2>
              </div>
              {isDesktop && (
-               <Button variant="ghost" size="sm" onClick={toggleSidebar}>
-                 {isSidebarOpen ? <PanelRightClose className="mr-2 h-4 w-4"/> : <PanelRightOpen className="mr-2 h-4 w-4"/>}
+               <Button variant="ghost" size="sm" onClick={toggleSidebar} className="h-8 text-xs">
+                 {isSidebarOpen ? <PanelRightClose className="mr-2 h-3 w-3"/> : <PanelRightOpen className="mr-2 h-3 w-3"/>}
                  {isSidebarOpen ? "Hide Library" : "Show Library"}
                </Button>
              )}
           </header>
 
-          <div className="flex-1 overflow-y-auto bg-muted/10 border rounded-xl p-2 md:p-4 scroll-smooth relative">
+          {/* SCROLL CONTAINER: 
+            1. flex-1 fills remaining space.
+            2. overflow-y-auto enables the scrollbar.
+            3. relative ensures DnD positioning works.
+          */}
+          <div className="flex-1 overflow-y-auto p-2 md:p-4 scroll-smooth relative bg-muted/10">
              <ProgramTimeline items={items} programId={program.id} />
-             {!isDesktop && <div className="mt-8 flex justify-center pb-20"><WorkoutPicker programId={program.id} /></div>}
+             
+             {!isDesktop && (
+                <div className="mt-8 flex justify-center pb-10">
+                   <WorkoutPicker programId={program.id} />
+                </div>
+             )}
           </div>
         </div>
 
-        {/* RIGHT: LIBRARY (Using Filtered Workouts) */}
+        {/* RIGHT COLUMN: LIBRARY */}
         {isDesktop && isSidebarOpen && (
-           <aside className="w-80 flex-shrink-0 flex flex-col border-l pl-6 animate-in slide-in-from-right-5 duration-200">
-              <LibrarySidebar workouts={availableWorkouts} />
+           <aside className="w-80 flex-shrink-0 flex flex-col border rounded-xl overflow-hidden animate-in slide-in-from-right-5 duration-200">
+              <div className="flex-1 overflow-hidden h-full bg-background">
+                 <LibrarySidebar workouts={availableWorkouts} />
+              </div>
            </aside>
         )}
       </div>
@@ -174,7 +196,8 @@ export function ProgramBuilder({ program, allWorkouts }: { program: any; allWork
            <div className="w-[300px] cursor-grabbing">
               <Card className="p-4 bg-background border-primary shadow-2xl">
                  <span className="font-bold">
-                    {activeItem.source === 'library' ? activeItem.name : activeItem.workouts?.name}
+                    {/* @ts-ignore */}
+                    {activeItem.source === 'library' ? activeItem.name : activeItem.workouts?.name || activeItem.name}
                  </span>
               </Card>
            </div>

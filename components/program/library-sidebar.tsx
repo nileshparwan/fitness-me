@@ -5,7 +5,6 @@ import { useDraggable } from "@dnd-kit/core";
 import { Search, GripVertical } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 
 export function LibrarySidebar({ workouts }: { workouts: any[] }) {
@@ -17,8 +16,10 @@ export function LibrarySidebar({ workouts }: { workouts: any[] }) {
   });
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="mb-4 space-y-2">
+    <div className="flex flex-col h-full overflow-hidden">
+      
+      {/* Header section */}
+      <div className="mb-4 space-y-2 flex-shrink-0 p-1">
         <h3 className="font-semibold text-lg">Workout Library</h3>
         <div className="relative">
            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -31,26 +32,36 @@ export function LibrarySidebar({ workouts }: { workouts: any[] }) {
         </div>
       </div>
 
-      <ScrollArea className="flex-1 pr-4 -mr-4">
+      {/* FIX: Added classes to hide scrollbar but keep functionality
+         - [&::-webkit-scrollbar]:hidden -> Chrome/Safari/Webkit
+         - [-ms-overflow-style:none] -> IE/Edge
+         - [scrollbar-width:none] -> Firefox
+      */}
+      <div className="flex-1 overflow-y-auto min-h-0 pr-2 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
         <div className="space-y-3 pb-4">
-          {filtered.map((workout) => (
-            <DraggableLibraryItem key={workout.id} workout={workout} />
-          ))}
+          {filtered.length === 0 ? (
+            <div className="text-sm text-muted-foreground text-center py-8">
+              No workouts found.
+            </div>
+          ) : (
+            filtered.map((workout) => (
+              <DraggableLibraryItem key={workout.id} workout={workout} />
+            ))
+          )}
         </div>
-      </ScrollArea>
+      </div>
     </div>
   );
 }
 
 function DraggableLibraryItem({ workout }: { workout: any }) {
-  // FIX: Use a unique ID prefix so DnD-Kit doesn't confuse this with the sortable list
   const uniqueId = `lib::${workout.id}`;
 
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: uniqueId, 
     data: {
       type: "library-item", 
-      workout, // Pass full workout data for the overlay
+      workout, 
     },
   });
 
@@ -63,11 +74,11 @@ function DraggableLibraryItem({ workout }: { workout: any }) {
         isDragging ? "opacity-40 ring-2 ring-primary" : ""
       }`}
     >
-      <GripVertical className="h-4 w-4 text-muted-foreground" />
+      <GripVertical className="h-4 w-4 text-muted-foreground flex-shrink-0" />
       <div className="flex-1 min-w-0">
         <div className="font-medium text-sm truncate">{workout.name}</div>
         <div className="flex items-center gap-2 mt-1">
-          <Badge variant="secondary" className="text-[10px] h-4 px-1">{workout.status}</Badge>
+          <Badge variant="secondary" className="text-[10px] h-4 px-1">{workout.status || 'Active'}</Badge>
           <span className="text-[10px] text-muted-foreground">{workout.duration_minutes || 0}m</span>
         </div>
       </div>

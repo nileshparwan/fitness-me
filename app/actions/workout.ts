@@ -2,89 +2,75 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
+import { Database } from "@/types/database";
 
-// ============================================================================
-// 1. TYPE DEFINITIONS
-// ============================================================================
-// We define these types to match the Supabase table structure exactly.
-// This prevents errors where we might forget a required field like 'user_id'.
+// 1. DERIVED TYPES FROM DATABASE
+type WorkoutInsert = Database['public']['Tables']['workouts']['Insert'];
+type WorkoutLogInsert = Database['public']['Tables']['workout_logs']['Insert'];
+type CardioLogInsert = Database['public']['Tables']['cardio_logs']['Insert'];
 
-type WorkoutLogInsert = {
-  workout_id: string;
-  user_id: string;       // Required: Links log to specific user for RLS (Row Level Security)
-  exercise_id?: string;  // Optional: Link to the specific exercise in your library
-  exercise_name: string; // Snapshot of the name (in case the library item is deleted later)
-  set_number: number;
-  reps: number;
-  weight: number;
-  rpe?: number | null;
-};
-
-type CardioLogInsert = {
-  workout_id: string;
-  user_id: string;       // Required
-  date: string;          // ISO String for database storage
-  activity_type: string; // e.g. "Running", "Cycling"
-  duration_minutes: number;
-  distance_km?: number | null;
-  calories_burned?: number | null;
-  average_heart_rate?: number | null;
-};
-
-// The shape of the data coming from your Frontend Form
-type WorkoutInput = {
+// 2. FORM INPUT TYPE
+export type WorkoutActionInput = {
   name: string;
   date: Date;
-  notes?: string;
-  status?: 'active' | 'draft' | 'archived' | 'completed';
-  exercises?: any[]; // Array containing both Strength sets and Cardio sessions
+  notes?: string | null;
+  status?: WorkoutInsert['status'];
+  exercises?: {
+    type?: 'strength' | 'cardio'; 
+    exercise_id?: string;
+    name: string;
+    notes?: string;
+    // Strength fields
+    sets?: {
+      set_number: number;
+      reps: number | string;
+      weight: number | string;
+      rpe?: number | string;
+    }[];
+    // Cardio fields
+    duration?: number | string;
+    distance?: number | string;
+    calories?: number | string;
+    heartRate?: number | string;
+  }[];
 };
 
 // ============================================================================
-// 2. CREATE WORKOUT ACTION
+// 2. CREATE WORKOUT
 // ============================================================================
-export async function createWorkoutAction(data: WorkoutInput) {
+export async function createWorkoutAction(data: WorkoutActionInput) {
   const supabase = await createClient();
-  
-  // SECURITY: Always get the user from the server session. 
-  // Never trust a user_id sent from the client.
   const { data: { user } } = await supabase.auth.getUser();
   
-  // Type Guard: This ensures 'user' is not null for the rest of the function
   if (!user) throw new Error("Not authenticated");
 
-  // --- Step A: Insert the Parent Workout Record ---
-  // We insert the header info first to generate the 'workout.id'
+  // A. Insert Parent Workout
+  const workoutPayload: WorkoutInsert = {
+    user_id: user.id,
+    name: data.name,
+    date: data.date.toISOString(),
+    status: data.status || "active",
+    notes: data.notes || null
+  };
+
   const { data: workout, error: wError } = await supabase
     .from("workouts")
-    .insert({
-      user_id: user.id,
-      name: data.name,
-      date: data.date.toISOString(),
-      status: data.status || "active",
-      notes: data.notes
-    })
+    .insert(workoutPayload)
     .select()
-    .single(); // Returns the single object created
+    .single();
 
   if (wError) throw new Error(wError.message);
 
-  // --- Step B: Insert Child Logs (Cardio & Strength) ---
+  // B. Insert Children
   if (data.exercises && data.exercises.length > 0) {
-    
-    // Initialize typed arrays to hold our rows
     const strengthLogs: WorkoutLogInsert[] = [];
     const cardioLogs: CardioLogInsert[] = [];
 
-    // Loop through the mixed array from the form
     for (const ex of data.exercises) {
-      
-      // LOGIC SPLIT: Determine where to save based on type
       if (ex.type === 'cardio') {
-        // Map Form Data -> Cardio Table Column Structure
         cardioLogs.push({
           workout_id: workout.id,
-          user_id: user.id, // We use the validated user.id here
+          user_id: user.id, // Cardio logs HAVE user_id
           date: data.date.toISOString(),
           activity_type: ex.name,
           duration_minutes: Number(ex.duration || 0),
@@ -93,14 +79,13 @@ export async function createWorkoutAction(data: WorkoutInput) {
           average_heart_rate: ex.heartRate ? Number(ex.heartRate) : null,
         });
       } else {
-        // Map Form Data -> Strength Table Column Structure
-        // Flatten sets: 1 Exercise with 3 sets = 3 Database Rows
+        // Strength
         if (ex.sets) {
-          ex.sets.forEach((set: any) => {
+          ex.sets.forEach((set) => {
             strengthLogs.push({
               workout_id: workout.id,
-              user_id: user.id,
-              exercise_id: ex.exercise_id,
+              // REMOVED user_id HERE to fix the error
+              exercise_id: ex.exercise_id || null,
               exercise_name: ex.name,
               set_number: set.set_number,
               reps: Number(set.reps || 0),
@@ -112,65 +97,52 @@ export async function createWorkoutAction(data: WorkoutInput) {
       }
     }
 
-    // PERFORMANCE: Batch Insert
-    // We send all cardio logs in one request, and all strength logs in another.
-    if (strengthLogs.length > 0) {
-      await supabase.from("workout_logs").insert(strengthLogs);
-    }
-    if (cardioLogs.length > 0) {
-      await supabase.from("cardio_logs").insert(cardioLogs);
-    }
+    if (strengthLogs.length > 0) await supabase.from("workout_logs").insert(strengthLogs);
+    if (cardioLogs.length > 0) await supabase.from("cardio_logs").insert(cardioLogs);
   }
 
-  // Refresh the workouts list page to show the new entry
   revalidatePath("/workouts");
   return workout;
 }
 
 // ============================================================================
-// 3. UPDATE WORKOUT ACTION
+// 3. UPDATE WORKOUT
 // ============================================================================
-export async function updateWorkoutAction(id: string, data: Partial<WorkoutInput>) {
+export async function updateWorkoutAction(id: string, data: Partial<WorkoutActionInput>) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
   if (!user) throw new Error("Unauthorized");
 
-  // --- Step A: Update Header Fields ---
-  // We construct an object with ONLY the fields that were changed
-  const updateData: any = {};
+  // A. Update Header
+  const updateData: Database['public']['Tables']['workouts']['Update'] = {};
   if (data.name) updateData.name = data.name;
   if (data.date) updateData.date = data.date.toISOString();
   if (data.notes !== undefined) updateData.notes = data.notes;
   if (data.status) updateData.status = data.status;
 
   if (Object.keys(updateData).length > 0) {
-    const { error: wError } = await supabase
-      .from("workouts")
-      .update(updateData)
-      .eq("id", id);
-    if (wError) throw new Error(wError.message);
+    const { error } = await supabase.from("workouts").update(updateData).eq("id", id);
+    if (error) throw new Error(error.message);
   }
 
-  // --- Step B: Update Logs (The "Wipe & Rewrite" Strategy) ---
+  // B. Wipe & Rewrite Logs
   if (data.exercises) {
-    
-    // 1. DELETE OLD DATA
-    // We delete all logs associated with this workout ID.
-    // This handles deleted exercises automatically (if it's not in the new array, it stays deleted).
+    // 1. Delete existing
     await supabase.from("workout_logs").delete().eq("workout_id", id);
     await supabase.from("cardio_logs").delete().eq("workout_id", id);
 
-    // 2. PREPARE NEW DATA
+    // 2. Prepare new
     const strengthLogs: WorkoutLogInsert[] = [];
     const cardioLogs: CardioLogInsert[] = [];
+    const dateStr = data.date ? data.date.toISOString() : new Date().toISOString();
 
     for (const ex of data.exercises) {
       if (ex.type === 'cardio') {
          cardioLogs.push({
           workout_id: id,
-          user_id: user.id, // Using non-null user.id
-          date: data.date ? data.date.toISOString() : new Date().toISOString(),
+          user_id: user.id, // Cardio logs HAVE user_id
+          date: dateStr,
           activity_type: ex.name,
           duration_minutes: Number(ex.duration || 0),
           distance_km: ex.distance ? Number(ex.distance) : null,
@@ -179,11 +151,11 @@ export async function updateWorkoutAction(id: string, data: Partial<WorkoutInput
          });
       } else {
          if (ex.sets) {
-            ex.sets.forEach((set: any) => {
+            ex.sets.forEach((set) => {
               strengthLogs.push({
                 workout_id: id,
-                user_id: user.id,
-                exercise_id: ex.exercise_id,
+                // REMOVED user_id HERE to fix the error
+                exercise_id: ex.exercise_id || null,
                 exercise_name: ex.name,
                 set_number: set.set_number,
                 reps: Number(set.reps || 0),
@@ -195,38 +167,24 @@ export async function updateWorkoutAction(id: string, data: Partial<WorkoutInput
       }
     }
 
-    // 3. INSERT NEW DATA
-    if (strengthLogs.length > 0) {
-      await supabase.from("workout_logs").insert(strengthLogs);
-    }
-    if (cardioLogs.length > 0) {
-      await supabase.from("cardio_logs").insert(cardioLogs);
-    }
+    if (strengthLogs.length > 0) await supabase.from("workout_logs").insert(strengthLogs);
+    if (cardioLogs.length > 0) await supabase.from("cardio_logs").insert(cardioLogs);
   }
 
-  // --- Step C: Revalidation ---
-  // 1. Update the list view
   revalidatePath("/workouts");
-  // 2. Update the detail view for this specific workout
   revalidatePath(`/workouts/${id}`);
-  // 3. Update the 'exercise_progress' SQL View so charts update immediately
   revalidatePath("/progress"); 
 }
 
 // ============================================================================
-// 4. DELETE WORKOUT ACTION
+// 4. DELETE WORKOUT
 // ============================================================================
 export async function deleteWorkoutAction(ids: string | string[]) {
   const supabase = await createClient();
   const idArray = Array.isArray(ids) ? ids : [ids];
 
-  // Note: If you have "ON DELETE CASCADE" set up in your Postgres foreign keys,
-  // this will automatically delete the related workout_logs and cardio_logs.
-  const { error } = await supabase
-    .from("workouts")
-    .delete()
-    .in("id", idArray);
-
+  const { error } = await supabase.from("workouts").delete().in("id", idArray);
   if (error) throw new Error(error.message);
+  
   revalidatePath("/workouts");
 }

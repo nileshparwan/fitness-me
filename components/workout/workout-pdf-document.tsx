@@ -3,6 +3,11 @@
 import React from "react";
 import { Page, Text, View, Document, StyleSheet, Font } from "@react-pdf/renderer";
 import { format } from "date-fns";
+import { Database } from "@/types/database";
+
+type Workout = Database['public']['Tables']['workouts']['Row'];
+type WorkoutLog = Database['public']['Tables']['workout_logs']['Row'];
+type CardioLog = Database['public']['Tables']['cardio_logs']['Row'];
 
 // 1. Define Styles (CSS-like but for PDF)
 const styles = StyleSheet.create({
@@ -27,8 +32,14 @@ const styles = StyleSheet.create({
   badge: { fontSize: 8, backgroundColor: "black", color: "white", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 2, alignSelf: "flex-end" }
 });
 
+interface WorkoutPDFProps {
+  workout: Workout & { user?: { email: string } | null };
+  strengthLogs: WorkoutLog[];
+  cardioLogs: CardioLog[];
+}
+
 // 2. The PDF Component
-export const WorkoutPDF = ({ workout, strengthLogs, cardioLogs }: any) => {
+export const WorkoutPDF = ({ workout, strengthLogs, cardioLogs }: WorkoutPDFProps) => {
   const strengthGroups = groupBy(strengthLogs, "exercise_name");
   const cardioGroups = groupBy(cardioLogs, "activity_type");
 
@@ -66,7 +77,7 @@ export const WorkoutPDF = ({ workout, strengthLogs, cardioLogs }: any) => {
             </View>
 
             {/* Table Rows */}
-            {sets.map((set: any, i: number) => (
+            {sets.map((set: WorkoutLog, i: number) => (
               <View key={i} style={styles.tableRow}>
                 <Text style={styles.colSet}>#{set.set_number}</Text>
                 <Text style={styles.colMain}>{set.weight} kg</Text>
@@ -89,7 +100,7 @@ export const WorkoutPDF = ({ workout, strengthLogs, cardioLogs }: any) => {
               <Text style={styles.colEnd}>HR</Text>
             </View>
 
-            {logs.map((log: any, i: number) => (
+            {logs.map((log: CardioLog, i: number) => (
               <View key={i} style={styles.tableRow}>
                 <Text style={styles.colSet}>{log.duration_minutes} min</Text>
                 <Text style={styles.colMain}>{log.distance_km ? `${log.distance_km} km` : "-"}</Text>

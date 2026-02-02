@@ -6,11 +6,12 @@ import { Input } from "@/components/ui/input";
 import { FormControl, FormField, FormItem } from "@/components/ui/form";
 import { cn } from "@/utils";
 import { Control } from "react-hook-form";
+import { WorkoutFormValues } from "@/types/workout";
 
 interface SetInputProps {
   index: number;
   setIndex: number;
-  control: Control<any>; // react-hook-form control
+  control: Control<WorkoutFormValues>;
   onRemove: () => void;
   isCompleted?: boolean;
 }
@@ -21,7 +22,7 @@ export function SetInput({ index, setIndex, control, onRemove }: SetInputProps) 
       
       {/* Set Number Badge */}
       <div className="col-span-1 flex justify-center">
-        <div className="flex h-6 w-6 items-center justify-center rounded-full bg-muted text-xs font-bold border">
+        <div className="flex h-5 w-5 items-center justify-center rounded-full bg-muted text-[10px] font-bold border text-muted-foreground">
           {setIndex + 1}
         </div>
       </div>
@@ -35,9 +36,11 @@ export function SetInput({ index, setIndex, control, onRemove }: SetInputProps) 
             <FormItem>
               <FormControl>
                 <Input 
-                  {...field} 
+                  {...field}
+                  // FIX: Handle null/undefined by defaulting to empty string
+                  value={field.value ?? ""}
                   type="number" 
-                  className="h-9 text-center font-medium focus:bg-accent/20" 
+                  className="h-8 text-center font-medium focus:bg-accent/20 p-1" 
                   placeholder="0" 
                 />
               </FormControl>
@@ -56,8 +59,10 @@ export function SetInput({ index, setIndex, control, onRemove }: SetInputProps) 
               <FormControl>
                 <Input 
                   {...field} 
+                  // FIX: Handle null/undefined by defaulting to empty string
+                  value={field.value ?? ""}
                   type="number" 
-                  className="h-9 text-center font-medium focus:bg-accent/20" 
+                  className="h-8 text-center font-medium focus:bg-accent/20 p-1" 
                   placeholder="0" 
                 />
               </FormControl>
@@ -66,7 +71,7 @@ export function SetInput({ index, setIndex, control, onRemove }: SetInputProps) 
         />
       </div>
 
-      {/* RPE Input (Simple version for grid, keeps layout tight) */}
+      {/* RPE Input */}
       <div className="col-span-2">
          <FormField
           control={control}
@@ -76,9 +81,12 @@ export function SetInput({ index, setIndex, control, onRemove }: SetInputProps) 
               <FormControl>
                 <Input 
                   {...field} 
+                  // FIX: Handle null/undefined by defaulting to empty string
+                  // This fixes the "Type 'null' is not assignable" error
+                  value={field.value ?? ""}
                   type="number" 
                   max={10}
-                  className="h-9 text-center text-muted-foreground focus:text-foreground" 
+                  className="h-8 text-center text-muted-foreground focus:text-foreground p-1" 
                   placeholder="-" 
                 />
               </FormControl>
@@ -93,10 +101,11 @@ export function SetInput({ index, setIndex, control, onRemove }: SetInputProps) 
             type="button" 
             variant="ghost" 
             size="icon" 
-            className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10" 
+            className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10" 
             onClick={onRemove}
+            tabIndex={-1}
          >
-           <Trash2 className="h-4 w-4" />
+           <Trash2 className="h-3.5 w-3.5" />
          </Button>
       </div>
     </div>
