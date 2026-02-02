@@ -1,18 +1,30 @@
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
+import { cn } from "@/utils";
 
-export function StatCard({ label, value, icon: Icon, badge }: any) {
-    return (
-        <Card>
-            <CardContent className="flex flex-col items-center justify-center p-4 text-center">
-                {Icon && <Icon className="h-4 w-4 text-muted-foreground mb-2" />}
-                <div className="text-xs text-muted-foreground uppercase font-medium">{label}</div>
-                {badge ? (
-                    <Badge variant="secondary" className="mt-1 capitalize">{value}</Badge>
-                ) : (
-                    <div className="text-2xl font-bold tracking-tight mt-1">{value}</div>
-                )}
-            </CardContent>
-        </Card>
-    );
+interface StatCardProps {
+  label: string;
+  value: string | number;
+  icon?: any;
+  className?: string;
+}
+
+export function StatCard({ label, value, icon: Icon, className }: StatCardProps) {
+  return (
+    <div className={cn(
+      "flex flex-col justify-center px-3 py-2.5 rounded-lg border bg-muted/5", 
+      className
+    )}>
+      {/* Top Row: Icon + Label */}
+      <div className="flex items-center gap-1.5 text-muted-foreground mb-0.5">
+        {Icon && <Icon className="h-3 w-3" />}
+        <span className="text-[10px] font-semibold uppercase tracking-wider leading-none">
+          {label}
+        </span>
+      </div>
+      
+      {/* Bottom Row: Value */}
+      <div className="text-sm md:text-base font-bold tracking-tight leading-none truncate">
+        {value}
+      </div>
+    </div>
+  );
 }

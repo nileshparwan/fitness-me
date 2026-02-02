@@ -1,97 +1,77 @@
 "use client";
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Database } from "@/types/database";
 import { Activity, Map, Timer, Flame } from "lucide-react";
+import { cn } from "@/utils";
 
 type CardioLog = Database['public']['Tables']['cardio_logs']['Row'];
 
 export function CardioAnalytics({ logs }: { logs: CardioLog[] }) {
   if (!logs || logs.length === 0) return null;
 
-  // Most recent log for "Current Status"
   const latest = logs[0];
-
-  // Calculations for the selected period
   const totalDist = logs.reduce((acc, l) => acc + (l.distance_km || 0), 0);
-  const totalDuration = logs.reduce((acc, l) => acc + (l.duration_minutes || 0), 0);
   
-  // Calculate average pace for the latest run (min/km)
   const latestPace = (latest.distance_km && latest.distance_km > 0) 
     ? latest.duration_minutes / latest.distance_km 
     : 0;
 
-  // Format Pace (e.g., 5.5 min/km -> 5:30 min/km)
   const formatPace = (decimalMin: number) => {
     const min = Math.floor(decimalMin);
     const sec = Math.round((decimalMin - min) * 60);
     return `${min}:${sec < 10 ? '0' : ''}${sec}`;
   };
 
+  // Reusable Micro-Card Component
+  const StatTile = ({ label, value, subtext, icon: Icon, colorClass }: any) => (
+    <div className="flex flex-col justify-between p-3 rounded-xl border bg-card shadow-sm h-full min-h-[80px]">
+      <div className="flex items-center gap-2 mb-1">
+        <div className={cn("p-1.5 rounded-md bg-muted", colorClass)}>
+           <Icon className="h-3.5 w-3.5" />
+        </div>
+        <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">{label}</span>
+      </div>
+      
+      <div>
+        <div className="text-lg font-bold leading-tight">{value}</div>
+        {subtext && <p className="text-[10px] text-muted-foreground mt-1 truncate">{subtext}</p>}
+      </div>
+    </div>
+  );
+
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
+      <StatTile 
+        label="Distance"
+        value={`${latest.distance_km?.toFixed(2)} km`}
+        subtext={new Date(latest.date).toLocaleDateString()}
+        icon={Map}
+        colorClass="text-blue-600 bg-blue-50"
+      />
       
-      {/* 1. Latest Distance */}
-      <Card className="bg-blue-50/50 border-blue-100 shadow-sm">
-        <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-          <CardTitle className="text-sm font-medium text-blue-900">Latest Distance</CardTitle>
-          <Map className="h-4 w-4 text-blue-500" />
-        </CardHeader>
-        <CardContent>
-          <div className="text-2xl font-bold text-blue-950">
-            {latest.distance_km?.toFixed(2)} <span className="text-sm font-normal text-blue-600">km</span>
-          </div>
-          <p className="text-xs text-blue-600/80 mt-1">
-            {new Date(latest.date).toLocaleDateString()}
-          </p>
-        </CardContent>
-      </Card>
-      
-      {/* 2. Latest Pace */}
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-          <CardTitle className="text-sm font-medium text-muted-foreground">Latest Pace</CardTitle>
-          <Timer className="h-4 w-4 text-green-500" />
-        </CardHeader>
-        <CardContent>
-          <div className="text-2xl font-bold">
-             {formatPace(latestPace)} <span className="text-sm font-normal text-muted-foreground">/km</span>
-          </div>
-          <p className="text-xs text-muted-foreground mt-1">
-             Duration: {latest.duration_minutes} min
-          </p>
-        </CardContent>
-      </Card>
+      <StatTile 
+        label="Pace"
+        value={`${formatPace(latestPace)} /km`}
+        subtext={`${latest.duration_minutes} min duration`}
+        icon={Timer}
+        colorClass="text-green-600 bg-green-50"
+      />
 
-      {/* 3. Average Heart Rate */}
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-          <CardTitle className="text-sm font-medium text-muted-foreground">Avg Heart Rate</CardTitle>
-          <Activity className="h-4 w-4 text-red-500" />
-        </CardHeader>
-        <CardContent>
-          <div className="text-2xl font-bold">
-            {latest.average_heart_rate ? latest.average_heart_rate : "—"} <span className="text-sm font-normal text-muted-foreground">bpm</span>
-          </div>
-          <p className="text-xs text-muted-foreground mt-1">
-             Intensity Zone analysis below
-          </p>
-        </CardContent>
-      </Card>
+      <StatTile 
+        label="Heart Rate"
+        value={latest.average_heart_rate ? `${latest.average_heart_rate} bpm` : "—"}
+        subtext="Avg. HR"
+        icon={Activity}
+        colorClass="text-red-600 bg-red-50"
+      />
 
-      {/* 4. Total Volume (Period) */}
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-          <CardTitle className="text-sm font-medium text-muted-foreground">Total Volume</CardTitle>
-          <Flame className="h-4 w-4 text-orange-500" />
-        </CardHeader>
-        <CardContent>
-          <div className="text-2xl font-bold">{totalDist.toFixed(1)} <span className="text-sm font-normal text-muted-foreground">km</span></div>
-          <p className="text-xs text-muted-foreground mt-1">
-            Over {logs.length} sessions
-          </p>
-        </CardContent>
-      </Card>
+      <StatTile 
+        label="Total Volume"
+        value={`${totalDist.toFixed(1)} km`}
+        subtext={`${logs.length} sessions total`}
+        icon={Flame}
+        colorClass="text-orange-600 bg-orange-50"
+      />
     </div>
   );
 }

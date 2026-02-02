@@ -11,7 +11,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Form, FormControl, FormField, FormItem, FormLabel } from "@/components/ui/form";
+import { Form, FormControl, FormField, FormItem } from "@/components/ui/form";
 import { Card, CardContent } from "@/components/ui/card";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
@@ -33,7 +33,7 @@ import { Database } from "@/types/database";
 type Program = Database['public']['Tables']['programs']['Row'];
 
 interface WorkoutFormProps {
-  initialData?: WorkoutFormValues; // Use the inferred type here
+  initialData?: WorkoutFormValues;
   workoutId?: string;
 }
 
@@ -51,7 +51,8 @@ export function WorkoutForm({ initialData, workoutId }: WorkoutFormProps) {
 
   // 1. USE THE SCHEMA IN USEFORM
   const form = useForm<WorkoutFormValues>({
-    resolver: zodResolver(workoutFormSchema),
+    // FIX: Cast resolver to any to bypass strict deep-type mismatch with nested arrays
+    resolver: zodResolver(workoutFormSchema) as any,
     // Safe Default Values
     defaultValues: initialData || {
       name: "",
@@ -126,7 +127,7 @@ export function WorkoutForm({ initialData, workoutId }: WorkoutFormProps) {
   const isSaving = createWorkout.isPending || updateWorkout.isPending || isAiProcessing;
 
   return (
-    <div className="max-w-3xl mx-auto">
+    <div className="max-w-3xl mx-auto px-2">
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onFormSubmit)} className="space-y-6">
           <Tabs value={mode} onValueChange={(v) => setMode(v as any)} className="w-full">

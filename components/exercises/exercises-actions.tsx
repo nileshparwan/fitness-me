@@ -1,33 +1,50 @@
 "use client";
-import Link from "next/link";
-import { Eye, MoreHorizontal, Pencil, Trash } from "lucide-react";
+
+import { useState } from "react";
+import { MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
+  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
-import { useState } from "react";
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+  SheetClose,
+} from "@/components/ui/sheet";
+import { useMediaQuery } from "@/hooks/use-media-query";
 import { useExerciseMutations } from "@/hooks/use-exercise";
+import { toast } from "sonner";
 
-export function ExerciseActions({ exercise, onEdit }: { exercise: any; onEdit: (ex: any) => void }) {
-  const [showDeleteAlert, setShowDeleteAlert] = useState(false);
+interface ExerciseActionsProps {
+  exercise: any;
+  onEdit: (exercise: any) => void;
+}
+
+export function ExerciseActions({ exercise, onEdit }: ExerciseActionsProps) {
+  const [isOpen, setIsOpen] = useState(false);
+  const isDesktop = useMediaQuery("(min-width: 768px)");
   const { remove } = useExerciseMutations();
 
-  return (
-    <>
+  const handleDelete = async () => {
+    if (confirm("Delete this exercise?")) {
+      try {
+        await remove.mutateAsync(exercise.id);
+        toast.success("Exercise deleted");
+      } catch (error) {
+        toast.error("Failed to delete exercise");
+      }
+    }
+  };
+
+  if (isDesktop) {
+    return (
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" className="h-8 w-8 p-0">
@@ -36,40 +53,51 @@ export function ExerciseActions({ exercise, onEdit }: { exercise: any; onEdit: (
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <DropdownMenuItem asChild>
-            <Link href={`/exercises/${exercise.id}`} className="cursor-pointer">
-              <Eye className="mr-2 h-4 w-4" /> View Details
-            </Link>
-          </DropdownMenuItem>
           <DropdownMenuItem onClick={() => onEdit(exercise)}>
             <Pencil className="mr-2 h-4 w-4" /> Edit
           </DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={() => setShowDeleteAlert(true)} className="text-red-600">
-            <Trash className="mr-2 h-4 w-4" /> Delete
+          <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={handleDelete}>
+            <Trash2 className="mr-2 h-4 w-4" /> Delete
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+    );
+  }
 
-      <AlertDialog open={showDeleteAlert} onOpenChange={setShowDeleteAlert}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This action cannot be undone. This will permanently delete <b>{exercise.name}</b> from the library.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-red-600 hover:bg-red-700"
-              onClick={() => remove.mutate(exercise.id)}
-            >
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </>
+  return (
+    <Sheet open={isOpen} onOpenChange={setIsOpen}>
+      <SheetTrigger asChild>
+        {/* Mobile Trigger with Primary Color & Larger Hit Area */}
+        <Button 
+          variant="ghost" 
+          size="icon" 
+          className="h-10 w-10 text-primary bg-primary/10 hover:bg-primary/20 active:bg-primary/30 transition-colors"
+        >
+          <MoreHorizontal className="h-5 w-5" />
+        </Button>
+      </SheetTrigger>
+      <SheetContent side="bottom" className="rounded-t-xl pb-8 px-2">
+        <SheetHeader className="text-left mb-4">
+          <SheetTitle>Manage {exercise.name}</SheetTitle>
+        </SheetHeader>
+        
+        <div className="flex flex-col gap-3">
+          <SheetClose asChild>
+            <Button variant="outline" className="w-full justify-start h-12 text-base" onClick={() => onEdit(exercise)}>
+              <Pencil className="mr-3 h-4 w-4" /> Edit Details
+            </Button>
+          </SheetClose>
+
+          <div className="my-1 border-t" />
+          
+          <SheetClose asChild>
+            <Button variant="destructive" className="w-full justify-start h-12 text-base" onClick={handleDelete}>
+              <Trash2 className="mr-3 h-4 w-4" /> Delete Exercise
+            </Button>
+          </SheetClose>
+        </div>
+      </SheetContent>
+    </Sheet>
   );
 }

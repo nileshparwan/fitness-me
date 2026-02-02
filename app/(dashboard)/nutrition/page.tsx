@@ -1,33 +1,31 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { format, parseISO } from "date-fns";
 import { 
   getPrograms, createProgram, deleteProgram, updateProgramStatus, duplicateProgram, updateProgram 
 } from "@/app/actions/nutrition";
-import { 
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow 
-} from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Label } from "@/components/ui/label";
-import { 
-  Plus, Trash2, MoreHorizontal, Search, Copy, Pencil, ArrowRight 
-} from "lucide-react";
-import { 
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuLabel, DropdownMenuSeparator 
-} from "@/components/ui/dropdown-menu";
+import { Plus, Search, Utensils } from "lucide-react";
 import { toast } from "sonner";
 import { ProgramsTableSkeleton } from "./_components/nutrition-skeletons";
+import { NutritionListItem } from "@/components/nutrition/nutrition-list-item"; 
+import { useMediaQuery } from "@/hooks/use-media-query";
 
 export default function NutritionDashboard() {
   const [search, setSearch] = useState("");
   const [editingProgram, setEditingProgram] = useState<any>(null); 
+  
+  // State for Modals
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
+
+  // Responsive Check
+  const isDesktop = useMediaQuery("(min-width: 768px)");
 
   const { data: programs, isLoading, refetch } = useQuery({
     queryKey: ["programs"],
@@ -60,11 +58,42 @@ export default function NutritionDashboard() {
     p.status.toLowerCase().includes(search.toLowerCase())
   );
 
-  const statusColors: Record<string, string> = {
-    active: "bg-green-100 text-green-800 hover:bg-green-200 border-green-200",
-    draft: "bg-gray-100 text-gray-800 hover:bg-gray-200 border-gray-200",
-    archived: "bg-orange-100 text-orange-800 hover:bg-orange-200 border-orange-200",
-  };
+  // --- Shared Form Components to avoid duplication ---
+  
+  const CreateForm = () => (
+    <form action={async (fd) => { 
+        await createProgram(fd); 
+        refetch(); 
+        setIsCreateOpen(false); 
+        toast.success("Program created");
+      }} className="space-y-4 py-4"
+    >
+      <div className="space-y-2"><Label>Name</Label><Input name="name" required placeholder="e.g. Cutting Phase 1" /></div>
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2"><Label>Start</Label><Input name="start_date" type="date" required /></div>
+        <div className="space-y-2"><Label>End</Label><Input name="end_date" type="date" required /></div>
+      </div>
+      <Button type="submit" className="w-full">Create Plan</Button>
+    </form>
+  );
+
+  const EditForm = () => (
+    <form action={async (fd) => { 
+      if(!editingProgram) return;
+      await updateProgram(fd, editingProgram.id); 
+      setIsEditOpen(false); 
+      refetch(); 
+      toast.success("Updated successfully"); 
+    }} className="space-y-4 py-4">
+      <div className="space-y-2"><Label>Name</Label><Input name="name" defaultValue={editingProgram?.name} required /></div>
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2"><Label>Start</Label><Input name="start_date" type="date" defaultValue={editingProgram?.start_date?.split('T')[0]} /></div>
+        <div className="space-y-2"><Label>End</Label><Input name="end_date" type="date" defaultValue={editingProgram?.end_date?.split('T')[0]} /></div>
+      </div>
+      <div className="space-y-2"><Label>Description</Label><Input name="description" defaultValue={editingProgram?.description} /></div>
+      <Button type="submit" className="w-full">Save Changes</Button>
+    </form>
+  );
 
   return (
     <div className="p-4 md:p-8 max-w-[1600px] mx-auto min-h-screen space-y-6">
@@ -86,127 +115,70 @@ export default function NutritionDashboard() {
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
-          <Dialog>
-            <DialogTrigger asChild>
-              <Button><Plus className="mr-2 h-4 w-4" /> New Plan</Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader><DialogTitle>Create New Plan</DialogTitle></DialogHeader>
-              <form action={async (fd) => { await createProgram(fd); refetch(); }} className="space-y-4 py-4">
-                <div className="space-y-2"><Label>Name</Label><Input name="name" required /></div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2"><Label>Start</Label><Input name="start_date" type="date" required /></div>
-                  <div className="space-y-2"><Label>End</Label><Input name="end_date" type="date" required /></div>
-                </div>
-                <Button type="submit" className="w-full">Create</Button>
-              </form>
-            </DialogContent>
-          </Dialog>
+
+          {/* CREATE MODAL: Responsive Dialog/Sheet */}
+          {isDesktop ? (
+            <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+              <DialogTrigger asChild>
+                <Button><Plus className="mr-2 h-4 w-4" /> New Plan</Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader><DialogTitle>Create New Plan</DialogTitle></DialogHeader>
+                <CreateForm />
+              </DialogContent>
+            </Dialog>
+          ) : (
+            <Sheet open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+              <SheetTrigger asChild>
+                <Button><Plus className="mr-2 h-4 w-4" /> New Plan</Button>
+              </SheetTrigger>
+              <SheetContent side="bottom" className="h-[85vh] rounded-t-xl">
+                <SheetHeader className="text-left"><SheetTitle>Create New Plan</SheetTitle></SheetHeader>
+                <CreateForm />
+              </SheetContent>
+            </Sheet>
+          )}
         </div>
       </div>
 
-      {/* Edit Dialog */}
-      <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>Edit Program</DialogTitle></DialogHeader>
-          <form action={async (fd) => { 
-            if(!editingProgram) return;
-            await updateProgram(fd, editingProgram.id); 
-            setIsEditOpen(false); 
-            refetch(); 
-            toast.success("Updated"); 
-          }} className="space-y-4 py-4">
-            <div className="space-y-2"><Label>Name</Label><Input name="name" defaultValue={editingProgram?.name} required /></div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2"><Label>Start</Label><Input name="start_date" type="date" defaultValue={editingProgram?.start_date?.split('T')[0]} /></div>
-              <div className="space-y-2"><Label>End</Label><Input name="end_date" type="date" defaultValue={editingProgram?.end_date?.split('T')[0]} /></div>
-            </div>
-            <div className="space-y-2"><Label>Description</Label><Input name="description" defaultValue={editingProgram?.description} /></div>
-            <Button type="submit" className="w-full">Save Changes</Button>
-          </form>
-        </DialogContent>
-      </Dialog>
+      {/* EDIT MODAL: Responsive Dialog/Sheet */}
+      {isDesktop ? (
+        <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
+          <DialogContent>
+            <DialogHeader><DialogTitle>Edit Program</DialogTitle></DialogHeader>
+            <EditForm />
+          </DialogContent>
+        </Dialog>
+      ) : (
+        <Sheet open={isEditOpen} onOpenChange={setIsEditOpen}>
+          <SheetContent side="bottom" className="h-[85vh] rounded-t-xl">
+            <SheetHeader className="text-left"><SheetTitle>Edit Program</SheetTitle></SheetHeader>
+            <EditForm />
+          </SheetContent>
+        </Sheet>
+      )}
 
-      {/* Data Table */}
+      {/* List View */}
       {isLoading ? <ProgramsTableSkeleton /> : (
-        <div className="rounded-md border bg-card">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-[30%]">Program Name</TableHead>
-                <TableHead>Dates</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredPrograms?.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={4} className="h-24 text-center">No results found.</TableCell>
-                </TableRow>
-              ) : (
-                filteredPrograms?.map((program: any) => (
-                  <TableRow key={program.id}>
-                    <TableCell className="font-medium">
-                      <div className="flex flex-col">
-                        <span className="text-base">{program.name}</span>
-                        <span className="text-xs text-muted-foreground truncate max-w-[200px]">{program.description}</span>
-                      </div>
-                    </TableCell>
-                    
-                    {/* FIXED DATE CELL */}
-                    <TableCell>
-                      <div className="text-sm text-muted-foreground">
-                        {program.start_date && program.end_date ? (
-                          <>
-                            {format(parseISO(program.start_date), "MMM d")} - {format(parseISO(program.end_date), "MMM d, yyyy")}
-                          </>
-                        ) : (
-                          <span className="italic opacity-50">No dates set</span>
-                        )}
-                      </div>
-                    </TableCell>
-
-                    <TableCell>
-                      <Badge variant="outline" className={`${statusColors[program.status]} capitalize`}>
-                        {program.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end items-center gap-2">
-                         <Button variant="secondary" size="sm" asChild className="hidden sm:flex">
-                           <Link href={`/nutrition/program/${program.id}`}>Open <ArrowRight className="ml-2 h-3 w-3"/></Link>
-                         </Button>
-                         
-                         <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8"><MoreHorizontal className="h-4 w-4" /></Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => { setEditingProgram(program); setIsEditOpen(true); }}>
-                              <Pencil className="mr-2 h-4 w-4" /> Edit Details
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleCopy(program.id)}>
-                              <Copy className="mr-2 h-4 w-4" /> Duplicate
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuLabel>Set Status</DropdownMenuLabel>
-                            <DropdownMenuItem onClick={() => handleStatusChange(program.id, "active")}>Active</DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleStatusChange(program.id, "draft")}>Draft</DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleStatusChange(program.id, "archived")}>Archived</DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem className="text-destructive" onClick={() => handleDelete(program.id)}>
-                              <Trash2 className="mr-2 h-4 w-4" /> Delete
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+        <div className="space-y-3">
+          {!filteredPrograms || filteredPrograms.length === 0 ? (
+             <div className="flex flex-col items-center justify-center p-12 text-center border rounded-xl border-dashed bg-muted/10">
+                <Utensils className="h-10 w-10 text-muted-foreground mb-4" />
+                <h3 className="text-lg font-semibold">No plans found</h3>
+                <p className="text-muted-foreground">Create a new nutrition plan to get started.</p>
+             </div>
+          ) : (
+            filteredPrograms.map((program: any) => (
+              <NutritionListItem 
+                key={program.id} 
+                program={program}
+                onEdit={(p) => { setEditingProgram(p); setIsEditOpen(true); }}
+                onDuplicate={handleCopy}
+                onDelete={handleDelete}
+                onStatusChange={handleStatusChange}
+              />
+            ))
+          )}
         </div>
       )}
     </div>
