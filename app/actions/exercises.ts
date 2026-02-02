@@ -41,11 +41,6 @@ export async function getExercises({
 export async function createExercise(values: ExerciseFormValues) {
     const supabase = await createClient();
 
-    // Parse aliases string "a, b" -> ["a", "b"]
-    const aliasesArray = values.aliases
-        ? values.aliases.split(",").map((s) => s.trim()).filter(Boolean)
-        : [];
-
     const { error } = await supabase.from("exercise_library").insert({
         name: values.name,
         category: values.category,
@@ -53,7 +48,7 @@ export async function createExercise(values: ExerciseFormValues) {
         equipment: values.equipment,
         description: values.description,
         video_url: values.video_url || null,
-        aliases: aliasesArray,
+        aliases: values.aliases,
     });
 
     if (error) throw new Error(error.message);
@@ -86,10 +81,6 @@ export async function deleteExercise(id: string) {
 export async function updateExercise(id: string, values: ExerciseFormValues) {
     const supabase = await createClient();
 
-    const aliasesArray = values.aliases
-        ? values.aliases.split(",").map((s) => s.trim()).filter(Boolean)
-        : [];
-
     const { error, count } = await supabase
         .from("exercise_library")
         .update({
@@ -99,7 +90,7 @@ export async function updateExercise(id: string, values: ExerciseFormValues) {
             equipment: values.equipment,
             description: values.description,
             video_url: values.video_url || null,
-            aliases: aliasesArray,
+            aliases: values.aliases,
         }, { count: "exact" }) // Request the count
         .eq("id", id);
 

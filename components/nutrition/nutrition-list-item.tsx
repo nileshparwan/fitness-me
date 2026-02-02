@@ -30,10 +30,11 @@ import {
   SheetClose 
 } from "@/components/ui/sheet";
 import { useMediaQuery } from "@/hooks/use-media-query";
+import { NutritionProgram } from "@/types/nutrition";
 
 interface NutritionListItemProps {
-  program: any;
-  onEdit: (program: any) => void;
+  program: NutritionProgram; // Typed!
+  onEdit: (program: NutritionProgram) => void;
   onDuplicate: (id: string) => void;
   onDelete: (id: string) => void;
   onStatusChange: (id: string, status: string) => void;

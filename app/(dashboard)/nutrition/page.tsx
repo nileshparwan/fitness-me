@@ -15,19 +15,18 @@ import { toast } from "sonner";
 import { ProgramsTableSkeleton } from "./_components/nutrition-skeletons";
 import { NutritionListItem } from "@/components/nutrition/nutrition-list-item"; 
 import { useMediaQuery } from "@/hooks/use-media-query";
+import { NutritionProgram } from "@/types/nutrition"; // Ensure this type exists
 
 export default function NutritionDashboard() {
   const [search, setSearch] = useState("");
-  const [editingProgram, setEditingProgram] = useState<any>(null); 
+  const [editingProgram, setEditingProgram] = useState<NutritionProgram | null>(null); 
   
-  // State for Modals
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
 
-  // Responsive Check
   const isDesktop = useMediaQuery("(min-width: 768px)");
 
-  const { data: programs, isLoading, refetch } = useQuery({
+  const { data: programs, isLoading, refetch } = useQuery<NutritionProgram[]>({
     queryKey: ["programs"],
     queryFn: getPrograms
   });
@@ -53,21 +52,30 @@ export default function NutritionDashboard() {
     toast.success(`Status updated to ${status}`);
   };
 
-  const filteredPrograms = programs?.filter((p: any) => 
+  const handleCreateSubmit = async (formData: FormData) => {
+    await createProgram(formData); 
+    refetch(); 
+    setIsCreateOpen(false); 
+    toast.success("Program created");
+  };
+
+  const handleEditSubmit = async (formData: FormData) => {
+    if(!editingProgram) return;
+    await updateProgram(formData, editingProgram.id); 
+    setIsEditOpen(false); 
+    refetch(); 
+    toast.success("Updated successfully"); 
+  };
+
+  const filteredPrograms = programs?.filter((p) => 
     p.name.toLowerCase().includes(search.toLowerCase()) || 
-    p.status.toLowerCase().includes(search.toLowerCase())
+    (p.status || "").toLowerCase().includes(search.toLowerCase())
   );
 
-  // --- Shared Form Components to avoid duplication ---
-  
-  const CreateForm = () => (
-    <form action={async (fd) => { 
-        await createProgram(fd); 
-        refetch(); 
-        setIsCreateOpen(false); 
-        toast.success("Program created");
-      }} className="space-y-4 py-4"
-    >
+  // --- JSX Definitions ---
+  // We define the form content here (not as a component) to reuse in Dialog/Sheet without performance issues
+  const createFormContent = (
+    <form action={handleCreateSubmit} className="space-y-4 py-4">
       <div className="space-y-2"><Label>Name</Label><Input name="name" required placeholder="e.g. Cutting Phase 1" /></div>
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2"><Label>Start</Label><Input name="start_date" type="date" required /></div>
@@ -77,20 +85,29 @@ export default function NutritionDashboard() {
     </form>
   );
 
-  const EditForm = () => (
-    <form action={async (fd) => { 
-      if(!editingProgram) return;
-      await updateProgram(fd, editingProgram.id); 
-      setIsEditOpen(false); 
-      refetch(); 
-      toast.success("Updated successfully"); 
-    }} className="space-y-4 py-4">
-      <div className="space-y-2"><Label>Name</Label><Input name="name" defaultValue={editingProgram?.name} required /></div>
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2"><Label>Start</Label><Input name="start_date" type="date" defaultValue={editingProgram?.start_date?.split('T')[0]} /></div>
-        <div className="space-y-2"><Label>End</Label><Input name="end_date" type="date" defaultValue={editingProgram?.end_date?.split('T')[0]} /></div>
+  const editFormContent = (
+    <form action={handleEditSubmit} className="space-y-4 py-4">
+      <div className="space-y-2">
+        <Label>Name</Label>
+        {/* FIX: Handle null with || "" */}
+        <Input name="name" defaultValue={editingProgram?.name || ""} required />
       </div>
-      <div className="space-y-2"><Label>Description</Label><Input name="description" defaultValue={editingProgram?.description} /></div>
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+            <Label>Start</Label>
+            {/* FIX: Handle potentially null date strings */}
+            <Input name="start_date" type="date" defaultValue={editingProgram?.start_date?.split('T')[0] || ""} />
+        </div>
+        <div className="space-y-2">
+            <Label>End</Label>
+            <Input name="end_date" type="date" defaultValue={editingProgram?.end_date?.split('T')[0] || ""} />
+        </div>
+      </div>
+      <div className="space-y-2">
+        <Label>Description</Label>
+        {/* FIX: Handle null description */}
+        <Input name="description" defaultValue={editingProgram?.description || ""} />
+      </div>
       <Button type="submit" className="w-full">Save Changes</Button>
     </form>
   );
@@ -116,15 +133,15 @@ export default function NutritionDashboard() {
             />
           </div>
 
-          {/* CREATE MODAL: Responsive Dialog/Sheet */}
+          {/* CREATE MODAL */}
           {isDesktop ? (
             <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
               <DialogTrigger asChild>
                 <Button><Plus className="mr-2 h-4 w-4" /> New Plan</Button>
               </DialogTrigger>
-              <DialogContent>
+              <DialogContent className="px-2">
                 <DialogHeader><DialogTitle>Create New Plan</DialogTitle></DialogHeader>
-                <CreateForm />
+                {createFormContent}
               </DialogContent>
             </Dialog>
           ) : (
@@ -132,28 +149,28 @@ export default function NutritionDashboard() {
               <SheetTrigger asChild>
                 <Button><Plus className="mr-2 h-4 w-4" /> New Plan</Button>
               </SheetTrigger>
-              <SheetContent side="bottom" className="h-[85vh] rounded-t-xl">
+              <SheetContent side="bottom" className="h-[85vh] rounded-t-xl px-2">
                 <SheetHeader className="text-left"><SheetTitle>Create New Plan</SheetTitle></SheetHeader>
-                <CreateForm />
+                {createFormContent}
               </SheetContent>
             </Sheet>
           )}
         </div>
       </div>
 
-      {/* EDIT MODAL: Responsive Dialog/Sheet */}
+      {/* EDIT MODAL */}
       {isDesktop ? (
         <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
           <DialogContent>
             <DialogHeader><DialogTitle>Edit Program</DialogTitle></DialogHeader>
-            <EditForm />
+            {editFormContent}
           </DialogContent>
         </Dialog>
       ) : (
         <Sheet open={isEditOpen} onOpenChange={setIsEditOpen}>
           <SheetContent side="bottom" className="h-[85vh] rounded-t-xl">
             <SheetHeader className="text-left"><SheetTitle>Edit Program</SheetTitle></SheetHeader>
-            <EditForm />
+            {editFormContent}
           </SheetContent>
         </Sheet>
       )}
@@ -168,7 +185,7 @@ export default function NutritionDashboard() {
                 <p className="text-muted-foreground">Create a new nutrition plan to get started.</p>
              </div>
           ) : (
-            filteredPrograms.map((program: any) => (
+            filteredPrograms.map((program) => (
               <NutritionListItem 
                 key={program.id} 
                 program={program}

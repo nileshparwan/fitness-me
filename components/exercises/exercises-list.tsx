@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useMemo, useCallback } from "react"; // Added hooks
+import { useState, useMemo, useCallback } from "react";
 import {
     flexRender,
     getCoreRowModel,
@@ -35,12 +35,10 @@ export function ExercisesList() {
     const [isSheetOpen, setIsSheetOpen] = useState(false);
     const [editingExercise, setEditingExercise] = useState<any | null>(null);
 
-    // useMemo ensures these arrays don't trigger re-renders
     const exercises = useMemo(() =>
         data?.pages.flatMap((page) => page.data) || [],
         [data]);
 
-    // useCallback keeps the function reference stable
     const handleEdit = useCallback((exercise: any) => {
         setEditingExercise(exercise);
         setIsSheetOpen(true);
@@ -51,9 +49,6 @@ export function ExercisesList() {
         setIsSheetOpen(true);
     }, []);
 
-    // --- CRITICAL FIX: Memoize Columns ---
-    // Without useMemo, this array is recreated on every render, 
-    // causing the table to loop endlessly.
     const columns = useMemo<ColumnDef<any>[]>(() => [
         {
             accessorKey: "name",
@@ -93,9 +88,14 @@ export function ExercisesList() {
         },
         {
             id: "actions",
-            cell: ({ row }) => <ExerciseActions exercise={row.original} onEdit={handleEdit} />,
+            // FIX: Added a wrapper div to stop propagation
+            cell: ({ row }) => (
+                <div onClick={(e) => e.stopPropagation()}>
+                    <ExerciseActions exercise={row.original} onEdit={handleEdit} />
+                </div>
+            ),
         },
-    ], [handleEdit]); // Only recreate if handleEdit changes
+    ], [handleEdit]); 
 
     const table = useReactTable({
         data: exercises,
@@ -154,11 +154,12 @@ export function ExercisesList() {
                                     <TableRow
                                         key={row.id}
                                         className="cursor-pointer hover:bg-muted/50"
+                                        // This onClick handles the row navigation
                                         onClick={(e) => {
-                                            // Prevent navigation if clicking the "Actions" button specifically
-                                            // (The generic type check handles standard HTML elements)
-                                            if ((e.target as HTMLElement).closest("button")) return;
-
+                                            // Defensive check: if the click somehow bubbled from a button/menu item, ignore it
+                                            const target = e.target as HTMLElement;
+                                            if (target.closest("button") || target.closest("[role='menuitem']")) return;
+                                            
                                             router.push(`/exercises/${row.original.id}`);
                                         }}
                                     >

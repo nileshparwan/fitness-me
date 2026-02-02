@@ -35,7 +35,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 
-// --- NEW COMPONENT: TagInput ---
+// --- TAG INPUT COMPONENT (Unchanged) ---
 interface TagInputProps {
   placeholder?: string;
   value: string[];
@@ -59,7 +59,6 @@ function TagInput({ placeholder, value = [], onChange }: TagInputProps) {
       newValue.pop();
       onChange(newValue);
     } else if (e.key === ",") {
-       // Also allow comma to trigger add, but prevent the comma character
        e.preventDefault();
        const trimmed = inputValue.trim();
        if (trimmed && !value.includes(trimmed)) {
@@ -74,7 +73,7 @@ function TagInput({ placeholder, value = [], onChange }: TagInputProps) {
   };
 
   return (
-    <div className="flex flex-wrap items-center gap-2 p-2 rounded-md border border-input bg-background focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2">
+    <div className="flex flex-wrap items-center gap-2 p-2 rounded-md border border-input bg-background focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 min-h-[40px]">
       {value.map((tag, index) => (
         <Badge key={index} variant="secondary" className="gap-1 pr-1">
           {tag}
@@ -97,7 +96,7 @@ function TagInput({ placeholder, value = [], onChange }: TagInputProps) {
   );
 }
 
-// --- MAIN COMPONENT ---
+// --- MAIN SHEET COMPONENT ---
 
 interface ExerciseSheetProps {
   open: boolean;
@@ -110,72 +109,65 @@ export function ExerciseSheet({ open, onOpenChange, exerciseToEdit }: ExerciseSh
   const { create, update } = useExerciseMutations();
   const isEditing = !!exerciseToEdit;
 
+  // Memoize default values
   const defaultValues = useMemo<ExerciseFormValues>(() => {
     if (exerciseToEdit) {
       return {
         name: exerciseToEdit.name,
         category: exerciseToEdit.category || "",
-        // Ensure these are arrays
-        muscle_groups: exerciseToEdit.muscle_groups || [],
         equipment: exerciseToEdit.equipment || "",
         description: exerciseToEdit.description || "",
         video_url: exerciseToEdit.video_url || "",
-        // Assuming aliases comes as array from DB, or split it if string
-        aliases: Array.isArray(exerciseToEdit.aliases) 
-          ? exerciseToEdit.aliases 
-          : exerciseToEdit.aliases?.split(",").map((s: string) => s.trim()) || [],
+        
+        // Ensure strictly arrays
+        muscle_groups: Array.isArray(exerciseToEdit.muscle_groups)
+          ? exerciseToEdit.muscle_groups
+          : [],
+          
+        aliases: Array.isArray(exerciseToEdit.aliases)
+          ? exerciseToEdit.aliases
+          : exerciseToEdit.aliases?.split(",").filter(Boolean) || [],
       };
     }
+    
+    // Default Empty State (Strictly typed)
     return {
       name: "",
       category: "",
-      muscle_groups: [],
+      muscle_groups: [], // Must be initialized as []
       equipment: "",
       description: "",
       video_url: "",
-      aliases: [], // Initialize as array
+      aliases: [],       // Must be initialized as []
     };
   }, [exerciseToEdit]);
 
   const form = useForm<ExerciseFormValues>({
     resolver: zodResolver(exerciseSchema),
-    values: defaultValues, 
-    defaultValues: defaultValues,
+    defaultValues,
+    values: defaultValues, // Keeps form in sync with prop changes
   });
 
   const onSubmit = async (values: ExerciseFormValues) => {
     try {
-      // API expects arrays? Ensure data structure matches what backend needs.
-      // If backend expects comma-joined strings, join them here. 
-      // Assuming backend handles arrays based on previous context:
-      
-      const payload = {
-        ...values,
-        // If your DTO expects strings for these, you might need:
-        // aliases: values.aliases.join(", "),
-        // muscle_groups: values.muscle_groups, 
-      };
-
       if (isEditing) {
-        await update.mutateAsync({ id: exerciseToEdit.id, values: payload });
+        await update.mutateAsync({ id: exerciseToEdit.id, values });
       } else {
-        await create.mutateAsync(payload);
+        await create.mutateAsync(values);
       }
       onOpenChange(false);
       form.reset();
     } catch (error) {
-      console.error(error);
+      console.error("Failed to save exercise:", error);
     }
   };
 
   const isLoading = create.isPending || update.isPending;
 
-  // Shared Form Content
   const FormContent = (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 mt-4">
         
-        {/* Name */}
         <FormField
           control={form.control}
           name="name"
@@ -191,7 +183,6 @@ export function ExerciseSheet({ open, onOpenChange, exerciseToEdit }: ExerciseSh
         />
 
         <div className="grid grid-cols-2 gap-4">
-          {/* Category */}
           <FormField
             control={form.control}
             name="category"
@@ -199,14 +190,13 @@ export function ExerciseSheet({ open, onOpenChange, exerciseToEdit }: ExerciseSh
               <FormItem>
                 <FormLabel>Category</FormLabel>
                 <FormControl>
-                  <Input placeholder="Strength" {...field} />
+                  <Input placeholder="Strength" {...field} value={field.value || ""} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
             )}
           />
 
-          {/* Equipment */}
           <FormField
             control={form.control}
             name="equipment"
@@ -214,7 +204,7 @@ export function ExerciseSheet({ open, onOpenChange, exerciseToEdit }: ExerciseSh
               <FormItem>
                 <FormLabel>Equipment</FormLabel>
                 <FormControl>
-                  <Input placeholder="Barbell, Dumbbell" {...field} />
+                  <Input placeholder="Barbell, Dumbbell" {...field} value={field.value || ""} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -222,7 +212,6 @@ export function ExerciseSheet({ open, onOpenChange, exerciseToEdit }: ExerciseSh
           />
         </div>
 
-        {/* Muscle Groups - UPDATED TO TAG INPUT */}
         <FormField
           control={form.control}
           name="muscle_groups"
@@ -231,8 +220,8 @@ export function ExerciseSheet({ open, onOpenChange, exerciseToEdit }: ExerciseSh
               <FormLabel>Muscle Groups</FormLabel>
               <FormControl>
                 <TagInput 
-                  placeholder="Type & Enter (e.g. Chest)" 
-                  value={field.value || []} 
+                  placeholder="Add muscle (e.g. Chest)" 
+                  value={field.value} 
                   onChange={field.onChange} 
                 />
               </FormControl>
@@ -241,37 +230,6 @@ export function ExerciseSheet({ open, onOpenChange, exerciseToEdit }: ExerciseSh
           )}
         />
 
-        {/* Description */}
-        <FormField
-          control={form.control}
-          name="description"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Description</FormLabel>
-              <FormControl>
-                <Textarea placeholder="Instructions..." className="resize-none" {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        {/* Video URL */}
-        <FormField
-          control={form.control}
-          name="video_url"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Video URL</FormLabel>
-              <FormControl>
-                <Input placeholder="https://youtube.com/..." {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        {/* Aliases - UPDATED TO TAG INPUT */}
         <FormField
           control={form.control}
           name="aliases"
@@ -280,10 +238,43 @@ export function ExerciseSheet({ open, onOpenChange, exerciseToEdit }: ExerciseSh
               <FormLabel>Aliases</FormLabel>
               <FormControl>
                 <TagInput 
-                  placeholder="Type & Enter (e.g. Flat Bench)" 
-                  value={Array.isArray(field.value) ? field.value : []} 
+                  placeholder="Add alias (e.g. Flat Bench)" 
+                  value={field.value} 
                   onChange={field.onChange} 
                 />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="description"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Description</FormLabel>
+              <FormControl>
+                <Textarea 
+                  placeholder="Instructions..." 
+                  className="resize-none" 
+                  {...field} 
+                  value={field.value || ""} 
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="video_url"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Video URL</FormLabel>
+              <FormControl>
+                <Input placeholder="https://youtube.com/..." {...field} value={field.value || ""} />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -294,18 +285,17 @@ export function ExerciseSheet({ open, onOpenChange, exerciseToEdit }: ExerciseSh
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
             <Button type="submit" disabled={isLoading}>
               {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Save
+              {isEditing ? "Save Changes" : "Create Exercise"}
             </Button>
         </div>
       </form>
     </Form>
   );
 
-  // RESPONSIVE RENDER
   if (isDesktop) {
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="sm:max-w-[500px] px-2">
+        <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
             <DialogTitle>{isEditing ? "Edit Exercise" : "New Exercise"}</DialogTitle>
             <DialogDescription>
@@ -320,7 +310,7 @@ export function ExerciseSheet({ open, onOpenChange, exerciseToEdit }: ExerciseSh
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="bottom" className="h-[90vh] rounded-t-xl overflow-y-auto px-2">
+      <SheetContent side="bottom" className="h-[90vh] rounded-t-xl overflow-y-auto">
         <SheetHeader className="text-left">
           <SheetTitle>{isEditing ? "Edit Exercise" : "New Exercise"}</SheetTitle>
           <SheetDescription>

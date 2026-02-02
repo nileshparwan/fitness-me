@@ -7,10 +7,11 @@ import { useQuery } from "@tanstack/react-query";
 import { format, parseISO } from "date-fns";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
+import { useMediaQuery } from "@/hooks/use-media-query"; // Ensure you have this hook
 
 // Actions
 import { 
-  getProgramMeals, updateProgramStatus, updateProgramNotes, deleteMeal, updateMealPositions, getPrograms 
+  getProgramMeals, updateProgramStatus, updateProgramNotes, deleteMeal, updateMealPositions, getPrograms, getProgramOptions 
 } from "@/app/actions/nutrition";
 
 // dnd-kit
@@ -26,15 +27,18 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"; // Import Sheet
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { ArrowLeft, ExternalLink, CalendarDays, FileText, ChevronDown, Save, MoreHorizontal, X, Trash2 } from "lucide-react";
+import { ArrowLeft, CalendarDays, FileText, MoreHorizontal, Trash2 } from "lucide-react";
 
 import { AddMealDialog } from "@/components/nutrition/add-meal-dialog";
 import { SortableMealCard } from "@/components/nutrition/sortable-meal-card";
 import { NutritionAnalytics } from "@/components/nutrition/nutrition-analytics";
 import { ShareProgramDialog } from "@/components/nutrition/share-program-dialog";
 import { NutritionProgramDetailSkeleton } from "../../_components/nutrition-program-skeleton";
+import { NutritionMeal, NutritionProgram, ProgramSummary } from "@/types/nutrition";
+import NotFound from "@/app/not-found";
 
 const DownloadNutritionButton = dynamic(
   () => import("@/components/nutrition/download-nutrition-button"),
@@ -44,32 +48,46 @@ const DownloadNutritionButton = dynamic(
 export default function ProgramPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const supabase = createClient();
-  const [notesBuffer, setNotesBuffer] = useState("");
-  const [orderedMeals, setOrderedMeals] = useState<any[]>([]);
   
-  // Selection State
+  // State
+  const [notesBuffer, setNotesBuffer] = useState("");
+  const [isNotesOpen, setIsNotesOpen] = useState(false); // State for Notes Modal
+  const [orderedMeals, setOrderedMeals] = useState<NutritionMeal[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
+  // Responsive Check
+  const isDesktop = useMediaQuery("(min-width: 768px)");
+
   // 1. Queries
-  const { data: program, isLoading: progLoading, refetch: refetchProg } = useQuery({
+  const { data: program, isLoading: progLoading, refetch: refetchProg } = useQuery<NutritionProgram | null>({
     queryKey: ["program-meta", id],
     queryFn: async () => {
-      const { data, error } = await supabase.from("nutrition_programs").select("*").eq("id", id).single();
+      const { data, error } = await supabase
+        .from("nutrition_programs")
+        .select("*")
+        .eq("id", id)
+        .maybeSingle();
+
       if (error) throw error;
+      
+      // If data is null, we return null. 
+      // The Type Generic <NutritionProgram | null> now accepts this.
+      if (!data) return null;
+
       setNotesBuffer(data.notes || "");
       return data;
     }
-  });
+});
 
-  const { data: meals, refetch: refetchMeals, isLoading: mealsLoading } = useQuery({
+  const { data: meals, refetch: refetchMeals, isLoading: mealsLoading } = useQuery<NutritionMeal[]>({
     queryKey: ["program-meals", id],
     queryFn: () => getProgramMeals(id),
     enabled: !!program 
   });
 
-  const { data: allPrograms } = useQuery({
-    queryKey: ["all-programs"],
-    queryFn: getPrograms
+  const { data: allPrograms } = useQuery<ProgramSummary[]>({
+    queryKey: ["program-options"],
+    queryFn: getProgramOptions
   });
 
   // 2. Sync State
@@ -98,39 +116,30 @@ export default function ProgramPage({ params }: { params: Promise<{ id: string }
     setOrderedMeals(updatedWithPositions);
 
     try {
-      await updateMealPositions(updatedWithPositions.map((m) => ({ id: m.id, position: m.position })), id);
+      await updateMealPositions(updatedWithPositions.map((m) => ({ id: m.id, position: m.position! })), id);
     } catch (err) {
       toast.error("Failed to save order");
       refetchMeals();
     }
   };
-
-  // const handleToggle = async (mealId: string, current: boolean) => {
-  //   setOrderedMeals(prev => prev.map(m => m.id === mealId ? { ...m, is_completed: !current } : m));
-  //   await toggleMealCompletion(mealId, !current);
-  //   refetchMeals();
-  // };
-
+  
   const handleDeleteMeal = async (mealId: string) => {
     if (confirm("Delete this meal?")) {
       setOrderedMeals(prev => prev.filter(m => m.id !== mealId));
-      setSelectedIds(prev => prev.filter(id => id !== mealId)); // Remove from selection
+      setSelectedIds(prev => prev.filter(id => id !== mealId));
       await deleteMeal(mealId);
       refetchMeals();
     }
   };
 
-  // Bulk Delete
   const handleBulkDelete = async () => {
     if(!confirm(`Delete ${selectedIds.length} items?`)) return;
-
-    // Optimistic UI
     setOrderedMeals(prev => prev.filter(m => !selectedIds.includes(m.id)));
+    const idsToDelete = [...selectedIds];
     setSelectedIds([]);
 
-    // Server Requests (Looping deletes is simplest for Supabase RLS consistency)
     try {
-      await Promise.all(selectedIds.map(id => deleteMeal(id)));
+      await Promise.all(idsToDelete.map(id => deleteMeal(id)));
       toast.success("Items deleted");
       refetchMeals();
     } catch(e) {
@@ -147,6 +156,7 @@ export default function ProgramPage({ params }: { params: Promise<{ id: string }
   const handleSaveNotes = async () => {
     await updateProgramNotes(id, notesBuffer);
     toast.success("Notes saved");
+    setIsNotesOpen(false);
   };
 
   const handleStatusChange = async (val: string) => {
@@ -155,15 +165,27 @@ export default function ProgramPage({ params }: { params: Promise<{ id: string }
     toast.success(`Status updated to ${val}`);
   };
 
+  // --- RENDER HELPERS ---
+  const NotesForm = (
+    <div className="space-y-4 pt-4">
+      <Textarea 
+        value={notesBuffer} 
+        onChange={(e) => setNotesBuffer(e.target.value)} 
+        className="min-h-[200px]" 
+        placeholder="Add general notes for this nutrition plan..."
+      />
+      <Button onClick={handleSaveNotes} className="w-full">Save Notes</Button>
+    </div>
+  );
+
   if (progLoading || mealsLoading) return <NutritionProgramDetailSkeleton />;
-  if (!program) return <div>Not Found</div>;
+  if (!program) return NotFound();
 
   return (
     <div className="p-3 md:p-6 max-w-4xl mx-auto pb-40 space-y-4 relative">
       
-      {/* --- RESPONSIVE HEADER --- */}
+      {/* RESPONSIVE HEADER */}
       <div className="flex flex-col gap-4">
-         {/* Top Row: Back + Title + Mobile Actions */}
          <div className="flex items-start justify-between gap-2">
             <div className="flex items-center gap-2 min-w-0">
                 <Link href="/nutrition">
@@ -178,13 +200,13 @@ export default function ProgramPage({ params }: { params: Promise<{ id: string }
                       <span className="hidden sm:inline">•</span>
                       <div className="hidden md:flex flex-wrap items-center gap-1">
                          <CalendarDays className="h-3 w-3" />
-                         {format(parseISO(program.start_date), "MMM d")} - {format(parseISO(program.end_date), "MMM d")}
+                         {program.start_date && format(parseISO(program.start_date), "MMM d")} - {program.end_date && format(parseISO(program.end_date), "MMM d")}
                       </div>
                    </div>
                 </div>
             </div>
 
-            {/* Mobile: Dropdown Menu for Secondary Actions */}
+            {/* Mobile Actions */}
             <div className="flex md:hidden gap-1">
                <ShareProgramDialog programId={id} programName={program.name} />
                <DropdownMenu>
@@ -192,18 +214,9 @@ export default function ProgramPage({ params }: { params: Promise<{ id: string }
                      <Button variant="ghost" size="icon"><MoreHorizontal className="h-5 w-5" /></Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
-                     <Dialog>
-                        <DialogTrigger asChild>
-                           <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
-                              <FileText className="mr-2 h-4 w-4" /> Notes
-                           </DropdownMenuItem>
-                        </DialogTrigger>
-                        <DialogContent>
-                           <DialogHeader><DialogTitle>Notes</DialogTitle></DialogHeader>
-                           <Textarea value={notesBuffer} onChange={(e) => setNotesBuffer(e.target.value)} className="min-h-[150px]" />
-                           <Button onClick={handleSaveNotes}>Save</Button>
-                        </DialogContent>
-                     </Dialog>
+                     <DropdownMenuItem onSelect={() => setIsNotesOpen(true)}>
+                        <FileText className="mr-2 h-4 w-4" /> Notes
+                     </DropdownMenuItem>
                      <div className="p-2">
                         <DownloadNutritionButton program={program} meals={orderedMeals} />
                      </div>
@@ -211,28 +224,19 @@ export default function ProgramPage({ params }: { params: Promise<{ id: string }
                </DropdownMenu>
             </div>
 
-            {/* Desktop: Full Actions */}
+            {/* Desktop Actions */}
             <div className="hidden md:flex items-center gap-2">
-               <Dialog>
-                 <DialogTrigger asChild>
-                   <Button variant="outline" size="sm"><FileText className="mr-2 h-4 w-4" /> Notes</Button>
-                 </DialogTrigger>
-                 <DialogContent>
-                   <DialogHeader><DialogTitle>Notes</DialogTitle></DialogHeader>
-                   <Textarea value={notesBuffer} onChange={(e) => setNotesBuffer(e.target.value)} className="min-h-[150px]" />
-                   <Button onClick={handleSaveNotes}>Save</Button>
-                 </DialogContent>
-               </Dialog>
-               
+               <Button variant="outline" size="sm" onClick={() => setIsNotesOpen(true)}>
+                  <FileText className="mr-2 h-4 w-4" /> Notes
+               </Button>
                <ShareProgramDialog programId={id} programName={program.name} />
                <DownloadNutritionButton program={program} meals={orderedMeals} />
             </div>
          </div>
          
-         {/* Action Bar: Status & Add Meal (Always visible) */}
          <div className="flex items-center justify-between gap-4 border-b pb-4">
              <div className="flex items-center gap-3">
-               <Select defaultValue={program.status} onValueChange={handleStatusChange}>
+               <Select defaultValue={program.status || 'draft'} onValueChange={handleStatusChange}>
                     <SelectTrigger className="h-8 w-[110px] text-xs font-medium">
                       <SelectValue />
                     </SelectTrigger>
@@ -250,10 +254,8 @@ export default function ProgramPage({ params }: { params: Promise<{ id: string }
          </div>
       </div>
 
-      {/* --- ANALYTICS --- */}
       <NutritionAnalytics meals={orderedMeals} />
 
-      {/* --- SORTABLE LIST --- */}
       <div>
          <div className="flex items-center justify-between mb-2 px-1">
              <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Plan Schedule</h2>
@@ -265,13 +267,12 @@ export default function ProgramPage({ params }: { params: Promise<{ id: string }
          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
             <SortableContext items={orderedMeals.map(m => m.id)} strategy={verticalListSortingStrategy}>
               <div className="pb-10 min-h-[200px]">
-                {orderedMeals.map((meal: any) => (
+                {orderedMeals.map((meal) => (
                    <SortableMealCard 
                       key={meal.id} 
                       meal={meal} 
                       isSelected={selectedIds.includes(meal.id)}
                       onSelect={(c) => handleSelect(meal.id, c)}
-                      // onToggle={handleToggle}
                       onDelete={handleDeleteMeal}
                       programs={allPrograms || []}
                     />
@@ -281,7 +282,23 @@ export default function ProgramPage({ params }: { params: Promise<{ id: string }
          </DndContext>
       </div>
 
-      {/* --- BULK ACTIONS FLOATING BAR --- */}
+      {/* --- RESPONSIVE NOTES MODAL --- */}
+      {isDesktop ? (
+        <Dialog open={isNotesOpen} onOpenChange={setIsNotesOpen}>
+          <DialogContent>
+            <DialogHeader><DialogTitle>Program Notes</DialogTitle></DialogHeader>
+            {NotesForm}
+          </DialogContent>
+        </Dialog>
+      ) : (
+        <Sheet open={isNotesOpen} onOpenChange={setIsNotesOpen}>
+          <SheetContent side="bottom" className="rounded-t-xl h-[80vh] px-2">
+            <SheetHeader className="text-left"><SheetTitle>Program Notes</SheetTitle></SheetHeader>
+            {NotesForm}
+          </SheetContent>
+        </Sheet>
+      )}
+
       {selectedIds.length > 0 && (
          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 w-[90%] max-w-lg bg-foreground text-background p-3 rounded-lg shadow-2xl flex items-center justify-between z-50 animate-in slide-in-from-bottom-5 fade-in">
             <div className="flex items-center gap-3 pl-2">

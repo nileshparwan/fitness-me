@@ -2,10 +2,11 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
+import { NutritionProgram, NutritionMeal, ProgramSummary } from "@/types/nutrition";
 
 // --- PROGRAMS ---
 
-export async function getPrograms() {
+export async function getPrograms(): Promise<NutritionProgram[]> {
     const supabase = await createClient();
     const { data } = await supabase
         .from("nutrition_programs")
@@ -14,11 +15,21 @@ export async function getPrograms() {
     return data || [];
 }
 
+// PERFORMANCE FIX: Lean query for dropdowns
+export async function getProgramOptions(): Promise<ProgramSummary[]> {
+    const supabase = await createClient();
+    const { data } = await supabase
+        .from("nutrition_programs")
+        .select("id, name")
+        .order("start_date", { ascending: false });
+    return data || [];
+}
+
 export async function createProgram(formData: FormData) {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
 
-    if (!user) throw new Error("You must be logged in to create a program.");
+    if (!user) throw new Error("Unauthorized");
 
     const programData = {
         user_id: user.id,
@@ -28,14 +39,11 @@ export async function createProgram(formData: FormData) {
         start_date: formData.get("start_date") as string,
         end_date: formData.get("end_date") as string,
         is_public: formData.get("is_public") === "on",
+        status: 'active' // Default status
     };
 
     const { error } = await supabase.from("nutrition_programs").insert(programData);
-
-    if (error) {
-        console.error("Error creating program:", error);
-        throw new Error(error.message);
-    }
+    if (error) throw new Error(error.message);
 
     revalidatePath("/nutrition");
 }
@@ -87,7 +95,7 @@ export async function duplicateProgram(programId: string) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error("Unauthorized");
 
-    // A. Fetch Original Program
+    // 1. Fetch Original
     const { data: original } = await supabase
         .from("nutrition_programs")
         .select("*")
@@ -96,12 +104,12 @@ export async function duplicateProgram(programId: string) {
 
     if (!original) throw new Error("Program not found");
 
-    // B. Create New Program
+    // 2. Create Copy
     const { data: newProgram, error: progError } = await supabase
         .from("nutrition_programs")
         .insert({
             user_id: user.id,
-            name: `Copy_of_${original.name}`,
+            name: `Copy of ${original.name}`,
             description: original.description,
             notes: original.notes,
             start_date: original.start_date,
@@ -114,13 +122,13 @@ export async function duplicateProgram(programId: string) {
 
     if (progError) throw new Error(progError.message);
 
-    // C. Fetch Original Meals
+    // 3. Fetch Meals
     const { data: meals } = await supabase
         .from("nutrition_meals")
         .select("*")
         .eq("program_id", programId);
 
-    // D. Bulk Insert Meals
+    // 4. Bulk Insert Meals
     if (meals && meals.length > 0) {
         const newMeals = meals.map(m => ({
             program_id: newProgram.id,
@@ -133,7 +141,6 @@ export async function duplicateProgram(programId: string) {
             instructions: m.instructions,
             alternatives: m.alternatives,
             position: m.position
-            // REMOVED: is_completed (column deleted)
         }));
 
         const { error: mealError } = await supabase.from("nutrition_meals").insert(newMeals);
@@ -145,13 +152,12 @@ export async function duplicateProgram(programId: string) {
 
 // --- MEALS ---
 
-export async function getProgramMeals(programId: string) {
+export async function getProgramMeals(programId: string): Promise<NutritionMeal[]> {
     const supabase = await createClient();
     const { data } = await supabase
         .from("nutrition_meals")
         .select("*")
         .eq("program_id", programId)
-        // FIXED: Removed .order("meal_date") as it was deleted
         .order("position", { ascending: true }); 
     return data || [];
 }
@@ -159,7 +165,7 @@ export async function getProgramMeals(programId: string) {
 export async function addMeal(formData: FormData, programId: string) {
     const supabase = await createClient();
     
-    // Get max position to append to end
+    // Get max position (Optimized: select only position)
     const { data: maxPos } = await supabase
       .from("nutrition_meals")
       .select("position")
@@ -168,7 +174,7 @@ export async function addMeal(formData: FormData, programId: string) {
       .limit(1)
       .single();
   
-    const nextPosition = (maxPos?.position || 0) + 1;
+    const nextPosition = (maxPos?.position ?? 0) + 1;
   
     const mealData = {
       program_id: programId,
@@ -201,6 +207,7 @@ export async function updateMeal(formData: FormData, mealId: string, programId: 
       fats_g: Number(formData.get("fats_g") || 0),
       instructions: (formData.get("instructions") as string) || null,
       alternatives: (formData.get("alternatives") as string) || null,
+      // Note: We don't update date/position here usually
     };
   
     const { error } = await supabase.from("nutrition_meals").update(updates).eq("id", mealId);
@@ -218,22 +225,18 @@ export async function deleteMeal(mealId: string) {
 export async function copyMeal(originalMealId: string, targetProgramId: string) {
     const supabase = await createClient();
   
-    // 1. Get original
     const { data: original } = await supabase.from("nutrition_meals").select("*").eq("id", originalMealId).single();
     if (!original) throw new Error("Meal not found");
   
-    // 2. Get max position in target
     const { data: maxPos } = await supabase.from("nutrition_meals").select("position").eq("program_id", targetProgramId).order("position", { ascending: false }).limit(1).single();
     
-    // 3. Insert Copy
-    // Note: We strip 'id', 'created_at', 'updated_at'. 
-    // Since 'is_completed' is deleted from DB, 'original' wont have it, so spread is safe.
+    // Strip system fields
     const { id, created_at, updated_at, ...mealData } = original;
     
     await supabase.from("nutrition_meals").insert({
       ...mealData,
       program_id: targetProgramId,
-      position: (maxPos?.position || 0) + 1
+      position: (maxPos?.position ?? 0) + 1
     });
   
     revalidatePath(`/nutrition/program/${targetProgramId}`);
@@ -242,13 +245,11 @@ export async function copyMeal(originalMealId: string, targetProgramId: string) 
 export async function moveMeal(mealId: string, targetProgramId: string) {
     const supabase = await createClient();
 
-    // 1. Get max position in target
     const { data: maxPos } = await supabase.from("nutrition_meals").select("position").eq("program_id", targetProgramId).order("position", { ascending: false }).limit(1).single();
 
-    // 2. Update Program ID and Position
     const { error } = await supabase.from("nutrition_meals").update({
         program_id: targetProgramId,
-        position: (maxPos?.position || 0) + 1
+        position: (maxPos?.position ?? 0) + 1
     }).eq("id", mealId);
 
     if (error) throw new Error(error.message);
@@ -256,6 +257,9 @@ export async function moveMeal(mealId: string, targetProgramId: string) {
     revalidatePath("/nutrition");
 }
 
+// PERFORMANCE NOTE: 
+// For production apps with large lists, consider a Postgres Function (RPC) for this.
+// For < 50 items, Promise.all is acceptable.
 export async function updateMealPositions(updates: { id: string; position: number }[], programId: string) {
     const supabase = await createClient();
 
