@@ -259,40 +259,58 @@ export type Database = {
       }
       goals: {
         Row: {
+          carbs_target: number | null
           created_at: string | null
+          current_weight: number | null
           custom_description: string | null
+          daily_calories: number | null
+          fat_target: number | null
           goal_type: string
           id: string
+          protein_target: number | null
           status: string | null
           target_body_fat_percent: number | null
           target_date: string | null
           target_weight: number | null
           updated_at: string | null
           user_id: string
+          weekly_workouts: number | null
         }
         Insert: {
+          carbs_target?: number | null
           created_at?: string | null
+          current_weight?: number | null
           custom_description?: string | null
+          daily_calories?: number | null
+          fat_target?: number | null
           goal_type: string
           id?: string
+          protein_target?: number | null
           status?: string | null
           target_body_fat_percent?: number | null
           target_date?: string | null
           target_weight?: number | null
           updated_at?: string | null
           user_id: string
+          weekly_workouts?: number | null
         }
         Update: {
+          carbs_target?: number | null
           created_at?: string | null
+          current_weight?: number | null
           custom_description?: string | null
+          daily_calories?: number | null
+          fat_target?: number | null
           goal_type?: string
           id?: string
+          protein_target?: number | null
           status?: string | null
           target_body_fat_percent?: number | null
           target_date?: string | null
           target_weight?: number | null
           updated_at?: string | null
           user_id?: string
+          weekly_workouts?: number | null
         }
         Relationships: []
       }
@@ -394,39 +412,54 @@ export type Database = {
       profiles: {
         Row: {
           activity_level: string | null
+          avatar_url: string | null
+          bio: string | null
           birth_date: string | null
           created_at: string | null
           display_name: string | null
+          full_name: string | null
           gender: string | null
           height: number | null
           id: string
           preferred_units: string | null
           timezone: string | null
           updated_at: string | null
+          username: string | null
+          website: string | null
         }
         Insert: {
           activity_level?: string | null
+          avatar_url?: string | null
+          bio?: string | null
           birth_date?: string | null
           created_at?: string | null
           display_name?: string | null
+          full_name?: string | null
           gender?: string | null
           height?: number | null
           id: string
           preferred_units?: string | null
           timezone?: string | null
           updated_at?: string | null
+          username?: string | null
+          website?: string | null
         }
         Update: {
           activity_level?: string | null
+          avatar_url?: string | null
+          bio?: string | null
           birth_date?: string | null
           created_at?: string | null
           display_name?: string | null
+          full_name?: string | null
           gender?: string | null
           height?: number | null
           id?: string
           preferred_units?: string | null
           timezone?: string | null
           updated_at?: string | null
+          username?: string | null
+          website?: string | null
         }
         Relationships: []
       }
