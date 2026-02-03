@@ -62,6 +62,7 @@ import Link from "next/link"
 import { NavUser } from "./nav-user"
 import { cn } from "@/utils"
 import { Button } from "@/components/ui/button"
+import { logoutUser } from "@/app/actions/supabase"
 
 // Define your menu structure here
 const data = {
@@ -199,7 +200,7 @@ function MobileNav() {
 
               {/* 4. Logout */}
               <SheetClose asChild>
-                 <button className="flex items-center gap-3 px-3 py-3 rounded-lg hover:bg-red-50 text-red-600 text-sm font-medium w-full text-left transition-colors">
+                 <button className="flex items-center gap-3 px-3 py-3 rounded-lg hover:bg-red-50 text-red-600 text-sm font-medium w-full text-left transition-colors" onClick={logoutUser}>
                     <LogOut className="h-4 w-4" />
                     Log out
                  </button>
