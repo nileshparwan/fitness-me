@@ -13,9 +13,9 @@ import { WorkoutListItem } from "@/components/workout/workout-list-item"; // Imp
 export default function WorkoutsPage() {
   const { history } = useWorkouts();
   const { data: workouts, isLoading } = history;
-  
+
   // Default view state
-  const [view, setView] = useState<"grid" | "list">("list"); 
+  const [view, setView] = useState<"grid" | "list">("list");
 
   return (
     <div className="space-y-6 px-2">
@@ -25,13 +25,13 @@ export default function WorkoutsPage() {
           <h2 className="text-2xl font-bold tracking-tight">Workouts</h2>
           <p className="text-muted-foreground">Manage your training history</p>
         </div>
-        
+
         <div className="flex items-center gap-2">
-           {/* View Switcher */}
-           <Tabs value={view} onValueChange={(v) => setView(v as "grid" | "list")} className="w-auto">
+          {/* View Switcher */}
+          <Tabs value={view} onValueChange={(v) => setView(v as "grid" | "list")} className="w-auto">
             <TabsList className="grid w-[100px] grid-cols-2">
-              <TabsTrigger value="grid" title="Grid View"><LayoutGrid className="h-4 w-4"/></TabsTrigger>
-              <TabsTrigger value="list" title="List View"><List className="h-4 w-4"/></TabsTrigger>
+              <TabsTrigger value="grid" title="Grid View"><LayoutGrid className="h-4 w-4" /></TabsTrigger>
+              <TabsTrigger value="list" title="List View"><List className="h-4 w-4" /></TabsTrigger>
             </TabsList>
           </Tabs>
 
@@ -53,17 +53,20 @@ export default function WorkoutsPage() {
         </div>
       ) : !workouts || workouts.length === 0 ? (
         <div className="flex flex-col items-center justify-center p-12 text-center border rounded-lg border-dashed bg-muted/10">
-           <Dumbbell className="h-10 w-10 text-muted-foreground mb-4" />
-           <h3 className="text-lg font-semibold">No workouts yet</h3>
-           <p className="text-muted-foreground mb-4">Start your journey by logging your first session.</p>
-           <Link href="/workouts/new"><Button>Start Now</Button></Link>
+          <Dumbbell className="h-10 w-10 text-muted-foreground mb-4" />
+          <h3 className="text-lg font-semibold">No workouts yet</h3>
+          <p className="text-muted-foreground mb-4">Start your journey by logging your first session.</p>
+          <Link href="/workouts/new"><Button>Start Now</Button></Link>
         </div>
       ) : (
         <>
           {/* GRID VIEW */}
-          <div className={view === "grid" ? "grid gap-4 md:grid-cols-2 lg:grid-cols-3" : "hidden"}>
+          <div className={view === "grid" ? "grid grid-cols-1 sm:grid-cols-2 md:flex md:flex-wrap gap-4" : "hidden"}>
             {workouts.map((workout: any) => (
-              <WorkoutCard key={workout.id} workout={workout} />
+              // Mobile: Full width / Desktop: Fixed 240px width for a slightly wider, better proportioned card
+              <div key={workout.id} className="w-full md:w-[240px]">
+                <WorkoutCard workout={workout} />
+              </div>
             ))}
           </div>
 

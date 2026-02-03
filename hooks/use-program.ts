@@ -8,7 +8,7 @@ export function usePrograms() {
 
   // 1. Fetch All Programs (Folders)
   const programs = useQuery({
-    queryKey: ["programs"],
+    queryKey: ["workout-programs"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("programs")

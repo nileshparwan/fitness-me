@@ -11,7 +11,7 @@ interface ProgramListItemProps {
 export function ProgramListItem({ program, isSelected, isSelectionMode }: ProgramListItemProps) {
   return (
     <div className={cn(
-      "flex items-center gap-4 p-3 rounded-xl border transition-all shadow-sm group bg-card",
+      "flex items-center gap-4 p-3 rounded-xl border transition-all shadow-sm group bg-card mb-2",
       isSelectionMode ? "cursor-pointer" : "hover:bg-accent/5",
       isSelected ? "border-primary bg-primary/5 ring-1 ring-primary" : "border-border"
     )}>

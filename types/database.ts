@@ -328,6 +328,7 @@ export type Database = {
           position: number | null
           program_id: string
           protein_g: number | null
+          status: string
           updated_at: string | null
         }
         Insert: {
@@ -343,6 +344,7 @@ export type Database = {
           position?: number | null
           program_id: string
           protein_g?: number | null
+          status?: string
           updated_at?: string | null
         }
         Update: {
@@ -358,6 +360,7 @@ export type Database = {
           position?: number | null
           program_id?: string
           protein_g?: number | null
+          status?: string
           updated_at?: string | null
         }
         Relationships: [

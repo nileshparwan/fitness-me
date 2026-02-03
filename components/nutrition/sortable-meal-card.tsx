@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { 
-  GripVertical, MoreVertical, Trash2, Copy, Pencil 
+  GripVertical, MoreVertical, Trash2, Copy, Pencil, Eye, EyeOff 
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -17,17 +17,20 @@ import {
 import { EditMealDialog } from "./edit-meal-dialog";
 import { CopyMealDialog } from "./copy-meal-dialog";
 import { NutritionMeal, ProgramSummary } from "@/types/nutrition";
+import { cn } from "@/utils"; // Ensure you have this utility or use simple string concat
 
 interface Props {
   meal: NutritionMeal;
   isSelected: boolean;
   onSelect: (checked: boolean) => void;
   onDelete: (id: string) => void;
+  // NEW: Handler for status change
+  onStatusChange: (id: string, status: 'active' | 'draft') => void;
   programs: ProgramSummary[];
 }
 
-export function SortableMealCard({ meal, isSelected, onSelect, onDelete, programs }: Props) {
-  // 1. STATE MANAGEMENT: The card controls the visibility
+export function SortableMealCard({ meal, isSelected, onSelect, onDelete, onStatusChange, programs }: Props) {
+  // 1. STATE MANAGEMENT
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isCopyOpen, setIsCopyOpen] = useState(false);
 
@@ -49,10 +52,11 @@ export function SortableMealCard({ meal, isSelected, onSelect, onDelete, program
   };
 
   const displayType = (meal.meal_type || "meal").replace(/_/g, ' ');
+  const isActive = meal.status === 'active';
 
   return (
     <>
-      {/* 2. RENDER DIALOGS: Hidden until state changes */}
+      {/* 2. RENDER DIALOGS */}
       <CopyMealDialog 
         meal={meal} 
         programs={programs} 
@@ -67,10 +71,12 @@ export function SortableMealCard({ meal, isSelected, onSelect, onDelete, program
       />
 
       <div ref={setNodeRef} style={style} className="touch-none mb-2">
-        <div className={`
-          group flex items-center gap-0 bg-card border rounded-md overflow-hidden transition-all hover:border-primary/50
-          ${isSelected ? "ring-2 ring-primary border-primary" : "bg-card shadow-sm"}
-        `}>
+        <div className={cn(
+          "group flex items-center gap-0 border rounded-md overflow-hidden transition-all hover:border-primary/50",
+          isSelected ? "ring-2 ring-primary border-primary bg-card" : "shadow-sm",
+          // VISUAL: Dim the card and change background if inactive
+          isActive ? "bg-card" : "bg-muted/40 opacity-75 border-dashed"
+        )}>
           
           <div 
             {...attributes} 
@@ -94,9 +100,16 @@ export function SortableMealCard({ meal, isSelected, onSelect, onDelete, program
                   <Badge variant="outline" className="text-[9px] h-4 px-1 py-0 uppercase tracking-tight shrink-0 text-muted-foreground border-border">
                     {displayType}
                   </Badge>
-                  <span className="text-sm font-medium truncate">
+                  
+                  {/* VISUAL: Strike-through if draft */}
+                  <span className={cn("text-sm font-medium truncate", !isActive && "text-muted-foreground line-through decoration-muted-foreground/50")}>
                     {meal.food_name}
                   </span>
+                  
+                  {/* VISUAL: Tiny Draft indicator */}
+                  {!isActive && (
+                     <span className="text-[9px] font-semibold text-muted-foreground border px-1 rounded-sm">DRAFT</span>
+                  )}
               </div>
               
               <div className="flex items-center gap-2 text-[10px] text-muted-foreground/80 sm:ml-auto">
@@ -116,8 +129,14 @@ export function SortableMealCard({ meal, isSelected, onSelect, onDelete, program
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-48">
                 
-                {/* 3. TRIGGERS: Simple menu items that update state */}
-                
+                {/* 3. NEW: Status Toggle */}
+                <DropdownMenuItem onSelect={() => onStatusChange(meal.id, isActive ? 'draft' : 'active')}>
+                  {isActive ? <EyeOff className="mr-2 h-3.5 w-3.5" /> : <Eye className="mr-2 h-3.5 w-3.5" />}
+                  {isActive ? "Set as Draft" : "Set Active"}
+                </DropdownMenuItem>
+
+                <DropdownMenuSeparator />
+
                 <DropdownMenuItem onSelect={() => setIsEditOpen(true)}>
                   <Pencil className="mr-2 h-3.5 w-3.5" /> Edit Details
                 </DropdownMenuItem>

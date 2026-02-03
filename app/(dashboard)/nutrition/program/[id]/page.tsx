@@ -11,7 +11,7 @@ import { useMediaQuery } from "@/hooks/use-media-query"; // Ensure you have this
 
 // Actions
 import { 
-  getProgramMeals, updateProgramStatus, updateProgramNotes, deleteMeal, updateMealPositions, getPrograms, getProgramOptions 
+  getProgramMeals, updateProgramStatus, updateProgramNotes, deleteMeal, updateMealPositions, getPrograms, getProgramOptions, updateMealStatus 
 } from "@/app/actions/nutrition";
 
 // dnd-kit
@@ -165,6 +165,22 @@ export default function ProgramPage({ params }: { params: Promise<{ id: string }
     toast.success(`Status updated to ${val}`);
   };
 
+  const handleMealStatusChange = async (mealId: string, newStatus: 'active' | 'draft') => {
+    // Optimistic Update
+    setOrderedMeals(prev => prev.map(m => 
+      m.id === mealId ? { ...m, status: newStatus } : m
+    ));
+    
+    try {
+      await updateMealStatus(mealId, newStatus);
+      toast.success(`Meal marked as ${newStatus}`);
+      refetchMeals(); // Sync with server to be safe
+    } catch (error) {
+      toast.error("Failed to update status");
+      refetchMeals(); // Revert
+    }
+  };
+
   // --- RENDER HELPERS ---
   const NotesForm = (
     <div className="space-y-4 pt-4">
@@ -275,6 +291,7 @@ export default function ProgramPage({ params }: { params: Promise<{ id: string }
                       onSelect={(c) => handleSelect(meal.id, c)}
                       onDelete={handleDeleteMeal}
                       programs={allPrograms || []}
+                      onStatusChange={handleMealStatusChange}
                     />
                 ))}
               </div>
