@@ -53,42 +53,30 @@ export type Database = {
         }
         Relationships: []
       }
-      ai_processing_queue: {
+      analytics_events: {
         Row: {
           created_at: string | null
-          error_message: string | null
+          event_name: string
           id: string
-          input_image_url: string | null
-          input_text: string | null
-          processed_at: string | null
-          result_json: Json | null
-          status: string | null
-          task_type: string | null
-          user_id: string
+          metadata: Json | null
+          page_path: string | null
+          user_id: string | null
         }
         Insert: {
           created_at?: string | null
-          error_message?: string | null
+          event_name: string
           id?: string
-          input_image_url?: string | null
-          input_text?: string | null
-          processed_at?: string | null
-          result_json?: Json | null
-          status?: string | null
-          task_type?: string | null
-          user_id: string
+          metadata?: Json | null
+          page_path?: string | null
+          user_id?: string | null
         }
         Update: {
           created_at?: string | null
-          error_message?: string | null
+          event_name?: string
           id?: string
-          input_image_url?: string | null
-          input_text?: string | null
-          processed_at?: string | null
-          result_json?: Json | null
-          status?: string | null
-          task_type?: string | null
-          user_id?: string
+          metadata?: Json | null
+          page_path?: string | null
+          user_id?: string | null
         }
         Relationships: []
       }

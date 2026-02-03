@@ -1,36 +1,30 @@
 "use server";
 
+import { after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
-export type HistoryEntry = {
-  date: string;
-  type: 'strength' | 'cardio';
-  weight: number | null;
-  reps: number | null;
-  estimated_1rm: number | null;
-  distance_km: number | null;
-  duration_minutes: number | null;
-  rpe: number | null;
-};
+export async function trackEvent(eventName: string, page_path: string = "", metadata: Record<string, any> = {}) {
 
-export async function getExerciseHistory(exerciseName: string) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  // 1. Schedule the database write for AFTER the response is sent
+  after(async () => {
+    try {
+      const supabase = await createClient();
 
-  if (!user) return [];
+      // This runs in the background
+      await supabase.from("analytics_events").insert({
+        event_name: eventName,
+        metadata: metadata,
+        user_id: (await supabase.auth.getUser()).data.user?.id,
+        page_path: page_path || ""
+      });
 
-  const { data, error } = await supabase
-    .from("exercise_progress")
-    .select("*")
-    .eq("user_id", user.id)
-    .eq("exercise_name", exerciseName)
-    .order("date", { ascending: false });
+      console.log(`[Analytics] Background write success: ${eventName}`);
+    } catch (error) {
+      console.error(`[Analytics] Background write failed:`, error);
+    }
+  });
 
-  if (error) {
-    console.error("Error fetching history:", error);
-    return [];
-  }
-
-  // FIX: Cast to unknown first to bypass the mismatch error
-  return data as unknown as HistoryEntry[];
+  // 2. Return immediately! 
+  // We do not wait for the DB insert above.
+  return { success: true };
 }

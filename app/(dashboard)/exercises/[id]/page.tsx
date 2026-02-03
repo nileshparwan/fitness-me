@@ -12,9 +12,9 @@ import Link from "next/link";
 import { VideoPlayer } from "@/components/exercises/video-player";
 import { ExerciseHistory } from "@/components/exercises/exercise-history"; // Now real
 import { ExerciseRecords } from "@/components/exercises/exercise-records"; // Now real
-import { getExerciseHistory } from "@/app/actions/analytics";
 import { AddToWorkoutButton } from "@/components/exercises/add-to-workout-button";
 import { ShareExerciseButton } from "@/components/exercises/share-exercise-button";
+import { getExerciseHistory } from "@/app/actions/exercises";
 
 interface PageProps {
   params: Promise<{ id: string }>;
