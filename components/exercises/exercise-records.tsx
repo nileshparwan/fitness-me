@@ -1,7 +1,7 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Trophy, TrendingUp, Timer, Scale } from "lucide-react";
 import { format } from "date-fns";
-import { HistoryEntry } from "@/app/actions/analytics";
+import { HistoryEntry } from "@/app/actions/exercises";
 
 export function ExerciseRecords({ history, type }: { history: HistoryEntry[], type: string }) {
   if (history.length === 0) return null;

@@ -2,7 +2,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
 import { Dumbbell, Timer, Activity, Calendar } from "lucide-react";
-import { HistoryEntry } from "@/app/actions/analytics";
+import { HistoryEntry } from "@/app/actions/exercises";
 
 export function ExerciseHistory({ history }: { history: HistoryEntry[] }) {
   if (history.length === 0) {
