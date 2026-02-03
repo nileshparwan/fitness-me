@@ -6,7 +6,7 @@ import {
   Plus, Folder, Dumbbell, Trash2, X, CheckSquare, Loader2, LayoutGrid, List 
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card"; // Removed unused imports
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -20,7 +20,69 @@ import { createProgram, deletePrograms } from "@/app/actions/program";
 import { cn } from "@/utils"; 
 import { useQueryClient } from "@tanstack/react-query";
 import { useMediaQuery } from "@/hooks/use-media-query";
-import { ProgramListItem } from "@/components/program/program-list-item"; // Import the new component
+import { ProgramListItem } from "@/components/program/program-list-item";
+
+// --- Extracted Grid Card Component ---
+// This prevents re-creation on every render and keeps the main component clean.
+const ProgramGridCard = ({ 
+  program, 
+  isSelectionMode, 
+  isSelected 
+}: { 
+  program: any; 
+  isSelectionMode: boolean; 
+  isSelected: boolean; 
+}) => (
+  <Card className={cn(
+     "group relative overflow-hidden transition-all duration-200",
+     // Dimensions
+     "w-[200px] h-[130px] shrink-0", 
+     // Flex Layout
+     "flex flex-col justify-between",
+     // Hover & Selection States
+     isSelectionMode ? "cursor-pointer" : "hover:shadow-md hover:border-primary/50",
+     isSelected ? "ring-2 ring-primary border-primary bg-primary/5" : "border-border bg-card"
+  )}>
+   <CardContent className="p-3 flex flex-col h-full">
+     
+     {/* Top Row: Icon & Selection */}
+     <div className="flex items-start justify-between mb-2">
+       <div className={cn(
+         "flex items-center justify-center w-8 h-8 rounded-lg",
+         "bg-amber-100 text-amber-600 dark:bg-amber-900/20 dark:text-amber-500"
+       )}>
+         <Folder className="h-4 w-4 fill-current" />
+       </div>
+
+       {isSelectionMode && (
+         <div className={cn(
+           "h-4 w-4 rounded border flex items-center justify-center transition-all",
+           isSelected ? "bg-primary border-primary" : "border-muted-foreground/30 bg-background"
+         )}>
+           {isSelected && <CheckSquare className="h-2.5 w-2.5 text-primary-foreground" />}
+         </div>
+       )}
+     </div>
+
+     {/* Middle: Text */}
+     <div className="flex-1 min-w-0 flex flex-col justify-center">
+       <h3 className="font-semibold text-sm leading-tight truncate text-foreground">
+         {program.name}
+       </h3>
+       <p className="text-[10px] text-muted-foreground truncate mt-0.5">
+         {program.description || "No description"}
+       </p>
+     </div>
+
+     {/* Footer: Count */}
+     <div className="mt-2 pt-2 border-t flex items-center gap-1.5 text-[10px] text-muted-foreground font-medium uppercase tracking-wider">
+       <Dumbbell className="h-3 w-3" />
+       <span>{program.program_items?.[0]?.count || 0} Items</span>
+     </div>
+
+   </CardContent>
+  </Card>
+);
 
 export default function ProgramsPage() {
   const { programs } = usePrograms();
@@ -28,7 +90,7 @@ export default function ProgramsPage() {
   const isDesktop = useMediaQuery("(min-width: 768px)");
 
   // State
-  const [view, setView] = useState<"grid" | "list">("list");
+  const [view, setView] = useState<"grid" | "list">("grid"); // Defaulted to grid to show changes
   const [isOpen, setIsOpen] = useState(false);
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -39,7 +101,7 @@ export default function ProgramsPage() {
   async function handleSubmit(formData: FormData) {
     try {
       await createProgram(formData);
-      await queryClient.invalidateQueries({ queryKey: ["programs"] });
+      await queryClient.invalidateQueries({ queryKey: ["workout-programs"] });
       setIsOpen(false);
       toast.success("Program created!");
     } catch (e) {
@@ -53,7 +115,7 @@ export default function ProgramsPage() {
     setIsDeleting(true);
     try {
       await deletePrograms(selectedIds);
-      await queryClient.invalidateQueries({ queryKey: ["programs"] });
+      await queryClient.invalidateQueries({ queryKey: ["workout-programs"] });
       setSelectedIds([]); 
       setIsSelectionMode(false);
       toast.success("Deleted successfully");
@@ -168,7 +230,7 @@ export default function ProgramsPage() {
                     <CheckSquare className="mr-2 h-4 w-4" /> Select
                  </Button>
 
-                 {/* CREATE ACTION: RESPONSIVE DIALOG/SHEET */}
+                 {/* CREATE ACTION */}
                  {isDesktop ? (
                    <Dialog open={isOpen} onOpenChange={setIsOpen}>
                     <DialogTrigger asChild>
@@ -196,6 +258,8 @@ export default function ProgramsPage() {
         )}
       </div>
 
+      
+
       {/* CONTENT AREA */}
       {programs.isLoading ? (
          <div className="space-y-4">
@@ -204,46 +268,27 @@ export default function ProgramsPage() {
       ) : (
         <>
           {/* GRID VIEW */}
-          <div className={cn("grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3", view === "list" && "hidden")}>
+          {/* Use Flex Wrap for tight packing of fixed-width cards */}
+          <div className={cn("flex flex-wrap gap-4", view === "list" && "hidden")}>
              {programs.data?.map((program: any) => {
                 const isSelected = selectedIds.includes(program.id);
                 
-                const GridCard = () => (
-                   <Card className={cn(
-                      "h-full transition-all duration-200",
-                      isSelectionMode ? "cursor-pointer border-2" : "hover:bg-muted/50 border",
-                      isSelected ? "border-primary bg-primary/5 shadow-sm" : "border-border"
-                   )}>
-                    <CardHeader className="relative pb-3">
-                      <CardTitle className="flex items-center gap-2 text-base">
-                        <Folder className={cn("h-5 w-5 transition-colors", isSelected ? "text-primary" : "text-muted-foreground")} />
-                        <span className="truncate">{program.name}</span>
-                      </CardTitle>
-                      <CardDescription className="line-clamp-2 text-xs mt-1">
-                        {program.description || "No description"}
-                      </CardDescription>
-
-                      {isSelectionMode && (
-                        <div className={cn("absolute top-4 right-4 h-5 w-5 rounded-full border flex items-center justify-center", isSelected ? "bg-primary border-primary" : "border-muted-foreground/30")}>
-                          {isSelected && <CheckSquare className="h-3.5 w-3.5 text-primary-foreground" />}
-                        </div>
-                      )}
-                    </CardHeader>
-                    <CardContent className="pt-0">
-                      <div className="flex gap-4 text-xs text-muted-foreground">
-                        <div className="flex items-center gap-1">
-                          <Dumbbell className="h-3.5 w-3.5" />
-                          {program.program_items?.[0]?.count || 0} Items
-                        </div>
-                      </div>
-                    </CardContent>
-                   </Card>
-                );
-
                 return isSelectionMode ? (
-                  <div key={program.id} onClick={() => toggleSelection(program.id)}><GridCard /></div>
+                  <div key={program.id} onClick={() => toggleSelection(program.id)}>
+                    <ProgramGridCard 
+                        program={program} 
+                        isSelectionMode={true} 
+                        isSelected={isSelected} 
+                    />
+                  </div>
                 ) : (
-                  <Link key={program.id} href={`/programs/${program.id}`} className="block h-full"><GridCard /></Link>
+                  <Link key={program.id} href={`/programs/${program.id}`} className="block">
+                    <ProgramGridCard 
+                        program={program} 
+                        isSelectionMode={false} 
+                        isSelected={isSelected} 
+                    />
+                  </Link>
                 );
              })}
           </div>

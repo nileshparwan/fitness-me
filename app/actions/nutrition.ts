@@ -271,3 +271,17 @@ export async function updateMealPositions(updates: { id: string; position: numbe
 
     revalidatePath(`/nutrition/program/${programId}`);
 }
+
+
+export async function updateMealStatus(mealId: string, status: 'active' | 'draft') {
+    const supabase = await createClient();
+    
+    const { error } = await supabase
+      .from("nutrition_meals")
+      .update({ status })
+      .eq("id", mealId);
+  
+    if (error) throw new Error(error.message);
+    
+    revalidatePath("/nutrition");
+  }
