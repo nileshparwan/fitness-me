@@ -25,7 +25,6 @@ export type WorkoutActionInput = {
       set_number: number;
       reps: number | string;
       weight: number | string;
-      rpe?: number | string;
     }[];
     // Cardio fields
     duration?: number | string;
@@ -73,7 +72,6 @@ function buildWorkoutLogs(
         set_number: set.set_number,
         reps: Number(set.reps || 0),
         weight: Number(set.weight || 0),
-        rpe: set.rpe ? Number(set.rpe) : null,
       });
     });
   }

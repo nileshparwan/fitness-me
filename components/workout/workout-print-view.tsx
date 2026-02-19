@@ -92,7 +92,6 @@ export const WorkoutPrintView = React.forwardRef<HTMLDivElement, PrintViewProps>
                         <th className="px-4 py-2 w-16">Set</th>
                         <th className="px-4 py-2">Weight</th>
                         <th className="px-4 py-2">Reps</th>
-                        <th className="px-4 py-2 text-right">RPE</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y">
@@ -103,9 +102,6 @@ export const WorkoutPrintView = React.forwardRef<HTMLDivElement, PrintViewProps>
                             {set.weight} <span className="text-xs font-normal text-muted-foreground">kg</span>
                           </td>
                           <td className="px-4 py-3">{set.reps}</td>
-                          <td className="px-4 py-3 text-right text-muted-foreground tabular-nums">
-                            {set.rpe || "-"}
-                          </td>
                         </tr>
                       ))}
                     </tbody>

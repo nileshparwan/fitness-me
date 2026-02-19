@@ -72,8 +72,7 @@ export const WorkoutPDF = ({ workout, strengthLogs, cardioLogs }: WorkoutPDFProp
             <View style={[styles.tableRow, styles.tableHeader]}>
               <Text style={styles.colSet}>SET</Text>
               <Text style={styles.colMain}>WEIGHT</Text>
-              <Text style={styles.colMetric}>REPS</Text>
-              <Text style={styles.colEnd}>RPE</Text>
+              <Text style={styles.colEnd}>REPS</Text>
             </View>
 
             {/* Table Rows */}
@@ -81,8 +80,7 @@ export const WorkoutPDF = ({ workout, strengthLogs, cardioLogs }: WorkoutPDFProp
               <View key={i} style={styles.tableRow}>
                 <Text style={styles.colSet}>#{set.set_number}</Text>
                 <Text style={styles.colMain}>{set.weight} kg</Text>
-                <Text style={styles.colMetric}>{set.reps}</Text>
-                <Text style={styles.colEnd}>{set.rpe || "-"}</Text>
+                <Text style={styles.colEnd}>{set.reps}</Text>
               </View>
             ))}
           </View>

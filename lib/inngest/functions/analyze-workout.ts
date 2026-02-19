@@ -53,7 +53,6 @@ export const analyzeWorkout = inngest.createFunction(
       //       set_number: setIndex + 1,
       //       reps: set.reps,
       //       weight: set.weight,
-      //       rpe: set.rpe || 7 // Default RPE if not provided
       //     }))
       //   );
   

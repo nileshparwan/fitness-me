@@ -1,5 +1,4 @@
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
 import { Dumbbell, Timer, Activity, Calendar } from "lucide-react";
 import { HistoryEntry } from "@/app/actions/exercises";
@@ -23,17 +22,12 @@ export function ExerciseHistory({ history }: { history: HistoryEntry[] }) {
             key={index} 
             className="flex items-center justify-between p-3 border rounded-lg bg-card hover:bg-accent/50 transition-colors"
           >
-            {/* Left: Date & RPE */}
+            {/* Left: Date */}
             <div className="space-y-1">
               <div className="flex items-center gap-2 text-sm font-medium">
                 <Calendar className="h-3 w-3 text-muted-foreground" />
                 {format(new Date(log.date), "MMM d, yyyy")}
               </div>
-              {log.type === 'strength' && log.rpe && (
-                 <Badge variant="outline" className="text-[10px] h-5">
-                   RPE {log.rpe}
-                 </Badge>
-              )}
             </div>
 
             {/* Right: The Numbers */}

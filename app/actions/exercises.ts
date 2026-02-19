@@ -14,7 +14,6 @@ export type HistoryEntry = {
     estimated_1rm: number | null;
     distance_km: number | null;
     duration_minutes: number | null;
-    rpe: number | null;
   };
   
 

@@ -197,13 +197,6 @@ export type Database = {
             foreignKeyName: "cardio_logs_workout_id_fkey"
             columns: ["workout_id"]
             isOneToOne: false
-            referencedRelation: "user_workout_summary"
-            referencedColumns: ["workout_id"]
-          },
-          {
-            foreignKeyName: "cardio_logs_workout_id_fkey"
-            columns: ["workout_id"]
-            isOneToOne: false
             referencedRelation: "workouts"
             referencedColumns: ["id"]
           },
@@ -443,13 +436,6 @@ export type Database = {
             foreignKeyName: "program_items_workout_id_fkey"
             columns: ["workout_id"]
             isOneToOne: false
-            referencedRelation: "user_workout_summary"
-            referencedColumns: ["workout_id"]
-          },
-          {
-            foreignKeyName: "program_items_workout_id_fkey"
-            columns: ["workout_id"]
-            isOneToOne: false
             referencedRelation: "workouts"
             referencedColumns: ["id"]
           },
@@ -496,7 +482,6 @@ export type Database = {
           notes: string | null
           reps: number | null
           rest_seconds: number | null
-          rpe: number | null
           set_number: number
           tempo: string | null
           updated_at: string | null
@@ -516,7 +501,6 @@ export type Database = {
           notes?: string | null
           reps?: number | null
           rest_seconds?: number | null
-          rpe?: number | null
           set_number: number
           tempo?: string | null
           updated_at?: string | null
@@ -536,7 +520,6 @@ export type Database = {
           notes?: string | null
           reps?: number | null
           rest_seconds?: number | null
-          rpe?: number | null
           set_number?: number
           tempo?: string | null
           updated_at?: string | null
@@ -550,13 +533,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "exercise_library"
             referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "workout_logs_workout_id_fkey"
-            columns: ["workout_id"]
-            isOneToOne: false
-            referencedRelation: "user_workout_summary"
-            referencedColumns: ["workout_id"]
           },
           {
             foreignKeyName: "workout_logs_workout_id_fkey"
@@ -614,36 +590,7 @@ export type Database = {
       }
     }
     Views: {
-      exercise_progress: {
-        Row: {
-          date: string | null
-          distance_km: number | null
-          duration_minutes: number | null
-          estimated_1rm: number | null
-          exercise_name: string | null
-          reps: number | null
-          rpe: number | null
-          type: string | null
-          user_id: string | null
-          weight: number | null
-        }
-        Relationships: []
-      }
-      user_workout_summary: {
-        Row: {
-          average_rpe: number | null
-          best_estimated_1rm: number | null
-          date: string | null
-          duration_minutes: number | null
-          status: string | null
-          total_sets: number | null
-          total_volume: number | null
-          user_id: string | null
-          workout_id: string | null
-          workout_name: string | null
-        }
-        Relationships: []
-      }
+      [_ in never]: never
     }
     Functions: {
       show_limit: { Args: never; Returns: number }

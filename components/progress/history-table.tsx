@@ -107,8 +107,8 @@ export function HistoryTable({ logs }: Props) {
                              {log.average_heart_rate ? `${log.average_heart_rate} bpm` : '-'}
                           </Badge>
                        ) : (
-                          <Badge variant="outline" className={`font-mono text-xs ${log.rpe >= 9 ? "bg-red-50 text-red-600 border-red-200" : "bg-slate-50 text-slate-600 border-slate-200"}`}>
-                             RPE {log.rpe || '-'}
+                          <Badge variant="outline" className="font-mono text-xs bg-slate-50 text-slate-600 border-slate-200">
+                             Rest {log.rest_seconds ?? '-'}s
                           </Badge>
                        )}
                     </TableCell>

@@ -36,11 +36,10 @@ export function ExerciseCard({ index, remove, control }: ExerciseCardProps) {
       </CardHeader>
 
       <CardContent className="p-0">
-        <div className="grid grid-cols-10 gap-2 p-2 text-[10px] uppercase tracking-wider font-bold text-muted-foreground text-center border-b">
+        <div className="grid grid-cols-8 gap-2 p-2 text-[10px] uppercase tracking-wider font-bold text-muted-foreground text-center border-b">
           <div className="col-span-1">Set</div>
           <div className="col-span-3">kg</div>
           <div className="col-span-3">Reps</div>
-          <div className="col-span-2">RPE</div>
           <div className="col-span-1"></div>
         </div>
 

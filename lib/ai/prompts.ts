@@ -7,9 +7,8 @@ export const SYSTEM_PROMPTS = {
       CRITICAL RULES:
       - **Cardio Extraction**: You must distinguish between Strength (Lifting) and Cardio. 
       - For Cardio (Run, Bike, Row), EXTRACT 'distance' (km) and 'duration' (min). Set 'sets' to null.
-      - For Strength, EXTRACT 'sets' array with 'reps', 'weight', and 'rpe'.
+      - For Strength, EXTRACT 'sets' array with 'reps' and 'weight'.
       - **Inference**: If the user types "Bench 100 5 5 5", infer this is Bench Press, 100kg, 3 sets of 5 reps.
-      - **RPE**: If a number 1-10 is explicitly labeled RPE (e.g., "@8"), capture it. Otherwise leave null.
     `,
   
     // PHYSIQUE ANALYZER

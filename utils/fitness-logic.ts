@@ -61,7 +61,7 @@ export const getStandardizedMetrics = (log: WorkoutLog | CardioLog | any) => {
             type: 'bodyweight',
             mainMetric: `${reps} reps`,
             subMetric: 'Bodyweight',
-            intensity: l.rpe ? `RPE ${l.rpe}` : '-',
+            intensity: '-',
             value: reps
         };
     }
@@ -70,7 +70,7 @@ export const getStandardizedMetrics = (log: WorkoutLog | CardioLog | any) => {
         type: 'strength',
         mainMetric: `${weight} kg`,
         subMetric: `${reps} reps`,
-        intensity: l.calculated_1rm ? `${l.calculated_1rm}kg (1RM)` : (l.rpe ? `RPE ${l.rpe}` : '-'),
+        intensity: l.calculated_1rm ? `${l.calculated_1rm}kg (1RM)` : '-',
         value: est1RM
     };
 };
@@ -91,16 +91,16 @@ export const calculateDeepInsights = (logs: WorkoutLog[]) => {
     else if (weightDiff === 0 && repDiff > 0) overloadStatus = "Volume Increase";
     else if (weightDiff < 0) overloadStatus = "Deload / Regression";
 
-    const rpeDiff = (latest.rpe || 0) - (previous.rpe || 0);
-    let rpeTrend = "Stable";
-    if (rpeDiff > 1) rpeTrend = "Harder than usual";
-    if (rpeDiff < -1) rpeTrend = "Getting easier";
+    const repDiffAbsolute = (latest.reps || 0) - (previous.reps || 0);
+    let repTrend = "Stable";
+    if (repDiffAbsolute > 1) repTrend = "Higher reps than usual";
+    if (repDiffAbsolute < -1) repTrend = "Lower reps than usual";
 
     return {
         weightDiff,
         repDiff,
         overloadStatus,
-        rpeTrend,
+        repTrend,
         previousWeight: previous.weight
     };
 };
@@ -178,15 +178,15 @@ export const calculateNextSession = (lastLog: WorkoutLog) => {
 
     if (metrics.type === 'strength') {
         const currentWeight = lastLog.weight || 0;
-        const rpe = lastLog.rpe || 8;
+        const reps = lastLog.reps || 0;
 
         let nextWeight = currentWeight;
         let msg = "Maintain load.";
 
-        if (rpe <= 6) {
+        if (reps >= 10) {
             nextWeight = currentWeight * 1.05;
-            msg = "Previous set was easy (RPE ≤ 6). Increase load ~5%.";
-        } else if (rpe >= 7 && rpe <= 8.5) {
+            msg = "Previous set had high reps. Increase load ~5%.";
+        } else if (reps >= 6 && reps <= 9) {
             // OPTIMIZATION: Small increase for optimal zone
             nextWeight = currentWeight + 1.25; 
             msg = "Optimal zone. Attempt a small micro-load increase.";

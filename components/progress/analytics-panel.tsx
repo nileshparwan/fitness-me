@@ -1,7 +1,7 @@
 "use client";
 
 import { Database } from "@/types/database";
-import { Dumbbell, Target, Zap, RotateCcw } from "lucide-react";
+import { Dumbbell, Zap, RotateCcw } from "lucide-react";
 import { cn } from "@/utils";
 
 type WorkoutLog = Database['public']['Tables']['workout_logs']['Row'];
@@ -61,14 +61,6 @@ export function AnalyticsPanel({ logs }: { logs: WorkoutLog[] }) {
         subtext={`${volumePercentage.toFixed(0)}% of best`}
         icon={Zap}
         colorClass="text-yellow-600 bg-yellow-50"
-      />
-
-      <StatTile 
-        label="Intensity" 
-        value={latest.rpe ? `${latest.rpe}/10` : "-"}
-        subtext="RPE Score"
-        icon={Target}
-        colorClass="text-orange-600 bg-orange-50"
       />
 
       <StatTile 

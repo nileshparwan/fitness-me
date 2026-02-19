@@ -198,7 +198,6 @@ export async function getExerciseMetrics(exerciseName: string, range: string) {
                 estimated_1rm: Math.max(existing.estimated_1rm, set1RM),
                 volume: existing.volume + setVolume,
                 totalRest: existing.totalRest + (log.rest_seconds || 0),
-                avgRpe: (existing.avgRpe + (log.rpe || 0)) / 2,
             });
         } else {
             const bodyWeight = bodyMetrics?.find(b => b.date === dateKey)?.weight || null;
@@ -209,7 +208,6 @@ export async function getExerciseMetrics(exerciseName: string, range: string) {
                 volume: setVolume,
                 bodyWeight: bodyWeight,
                 totalRest: log.rest_seconds || 0,
-                avgRpe: log.rpe || 0,
             });
         }
     });

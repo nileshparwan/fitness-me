@@ -2,7 +2,7 @@
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Brain, TrendingUp, TrendingDown, Minus, Info } from "lucide-react";
+import { Brain, TrendingUp, Minus, Info } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Database } from "@/types/database";
 
@@ -27,7 +27,7 @@ export function AdvancedCoach({ logs, exerciseName }: Props) {
 
   // 3. Calculate Metrics
   const lastSessionMax = Math.max(...lastSessionLogs.map(l => l.weight || 0));
-  const lastSessionRPE = lastSessionLogs.reduce((acc, l) => acc + (l.rpe || 0), 0) / lastSessionLogs.length;
+  const lastSessionAvgReps = lastSessionLogs.reduce((acc, l) => acc + (l.reps || 0), 0) / lastSessionLogs.length;
   
   // 4. GENERATE RECOMMENDATION
   // Adjusted thresholds to match your seed data's intensity
@@ -35,18 +35,18 @@ export function AdvancedCoach({ logs, exerciseName }: Props) {
   let advice = "";
   let statusColor = "";
 
-  if (lastSessionRPE >= 8.0) { 
-    // High Intensity (RPE 8+) -> Recommend small deload/reset (-4kg approx)
+  if (lastSessionAvgReps <= 5) { 
+    // Low reps usually indicate high loading; recommend a small reset.
     nextLoad = lastSessionMax - 4; 
-    advice = "Intensity was high. Resetting load to build momentum.";
+    advice = "Recent sets were low-rep. Resetting load slightly to keep quality high.";
     statusColor = "text-orange-500";
-  } else if (lastSessionRPE < 6.5) {
-    // Too Easy -> Aggressive jump
+  } else if (lastSessionAvgReps >= 10) {
+    // Higher reps suggest capacity for additional load.
     nextLoad = lastSessionMax + 5;
-    advice = "Session was very easy. Increase load significantly.";
+    advice = "Recent sets were high-rep. Increase load for progressive overload.";
     statusColor = "text-green-500";
   } else {
-    // Optimal (6.5 - 7.9) -> Small increase
+    // Middle rep zone -> micro-load increase.
     nextLoad = lastSessionMax + 1.25; 
     advice = "Optimal zone. Attempt a micro-load increase.";
     statusColor = "text-emerald-500";
@@ -131,10 +131,10 @@ export function AdvancedCoach({ logs, exerciseName }: Props) {
 
             {/* TREND ROW */}
             <div className="flex items-center justify-between p-3 rounded-lg bg-slate-900/30 border border-white/5">
-                <span className="text-sm text-slate-400">RPE Trend</span>
+                <span className="text-sm text-slate-400">Rep Trend</span>
                 <div className="flex items-center gap-2 text-sm font-medium text-slate-200">
-                    {lastSessionRPE >= 8 ? <TrendingUp className="h-4 w-4 text-orange-400" /> : <Minus className="h-4 w-4 text-slate-500" />}
-                    {lastSessionRPE >= 8 ? "High Intensity" : "Stable"}
+                    {lastSessionAvgReps >= 10 ? <TrendingUp className="h-4 w-4 text-orange-400" /> : <Minus className="h-4 w-4 text-slate-500" />}
+                    {lastSessionAvgReps >= 10 ? "Higher Reps" : "Stable"}
                 </div>
             </div>
 

@@ -7,7 +7,6 @@ const setSchema = z.object({
   set_number: z.coerce.number(),
   reps: z.coerce.number().min(0, "Reps must be 0+"),
   weight: z.coerce.number().min(0, "Weight must be 0+"),
-  rpe: z.coerce.number().min(0).max(10).optional().nullable(),
   is_completed: z.boolean().default(false).optional(),
 });
 

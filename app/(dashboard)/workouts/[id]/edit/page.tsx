@@ -53,7 +53,6 @@ export default function EditWorkoutPage() {
         set_number: set.set_number,
         reps: set.reps, // Number
         weight: set.weight, // Number
-        rpe: set.rpe || 0, // Handle Null
         is_completed: true
       }))
     }))

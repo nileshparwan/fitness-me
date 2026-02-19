@@ -18,7 +18,7 @@ interface SetInputProps {
 
 export function SetInput({ index, setIndex, control, onRemove }: SetInputProps) {
   return (
-    <div className={cn("grid grid-cols-10 gap-2 p-2 items-center", setIndex % 2 === 0 ? "bg-background" : "bg-muted/20")}>
+    <div className={cn("grid grid-cols-8 gap-2 p-2 items-center", setIndex % 2 === 0 ? "bg-background" : "bg-muted/20")}>
       
       {/* Set Number Badge */}
       <div className="col-span-1 flex justify-center">
@@ -64,30 +64,6 @@ export function SetInput({ index, setIndex, control, onRemove }: SetInputProps) 
                   type="number" 
                   className="h-8 text-center font-medium focus:bg-accent/20 p-1" 
                   placeholder="0" 
-                />
-              </FormControl>
-            </FormItem>
-          )}
-        />
-      </div>
-
-      {/* RPE Input */}
-      <div className="col-span-2">
-         <FormField
-          control={control}
-          name={`exercises.${index}.sets.${setIndex}.rpe`}
-          render={({ field }) => (
-            <FormItem>
-              <FormControl>
-                <Input 
-                  {...field} 
-                  // FIX: Handle null/undefined by defaulting to empty string
-                  // This fixes the "Type 'null' is not assignable" error
-                  value={field.value ?? ""}
-                  type="number" 
-                  max={10}
-                  className="h-8 text-center text-muted-foreground focus:text-foreground p-1" 
-                  placeholder="-" 
                 />
               </FormControl>
             </FormItem>

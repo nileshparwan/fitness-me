@@ -203,22 +203,18 @@ export default function WorkoutDetailPage() {
                    {/* Sets Grid - Replaces Table */}
                    <div className="p-3 space-y-2">
                       {/* Header Row */}
-                      <div className="grid grid-cols-4 text-[10px] font-medium text-muted-foreground uppercase tracking-wider text-center">
+                      <div className="grid grid-cols-3 text-[10px] font-medium text-muted-foreground uppercase tracking-wider text-center">
                          <span>Set</span>
                          <span>Kg</span>
                          <span>Reps</span>
-                         <span>RPE</span>
                       </div>
                       {/* Data Rows */}
                       <div className="space-y-1">
                         {ex.sets.map((set: WorkoutLog, idx: number) => (
-                           <div key={set.id} className="grid grid-cols-4 text-xs text-center items-center py-1.5 rounded-sm hover:bg-muted/50 transition-colors">
+                           <div key={set.id} className="grid grid-cols-3 text-xs text-center items-center py-1.5 rounded-sm hover:bg-muted/50 transition-colors">
                               <span className="font-medium text-muted-foreground">{idx + 1}</span>
                               <span className="font-semibold">{set.weight}</span>
                               <span>{set.reps}</span>
-                              <span className={cn("text-muted-foreground text-[10px]", !set.rpe && "opacity-20")}>
-                                 {set.rpe || "-"}
-                              </span>
                            </div>
                         ))}
                       </div>

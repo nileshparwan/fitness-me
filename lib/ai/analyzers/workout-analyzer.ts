@@ -25,7 +25,6 @@ export const multiWorkoutSchema = z.object({
         reps: z.number(),
         // CHANGE: .optional() -> .nullable()
         weight: z.number().nullable().describe("Weight in kg. 0 if bodyweight or not specified"),
-        rpe: z.number().nullable().describe("Rate of Perceived Exertion (1-10)"),
       })).nullable().describe("List of sets performed. Return null for pure cardio activities."),
 
       // CHANGE: All .optional() -> .nullable()

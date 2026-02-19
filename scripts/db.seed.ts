@@ -210,9 +210,6 @@ const main = async () => {
       const baseWeight = 40 + (cycleNum * 2.5);
 
       for (let s = 1; s <= 3; s++) {
-        // FIX: Round RPE to integer
-        const rpeVal = Math.round(7 + (s * 0.5)); 
-        
         historyLogs.push({
           workout_id: doneWorkout.id,
           exercise_id: ex.id,
@@ -220,7 +217,6 @@ const main = async () => {
           set_number: s,
           reps: 8 + (s % 2),
           weight: baseWeight + (s * 2),
-          rpe: rpeVal, // Integer
           calculated_1rm: Math.round((baseWeight + (s*2)) * 1.2),
           created_at: dateISO,
           updated_at: dateISO
