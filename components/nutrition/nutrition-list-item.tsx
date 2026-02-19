@@ -61,11 +61,11 @@ export function NutritionListItem({
   };
 
   return (
-    <div className="flex items-center gap-3 p-3 rounded-xl border bg-card hover:bg-accent/5 transition-all shadow-sm group relative">
+    <div className="group relative flex items-center gap-3 rounded-2xl border bg-card p-3 shadow-sm transition-all hover:bg-accent/10 sm:p-3.5">
       
       {/* Date Badge (Clickable) */}
       <Link href={`/nutrition/program/${program.id}`} className="shrink-0">
-        <div className="flex flex-col items-center justify-center h-12 w-12 rounded-lg border bg-muted/20 text-muted-foreground">
+        <div className="flex flex-col items-center justify-center h-12 w-12 rounded-xl border bg-muted/20 text-muted-foreground">
           {startDate ? (
             <>
               <span className="text-[10px] uppercase font-bold leading-none">
@@ -82,7 +82,7 @@ export function NutritionListItem({
       </Link>
 
       {/* Main Info (Clickable) */}
-      <Link href={`/nutrition/program/${program.id}`} className="flex-1 min-w-0 py-1">
+      <Link href={`/nutrition/${program.id}`} className="min-w-0 flex-1 py-1">
         <div className="flex items-center gap-2 mb-1">
           <h3 className="font-semibold text-base truncate leading-none">
             {program.name}
@@ -107,9 +107,9 @@ export function NutritionListItem({
       </Link>
 
       {/* Actions */}
-      <div className="flex items-center gap-1 shrink-0">
+      <div className="flex shrink-0 items-center gap-1">
         <Button variant="ghost" size="icon" asChild className="hidden sm:flex h-8 w-8 text-muted-foreground">
-           <Link href={`/nutrition/program/${program.id}`}><ArrowRight className="h-4 w-4"/></Link>
+           <Link href={`/nutrition/${program.id}`}><ArrowRight className="h-4 w-4"/></Link>
         </Button>
 
         {isDesktop ? (
@@ -154,12 +154,12 @@ export function NutritionListItem({
               <Button 
                 variant="ghost" 
                 size="icon" 
-                className="h-10 w-10 -mr-2 text-primary bg-primary/10 hover:bg-primary/20 active:bg-primary/30 transition-colors"
+                className="h-10 w-10 -mr-1 text-primary transition-colors active:bg-primary/30 bg-primary/10 hover:bg-primary/20 sm:-mr-2"
               >
                 <MoreHorizontal className="h-5 w-5" />
               </Button>
             </SheetTrigger>
-            <SheetContent side="bottom" className="rounded-t-xl pb-8 px-2">
+            <SheetContent side="bottom" className="rounded-t-xl px-3 pb-8 sm:px-4">
               <SheetHeader className="text-left mb-4">
                 <SheetTitle className="text-lg">Manage {program.name}</SheetTitle>
               </SheetHeader>
@@ -180,7 +180,7 @@ export function NutritionListItem({
                  <div className="my-1 border-t" />
                  <p className="text-xs font-medium text-muted-foreground px-1">Update Status</p>
                  
-                 <div className="grid grid-cols-3 gap-3">
+                 <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3 sm:gap-3">
                     <SheetClose asChild>
                       <Button variant="outline" className="border-green-200 bg-green-50 text-green-700" onClick={() => onStatusChange(program.id, "active")}>
                         Active

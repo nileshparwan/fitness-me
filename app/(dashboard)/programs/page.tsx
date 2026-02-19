@@ -35,15 +35,12 @@ const ProgramGridCard = ({
 }) => (
   <Card className={cn(
      "group relative overflow-hidden transition-all duration-200",
-     // Dimensions
-     "w-[200px] h-[130px] shrink-0", 
-     // Flex Layout
+     "w-[200px] h-[130px] shrink-0 py-2!", 
      "flex flex-col justify-between",
-     // Hover & Selection States
      isSelectionMode ? "cursor-pointer" : "hover:shadow-md hover:border-primary/50",
-     isSelected ? "ring-2 ring-primary border-primary bg-primary/5" : "border-border bg-card"
+     isSelected ? "ring-2 ring-primary border-primary bg-primary/5" : "border-border bg-card",
   )}>
-   <CardContent className="p-3 flex flex-col h-full">
+   <CardContent className="md:px-3 flex flex-col h-full">
      
      {/* Top Row: Icon & Selection */}
      <div className="flex items-start justify-between mb-2">

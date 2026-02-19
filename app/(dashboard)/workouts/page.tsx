@@ -18,15 +18,15 @@ export default function WorkoutsPage() {
   const [view, setView] = useState<"grid" | "list">("list");
 
   return (
-    <div className="space-y-6 px-2">
+    <div className="page-shell section-gap">
       {/* Header & Controls */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-bold tracking-tight">Workouts</h2>
+      <div className="native-surface md:desktop-surface p-4 md:p-5 flex flex-col gap-4 sm:flex-row sm:items-center justify-between">
+        <div className="min-w-0">
+          <h2 className="text-2xl md:text-3xl font-bold tracking-tight">Workouts</h2>
           <p className="text-muted-foreground">Manage your training history</p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 w-full sm:w-auto">
           {/* View Switcher */}
           <Tabs value={view} onValueChange={(v) => setView(v as "grid" | "list")} className="w-auto">
             <TabsList className="grid w-[100px] grid-cols-2">
@@ -36,7 +36,7 @@ export default function WorkoutsPage() {
           </Tabs>
 
           <Link href="/workouts/new">
-            <Button>
+            <Button className="w-full sm:w-auto">
               <Plus className="mr-2 h-4 w-4" />
               Log Workout
             </Button>
@@ -52,7 +52,7 @@ export default function WorkoutsPage() {
           ))}
         </div>
       ) : !workouts || workouts.length === 0 ? (
-        <div className="flex flex-col items-center justify-center p-12 text-center border rounded-lg border-dashed bg-muted/10">
+        <div className="native-surface flex flex-col items-center justify-center p-12 text-center border-dashed">
           <Dumbbell className="h-10 w-10 text-muted-foreground mb-4" />
           <h3 className="text-lg font-semibold">No workouts yet</h3>
           <p className="text-muted-foreground mb-4">Start your journey by logging your first session.</p>
@@ -61,10 +61,9 @@ export default function WorkoutsPage() {
       ) : (
         <>
           {/* GRID VIEW */}
-          <div className={view === "grid" ? "grid grid-cols-1 sm:grid-cols-2 md:flex md:flex-wrap gap-4" : "hidden"}>
+          <div className={view === "grid" ? "grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4" : "hidden"}>
             {workouts.map((workout: any) => (
-              // Mobile: Full width / Desktop: Fixed 240px width for a slightly wider, better proportioned card
-              <div key={workout.id} className="w-full md:w-[240px]">
+              <div key={workout.id} className="w-full">
                 <WorkoutCard workout={workout} />
               </div>
             ))}

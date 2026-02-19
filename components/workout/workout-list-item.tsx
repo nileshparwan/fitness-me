@@ -40,11 +40,11 @@ export function WorkoutListItem({ workout }: WorkoutListItemProps) {
   };
 
   return (
-    <div className="flex items-center gap-3 p-3 rounded-xl border bg-card hover:bg-accent/5 transition-all shadow-sm">
+    <div className="flex items-center gap-3 rounded-2xl border bg-card p-3 shadow-sm transition-all hover:bg-accent/10 sm:p-3.5">
       
       {/* Date Badge */}
       <Link href={`/workouts/${workout.id}`} className="shrink-0">
-        <div className="flex flex-col items-center justify-center h-12 w-12 rounded-lg border bg-muted/20">
+        <div className="flex flex-col items-center justify-center h-12 w-12 rounded-xl border bg-muted/20">
           <span className="text-[10px] uppercase font-bold text-muted-foreground/80 leading-none">
             {format(dateObj, "MMM")}
           </span>
@@ -71,7 +71,7 @@ export function WorkoutListItem({ workout }: WorkoutListItemProps) {
       </Link>
 
       {/* Actions */}
-      <div className="flex items-center gap-2 shrink-0">
+      <div className="flex shrink-0 items-center gap-2">
         {/* Status Select */}
         <div onClick={(e) => e.preventDefault()}>
             <WorkoutStatusSelect

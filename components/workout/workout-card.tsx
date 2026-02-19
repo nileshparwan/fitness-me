@@ -43,15 +43,15 @@ export function WorkoutCard({ workout }: WorkoutCardProps) {
     <div className="group h-full">
       <Link href={`/workouts/${workout.id}`} className="block h-full">
         <Card className={cn(
-          "relative h-full transition-all duration-200 hover:shadow-md cursor-pointer overflow-hidden",
-          "border-l-[4px] bg-card", 
+          "relative h-full transition-all duration-200 hover:shadow-lg cursor-pointer overflow-hidden",
+          "border-l-[4px] bg-card rounded-2xl", 
           styles.border
         )}>
           <CardContent className="p-0 flex flex-col h-full">
             
             {/* TOP ROW: Date & Status */}
             {/* Putting status here ensures it never overlaps the title */}
-            <div className="flex items-center justify-between p-3 pb-1">
+            <div className="flex items-center justify-between px-3.5 pb-1 pt-3.5 sm:p-4 sm:pb-1">
               <div className="flex items-center text-[10px] font-medium text-muted-foreground/80 uppercase tracking-wider">
                 <Calendar className="mr-1.5 h-3 w-3" />
                 {format(dateObj, "MMM d")}
@@ -72,7 +72,7 @@ export function WorkoutCard({ workout }: WorkoutCardProps) {
 
             {/* MIDDLE: Title */}
             {/* Full width available now. min-h ensures consistent card height alignment */}
-            <div className="px-3 py-1.5 flex-1">
+            <div className="flex-1 px-3.5 py-2 sm:px-4">
               <h3 className="font-bold text-base leading-tight text-foreground line-clamp-2" title={workout.name}>
                 {workout.name}
               </h3>
@@ -80,7 +80,7 @@ export function WorkoutCard({ workout }: WorkoutCardProps) {
             
             {/* BOTTOM: Stats Footer */}
             {/* Uses a subtle background to ground the card */}
-            <div className="mt-3 px-3 py-2 bg-muted/30 border-t flex items-center justify-between text-xs text-muted-foreground">
+            <div className="mt-3 flex items-center justify-between border-t bg-muted/25 px-3.5 py-3 text-xs text-muted-foreground sm:px-4">
                <div className="flex items-center gap-1.5">
                   <Clock className="h-3.5 w-3.5" />
                   <span>{workout.duration_minutes || "--"} min</span>

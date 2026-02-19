@@ -29,7 +29,7 @@ export function ExerciseCard({ index, remove, control }: ExerciseCardProps) {
 
   return (
     <Card className="relative overflow-hidden shadow-sm border-l-4 border-l-primary/20">
-      <CardHeader className="flex flex-row items-center justify-between py-3 bg-muted/20">
+      <CardHeader className="flex flex-row items-center justify-between bg-muted/20 px-3 py-3 sm:px-4">
         <CardTitle className="text-sm font-semibold truncate max-w-[80%]">
           {exerciseName}
         </CardTitle>
@@ -39,7 +39,7 @@ export function ExerciseCard({ index, remove, control }: ExerciseCardProps) {
       </CardHeader>
 
       <CardContent className="p-0">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 p-3 border-b bg-muted/10">
+        <div className="grid grid-cols-1 gap-2 border-b bg-muted/10 p-3 sm:grid-cols-2">
           <FormField
             control={control}
             name={`exercises.${index}.group_id`}
@@ -74,7 +74,7 @@ export function ExerciseCard({ index, remove, control }: ExerciseCardProps) {
           />
         </div>
 
-        <div className="grid grid-cols-8 gap-2 p-2 text-[10px] uppercase tracking-wider font-bold text-muted-foreground text-center border-b">
+        <div className="grid grid-cols-8 gap-2 border-b px-3 py-2 text-center text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
           <div className="col-span-1">Set</div>
           <div className="col-span-3">kg</div>
           <div className="col-span-3">Reps</div>
@@ -96,7 +96,7 @@ export function ExerciseCard({ index, remove, control }: ExerciseCardProps) {
         <Button
           type="button"
           variant="ghost"
-          className="w-full rounded-none border-t h-10 text-xs font-medium text-muted-foreground hover:bg-muted/50 hover:text-primary"
+          className="h-11 w-full rounded-none border-t text-xs font-medium text-muted-foreground hover:bg-muted/50 hover:text-primary sm:h-10"
           onClick={() =>
             append({
               set_number: fields.length + 1,

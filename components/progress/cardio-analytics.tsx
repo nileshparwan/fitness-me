@@ -25,23 +25,23 @@ export function CardioAnalytics({ logs }: { logs: CardioLog[] }) {
 
   // Reusable Micro-Card Component
   const StatTile = ({ label, value, subtext, icon: Icon, colorClass }: StatTileProps) => (
-    <div className="flex flex-col justify-between p-3 rounded-xl border bg-card shadow-sm h-full min-h-[80px]">
-      <div className="flex items-center gap-2 mb-1">
+    <div className="flex h-full min-h-[88px] flex-col justify-between rounded-xl border bg-card p-3.5 shadow-sm sm:min-h-[80px] sm:p-3">
+      <div className="mb-1 flex items-center gap-2">
         <div className={cn("p-1.5 rounded-md bg-muted", colorClass)}>
            <Icon className="h-3.5 w-3.5" />
         </div>
-        <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">{label}</span>
+        <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{label}</span>
       </div>
       
       <div>
-        <div className="text-lg font-bold leading-tight">{value}</div>
+        <div className="text-lg font-bold leading-tight sm:text-[1.05rem]">{value}</div>
         {subtext && <p className="text-[10px] text-muted-foreground mt-1 truncate">{subtext}</p>}
       </div>
     </div>
   );
 
   return (
-    <div className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-4 md:gap-4">
       <StatTile 
         label="Distance"
         value={`${latest.distance_km?.toFixed(2)} km`}

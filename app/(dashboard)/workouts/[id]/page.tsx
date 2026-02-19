@@ -68,7 +68,7 @@ export default function WorkoutDetailPage() {
 
       {/* --- HEADER --- */}
       <div className="flex flex-col gap-4">
-        <div className="flex items-start justify-between gap-3 px-2 md:px-0">
+        <div className="flex items-start justify-between gap-3 px-3 md:px-0">
            {/* Title Area */}
            <div className="flex items-center gap-3 overflow-hidden flex-1">
               <Button variant="outline" size="icon" className="h-9 w-9 shrink-0 rounded-full" onClick={() => router.back()}>
@@ -163,7 +163,7 @@ export default function WorkoutDetailPage() {
         </div>
 
         {/* --- STATS GRID --- */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 px-2 md:px-0">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 px-3 md:px-0">
            <DetailStat icon={Clock} label="Duration" value={`${workout.duration_minutes || "--"} min`} />
            <DetailStat icon={Weight} label="Volume" value={`${(totalVolume / 1000).toFixed(1)}k kg`} />
            <DetailStat icon={Hash} label="Strength" value={`${exercises.length} Exercises`} />
@@ -177,7 +177,7 @@ export default function WorkoutDetailPage() {
 
       {/* --- STRENGTH SECTION --- */}
       {exercises.length > 0 && (
-        <section className="space-y-4 px-2 md:px-0">
+        <section className="space-y-4 px-3 md:px-0">
           <div className="flex items-center justify-between">
              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
                 <Dumbbell className="h-4 w-4" /> Strength Routine
@@ -243,7 +243,7 @@ export default function WorkoutDetailPage() {
 
       {/* --- CARDIO SECTION --- */}
       {cardioLogs.length > 0 && (
-        <section className="space-y-4 px-2 md:px-0 mt-8">
+        <section className="space-y-4 px-3 md:px-0 mt-8">
            <div className="flex items-center justify-between">
              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
                 <HeartPulse className="h-4 w-4" /> Cardio Sessions
@@ -293,7 +293,7 @@ export default function WorkoutDetailPage() {
       )}
 
       {workout.ai_feedback && (
-        <section className="px-2 md:px-0 mt-8">
+        <section className="px-3 md:px-0 mt-8">
           <Card className="border-primary/20 bg-primary/5">
             <CardHeader>
               <CardTitle className="text-sm">AI Feedback</CardTitle>

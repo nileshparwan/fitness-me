@@ -42,7 +42,7 @@ export function HistoryTable({ logs }: Props) {
 
   return (
     <Card className="shadow-sm border-muted h-full flex flex-col">
-      <CardHeader className="pb-3">
+      <CardHeader className="px-3 pb-3 pt-4 sm:px-6">
         <div className="flex items-center gap-2">
             <CalendarDays className="h-5 w-5 text-indigo-500" />
             <CardTitle>History Log</CardTitle>
@@ -58,15 +58,15 @@ export function HistoryTable({ logs }: Props) {
         */}
         <div className="h-[500px] w-full overflow-y-auto overflow-x-auto border-t">
           
-          <Table className="min-w-[600px] md:min-w-full">
+          <Table className="min-w-[560px] md:min-w-full">
             {/* STICKY HEADER: Use sticky top-0 and z-index to keep it visible */}
             <TableHeader className="sticky top-0 z-20 bg-slate-50 shadow-sm">
               <TableRow className="hover:bg-transparent">
-                <TableHead className="w-[120px] whitespace-nowrap pl-6 font-semibold">Date</TableHead>
-                <TableHead className="w-[180px] whitespace-nowrap font-semibold">Exercise</TableHead>
+                <TableHead className="w-[110px] whitespace-nowrap pl-3 font-semibold sm:pl-6">Date</TableHead>
+                <TableHead className="w-[170px] whitespace-nowrap font-semibold">Exercise</TableHead>
                 <TableHead className="whitespace-nowrap font-semibold">Performance</TableHead>
                 <TableHead className="whitespace-nowrap font-semibold">Intensity</TableHead>
-                <TableHead className="text-right whitespace-nowrap pr-6 font-semibold">Metric</TableHead>
+                <TableHead className="whitespace-nowrap pr-3 text-right font-semibold sm:pr-6">Metric</TableHead>
               </TableRow>
             </TableHeader>
             
@@ -76,7 +76,7 @@ export function HistoryTable({ logs }: Props) {
 
                 return (
                   <TableRow key={log.id} className="hover:bg-muted/5 group">
-                    <TableCell className="font-medium whitespace-nowrap text-muted-foreground pl-6">
+                    <TableCell className="whitespace-nowrap pl-3 font-medium text-muted-foreground sm:pl-6">
                       {formatDate(getLogDate(log))}
                     </TableCell>
 
@@ -119,7 +119,7 @@ export function HistoryTable({ logs }: Props) {
                        )}
                     </TableCell>
 
-                    <TableCell className="text-right whitespace-nowrap pr-6">
+                    <TableCell className="whitespace-nowrap pr-3 text-right sm:pr-6">
                        {isCardioLog ? (
                           <span className="text-sm text-muted-foreground font-mono">
                             {log.calories_burned} kcal

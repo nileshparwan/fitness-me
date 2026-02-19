@@ -210,12 +210,12 @@ export default function NutritionDashboard() {
   );
 
   return (
-    <div className="p-4 md:p-8 max-w-[1600px] mx-auto min-h-screen space-y-6">
+    <div className="page-shell max-w-[1600px] mx-auto min-h-screen section-gap">
 
       {/* Header & Controls */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+      <div className="native-surface md:desktop-surface p-4 md:p-5 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Nutrition Plans</h1>
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Nutrition Plans</h1>
           <p className="text-muted-foreground">Manage your meal schedules.</p>
         </div>
 
@@ -252,7 +252,7 @@ export default function NutritionDashboard() {
             {isDesktop ? (
                 <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
                 <DialogTrigger asChild>
-                    <Button><Plus className="mr-2 h-4 w-4" /> New</Button>
+                    <Button className="w-full sm:w-auto"><Plus className="mr-2 h-4 w-4" /> New</Button>
                 </DialogTrigger>
                 <DialogContent className="px-2">
                     <DialogHeader><DialogTitle>Create New Plan</DialogTitle></DialogHeader>
@@ -262,7 +262,7 @@ export default function NutritionDashboard() {
             ) : (
                 <Sheet open={isCreateOpen} onOpenChange={setIsCreateOpen}>
                 <SheetTrigger asChild>
-                    <Button size="icon"><Plus className="h-4 w-4" /></Button>
+                  <Button size="icon" className="rounded-xl"><Plus className="h-4 w-4" /></Button>
                 </SheetTrigger>
                 <SheetContent side="bottom" className="h-[85vh] rounded-t-xl px-2">
                     <SheetHeader className="text-left"><SheetTitle>Create New Plan</SheetTitle></SheetHeader>
@@ -295,7 +295,7 @@ export default function NutritionDashboard() {
       {isLoading ? <ProgramsTableSkeleton /> : (
         <>
            {!filteredPrograms || filteredPrograms.length === 0 ? (
-             <div className="flex flex-col items-center justify-center p-12 text-center border rounded-xl border-dashed bg-muted/10">
+             <div className="native-surface flex flex-col items-center justify-center p-12 text-center border-dashed">
                 <Utensils className="h-10 w-10 text-muted-foreground mb-4" />
                 <h3 className="text-lg font-semibold">No plans found</h3>
                 <p className="text-muted-foreground">Create a new nutrition plan to get started.</p>

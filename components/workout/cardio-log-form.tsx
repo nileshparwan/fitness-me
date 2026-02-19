@@ -104,13 +104,13 @@ export function CardioLogForm({ workoutId, initialData, onSuccess, onCancel }: C
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4 border p-4 rounded-lg bg-card">
+    <form onSubmit={handleSubmit} className="space-y-4 rounded-xl border bg-card p-3 sm:p-4">
       <h3 className="font-semibold text-lg flex items-center gap-2">
         <Activity className="h-5 w-5 text-primary" />
         {initialData ? "Edit Cardio Log" : "Add Cardio Log"}
       </h3>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
         <div className="space-y-2">
           <Label>Activity Type *</Label>
           <Input 
@@ -132,7 +132,7 @@ export function CardioLogForm({ workoutId, initialData, onSuccess, onCancel }: C
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <div className="space-y-2">
           <Label className="text-xs">Dist (km)</Label>
           <Input type="number" step="0.01" value={formData.distance_km} onChange={e => handleChange("distance_km", e.target.value)} />
@@ -147,7 +147,7 @@ export function CardioLogForm({ workoutId, initialData, onSuccess, onCancel }: C
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <div className="space-y-2">
            <Label className="text-xs">Max HR</Label>
            <Input type="number" value={formData.max_heart_rate} onChange={e => handleChange("max_heart_rate", e.target.value)} />
@@ -167,11 +167,11 @@ export function CardioLogForm({ workoutId, initialData, onSuccess, onCancel }: C
         <Textarea placeholder="Notes..." value={formData.notes} onChange={e => handleChange("notes", e.target.value)} />
       </div>
 
-      <div className="flex justify-end gap-2">
+      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
         {onCancel && (
-          <Button type="button" variant="ghost" onClick={onCancel}>Cancel</Button>
+          <Button type="button" variant="ghost" onClick={onCancel} className="w-full sm:w-auto">Cancel</Button>
         )}
-        <Button type="submit" disabled={loading}>
+        <Button type="submit" disabled={loading} className="w-full sm:w-auto">
           {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
           {initialData ? "Update Log" : "Add Log"}
         </Button>

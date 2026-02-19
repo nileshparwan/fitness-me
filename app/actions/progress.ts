@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { Database } from "@/types/database";
 import { subMonths, subYears } from "date-fns";
 import { calculatePaceMinutesPerKm, estimateOneRepMax } from "@/utils/fitness-logic";
+import { z } from "zod";
 
 type StrengthLogRow = Database["public"]["Tables"]["workout_logs"]["Row"];
 type CardioLogRow = Database["public"]["Tables"]["cardio_logs"]["Row"];
@@ -42,20 +43,34 @@ type ExerciseMetricsResult =
       chartData: StrengthChartPoint[];
     };
 
+const rangeSchema = z.enum(["1M", "6M", "1Y", "ALL"]);
+const exerciseSchema = z.string().trim().min(1).max(120);
+
 export async function getAvailableExercises() {
     const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return [];
 
-    // 1. Strength Logs
-    const { data: strength } = await supabase
-        .from("workout_logs")
-        .select("exercise_name")
-        .not("exercise_name", "is", null);
+    const { data: workouts } = await supabase.from("workouts").select("id").eq("user_id", user.id);
+    const workoutIds = (workouts || []).map((workout) => workout.id);
 
-    // 2. Cardio Logs
-    const { data: cardio } = await supabase
-        .from("cardio_logs")
-        .select("activity_type")
-        .not("activity_type", "is", null);
+    const strengthPromise = workoutIds.length
+      ? supabase
+          .from("workout_logs")
+          .select("exercise_name")
+          .in("workout_id", workoutIds)
+          .not("exercise_name", "is", null)
+      : Promise.resolve({ data: [] as { exercise_name: string }[] });
+
+    const cardioPromise = supabase
+      .from("cardio_logs")
+      .select("activity_type")
+      .eq("user_id", user.id)
+      .not("activity_type", "is", null);
+
+    const [{ data: strength }, { data: cardio }] = await Promise.all([strengthPromise, cardioPromise]);
 
     const names = new Set([
         ...(strength?.map(d => d.exercise_name) || []),
@@ -67,6 +82,13 @@ export async function getAvailableExercises() {
 
 export async function getMuscleBalance() {
     const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return [];
+    const { data: workouts } = await supabase.from("workouts").select("id").eq("user_id", user.id);
+    const workoutIds = (workouts || []).map((workout) => workout.id);
+    if (workoutIds.length === 0) return [];
     type WorkoutLogWithLibrary = Pick<
       Database["public"]["Tables"]["workout_logs"]["Row"],
       "exercise_name" | "exercise_id"
@@ -87,6 +109,7 @@ export async function getMuscleBalance() {
           muscle_groups
         )
       `)
+        .in("workout_id", workoutIds)
         .gte("created_at", subMonths(new Date(), 1).toISOString());
 
     if (error || !data) {
@@ -153,12 +176,13 @@ export async function getUserProfile() {
 
 export async function getExerciseDetails(exerciseName: string) {
     const supabase = await createClient();
+    const safeExerciseName = exerciseSchema.parse(exerciseName);
 
     // Fetch detailed metadata from Exercise Library
     const { data } = await supabase
         .from("exercise_library")
         .select("*")
-        .eq("name", exerciseName)
+        .eq("name", safeExerciseName)
         .single();
 
     return data;
@@ -166,12 +190,26 @@ export async function getExerciseDetails(exerciseName: string) {
 
 export async function getExerciseMetrics(exerciseName: string, range: string): Promise<ExerciseMetricsResult> {
     const supabase = await createClient();
+    const safeExerciseName = exerciseSchema.parse(exerciseName);
+    const safeRange = rangeSchema.parse(range);
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+      return {
+        type: "strength",
+        logs: [],
+        chartData: [],
+      };
+    }
     const now = new Date();
+    const { data: workouts } = await supabase.from("workouts").select("id").eq("user_id", user.id);
+    const workoutIds = (workouts || []).map((workout) => workout.id);
     let startDate = subMonths(now, 6);
 
-    if (range === "1M") startDate = subMonths(now, 1);
-    if (range === "1Y") startDate = subYears(now, 1);
-    if (range === "ALL") startDate = new Date(0);
+    if (safeRange === "1M") startDate = subMonths(now, 1);
+    if (safeRange === "1Y") startDate = subYears(now, 1);
+    if (safeRange === "ALL") startDate = new Date(0);
 
     // =========================================================
     // 1. TRY FETCHING CARDIO LOGS FIRST (Restored Logic)
@@ -179,7 +217,8 @@ export async function getExerciseMetrics(exerciseName: string, range: string): P
     const { data: cardioLogs } = await supabase
         .from("cardio_logs")
         .select("*")
-        .eq("activity_type", exerciseName) // e.g., "Running"
+        .eq("user_id", user.id)
+        .eq("activity_type", safeExerciseName) // e.g., "Running"
         .gte("date", startDate.toISOString())
         .order("date", { ascending: true });
 
@@ -201,10 +240,19 @@ export async function getExerciseMetrics(exerciseName: string, range: string): P
     // =========================================================
     // 2. FALLBACK TO STRENGTH LOGIC (Your existing code)
     // =========================================================
+    if (workoutIds.length === 0) {
+      return {
+        type: "strength",
+        logs: [],
+        chartData: [],
+      };
+    }
+
     const { data: strengthLogs, error } = await supabase
         .from("workout_logs")
         .select("*")
-        .eq("exercise_name", exerciseName)
+        .in("workout_id", workoutIds)
+        .eq("exercise_name", safeExerciseName)
         .gte("created_at", startDate.toISOString())
         .order("created_at", { ascending: true });
 
@@ -219,6 +267,9 @@ export async function getExerciseMetrics(exerciseName: string, range: string): P
 
     // AGGREGATE DATA
     const aggregatedMap = new Map<string, StrengthChartPoint>();
+    const bodyMetricMap = new Map<string, BodyMetricRow>(
+      ((bodyMetrics as BodyMetricRow[] | null) || []).map((metric) => [metric.date, metric]),
+    );
 
     strengthLogs?.forEach((log: StrengthLogRow) => {
         const dateKey = log.created_at ? log.created_at.split("T")[0] : "unknown";
@@ -239,7 +290,7 @@ export async function getExerciseMetrics(exerciseName: string, range: string): P
                 totalRest: existing.totalRest + (log.rest_seconds || 0),
             });
         } else {
-            const metric = (bodyMetrics as BodyMetricRow[] | null)?.find((b) => b.date === dateKey);
+            const metric = bodyMetricMap.get(dateKey);
 
             aggregatedMap.set(dateKey, {
                 date: log.created_at!,

@@ -15,6 +15,16 @@ export async function upsertCardioLog(data: CardioLogUpsertInput) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Unauthorized");
 
+  if (data.workout_id) {
+    const { data: workout } = await supabase
+      .from("workouts")
+      .select("id")
+      .eq("id", data.workout_id)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (!workout) throw new Error("Forbidden");
+  }
+
   // 2. Prepare Payload
   const paceValue =
     data.average_pace ??
@@ -51,11 +61,22 @@ export async function upsertCardioLog(data: CardioLogUpsertInput) {
 
 export async function deleteCardioLog(id: string, workoutId: string) {
     const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Unauthorized");
+
+    const { data: ownedWorkout } = await supabase
+      .from("workouts")
+      .select("id")
+      .eq("id", workoutId)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (!ownedWorkout) throw new Error("Forbidden");
     
     const { error } = await supabase
       .from("cardio_logs")
       .delete()
-      .eq("id", id);
+      .eq("id", id)
+      .eq("user_id", user.id);
   
     if (error) throw new Error(error.message);
   

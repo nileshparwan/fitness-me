@@ -63,7 +63,7 @@ export function WorkoutActions({ workout, strengthLogs, cardioLogs, isPublicPage
     };
 
     return (
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2 sm:flex-nowrap">
 
             {/* ACTION 1: Direct PDF Download (Safe) */}
             {/* 1. PDF BUTTON (Now Safe & Lazy Loaded) */}
@@ -88,7 +88,7 @@ export function WorkoutActions({ workout, strengthLogs, cardioLogs, isPublicPage
                     </Button>
                 </DialogTrigger>
 
-                <DialogContent className="sm:max-w-md">
+                <DialogContent className="w-[calc(100vw-1.5rem)] rounded-xl sm:max-w-md">
                     <DialogHeader className="items-center">
                         <DialogTitle>Share Workout</DialogTitle>
                         <DialogDescription className="text-center">
@@ -96,20 +96,20 @@ export function WorkoutActions({ workout, strengthLogs, cardioLogs, isPublicPage
                         </DialogDescription>
                     </DialogHeader>
 
-                    <div className="flex flex-col items-center text-center space-y-4 p-2">
+                    <div className="space-y-4 p-3 text-center sm:p-2">
                         <div className="bg-white p-4 rounded-lg shadow-inner border">
                             <QRCodeSVG value={shareUrl} size={150} />
                         </div>
                         <p className="text-xs text-muted-foreground">
                             Scan to view on mobile or download PDF
                         </p>
-                        <div className="w-full flex gap-2">
+                        <div className="flex w-full flex-col gap-2 sm:flex-row">
                             <input
                                 readOnly
                                 value={shareUrl}
                                 className="flex-1 text-xs bg-muted p-2 rounded border truncate"
                             />
-                            <Button size="sm" onClick={copyLink}>Copy</Button>
+                            <Button size="sm" onClick={copyLink} className="w-full sm:w-auto">Copy</Button>
                         </div>
                     </div>
                 </DialogContent>

@@ -30,6 +30,14 @@ export async function addExerciseToWorkout(workoutId: string, exercise: QuickExe
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Unauthorized");
 
+  const { data: workout } = await supabase
+    .from("workouts")
+    .select("id")
+    .eq("id", workoutId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (!workout) throw new Error("Forbidden");
+
   const isCardio = exercise.category?.toLowerCase() === "cardio";
 
   if (isCardio) {

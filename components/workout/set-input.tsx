@@ -19,8 +19,8 @@ interface SetInputProps {
 
 export function SetInput({ index, setIndex, control, onRemove }: SetInputProps) {
   return (
-    <div className={cn("p-2", setIndex % 2 === 0 ? "bg-background" : "bg-muted/20")}>
-      <div className="grid grid-cols-8 gap-2 items-center">
+    <div className={cn("px-3 py-2.5 sm:px-2.5", setIndex % 2 === 0 ? "bg-background" : "bg-muted/20")}>
+      <div className="grid grid-cols-8 items-center gap-2 sm:gap-2.5">
         {/* Set Number Badge */}
         <div className="col-span-1 flex justify-center">
           <div className="flex h-5 w-5 items-center justify-center rounded-full bg-muted text-[10px] font-bold border text-muted-foreground">
@@ -40,7 +40,7 @@ export function SetInput({ index, setIndex, control, onRemove }: SetInputProps) 
                     {...field}
                     value={field.value ?? ""}
                     type="number"
-                    className="h-8 text-center font-medium focus:bg-accent/20 p-1"
+                    className="h-9 p-2 text-center font-medium focus:bg-accent/20 sm:h-8 sm:p-1"
                     placeholder="0"
                   />
                 </FormControl>
@@ -61,7 +61,7 @@ export function SetInput({ index, setIndex, control, onRemove }: SetInputProps) 
                     {...field}
                     value={field.value ?? ""}
                     type="number"
-                    className="h-8 text-center font-medium focus:bg-accent/20 p-1"
+                    className="h-9 p-2 text-center font-medium focus:bg-accent/20 sm:h-8 sm:p-1"
                     placeholder="0"
                   />
                 </FormControl>
@@ -76,7 +76,7 @@ export function SetInput({ index, setIndex, control, onRemove }: SetInputProps) 
             type="button"
             variant="ghost"
             size="icon"
-            className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+            className="h-8 w-8 text-muted-foreground hover:bg-destructive/10 hover:text-destructive sm:h-7 sm:w-7"
             onClick={onRemove}
             tabIndex={-1}
           >
@@ -85,7 +85,7 @@ export function SetInput({ index, setIndex, control, onRemove }: SetInputProps) 
         </div>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-6 gap-2 mt-2">
+      <div className="mt-2.5 grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-6">
         <FormField
           control={control}
           name={`exercises.${index}.sets.${setIndex}.rest_seconds`}
@@ -96,7 +96,7 @@ export function SetInput({ index, setIndex, control, onRemove }: SetInputProps) 
                   value={field.value ?? ""}
                   onChange={(e) => field.onChange(e.target.value === "" ? undefined : Number(e.target.value))}
                   type="number"
-                  className="h-8 text-xs"
+                  className="h-9 text-xs sm:h-8"
                   placeholder="Rest (sec)"
                 />
               </FormControl>
@@ -112,7 +112,7 @@ export function SetInput({ index, setIndex, control, onRemove }: SetInputProps) 
                 <Input
                   value={field.value ?? ""}
                   onChange={field.onChange}
-                  className="h-8 text-xs"
+                  className="h-9 text-xs sm:h-8"
                   placeholder="Tempo (e.g. 3-1-1)"
                 />
               </FormControl>
@@ -123,7 +123,7 @@ export function SetInput({ index, setIndex, control, onRemove }: SetInputProps) 
           control={control}
           name={`exercises.${index}.sets.${setIndex}.is_warmup`}
           render={({ field }) => (
-            <FormItem className="flex flex-row items-center gap-2 rounded-md border px-2">
+            <FormItem className="flex h-9 flex-row items-center gap-2 rounded-md border px-2 sm:h-8">
               <FormControl>
                 <Checkbox checked={Boolean(field.value)} onCheckedChange={(checked) => field.onChange(checked === true)} />
               </FormControl>
@@ -135,7 +135,7 @@ export function SetInput({ index, setIndex, control, onRemove }: SetInputProps) 
           control={control}
           name={`exercises.${index}.sets.${setIndex}.is_dropset`}
           render={({ field }) => (
-            <FormItem className="flex flex-row items-center gap-2 rounded-md border px-2">
+            <FormItem className="flex h-9 flex-row items-center gap-2 rounded-md border px-2 sm:h-8">
               <FormControl>
                 <Checkbox checked={Boolean(field.value)} onCheckedChange={(checked) => field.onChange(checked === true)} />
               </FormControl>
@@ -152,7 +152,7 @@ export function SetInput({ index, setIndex, control, onRemove }: SetInputProps) 
                 <Input
                   value={field.value ?? ""}
                   onChange={field.onChange}
-                  className="h-8 text-xs"
+                  className="h-9 text-xs sm:h-8"
                   placeholder="Form Video URL (Optional)"
                 />
               </FormControl>

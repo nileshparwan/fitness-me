@@ -147,6 +147,14 @@ export async function updateWorkoutAction(id: string, data: Partial<WorkoutActio
 
   if (!user) throw new Error("Unauthorized");
 
+  const { data: ownedWorkout } = await supabase
+    .from("workouts")
+    .select("id")
+    .eq("id", id)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (!ownedWorkout) throw new Error("Forbidden");
+
   // A. Update Header
   const updateData: Database['public']['Tables']['workouts']['Update'] = {};
   if (data.name) updateData.name = data.name;
@@ -158,7 +166,11 @@ export async function updateWorkoutAction(id: string, data: Partial<WorkoutActio
   if (data.template_id !== undefined) updateData.template_id = data.template_id || null;
 
   if (Object.keys(updateData).length > 0) {
-    const { error } = await supabase.from("workouts").update(updateData).eq("id", id);
+    const { error } = await supabase
+      .from("workouts")
+      .update(updateData)
+      .eq("id", id)
+      .eq("user_id", user.id);
     if (error) throw new Error(error.message);
   }
 
@@ -185,9 +197,15 @@ export async function updateWorkoutAction(id: string, data: Partial<WorkoutActio
 // ============================================================================
 export async function deleteWorkoutAction(ids: string | string[]) {
   const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Unauthorized");
   const idArray = Array.isArray(ids) ? ids : [ids];
 
-  const { error } = await supabase.from("workouts").delete().in("id", idArray);
+  const { error } = await supabase
+    .from("workouts")
+    .delete()
+    .eq("user_id", user.id)
+    .in("id", idArray);
   if (error) throw new Error(error.message);
   
   revalidatePath("/workouts");
