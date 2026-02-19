@@ -10,7 +10,7 @@ const roundToGymPlates = (weight: number) => {
 };
 
 // --- UNIVERSAL METRIC CALCULATOR ---
-export const getStandardizedMetrics = (log: WorkoutLog | CardioLog | any) => {
+const getStandardizedMetrics = (log: WorkoutLog | CardioLog | any) => {
 
     // 1. IS IT CARDIO?
     if (log && ('distance_km' in log || 'activity_type' in log)) {
@@ -75,7 +75,7 @@ export const getStandardizedMetrics = (log: WorkoutLog | CardioLog | any) => {
     };
 };
 
-export const calculateDeepInsights = (logs: WorkoutLog[]) => {
+const calculateDeepInsights = (logs: WorkoutLog[]) => {
     if (logs.length < 2) return null;
 
     const latest = logs[0];
@@ -148,7 +148,7 @@ export const calculateCardioInsights = (logs: CardioLog[], birthDate?: string | 
     };
 };
 
-export const calculateStrengthStats = (log: WorkoutLog) => {
+const calculateStrengthStats = (log: WorkoutLog) => {
     const weight = log.weight || 0;
     const reps = log.reps || 0;
     const volume = weight * reps;
@@ -164,7 +164,7 @@ export const calculateStrengthStats = (log: WorkoutLog) => {
     return { volume, est1RM };
 };
 
-export const calculateNextSession = (lastLog: WorkoutLog) => {
+const calculateNextSession = (lastLog: WorkoutLog) => {
     const metrics = getStandardizedMetrics(lastLog);
 
     if (metrics.type === 'bodyweight') {
@@ -206,7 +206,7 @@ export const calculateNextSession = (lastLog: WorkoutLog) => {
     return null;
 };
 
-export const analyzeTrainingStyle = (logs: WorkoutLog[]) => {
+const analyzeTrainingStyle = (logs: WorkoutLog[]) => {
     if (!logs.length) return { style: "Balanced", color: "text-blue-500" };
     
     // OPTIMIZATION: Only analyze last 5 sessions for current phase accuracy

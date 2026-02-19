@@ -27,7 +27,7 @@ type GenerateUserReportEvent = {
     };
   };
 
-export type Events = {
+type Events = {
     "ai/analyze.workout": AnalyzeWorkoutEvent;
     "ai/analyze.photo": AnalyzePhotoEvent;
     "app/weekly.report": WeeklyReportEvent;

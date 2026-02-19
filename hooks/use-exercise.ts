@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 
 // Centralized keys ensure consistency across your app
-export const exerciseKeys = {
+const exerciseKeys = {
   all: ["exercises"] as const,
   list: (search?: string) => [...exerciseKeys.all, "list", { search }] as const,
   infinite: (search?: string) => [...exerciseKeys.all, "infinite", { search }] as const,

@@ -12,4 +12,4 @@ export const registerSchema = z.object({
 });
 
 // Create a union type for our form
-export type AuthFormValues = z.infer<typeof registerSchema>;
+type AuthFormValues = z.infer<typeof registerSchema>;

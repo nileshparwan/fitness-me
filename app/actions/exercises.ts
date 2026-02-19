@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { ExerciseFormValues } from "@/lib/validations/exercise";
 import { revalidatePath } from "next/cache";
+import { Database } from "@/types/database";
 
 const PAGE_SIZE = 10;
 
@@ -15,28 +16,82 @@ export type HistoryEntry = {
     distance_km: number | null;
     duration_minutes: number | null;
   };
-  
+
+type WorkoutLogRow = Database["public"]["Tables"]["workout_logs"]["Row"];
+type CardioLogRow = Database["public"]["Tables"]["cardio_logs"]["Row"];
+type WorkoutRow = Database["public"]["Tables"]["workouts"]["Row"];
 
 export async function getExerciseHistory(exerciseName: string) {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
   
     if (!user) return [];
-  
-    const { data, error } = await supabase
-      .from("exercise_progress")
-      .select("*")
-      .eq("user_id", user.id)
-      .eq("exercise_name", exerciseName)
-      .order("date", { ascending: false });
-  
-    if (error) {
-      console.error("Error fetching history:", error);
+
+    const { data: userWorkouts, error: workoutError } = await supabase
+      .from("workouts")
+      .select("id")
+      .eq("user_id", user.id);
+
+    if (workoutError) {
+      console.error("Error fetching workouts:", workoutError);
       return [];
     }
-  
-    // FIX: Cast to unknown first to bypass the mismatch error
-    return data as unknown as HistoryEntry[];
+
+    const workoutIds = (userWorkouts || []).map((w: Pick<WorkoutRow, "id">) => w.id);
+
+    let strengthLogs: Pick<WorkoutLogRow, "created_at" | "weight" | "reps" | "calculated_1rm">[] = [];
+    if (workoutIds.length > 0) {
+      const { data: strengthData, error: strengthError } = await supabase
+        .from("workout_logs")
+        .select("created_at, weight, reps, calculated_1rm")
+        .eq("exercise_name", exerciseName)
+        .in("workout_id", workoutIds)
+        .order("created_at", { ascending: false });
+
+      if (strengthError) {
+        console.error("Error fetching strength history:", strengthError);
+        return [];
+      }
+      strengthLogs = strengthData || [];
+    }
+
+    const { data: cardioData, error: cardioError } = await supabase
+      .from("cardio_logs")
+      .select("date, distance_km, duration_minutes")
+      .eq("user_id", user.id)
+      .eq("activity_type", exerciseName)
+      .order("date", { ascending: false });
+
+    if (cardioError) {
+      console.error("Error fetching cardio history:", cardioError);
+      return [];
+    }
+
+    const cardioLogs = (cardioData || []) as Pick<CardioLogRow, "date" | "distance_km" | "duration_minutes">[];
+
+    const strengthEntries: HistoryEntry[] = strengthLogs.map((log) => ({
+      date: log.created_at || new Date(0).toISOString(),
+      type: "strength",
+      weight: log.weight,
+      reps: log.reps,
+      estimated_1rm: log.calculated_1rm,
+      distance_km: null,
+      duration_minutes: null,
+    }));
+
+    const cardioEntries: HistoryEntry[] = cardioLogs.map((log) => ({
+      date: log.date,
+      type: "cardio",
+      weight: null,
+      reps: null,
+      estimated_1rm: null,
+      distance_km: log.distance_km,
+      duration_minutes: log.duration_minutes,
+    }));
+
+    return [...strengthEntries, ...cardioEntries].sort(
+      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+    );
   }
 
 export async function getExercises({

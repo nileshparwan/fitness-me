@@ -22,7 +22,7 @@ if(!parsed.success) {
     throw new Error("Invalid environment variables");
 }
 
-export const env = parsed.data;
+const env = parsed.data;
 
 if (process.env.NODE_ENV !== "production") {
     console.log("✅ Environment variables validated");

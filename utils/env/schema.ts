@@ -17,4 +17,4 @@ export const envSchema = z.object({
     OPENAI_AI_URL: z.url(),
 });
 
-export type Env = z.infer<typeof envSchema>;
+type Env = z.infer<typeof envSchema>;

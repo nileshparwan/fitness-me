@@ -4,10 +4,6 @@ import { createClient } from "@/lib/supabase/server";
 import { Database } from "@/types/database";
 import { subMonths, subYears } from "date-fns";
 
-export type ExerciseProgressRow = Database['public']['Views']['exercise_progress']['Row'];
-export type WorkoutLogRow = Database['public']['Tables']['workout_logs']['Row'];
-export type CardioLogRow = Database['public']['Tables']['cardio_logs']['Row'];
-
 export async function getAvailableExercises() {
     const supabase = await createClient();
 
@@ -35,6 +31,15 @@ export async function getAvailableExercises() {
 
 export async function getMuscleBalance() {
     const supabase = await createClient();
+    type WorkoutLogWithLibrary = Pick<
+      Database["public"]["Tables"]["workout_logs"]["Row"],
+      "exercise_name" | "exercise_id"
+    > & {
+      exercise_library: {
+        category: string | null;
+        muscle_groups: string[] | null;
+      } | null;
+    };
 
     const { data, error } = await supabase
         .from("workout_logs")
@@ -53,10 +58,15 @@ export async function getMuscleBalance() {
         return [];
     }
 
-    const scores = { Push: 0, Pull: 0, Legs: 0, Core: 0 };
+    const scores: Record<"Push" | "Pull" | "Legs" | "Core", number> = {
+      Push: 0,
+      Pull: 0,
+      Legs: 0,
+      Core: 0,
+    };
 
-    data.forEach((log: any) => {
-        let category = "Core";
+    (data as WorkoutLogWithLibrary[]).forEach((log) => {
+        let category: "Push" | "Pull" | "Legs" | "Core" = "Core";
 
         // Strategy 1: Database Category
         if (log.exercise_library?.category) {
@@ -80,9 +90,7 @@ export async function getMuscleBalance() {
             else if (n.match(/squat|leg|lung|calf|raise|thrust/)) category = "Legs";
         }
 
-        // @ts-ignore
-        if (scores[category] !== undefined) scores[category] += 1;
-        else scores.Core += 1;
+        scores[category] += 1;
     });
 
     const total = Object.values(scores).reduce((a, b) => a + b, 0) || 1;
@@ -122,6 +130,15 @@ export async function getExerciseDetails(exerciseName: string) {
 
 export async function getExerciseMetrics(exerciseName: string, range: string) {
     const supabase = await createClient();
+    type StrengthLogRow = Database["public"]["Tables"]["workout_logs"]["Row"];
+    type BodyMetricRow = Pick<Database["public"]["Tables"]["body_metrics"]["Row"], "date" | "weight">;
+    type AggregatedStrengthPoint = {
+      date: string;
+      estimated_1rm: number;
+      volume: number;
+      bodyWeight: number | null;
+      totalRest: number;
+    };
     const now = new Date();
     let startDate = subMonths(now, 6);
 
@@ -174,9 +191,9 @@ export async function getExerciseMetrics(exerciseName: string, range: string) {
         .order("date", { ascending: true });
 
     // AGGREGATE DATA
-    const aggregatedMap = new Map<string, any>();
+    const aggregatedMap = new Map<string, AggregatedStrengthPoint>();
 
-    strengthLogs?.forEach((log) => {
+    strengthLogs?.forEach((log: StrengthLogRow) => {
         const dateKey = log.created_at ? log.created_at.split("T")[0] : "unknown";
         const weight = log.weight || 0;
         const reps = log.reps || 0;
@@ -200,7 +217,7 @@ export async function getExerciseMetrics(exerciseName: string, range: string) {
                 totalRest: existing.totalRest + (log.rest_seconds || 0),
             });
         } else {
-            const bodyWeight = bodyMetrics?.find(b => b.date === dateKey)?.weight || null;
+            const bodyWeight = (bodyMetrics as BodyMetricRow[] | null)?.find((b) => b.date === dateKey)?.weight || null;
 
             aggregatedMap.set(dateKey, {
                 date: log.created_at!,

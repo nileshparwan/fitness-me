@@ -8,7 +8,7 @@ const openai = new OpenAI({
 });
 
 // Define the Schema for AI Extraction
-export const multiWorkoutSchema = z.object({
+const multiWorkoutSchema = z.object({
   workouts: z.array(z.object({
     name: z.string().describe("Name of the session (e.g., 'Upper Body Power', 'Morning Run', 'Day 1')"),
     // CHANGE: .optional() -> .nullable()
