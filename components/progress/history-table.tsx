@@ -12,17 +12,23 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { format, parseISO, isValid } from "date-fns";
 import { Dumbbell, Activity, CalendarDays } from "lucide-react";
+import { Database } from "@/types/database";
+
+type WorkoutLog = Database["public"]["Tables"]["workout_logs"]["Row"];
+type CardioLog = Database["public"]["Tables"]["cardio_logs"]["Row"];
+type HistoryLog = WorkoutLog | CardioLog;
 
 interface Props {
-  logs: any[];
+  logs: HistoryLog[];
 }
 
 export function HistoryTable({ logs }: Props) {
   if (!logs || logs.length === 0) return null;
+  const getLogDate = (log: HistoryLog) => ("activity_type" in log ? log.date : log.created_at || "");
 
   const sortedLogs = [...logs].sort((a, b) => {
-    const dateA = new Date(a.date || a.created_at || 0).getTime();
-    const dateB = new Date(b.date || b.created_at || 0).getTime();
+    const dateA = new Date(getLogDate(a) || 0).getTime();
+    const dateB = new Date(getLogDate(b) || 0).getTime();
     return dateB - dateA;
   });
 
@@ -32,7 +38,7 @@ export function HistoryTable({ logs }: Props) {
     return isValid(date) ? format(date, "MMM d, yyyy") : "-";
   };
 
-  const isCardio = (log: any) => log.activity_type !== undefined;
+  const isCardio = (log: HistoryLog): log is CardioLog => "activity_type" in log;
 
   return (
     <Card className="shadow-sm border-muted h-full flex flex-col">
@@ -71,7 +77,7 @@ export function HistoryTable({ logs }: Props) {
                 return (
                   <TableRow key={log.id} className="hover:bg-muted/5 group">
                     <TableCell className="font-medium whitespace-nowrap text-muted-foreground pl-6">
-                      {formatDate(log.date || log.created_at)}
+                      {formatDate(getLogDate(log))}
                     </TableCell>
 
                     <TableCell className="whitespace-nowrap">

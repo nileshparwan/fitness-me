@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useForm, useFieldArray } from "react-hook-form";
+import { Resolver, useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter, useSearchParams } from "next/navigation";
 import { CalendarIcon, Loader2, Save, Sparkles, Check } from "lucide-react";
@@ -28,6 +28,7 @@ import { usePrograms } from "@/hooks/use-program";
 import { MultiSelect } from "@/components/program/multiple-select";
 import { linkWorkoutToPrograms } from "@/app/actions/program";
 import { Database } from "@/types/database";
+import type { WorkoutActionInput } from "@/app/actions/workout";
 
 type Program = Database['public']['Tables']['programs']['Row'];
 
@@ -48,11 +49,24 @@ export function WorkoutForm({ initialData, workoutId }: WorkoutFormProps) {
   const [aiText, setAiText] = useState("");
   const [isAiProcessing, setIsAiProcessing] = useState(false);
 
-  // 1. USE THE SCHEMA IN USEFORM
+  const toWorkoutActionInput = (data: WorkoutFormValues): WorkoutActionInput => ({
+    name: data.name,
+    date: data.date,
+    notes: data.notes || null,
+    exercises: data.exercises.map((exercise) => ({
+      exercise_id: exercise.exercise_id,
+      name: exercise.name,
+      notes: exercise.notes,
+      sets: exercise.sets.map((set) => ({
+        set_number: set.set_number,
+        reps: set.reps,
+        weight: set.weight,
+      })),
+    })),
+  });
+
   const form = useForm<WorkoutFormValues>({
-    // FIX: Cast resolver to any to bypass strict deep-type mismatch with nested arrays
-    resolver: zodResolver(workoutFormSchema) as any,
-    // Safe Default Values
+    resolver: zodResolver(workoutFormSchema) as Resolver<WorkoutFormValues>,
     defaultValues: initialData || {
       name: "",
       notes: "",
@@ -75,14 +89,13 @@ export function WorkoutForm({ initialData, workoutId }: WorkoutFormProps) {
   async function onFormSubmit(data: WorkoutFormValues) {
     try {
       let savedId: string | undefined;
+      const actionInput = toWorkoutActionInput(data);
 
       if (workoutId) {
-        // @ts-ignore: Action handles partials fine, schema is strict
-        await updateWorkout.mutateAsync({ id: workoutId, data });
+        await updateWorkout.mutateAsync({ id: workoutId, data: actionInput });
         savedId = workoutId;
       } else {
-        // @ts-ignore: Action handles form data structure
-        const result = await createWorkout.mutateAsync(data);
+        const result = await createWorkout.mutateAsync(actionInput);
         savedId = result?.id; 
       }
 
@@ -119,9 +132,10 @@ export function WorkoutForm({ initialData, workoutId }: WorkoutFormProps) {
     setIsAiProcessing(true);
     try {
       toast.error("AI text workout parsing is not available yet.");
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(error);
-      toast.error(error.message || "Failed to parse workout");
+      const message = error instanceof Error ? error.message : "Failed to parse workout";
+      toast.error(message);
     } finally {
       setIsAiProcessing(false);
     }
@@ -133,7 +147,13 @@ export function WorkoutForm({ initialData, workoutId }: WorkoutFormProps) {
     <div className="max-w-3xl mx-auto px-2">
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onFormSubmit)} className="space-y-6">
-          <Tabs value={mode} onValueChange={(v) => setMode(v as any)} className="w-full">
+          <Tabs
+            value={mode}
+            onValueChange={(value) => {
+              if (value === "form" || value === "text") setMode(value);
+            }}
+            className="w-full"
+          >
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
               <TabsList className="grid w-full sm:w-[400px] grid-cols-2">
                 <TabsTrigger value="form">Builder</TabsTrigger>

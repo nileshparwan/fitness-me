@@ -3,8 +3,17 @@
 import { Database } from "@/types/database";
 import { Activity, Map, Timer, Flame } from "lucide-react";
 import { cn } from "@/utils";
+import { LucideIcon } from "lucide-react";
+import { calculatePaceMinutesPerKm, formatPace } from "@/utils/fitness-logic";
 
 type CardioLog = Database['public']['Tables']['cardio_logs']['Row'];
+type StatTileProps = {
+  label: string;
+  value: string;
+  subtext?: string;
+  icon: LucideIcon;
+  colorClass: string;
+};
 
 export function CardioAnalytics({ logs }: { logs: CardioLog[] }) {
   if (!logs || logs.length === 0) return null;
@@ -12,18 +21,10 @@ export function CardioAnalytics({ logs }: { logs: CardioLog[] }) {
   const latest = logs[0];
   const totalDist = logs.reduce((acc, l) => acc + (l.distance_km || 0), 0);
   
-  const latestPace = (latest.distance_km && latest.distance_km > 0) 
-    ? latest.duration_minutes / latest.distance_km 
-    : 0;
-
-  const formatPace = (decimalMin: number) => {
-    const min = Math.floor(decimalMin);
-    const sec = Math.round((decimalMin - min) * 60);
-    return `${min}:${sec < 10 ? '0' : ''}${sec}`;
-  };
+  const latestPace = calculatePaceMinutesPerKm(latest.distance_km || 0, latest.duration_minutes || 0);
 
   // Reusable Micro-Card Component
-  const StatTile = ({ label, value, subtext, icon: Icon, colorClass }: any) => (
+  const StatTile = ({ label, value, subtext, icon: Icon, colorClass }: StatTileProps) => (
     <div className="flex flex-col justify-between p-3 rounded-xl border bg-card shadow-sm h-full min-h-[80px]">
       <div className="flex items-center gap-2 mb-1">
         <div className={cn("p-1.5 rounded-md bg-muted", colorClass)}>

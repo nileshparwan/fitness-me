@@ -2,6 +2,12 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
+import { Database } from "@/types/database";
+
+type ExerciseLibraryRow = Database["public"]["Tables"]["exercise_library"]["Row"];
+type QuickExercise = Pick<ExerciseLibraryRow, "id" | "name" | "category">;
+type CardioInsert = Database["public"]["Tables"]["cardio_logs"]["Insert"];
+type WorkoutLogInsert = Database["public"]["Tables"]["workout_logs"]["Insert"];
 
 export async function getOpenWorkouts() {
   const supabase = await createClient();
@@ -19,44 +25,43 @@ export async function getOpenWorkouts() {
   return data || [];
 }
 
-export async function addExerciseToWorkout(workoutId: string, exercise: any) {
+export async function addExerciseToWorkout(workoutId: string, exercise: QuickExercise) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Unauthorized");
 
   const isCardio = exercise.category?.toLowerCase() === "cardio";
-  const table = isCardio ? "cardio_logs" : "workout_logs";
-
-  let payload: any = {};
 
   if (isCardio) {
-    // Cardio Logs DO need user_id (based on your schema) and date
-    payload = {
+    const payload: CardioInsert = {
       workout_id: workoutId,
-      user_id: user.id,          // <--- Keep for Cardio
+      user_id: user.id,
       date: new Date().toISOString(),
       activity_type: exercise.name,
       duration_minutes: 0,
       distance_km: 0,
     };
+
+    const { error } = await supabase.from("cardio_logs").insert(payload);
+    if (error) {
+      console.error("Add Exercise Error:", error.message);
+      throw new Error(error.message);
+    }
   } else {
-    // Strength Logs DO NOT need user_id (it inherits from workout) or date
-    payload = {
+    const payload: WorkoutLogInsert = {
       workout_id: workoutId,
-      // user_id: user.id,       // <--- REMOVED THIS LINE
       exercise_id: exercise.id,
       exercise_name: exercise.name,
       set_number: 1,
       reps: 0,
       weight: 0,
     };
-  }
 
-  const { error } = await supabase.from(table).insert(payload);
-
-  if (error) {
-    console.error("❌ Add Exercise Error:", error.message);
-    throw new Error(error.message);
+    const { error } = await supabase.from("workout_logs").insert(payload);
+    if (error) {
+      console.error("Add Exercise Error:", error.message);
+      throw new Error(error.message);
+    }
   }
 
   revalidatePath("/workouts");
@@ -64,7 +69,7 @@ export async function addExerciseToWorkout(workoutId: string, exercise: any) {
   return { success: true };
 }
 
-export async function createWorkoutWithExercise(exercise: any) {
+export async function createWorkoutWithExercise(exercise: QuickExercise) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Unauthorized");

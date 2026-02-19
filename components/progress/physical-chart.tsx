@@ -4,7 +4,13 @@ import { ComposedChart, Line, Area, CartesianGrid, XAxis, YAxis, Tooltip, Respon
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { format, parseISO } from "date-fns";
 
-export function PhysioChart({ data }: { data: any[] }) {
+type PhysioPoint = {
+  date: string;
+  estimated_1rm: number;
+  bodyWeight: number | null;
+};
+
+export function PhysioChart({ data }: { data: PhysioPoint[] }) {
   // Filter out data points where we don't have body weight logged to avoid ugly gaps
   const cleanData = data.filter(d => d.bodyWeight !== null);
 

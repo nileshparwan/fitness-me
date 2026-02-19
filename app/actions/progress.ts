@@ -3,6 +3,38 @@
 import { createClient } from "@/lib/supabase/server";
 import { Database } from "@/types/database";
 import { subMonths, subYears } from "date-fns";
+import { calculatePaceMinutesPerKm, estimateOneRepMax } from "@/utils/fitness-logic";
+
+type StrengthLogRow = Database["public"]["Tables"]["workout_logs"]["Row"];
+type CardioLogRow = Database["public"]["Tables"]["cardio_logs"]["Row"];
+type BodyMetricRow = Pick<Database["public"]["Tables"]["body_metrics"]["Row"], "date" | "weight">;
+
+export type StrengthChartPoint = {
+  date: string;
+  estimated_1rm: number;
+  volume: number;
+  bodyWeight: number | null;
+  totalRest: number;
+};
+
+export type CardioChartPoint = {
+  date: string;
+  pace: number;
+  heart_rate: number;
+  distance: number;
+};
+
+type ExerciseMetricsResult =
+  | {
+      type: "cardio";
+      logs: CardioLogRow[];
+      chartData: CardioChartPoint[];
+    }
+  | {
+      type: "strength";
+      logs: StrengthLogRow[];
+      chartData: StrengthChartPoint[];
+    };
 
 export async function getAvailableExercises() {
     const supabase = await createClient();
@@ -18,8 +50,6 @@ export async function getAvailableExercises() {
         .from("cardio_logs")
         .select("activity_type")
         .not("activity_type", "is", null);
-
-    console.log(cardio)
 
     const names = new Set([
         ...(strength?.map(d => d.exercise_name) || []),
@@ -128,17 +158,8 @@ export async function getExerciseDetails(exerciseName: string) {
     return data;
 }
 
-export async function getExerciseMetrics(exerciseName: string, range: string) {
+export async function getExerciseMetrics(exerciseName: string, range: string): Promise<ExerciseMetricsResult> {
     const supabase = await createClient();
-    type StrengthLogRow = Database["public"]["Tables"]["workout_logs"]["Row"];
-    type BodyMetricRow = Pick<Database["public"]["Tables"]["body_metrics"]["Row"], "date" | "weight">;
-    type AggregatedStrengthPoint = {
-      date: string;
-      estimated_1rm: number;
-      volume: number;
-      bodyWeight: number | null;
-      totalRest: number;
-    };
     const now = new Date();
     let startDate = subMonths(now, 6);
 
@@ -164,7 +185,7 @@ export async function getExerciseMetrics(exerciseName: string, range: string) {
             logs: [...cardioLogs].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
             chartData: cardioLogs.map(l => ({
                 date: l.date,
-                pace: l.distance_km && l.duration_minutes ? (l.duration_minutes / l.distance_km) : 0,
+                pace: calculatePaceMinutesPerKm(l.distance_km || 0, l.duration_minutes || 0),
                 heart_rate: l.average_heart_rate || 0,
                 distance: l.distance_km || 0,
             }))
@@ -191,7 +212,7 @@ export async function getExerciseMetrics(exerciseName: string, range: string) {
         .order("date", { ascending: true });
 
     // AGGREGATE DATA
-    const aggregatedMap = new Map<string, AggregatedStrengthPoint>();
+    const aggregatedMap = new Map<string, StrengthChartPoint>();
 
     strengthLogs?.forEach((log: StrengthLogRow) => {
         const dateKey = log.created_at ? log.created_at.split("T")[0] : "unknown";
@@ -199,12 +220,7 @@ export async function getExerciseMetrics(exerciseName: string, range: string) {
         const reps = log.reps || 0;
 
         // 1RM Calc
-        let set1RM = log.calculated_1rm || 0;
-        if (!set1RM && weight > 0) {
-            if (reps > 20) set1RM = weight;
-            else if (reps > 10) set1RM = Math.round(weight * (1 + (reps / 30)));
-            else set1RM = Math.round(weight * (36 / (37 - reps)));
-        }
+        const set1RM = log.calculated_1rm || estimateOneRepMax(weight, reps);
 
         const setVolume = weight * reps;
 

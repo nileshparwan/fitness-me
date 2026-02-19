@@ -3,6 +3,15 @@
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { profileSchema, goalsSchema, ProfileFormValues, GoalsFormValues } from "@/lib/validations/settings";
+import { Database } from "@/types/database";
+
+type GoalsInsert = Database["public"]["Tables"]["goals"]["Insert"];
+
+const inferGoalType = (currentWeight: number, targetWeight: number) => {
+  if (targetWeight < currentWeight) return "weight_loss";
+  if (targetWeight > currentWeight) return "weight_gain";
+  return "maintenance";
+};
 
 export async function updateProfile(data: ProfileFormValues) {
   const supabase = await createClient();
@@ -47,21 +56,30 @@ export async function updateGoals(data: GoalsFormValues) {
   if (!user) throw new Error("Unauthorized");
 
   const parsed = goalsSchema.parse(data);
+  const { data: existingGoal } = await supabase
+    .from("goals")
+    .select("goal_type")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  const goal_type = existingGoal?.goal_type || inferGoalType(parsed.current_weight, parsed.target_weight);
+
+  const payload: GoalsInsert = {
+    user_id: user.id,
+    goal_type,
+    target_weight: parsed.target_weight,
+    current_weight: parsed.current_weight,
+    weekly_workouts: parsed.weekly_workouts,
+    daily_calories: parsed.daily_calories,
+    protein_target: parsed.protein_target,
+    carbs_target: parsed.carbs_target,
+    fat_target: parsed.fat_target,
+    updated_at: new Date().toISOString(),
+  };
 
   const { error } = await supabase
     .from("goals")
-    .upsert({
-      user_id: user.id,
-      goal_type: "weight_loss", // Defaulting to this as it's required
-      target_weight: parsed.target_weight,
-      current_weight: parsed.current_weight,
-      weekly_workouts: parsed.weekly_workouts,
-      daily_calories: parsed.daily_calories,
-      protein_target: parsed.protein_target,
-      carbs_target: parsed.carbs_target,
-      fat_target: parsed.fat_target,
-      updated_at: new Date().toISOString(),
-    }, { onConflict: 'user_id' });
+    .upsert(payload, { onConflict: 'user_id' });
 
   if (error) throw error;
   revalidatePath("/settings/goals");

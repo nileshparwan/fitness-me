@@ -1,27 +1,36 @@
-// lib/utils.ts
-export function groupLogsByExercise(logs: any[]) {
-    if (!logs) return [];
+import { Database } from "@/types/database";
 
-    const groups: Record<string, any> = {};
+type WorkoutLog = Database["public"]["Tables"]["workout_logs"]["Row"];
 
-    logs.forEach((log) => {
-        // Use exercise name as key (or composite key with ID if needed)
-        const key = log.exercise_name;
+type GroupedExerciseLogs = {
+  exercise_id: string | null;
+  name: string;
+  sets: WorkoutLog[];
+};
 
-        if (!groups[key]) {
-            groups[key] = {
-                exercise_id: log.exercise_id,
-                name: log.exercise_name,
-                sets: []
-            };
-        }
+export function groupLogsByExercise(logs: WorkoutLog[] | null | undefined): GroupedExerciseLogs[] {
+  if (!logs?.length) return [];
 
-        groups[key].sets.push(log);
+  const groups = new Map<string, GroupedExerciseLogs>();
+
+  for (const log of logs) {
+    const key = log.exercise_name;
+    const existing = groups.get(key);
+
+    if (existing) {
+      existing.sets.push(log);
+      continue;
+    }
+
+    groups.set(key, {
+      exercise_id: log.exercise_id,
+      name: key,
+      sets: [log],
     });
+  }
 
-    // Convert object back to array and sort sets by number
-    return Object.values(groups).map((group: any) => ({
-        ...group,
-        sets: group.sets.sort((a: any, b: any) => a.set_number - b.set_number)
-    }));
+  return Array.from(groups.values()).map((group) => ({
+    ...group,
+    sets: group.sets.sort((a, b) => a.set_number - b.set_number),
+  }));
 }

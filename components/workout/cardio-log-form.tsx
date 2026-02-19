@@ -95,8 +95,9 @@ export function CardioLogForm({ workoutId, initialData, onSuccess, onCancel }: C
       toast.success(formData.id ? "Log updated" : "Log added");
       if (!initialData) setFormData(defaultState); // Clear only if adding new
       if (onSuccess) onSuccess();
-    } catch (err: any) {
-      toast.error(err.message || "Failed to save");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to save";
+      toast.error(message);
     } finally {
       setLoading(false);
     }

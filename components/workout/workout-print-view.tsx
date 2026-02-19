@@ -14,6 +14,10 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { Database } from "@/types/database";
+
+type WorkoutLog = Database["public"]["Tables"]["workout_logs"]["Row"];
+type CardioLog = Database["public"]["Tables"]["cardio_logs"]["Row"];
 
 interface PrintViewProps {
   workout: {
@@ -22,8 +26,8 @@ interface PrintViewProps {
     notes?: string | null;
     user?: { email: string } | null;
   };
-  strengthLogs: any[];
-  cardioLogs: any[];
+  strengthLogs: WorkoutLog[];
+  cardioLogs: CardioLog[];
 }
 
 export const WorkoutPrintView = React.forwardRef<HTMLDivElement, PrintViewProps>(
@@ -65,7 +69,7 @@ export const WorkoutPrintView = React.forwardRef<HTMLDivElement, PrintViewProps>
 
           {workout.notes && (
             <div className="bg-muted/50 border-l-4 border-primary/50 p-4 rounded-r-md text-sm italic text-muted-foreground">
-              "{workout.notes}"
+              &quot;{workout.notes}&quot;
             </div>
           )}
         </div>
@@ -81,7 +85,7 @@ export const WorkoutPrintView = React.forwardRef<HTMLDivElement, PrintViewProps>
             </div>
             
             <div className="grid gap-8">
-              {Object.entries(strengthGroups).map(([name, sets]: [string, any]) => (
+              {Object.entries(strengthGroups).map(([name, sets]) => (
                 <div key={name} className="break-inside-avoid rounded-lg border bg-card shadow-sm overflow-hidden">
                   <div className="bg-muted/30 px-4 py-3 border-b">
                     <h3 className="font-bold text-lg">{name}</h3>
@@ -95,7 +99,7 @@ export const WorkoutPrintView = React.forwardRef<HTMLDivElement, PrintViewProps>
                       </tr>
                     </thead>
                     <tbody className="divide-y">
-                      {sets.map((set: any, i: number) => (
+                      {sets.map((set, i) => (
                         <tr key={i} className="hover:bg-muted/5 transition-colors">
                           <td className="px-4 py-3 font-medium text-muted-foreground">#{set.set_number}</td>
                           <td className="px-4 py-3 font-bold">
@@ -121,7 +125,7 @@ export const WorkoutPrintView = React.forwardRef<HTMLDivElement, PrintViewProps>
             </div>
             
             <div className="grid gap-8">
-              {Object.entries(cardioGroups).map(([activity, logs]: [string, any]) => (
+              {Object.entries(cardioGroups).map(([activity, logs]) => (
                 <div key={activity} className="break-inside-avoid rounded-lg border bg-card shadow-sm overflow-hidden">
                    <div className="bg-blue-50/50 dark:bg-blue-900/10 px-4 py-3 border-b border-blue-100 dark:border-blue-900/50">
                     <h3 className="font-bold text-lg">{activity}</h3>
@@ -137,7 +141,7 @@ export const WorkoutPrintView = React.forwardRef<HTMLDivElement, PrintViewProps>
                       </tr>
                     </thead>
                     <tbody className="divide-y">
-                      {logs.map((log: any, i: number) => (
+                      {logs.map((log, i) => (
                         <tr key={i} className="hover:bg-muted/5 transition-colors">
                           <td className="px-4 py-3 font-bold flex items-center gap-2">
                              <Timer className="h-3 w-3 text-muted-foreground" />
@@ -187,9 +191,10 @@ export const WorkoutPrintView = React.forwardRef<HTMLDivElement, PrintViewProps>
 );
 WorkoutPrintView.displayName = "WorkoutPrintView";
 
-function groupBy(array: any[], key: string) {
-  return array.reduce((result: any, currentValue: any) => {
-    const groupKey = currentValue[key] || "Other";
+function groupBy<T extends Record<string, unknown>>(array: T[], key: keyof T) {
+  return array.reduce<Record<string, T[]>>((result, currentValue) => {
+    const rawKey = currentValue[key];
+    const groupKey = typeof rawKey === "string" && rawKey.length > 0 ? rawKey : "Other";
     (result[groupKey] = result[groupKey] || []).push(currentValue);
     return result;
   }, {});

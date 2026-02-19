@@ -64,7 +64,7 @@ export const WorkoutPDF = ({ workout, strengthLogs, cardioLogs }: WorkoutPDFProp
         </View>
 
         {/* STRENGTH SECTION */}
-        {Object.entries(strengthGroups).map(([name, sets]: [string, any], index) => (
+        {Object.entries(strengthGroups).map(([name, sets], index) => (
           <View key={index} wrap={false}>
             <Text style={styles.sectionTitle}>{name}</Text>
             
@@ -76,7 +76,7 @@ export const WorkoutPDF = ({ workout, strengthLogs, cardioLogs }: WorkoutPDFProp
             </View>
 
             {/* Table Rows */}
-            {sets.map((set: WorkoutLog, i: number) => (
+            {sets.map((set, i) => (
               <View key={i} style={styles.tableRow}>
                 <Text style={styles.colSet}>#{set.set_number}</Text>
                 <Text style={styles.colMain}>{set.weight} kg</Text>
@@ -87,7 +87,7 @@ export const WorkoutPDF = ({ workout, strengthLogs, cardioLogs }: WorkoutPDFProp
         ))}
 
         {/* CARDIO SECTION */}
-        {Object.entries(cardioGroups).map(([activity, logs]: [string, any], index) => (
+        {Object.entries(cardioGroups).map(([activity, logs], index) => (
           <View key={`cardio-${index}`} wrap={false}>
             <Text style={styles.sectionTitle}>{activity}</Text>
             
@@ -98,7 +98,7 @@ export const WorkoutPDF = ({ workout, strengthLogs, cardioLogs }: WorkoutPDFProp
               <Text style={styles.colEnd}>HR</Text>
             </View>
 
-            {logs.map((log: CardioLog, i: number) => (
+            {logs.map((log, i) => (
               <View key={i} style={styles.tableRow}>
                 <Text style={styles.colSet}>{log.duration_minutes} min</Text>
                 <Text style={styles.colMain}>{log.distance_km ? `${log.distance_km} km` : "-"}</Text>
@@ -116,9 +116,10 @@ export const WorkoutPDF = ({ workout, strengthLogs, cardioLogs }: WorkoutPDFProp
   );
 };
 
-function groupBy(array: any[], key: string) {
-  return array.reduce((result: any, currentValue: any) => {
-    const groupKey = currentValue[key] || "Other";
+function groupBy<T extends Record<string, unknown>>(array: T[], key: keyof T) {
+  return array.reduce<Record<string, T[]>>((result, currentValue) => {
+    const rawKey = currentValue[key];
+    const groupKey = typeof rawKey === "string" && rawKey.length > 0 ? rawKey : "Other";
     (result[groupKey] = result[groupKey] || []).push(currentValue);
     return result;
   }, {});

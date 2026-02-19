@@ -1,10 +1,11 @@
 "use client";
 
 import { useTransition } from "react";
+import { WheelEvent } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
-import { Activity, Utensils, Scale, Dumbbell } from "lucide-react";
+import { Activity, Utensils, Scale } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -39,7 +40,7 @@ export function GoalsForm({ initialData }: GoalsFormProps) {
   // Prevent scroll changing number values
   const numberProps = {
     type: "number",
-    onWheel: (e: any) => e.target.blur(),
+    onWheel: (e: WheelEvent<HTMLInputElement>) => e.currentTarget.blur(),
   };
 
   return (

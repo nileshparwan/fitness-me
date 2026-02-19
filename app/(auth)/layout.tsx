@@ -23,7 +23,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
         <div className="relative z-20 mt-auto">
           <blockquote className="space-y-2">
             <p className="text-lg">
-              &ldquo;This AI coach completely transformed my training. I've added 20kg to my total in just 3 months while staying injury-free.&rdquo;
+              &ldquo;This AI coach completely transformed my training. I&apos;ve added 20kg to my total in just 3 months while staying injury-free.&rdquo;
             </p>
             <footer className="text-sm">Aarnold schwarzenegger, Competitive Bodybuilder</footer>
           </blockquote>

@@ -3,7 +3,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Database } from "@/types/database";
 import { calculateCardioInsights } from "@/utils/fitness-logic";
-import { Brain, Activity, Flame, Timer } from "lucide-react";
+import { Brain, Flame, Timer } from "lucide-react";
 
 type CardioLog = Database['public']['Tables']['cardio_logs']['Row'];
 

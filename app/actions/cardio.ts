@@ -2,26 +2,13 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
+import { Database } from "@/types/database";
+import { calculatePaceMinutesPerKm, formatPace } from "@/utils/fitness-logic";
 
-// Define the exact shape required by your DB
-type CardioLogInsert = {
-  id?: string;
-  workout_id?: string | null;
-  user_id: string;
-  activity_type: string;
-  date?: string;
-  duration_minutes: number;
-  distance_km?: number | null;
-  calories_burned?: number | null;
-  average_heart_rate?: number | null;
-  max_heart_rate?: number | null;
-  average_pace?: string | null;
-  elevation_gain_m?: number | null;
-  reps?: number | null;
-  notes?: string | null;
-};
+type CardioLogInsert = Database["public"]["Tables"]["cardio_logs"]["Insert"];
+type CardioLogUpsertInput = Omit<CardioLogInsert, "user_id" | "created_at" | "updated_at">;
 
-export async function upsertCardioLog(data: Omit<CardioLogInsert, "user_id">) {
+export async function upsertCardioLog(data: CardioLogUpsertInput) {
   const supabase = await createClient();
   
   // 1. Get Current User
@@ -29,10 +16,17 @@ export async function upsertCardioLog(data: Omit<CardioLogInsert, "user_id">) {
   if (!user) throw new Error("Unauthorized");
 
   // 2. Prepare Payload
+  const paceValue =
+    data.average_pace ??
+    (data.distance_km && data.duration_minutes
+      ? formatPace(calculatePaceMinutesPerKm(data.distance_km, data.duration_minutes))
+      : null);
+
   const payload: CardioLogInsert = {
     ...data,
     user_id: user.id,
     date: data.date || new Date().toISOString(),
+    average_pace: paceValue,
   };
 
   // 3. Upsert

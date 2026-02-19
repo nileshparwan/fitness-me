@@ -28,4 +28,4 @@ export const workoutFormSchema = z.object({
 });
 
 // INFER TYPE
-export type WorkoutFormValues = z.infer<typeof workoutFormSchema>;
+export type WorkoutFormValues = z.output<typeof workoutFormSchema>;

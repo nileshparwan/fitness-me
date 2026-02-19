@@ -3,9 +3,12 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { format } from "date-fns";
-import { Clock, Dumbbell, ChevronRight } from "lucide-react";
+import { Clock, Dumbbell } from "lucide-react";
 import { cn } from "@/utils";
 import { WorkoutStatusSelect } from "@/components/workout/workout-status-select";
+import { Database } from "@/types/database";
+
+type WorkoutLog = Database["public"]["Tables"]["workout_logs"]["Row"];
 
 interface WorkoutListItemProps {
   workout: {
@@ -14,7 +17,7 @@ interface WorkoutListItemProps {
     status: string | null;
     date: string | Date;
     duration_minutes: number | null;
-    workout_logs: any[];
+    workout_logs: WorkoutLog[];
   };
 }
 

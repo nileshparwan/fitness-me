@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { Share2, Eye, Download, Loader2 } from "lucide-react";
+import { useState } from "react";
+import { Share2, Eye, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
     Dialog,
@@ -14,15 +14,18 @@ import {
 import { QRCodeSVG } from "qrcode.react";
 
 // NEW IMPORTS
-import { PDFDownloadLink } from "@react-pdf/renderer";
-import { WorkoutPDF } from "./workout-pdf-document";
 import { toast } from "sonner";
 import dynamic from "next/dynamic";
+import { Database } from "@/types/database";
+
+type Workout = Database["public"]["Tables"]["workouts"]["Row"];
+type WorkoutLog = Database["public"]["Tables"]["workout_logs"]["Row"];
+type CardioLog = Database["public"]["Tables"]["cardio_logs"]["Row"];
 
 interface WorkoutActionsProps {
-    workout: any;
-    strengthLogs: any[];
-    cardioLogs: any[];
+    workout: Workout;
+    strengthLogs: WorkoutLog[];
+    cardioLogs: CardioLog[];
     isPublicPage?: boolean;
 }
 

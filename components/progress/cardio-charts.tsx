@@ -6,6 +6,13 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { format, parseISO, isValid } from "date-fns"; // Added isValid
 
+type CardioChartPoint = {
+  date: string;
+  pace: number;
+  heart_rate: number;
+  distance: number;
+};
+
 // Safe date formatter
 const formatDate = (dateStr: string) => {
   if (!dateStr) return "";
@@ -19,7 +26,7 @@ const formatTooltipDate = (dateStr: string) => {
   return isValid(date) ? format(date, "MMM d, yyyy") : "";
 };
 
-export function CardioCharts({ data, exerciseName }: { data: any[], exerciseName: string }) {
+export function CardioCharts({ data, exerciseName }: { data: CardioChartPoint[], exerciseName: string }) {
   const [activeTab, setActiveTab] = useState("efficiency");
 
   return (

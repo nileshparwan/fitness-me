@@ -3,8 +3,17 @@
 import { Database } from "@/types/database";
 import { Dumbbell, Zap, RotateCcw } from "lucide-react";
 import { cn } from "@/utils";
+import { LucideIcon } from "lucide-react";
 
 type WorkoutLog = Database['public']['Tables']['workout_logs']['Row'];
+type StatTileProps = {
+  label: string;
+  value: string | number;
+  subtext?: string;
+  icon: LucideIcon;
+  colorClass: string;
+  progress?: number;
+};
 
 export function AnalyticsPanel({ logs }: { logs: WorkoutLog[] }) {
   if (!logs || logs.length === 0) return null;
@@ -17,7 +26,7 @@ export function AnalyticsPanel({ logs }: { logs: WorkoutLog[] }) {
   const volumePercentage = bestVolume ? (latestVolume / bestVolume) * 100 : 0;
 
   // Reusable Micro-Card Component
-  const StatTile = ({ label, value, subtext, icon: Icon, colorClass, progress }: any) => (
+  const StatTile = ({ label, value, subtext, icon: Icon, colorClass, progress }: StatTileProps) => (
     <div className="flex flex-col justify-between p-3 rounded-xl border bg-card shadow-sm h-full min-h-[80px]">
       <div className="flex items-center gap-2 mb-1">
         <div className={cn("p-1.5 rounded-md bg-muted", colorClass)}>

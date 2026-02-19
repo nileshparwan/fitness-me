@@ -1,220 +1,191 @@
 import { Database } from "@/types/database";
 import { differenceInYears } from "date-fns";
 
-type WorkoutLog = Database['public']['Tables']['workout_logs']['Row'];
-type CardioLog = Database['public']['Tables']['cardio_logs']['Row'];
+type WorkoutLog = Database["public"]["Tables"]["workout_logs"]["Row"];
+type CardioLog = Database["public"]["Tables"]["cardio_logs"]["Row"];
 
-// Helper: Round to nearest 2.5kg (Standard Gym Increment)
-const roundToGymPlates = (weight: number) => {
-    return Math.round(weight / 2.5) * 2.5;
+const roundToGymPlates = (weight: number, increment = 2.5) =>
+  Math.round(weight / increment) * increment;
+
+export const calculatePaceMinutesPerKm = (distanceKm: number, durationMinutes: number) => {
+  if (distanceKm <= 0 || durationMinutes <= 0) return 0;
+  return durationMinutes / distanceKm;
 };
 
-// --- UNIVERSAL METRIC CALCULATOR ---
-const getStandardizedMetrics = (log: WorkoutLog | CardioLog | any) => {
+export const formatPace = (paceMinutes: number) => {
+  if (!Number.isFinite(paceMinutes) || paceMinutes <= 0) return "0:00";
+  const mins = Math.floor(paceMinutes);
+  const secs = Math.round((paceMinutes - mins) * 60);
+  const safeSecs = secs === 60 ? 59 : secs;
+  return `${mins}:${safeSecs.toString().padStart(2, "0")}`;
+};
 
-    // 1. IS IT CARDIO?
-    if (log && ('distance_km' in log || 'activity_type' in log)) {
-        const l = log as CardioLog;
-        const dist = l.distance_km || 0;
-        const time = l.duration_minutes || 0;
-        const pace = dist > 0 ? time / dist : 0;
+export const estimateOneRepMax = (weight: number, reps: number) => {
+  if (weight <= 0 || reps <= 0) return 0;
+  if (reps > 20) return weight;
+  if (reps > 10) return Math.round(weight * (1 + reps / 30)); // Epley
+  if (reps >= 37) return weight;
+  return Math.round(weight * (36 / (37 - reps))); // Brzycki
+};
 
-        // Convert decimal pace to MM:SS
-        const paceMin = Math.floor(pace);
-        const paceSec = Math.round((pace - paceMin) * 60);
-        const paceStr = `${paceMin}:${paceSec < 10 ? '0' : ''}${paceSec}`;
+const calculateSetVolume = (weight: number, reps: number) => weight * reps;
 
-        return {
-            type: 'cardio',
-            mainMetric: `${dist.toFixed(2)} km`,
-            subMetric: `${paceStr} /km`,
-            intensity: l.average_heart_rate ? `${l.average_heart_rate} bpm` : '-',
-            value: dist
-        };
-    }
-
-    // 2. IS IT STRENGTH?
-    const l = log as WorkoutLog;
-    const weight = l.weight || 0;
-    const reps = l.reps || 0;
-
-    // Smart 1RM Calculation
-    // Use stored value if exists, otherwise calculate safely
-    let est1RM = l.calculated_1rm || 0;
-    
-    if (!est1RM && weight > 0) {
-        if (reps > 20) {
-            // High rep sets are poor 1RM predictors. Return weight as is.
-            est1RM = weight; 
-        } else if (reps > 10) {
-            // Epley Formula (Better for higher reps than Brzycki)
-            est1RM = Math.round(weight * (1 + (reps / 30)));
-        } else {
-            // Brzycki Formula (Gold standard for < 10 reps)
-            est1RM = Math.round(weight * (36 / (37 - reps)));
-        }
-    }
-
-    // Bodyweight Handling
-    if (weight === 0 && reps > 0) {
-        return {
-            type: 'bodyweight',
-            mainMetric: `${reps} reps`,
-            subMetric: 'Bodyweight',
-            intensity: '-',
-            value: reps
-        };
-    }
+const getStandardizedMetrics = (log: WorkoutLog | CardioLog) => {
+  if ("activity_type" in log) {
+    const distance = log.distance_km || 0;
+    const duration = log.duration_minutes || 0;
+    const pace = calculatePaceMinutesPerKm(distance, duration);
 
     return {
-        type: 'strength',
-        mainMetric: `${weight} kg`,
-        subMetric: `${reps} reps`,
-        intensity: l.calculated_1rm ? `${l.calculated_1rm}kg (1RM)` : '-',
-        value: est1RM
+      type: "cardio" as const,
+      mainMetric: `${distance.toFixed(2)} km`,
+      subMetric: `${formatPace(pace)} /km`,
+      intensity: log.average_heart_rate ? `${log.average_heart_rate} bpm` : "-",
+      value: distance,
     };
+  }
+
+  const weight = log.weight || 0;
+  const reps = log.reps || 0;
+
+  if (weight === 0 && reps > 0) {
+    return {
+      type: "bodyweight" as const,
+      mainMetric: `${reps} reps`,
+      subMetric: "Bodyweight",
+      intensity: "-",
+      value: reps,
+    };
+  }
+
+  const oneRepMax = log.calculated_1rm || estimateOneRepMax(weight, reps);
+
+  return {
+    type: "strength" as const,
+    mainMetric: `${weight} kg`,
+    subMetric: `${reps} reps`,
+    intensity: oneRepMax ? `${oneRepMax}kg (1RM)` : "-",
+    value: oneRepMax,
+  };
 };
 
 const calculateDeepInsights = (logs: WorkoutLog[]) => {
-    if (logs.length < 2) return null;
+  if (logs.length < 2) return null;
 
-    const latest = logs[0];
-    const previous = logs.find(l =>
-        new Date(l.created_at!).toDateString() !== new Date(latest.created_at!).toDateString()
+  const latest = logs[0];
+  const previous =
+    logs.find(
+      (entry) =>
+        new Date(entry.created_at || 0).toDateString() !==
+        new Date(latest.created_at || 0).toDateString(),
     ) || logs[1];
 
-    const weightDiff = (latest.weight || 0) - (previous.weight || 0);
-    const repDiff = (latest.reps || 0) - (previous.reps || 0);
+  const weightDiff = (latest.weight || 0) - (previous.weight || 0);
+  const repDiff = (latest.reps || 0) - (previous.reps || 0);
 
-    let overloadStatus = "Maintenance";
-    if (weightDiff > 0) overloadStatus = "Intensity Increase";
-    else if (weightDiff === 0 && repDiff > 0) overloadStatus = "Volume Increase";
-    else if (weightDiff < 0) overloadStatus = "Deload / Regression";
+  let overloadStatus = "Maintenance";
+  if (weightDiff > 0) overloadStatus = "Intensity Increase";
+  else if (weightDiff === 0 && repDiff > 0) overloadStatus = "Volume Increase";
+  else if (weightDiff < 0) overloadStatus = "Deload / Regression";
 
-    const repDiffAbsolute = (latest.reps || 0) - (previous.reps || 0);
-    let repTrend = "Stable";
-    if (repDiffAbsolute > 1) repTrend = "Higher reps than usual";
-    if (repDiffAbsolute < -1) repTrend = "Lower reps than usual";
+  let repTrend = "Stable";
+  if (repDiff > 1) repTrend = "Higher reps than usual";
+  if (repDiff < -1) repTrend = "Lower reps than usual";
 
-    return {
-        weightDiff,
-        repDiff,
-        overloadStatus,
-        repTrend,
-        previousWeight: previous.weight
-    };
+  return {
+    weightDiff,
+    repDiff,
+    overloadStatus,
+    repTrend,
+    previousWeight: previous.weight,
+  };
 };
 
 export const calculateCardioInsights = (logs: CardioLog[], birthDate?: string | null) => {
-    if (logs.length < 2) return null;
+  if (logs.length < 2) return null;
 
-    const latest = logs[0];
-    const previous = logs[1];
+  const latest = logs[0];
+  const previous = logs[1];
 
-    const age = birthDate ? differenceInYears(new Date(), new Date(birthDate)) : 30; 
-    const maxHR = 220 - age; // Note: Use Karvonen if RHR is added to profile schema later
+  const age = birthDate ? differenceInYears(new Date(), new Date(birthDate)) : 30;
+  const maxHR = 220 - age;
 
-    const calculatePace = (log: CardioLog) => {
-        if (!log.distance_km || !log.duration_minutes) return 0;
-        return log.duration_minutes / log.distance_km;
-    };
+  const latestPace = calculatePaceMinutesPerKm(latest.distance_km || 0, latest.duration_minutes || 0);
+  const previousPace = calculatePaceMinutesPerKm(previous.distance_km || 0, previous.duration_minutes || 0);
+  const paceDiff = previousPace - latestPace;
 
-    const latestPace = calculatePace(latest);
-    const prevPace = calculatePace(previous);
-    const paceDiff = prevPace - latestPace;
+  const efficiencyScore = (log: CardioLog) => {
+    if (!log.average_heart_rate || !log.distance_km || !log.duration_minutes) return 0;
+    return (log.distance_km * 1000) / (log.average_heart_rate * log.duration_minutes);
+  };
 
-    // Efficiency: Meters per Heart Beat (Aerobic Decoupling proxy)
-    const efficiencyScore = (log: CardioLog) => {
-        if (!log.average_heart_rate || !log.distance_km || !log.duration_minutes) return 0;
-        return (log.distance_km * 1000) / (log.average_heart_rate * log.duration_minutes);
-    };
+  const hrZone = latest.average_heart_rate ? (latest.average_heart_rate / maxHR) * 100 : 0;
+  let zoneDescription = "Moderate";
+  if (hrZone < 60) zoneDescription = "Zone 1 (Recovery)";
+  else if (hrZone < 70) zoneDescription = "Zone 2 (Endurance Base)";
+  else if (hrZone < 80) zoneDescription = "Zone 3 (Aerobic)";
+  else if (hrZone < 90) zoneDescription = "Zone 4 (Threshold)";
+  else zoneDescription = "Zone 5 (Max Effort)";
 
-    const isMoreEfficient = efficiencyScore(latest) > efficiencyScore(previous);
-
-    const hrZone = latest.average_heart_rate ? (latest.average_heart_rate / maxHR) * 100 : 0;
-    let zoneDescription = "Moderate";
-    if (hrZone < 60) zoneDescription = "Zone 1 (Recovery)";
-    else if (hrZone < 70) zoneDescription = "Zone 2 (Endurance Base)";
-    else if (hrZone < 80) zoneDescription = "Zone 3 (Aerobic)";
-    else if (hrZone < 90) zoneDescription = "Zone 4 (Threshold)";
-    else zoneDescription = "Zone 5 (Max Effort)";
-
-    return {
-        paceDiff,
-        isMoreEfficient,
-        zoneDescription,
-        hrZone: Math.round(hrZone),
-        caloriesPerMin: latest.calories_burned ? (latest.calories_burned / latest.duration_minutes).toFixed(1) : 0
-    };
+  return {
+    paceDiff,
+    isMoreEfficient: efficiencyScore(latest) > efficiencyScore(previous),
+    zoneDescription,
+    hrZone: Math.round(hrZone),
+    caloriesPerMin: latest.calories_burned ? latest.calories_burned / Math.max(latest.duration_minutes, 1) : 0,
+  };
 };
 
 const calculateStrengthStats = (log: WorkoutLog) => {
-    const weight = log.weight || 0;
-    const reps = log.reps || 0;
-    const volume = weight * reps;
-    
-    // SAFE 1RM CALCULATION
-    let est1RM = 0;
-    if (weight > 0) {
-        if (reps > 20) est1RM = weight; // Cap high reps
-        else if (reps > 10) est1RM = Math.round(weight * (1 + (reps / 30))); // Epley
-        else est1RM = Math.round(weight * (36 / (37 - reps))); // Brzycki
-    }
-
-    return { volume, est1RM };
+  const weight = log.weight || 0;
+  const reps = log.reps || 0;
+  return {
+    volume: calculateSetVolume(weight, reps),
+    est1RM: estimateOneRepMax(weight, reps),
+  };
 };
 
 const calculateNextSession = (lastLog: WorkoutLog) => {
-    const metrics = getStandardizedMetrics(lastLog);
+  const metrics = getStandardizedMetrics(lastLog);
 
-    if (metrics.type === 'bodyweight') {
-        return {
-            metric: "Reps",
-            weight: 0,
-            target: Math.round(metrics.value * 1.1),
-            reason: "Bodyweight movement. Focus on increasing repetition volume."
-        };
-    }
+  if (metrics.type === "bodyweight") {
+    return {
+      metric: "Reps",
+      weight: 0,
+      target: Math.round(metrics.value * 1.1),
+      reason: "Bodyweight movement. Increase repetition volume gradually.",
+    };
+  }
 
-    if (metrics.type === 'strength') {
-        const currentWeight = lastLog.weight || 0;
-        const reps = lastLog.reps || 0;
+  const currentWeight = lastLog.weight || 0;
+  const reps = lastLog.reps || 0;
+  let nextWeight = currentWeight;
+  let reason = "Maintain load.";
 
-        let nextWeight = currentWeight;
-        let msg = "Maintain load.";
+  if (reps >= 10) {
+    nextWeight = currentWeight * 1.05;
+    reason = "High reps reached. Increase load by about 5%.";
+  } else if (reps >= 6) {
+    nextWeight = currentWeight + 1.25;
+    reason = "Good intensity range. Try a micro-load increase.";
+  }
 
-        if (reps >= 10) {
-            nextWeight = currentWeight * 1.05;
-            msg = "Previous set had high reps. Increase load ~5%.";
-        } else if (reps >= 6 && reps <= 9) {
-            // OPTIMIZATION: Small increase for optimal zone
-            nextWeight = currentWeight + 1.25; 
-            msg = "Optimal zone. Attempt a small micro-load increase.";
-        }
-
-        // OPTIMIZATION: Round to actionable gym plates (2.5kg)
-        const roundedWeight = roundToGymPlates(nextWeight);
-
-        return {
-            metric: "Weight",
-            weight: roundedWeight,
-            target: roundedWeight,
-            reason: msg
-        };
-    }
-
-    return null;
+  const target = roundToGymPlates(nextWeight);
+  return {
+    metric: "Weight",
+    weight: target,
+    target,
+    reason,
+  };
 };
 
 const analyzeTrainingStyle = (logs: WorkoutLog[]) => {
-    if (!logs.length) return { style: "Balanced", color: "text-blue-500" };
-    
-    // OPTIMIZATION: Only analyze last 5 sessions for current phase accuracy
-    const recentLogs = logs.slice(0, 5);
-    
-    const avgReps = recentLogs.reduce((acc, curr) => acc + (curr.reps || 0), 0) / recentLogs.length;
+  if (!logs.length) return { style: "Balanced", color: "text-blue-500" };
 
-    if (avgReps < 6) return { style: "Strength (Power)", color: "text-red-500" };
-    if (avgReps >= 6 && avgReps <= 12) return { style: "Hypertrophy", color: "text-blue-500" };
-    return { style: "Endurance", color: "text-green-500" };
+  const recent = logs.slice(0, 5);
+  const avgReps = recent.reduce((acc, entry) => acc + (entry.reps || 0), 0) / recent.length;
+
+  if (avgReps < 6) return { style: "Strength (Power)", color: "text-red-500" };
+  if (avgReps <= 12) return { style: "Hypertrophy", color: "text-blue-500" };
+  return { style: "Endurance", color: "text-green-500" };
 };

@@ -13,6 +13,9 @@ import {
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useExercises } from "@/hooks/use-exercise";
+import { Database } from "@/types/database";
+
+type Exercise = Database["public"]["Tables"]["exercise_library"]["Row"];
 
 interface ExerciseSelectorProps {
   onSelect: (exercise: { id: string; name: string }) => void;
@@ -24,7 +27,7 @@ export function ExerciseSelector({ onSelect }: ExerciseSelectorProps) {
   const { data: exercises, isLoading } = useExercises(search);
   const exerciseList = Array.isArray(exercises) ? exercises : [];
 
-  const handleSelect = (ex: any) => {
+  const handleSelect = (ex: Exercise) => {
     onSelect({ id: ex.id, name: ex.name });
     setOpen(false);
     setSearch("");

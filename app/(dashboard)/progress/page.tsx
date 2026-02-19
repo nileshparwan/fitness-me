@@ -2,7 +2,15 @@
 
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { getAvailableExercises, getExerciseMetrics, getUserProfile, getMuscleBalance, getExerciseDetails } from "@/app/actions/progress";
+import {
+  getAvailableExercises,
+  getExerciseMetrics,
+  getUserProfile,
+  getMuscleBalance,
+  getExerciseDetails,
+  type CardioChartPoint,
+  type StrengthChartPoint,
+} from "@/app/actions/progress";
 import { Database } from "@/types/database";
 
 // UI Components
@@ -31,20 +39,6 @@ import { AdvancedCoach } from "@/components/progress/advance-coach";
 
 type WorkoutLogRow = Database['public']['Tables']['workout_logs']['Row'];
 type CardioLogRow = Database['public']['Tables']['cardio_logs']['Row'];
-
-type StrengthChartData = {
-  date: string;
-  estimated_1rm: number;
-  volume: number;
-  bodyWeight?: number | null;
-};
-
-type CardioChartData = {
-  date: string;
-  pace: number;
-  heart_rate: number;
-  distance: number;
-};
 
 export default function ProgressPage() {
   const [exercise, setExercise] = useState<string>("");
@@ -125,6 +119,10 @@ export default function ProgressPage() {
   const logs = metrics?.logs || [];
   const chartData = metrics?.chartData || [];
   const currentExerciseName = exercise || "Loading...";
+  const cardioLogs: CardioLogRow[] = metrics?.type === "cardio" ? metrics.logs : [];
+  const strengthLogs: WorkoutLogRow[] = metrics?.type === "strength" ? metrics.logs : [];
+  const cardioChartData: CardioChartPoint[] = metrics?.type === "cardio" ? metrics.chartData : [];
+  const strengthChartData: StrengthChartPoint[] = metrics?.type === "strength" ? metrics.chartData : [];
 
   return (
     <div className="p-4 md:p-8 max-w-[1600px] mx-auto space-y-8 pb-24 bg-gray-50/30 min-h-screen animate-in fade-in duration-500">
@@ -162,10 +160,10 @@ export default function ProgressPage() {
       {isCardio ? (
         // === CARDIO VIEW ===
         <div className="space-y-6 animate-in slide-in-from-bottom-2 duration-500">
-          <CardioAnalytics logs={logs as unknown as CardioLogRow[]} />
+          <CardioAnalytics logs={cardioLogs} />
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-auto">
-            <CardioCharts data={chartData as unknown as CardioChartData[]} exerciseName={currentExerciseName} />
+            <CardioCharts data={cardioChartData} exerciseName={currentExerciseName} />
 
             <div className="col-span-1 h-full">
               <AthleteRadar data={radarData || []} />
@@ -173,21 +171,21 @@ export default function ProgressPage() {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <CardioCoach logs={logs as unknown as CardioLogRow[]} birthDate={profile?.birth_date} />
+            <CardioCoach logs={cardioLogs} birthDate={profile?.birth_date} />
           </div>
 
           <div className="grid grid-cols-1">
-            <HistoryTable logs={logs as any[]} />
+            <HistoryTable logs={cardioLogs} />
           </div>
         </div>
       ) : (
         // === STRENGTH VIEW ===
         <div className="space-y-6 animate-in slide-in-from-bottom-2 duration-500">
-          <AnalyticsPanel logs={logs as unknown as WorkoutLogRow[]} />
+          <AnalyticsPanel logs={strengthLogs} />
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-auto">
             <ProgressCharts
-              data={chartData as unknown as StrengthChartData[]}
+              data={strengthChartData}
               exerciseName={currentExerciseName}
               timeRange={range}
             />
@@ -197,18 +195,18 @@ export default function ProgressPage() {
           </div>
 
           <div className="grid grid-cols-1">
-            <PhysioChart data={chartData as unknown as StrengthChartData[]} />
+            <PhysioChart data={strengthChartData} />
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <AdvancedCoach logs={logs as unknown as WorkoutLogRow[]} exerciseName={currentExerciseName} />
+            <AdvancedCoach logs={strengthLogs} exerciseName={currentExerciseName} />
             <div className="col-span-1 h-full">
-              <PersonalRecords logs={logs as unknown as WorkoutLogRow[]} />
+              <PersonalRecords logs={strengthLogs} />
             </div>
           </div>
 
           <div className="grid grid-cols-1">
-            <HistoryTable logs={logs as any[]} />
+            <HistoryTable logs={strengthLogs} />
           </div>
         </div>
       )}
