@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Page, Text, View, Document, StyleSheet, Font } from "@react-pdf/renderer";
+import { Page, Text, View, Document, StyleSheet } from "@react-pdf/renderer";
 import { format } from "date-fns";
 import { Database } from "@/types/database";
 
@@ -54,6 +54,8 @@ export const WorkoutPDF = ({ workout, strengthLogs, cardioLogs }: WorkoutPDFProp
               <Text style={styles.title}>{workout.name}</Text>
               <View style={styles.meta}>
                 <Text>{format(new Date(workout.date), "PPP")}</Text>
+                {workout.overall_rating ? <Text>• Rating: {workout.overall_rating}/10</Text> : null}
+                {workout.template_id ? <Text>• Template Linked</Text> : null}
                 {workout.user?.email && <Text>• {workout.user.email.split('@')[0]}</Text>}
               </View>
             </View>
@@ -72,7 +74,8 @@ export const WorkoutPDF = ({ workout, strengthLogs, cardioLogs }: WorkoutPDFProp
             <View style={[styles.tableRow, styles.tableHeader]}>
               <Text style={styles.colSet}>SET</Text>
               <Text style={styles.colMain}>WEIGHT</Text>
-              <Text style={styles.colEnd}>REPS</Text>
+              <Text style={styles.colMetric}>REPS</Text>
+              <Text style={styles.colEnd}>META</Text>
             </View>
 
             {/* Table Rows */}
@@ -80,11 +83,28 @@ export const WorkoutPDF = ({ workout, strengthLogs, cardioLogs }: WorkoutPDFProp
               <View key={i} style={styles.tableRow}>
                 <Text style={styles.colSet}>#{set.set_number}</Text>
                 <Text style={styles.colMain}>{set.weight} kg</Text>
-                <Text style={styles.colEnd}>{set.reps}</Text>
+                <Text style={styles.colMetric}>{set.reps}</Text>
+                <Text style={styles.colEnd}>
+                  {[
+                    set.is_warmup ? "W" : null,
+                    set.is_dropset ? "D" : null,
+                    set.rest_seconds ? `R${set.rest_seconds}` : null,
+                    set.tempo ? set.tempo : null,
+                  ]
+                    .filter(Boolean)
+                    .join("|") || "-"}
+                </Text>
               </View>
             ))}
           </View>
         ))}
+
+        {workout.ai_feedback ? (
+          <View wrap={false} style={{ marginTop: 12 }}>
+            <Text style={styles.sectionTitle}>AI Feedback</Text>
+            <Text style={{ fontSize: 10, color: "#444444" }}>{workout.ai_feedback}</Text>
+          </View>
+        ) : null}
 
         {/* CARDIO SECTION */}
         {Object.entries(cardioGroups).map(([activity, logs], index) => (

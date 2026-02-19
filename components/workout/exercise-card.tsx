@@ -2,10 +2,13 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "../ui/button";
+import { Input } from "../ui/input";
+import { Textarea } from "../ui/textarea";
 import { Trash2 } from "lucide-react";
 import { useFieldArray, Control, useWatch } from "react-hook-form";
 import { SetInput } from "./set-input";
 import { WorkoutFormValues } from "@/types/workout";
+import { FormControl, FormField, FormItem } from "../ui/form";
 
 interface ExerciseCardProps {
   index: number;
@@ -36,6 +39,41 @@ export function ExerciseCard({ index, remove, control }: ExerciseCardProps) {
       </CardHeader>
 
       <CardContent className="p-0">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 p-3 border-b bg-muted/10">
+          <FormField
+            control={control}
+            name={`exercises.${index}.group_id`}
+            render={({ field }) => (
+              <FormItem>
+                <FormControl>
+                  <Input
+                    value={field.value ?? ""}
+                    onChange={field.onChange}
+                    placeholder="Exercise Group ID (Optional)"
+                    className="h-8 text-xs"
+                  />
+                </FormControl>
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={control}
+            name={`exercises.${index}.notes`}
+            render={({ field }) => (
+              <FormItem>
+                <FormControl>
+                  <Textarea
+                    value={field.value ?? ""}
+                    onChange={field.onChange}
+                    placeholder="Exercise Notes (e.g. keep elbows tucked)"
+                    className="min-h-[32px] text-xs"
+                  />
+                </FormControl>
+              </FormItem>
+            )}
+          />
+        </div>
+
         <div className="grid grid-cols-8 gap-2 p-2 text-[10px] uppercase tracking-wider font-bold text-muted-foreground text-center border-b">
           <div className="col-span-1">Set</div>
           <div className="col-span-3">kg</div>
@@ -59,7 +97,19 @@ export function ExerciseCard({ index, remove, control }: ExerciseCardProps) {
           type="button"
           variant="ghost"
           className="w-full rounded-none border-t h-10 text-xs font-medium text-muted-foreground hover:bg-muted/50 hover:text-primary"
-          onClick={() => append({ set_number: fields.length + 1, reps: 0, weight: 0, is_completed: false })}
+          onClick={() =>
+            append({
+              set_number: fields.length + 1,
+              reps: 0,
+              weight: 0,
+              rest_seconds: 90,
+              tempo: "",
+              is_warmup: false,
+              is_dropset: false,
+              form_video_url: "",
+              is_completed: false,
+            })
+          }
         >
           + Add Set
         </Button>

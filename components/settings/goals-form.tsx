@@ -9,8 +9,10 @@ import { Activity, Utensils, Scale } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { goalsSchema, GoalsFormValues } from "@/lib/validations/settings";
 import { updateGoals } from "@/app/actions/settings";
 
@@ -91,6 +93,39 @@ export function GoalsForm({ initialData }: GoalsFormProps) {
                 </FormItem>
               )}
             />
+            <FormField
+              control={form.control}
+              name="target_body_fat_percent"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Target Body Fat (%)</FormLabel>
+                  <FormControl>
+                    <div className="relative">
+                      <Input
+                        {...numberProps}
+                        value={field.value ?? ""}
+                        onChange={(e) => field.onChange(e.target.value === "" ? null : Number(e.target.value))}
+                      />
+                      <span className="absolute right-3 top-2.5 text-sm text-muted-foreground">%</span>
+                    </div>
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="target_date"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Target Date</FormLabel>
+                  <FormControl>
+                    <Input type="date" value={field.value ?? ""} onChange={field.onChange} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
             
             <FormField
               control={form.control}
@@ -105,6 +140,55 @@ export function GoalsForm({ initialData }: GoalsFormProps) {
                     </div>
                   </FormControl>
                   <FormDescription>Days you plan to train per week.</FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Goal Context</CardTitle>
+            <CardDescription>Add details to personalize guidance and planning.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <FormField
+              control={form.control}
+              name="status"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Goal Status</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value ?? "active"}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select status" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="active">Active</SelectItem>
+                      <SelectItem value="paused">Paused</SelectItem>
+                      <SelectItem value="completed">Completed</SelectItem>
+                      <SelectItem value="cancelled">Cancelled</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="custom_description"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Custom Goal Description</FormLabel>
+                  <FormControl>
+                    <Textarea
+                      value={field.value ?? ""}
+                      onChange={field.onChange}
+                      placeholder="Example: Drop to 15% body fat while maintaining strength on squat and bench."
+                    />
+                  </FormControl>
                   <FormMessage />
                 </FormItem>
               )}

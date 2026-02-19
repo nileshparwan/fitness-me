@@ -7,13 +7,19 @@ import { calculatePaceMinutesPerKm, estimateOneRepMax } from "@/utils/fitness-lo
 
 type StrengthLogRow = Database["public"]["Tables"]["workout_logs"]["Row"];
 type CardioLogRow = Database["public"]["Tables"]["cardio_logs"]["Row"];
-type BodyMetricRow = Pick<Database["public"]["Tables"]["body_metrics"]["Row"], "date" | "weight">;
+type BodyMetricRow = Pick<
+  Database["public"]["Tables"]["body_metrics"]["Row"],
+  "date" | "weight" | "body_fat_percent" | "muscle_mass_kg" | "waist_cm"
+>;
 
 export type StrengthChartPoint = {
   date: string;
   estimated_1rm: number;
   volume: number;
   bodyWeight: number | null;
+  bodyFatPercent: number | null;
+  muscleMassKg: number | null;
+  waistCm: number | null;
   totalRest: number;
 };
 
@@ -207,7 +213,7 @@ export async function getExerciseMetrics(exerciseName: string, range: string): P
     // FETCH BODY METRICS (For correlation chart)
     const { data: bodyMetrics } = await supabase
         .from("body_metrics")
-        .select("date, weight")
+        .select("date, weight, body_fat_percent, muscle_mass_kg, waist_cm")
         .gte("date", startDate.toISOString())
         .order("date", { ascending: true });
 
@@ -233,13 +239,16 @@ export async function getExerciseMetrics(exerciseName: string, range: string): P
                 totalRest: existing.totalRest + (log.rest_seconds || 0),
             });
         } else {
-            const bodyWeight = (bodyMetrics as BodyMetricRow[] | null)?.find((b) => b.date === dateKey)?.weight || null;
+            const metric = (bodyMetrics as BodyMetricRow[] | null)?.find((b) => b.date === dateKey);
 
             aggregatedMap.set(dateKey, {
                 date: log.created_at!,
                 estimated_1rm: set1RM,
                 volume: setVolume,
-                bodyWeight: bodyWeight,
+                bodyWeight: metric?.weight || null,
+                bodyFatPercent: metric?.body_fat_percent || null,
+                muscleMassKg: metric?.muscle_mass_kg || null,
+                waistCm: metric?.waist_cm || null,
                 totalRest: log.rest_seconds || 0,
             });
         }

@@ -29,6 +29,10 @@ export const profileSchema = z.object({
 export const goalsSchema = z.object({
   current_weight: z.number().min(0),
   target_weight: z.number().min(0),
+  target_body_fat_percent: z.number().min(0).max(100).optional().nullable(),
+  target_date: z.string().optional().nullable(),
+  custom_description: z.string().max(500).optional().nullable(),
+  status: z.enum(["active", "paused", "completed", "cancelled"]).optional().nullable(),
   weekly_workouts: z.number().min(0).max(21),
   daily_calories: z.number().min(500),
   protein_target: z.number().min(0),

@@ -11,7 +11,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Form, FormControl, FormField, FormItem } from "@/components/ui/form";
+import { Form, FormControl, FormField, FormItem, FormLabel } from "@/components/ui/form";
 import { Card, CardContent } from "@/components/ui/card";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
@@ -53,14 +53,23 @@ export function WorkoutForm({ initialData, workoutId }: WorkoutFormProps) {
     name: data.name,
     date: data.date,
     notes: data.notes || null,
+    overall_rating: data.overall_rating,
+    ai_feedback: data.ai_feedback,
+    template_id: data.template_id,
     exercises: data.exercises.map((exercise) => ({
       exercise_id: exercise.exercise_id,
+      group_id: exercise.group_id,
       name: exercise.name,
       notes: exercise.notes,
       sets: exercise.sets.map((set) => ({
         set_number: set.set_number,
         reps: set.reps,
         weight: set.weight,
+        rest_seconds: set.rest_seconds,
+        tempo: set.tempo,
+        is_warmup: set.is_warmup,
+        is_dropset: set.is_dropset,
+        form_video_url: set.form_video_url,
       })),
     })),
   });
@@ -71,6 +80,9 @@ export function WorkoutForm({ initialData, workoutId }: WorkoutFormProps) {
       name: "",
       notes: "",
       date: new Date(),
+      overall_rating: undefined,
+      ai_feedback: "",
+      template_id: "",
       exercises: [],
       programIds: []
     },
@@ -216,13 +228,91 @@ export function WorkoutForm({ initialData, workoutId }: WorkoutFormProps) {
                 </CardContent>
               </Card>
 
+              <Card>
+                <CardContent className="p-4 md:p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="overall_rating"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Overall Rating (1-10)</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="number"
+                            min={1}
+                            max={10}
+                            value={field.value ?? ""}
+                            onChange={(e) => field.onChange(e.target.value === "" ? undefined : Number(e.target.value))}
+                            placeholder="How hard/effective was this session?"
+                          />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="template_id"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Template ID (Optional)</FormLabel>
+                        <FormControl>
+                          <Input
+                            value={field.value ?? ""}
+                            onChange={field.onChange}
+                            placeholder="Link this workout to a template id"
+                          />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="ai_feedback"
+                    render={({ field }) => (
+                      <FormItem className="md:col-span-2">
+                        <FormLabel>AI Feedback</FormLabel>
+                        <FormControl>
+                          <Textarea
+                            value={field.value ?? ""}
+                            onChange={field.onChange}
+                            placeholder="Coach notes, observations, and next-session guidance"
+                          />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                </CardContent>
+              </Card>
+
               <div className="space-y-4">
                 {fields.map((field, index) => (
                   <ExerciseCard key={field.id} index={index} remove={() => remove(index)} control={form.control} />
                 ))}
                 <div className="pt-2 pb-24">
                   {/* Default new exercise structure matches Zod schema */}
-                  <ExerciseSelector onSelect={(ex) => append({ exercise_id: ex.id, name: ex.name, sets: [{ set_number: 1, reps: 0, weight: 0, is_completed: false }] })} />
+                  <ExerciseSelector
+                    onSelect={(ex) =>
+                      append({
+                        exercise_id: ex.id,
+                        name: ex.name,
+                        notes: "",
+                        group_id: "",
+                        sets: [
+                          {
+                            set_number: 1,
+                            reps: 0,
+                            weight: 0,
+                            rest_seconds: 90,
+                            tempo: "",
+                            is_warmup: false,
+                            is_dropset: false,
+                            form_video_url: "",
+                            is_completed: false,
+                          },
+                        ],
+                      })
+                    }
+                  />
                 </div>
               </div>
             </TabsContent>

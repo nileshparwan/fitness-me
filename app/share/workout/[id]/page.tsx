@@ -4,6 +4,11 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { WorkoutPrintView } from "@/components/workout/workout-print-view";
 import { WorkoutActions } from "@/components/workout/workout-actions";
+import { Database } from "@/types/database";
+
+type Workout = Database["public"]["Tables"]["workouts"]["Row"];
+type WorkoutLog = Database["public"]["Tables"]["workout_logs"]["Row"];
+type CardioLog = Database["public"]["Tables"]["cardio_logs"]["Row"];
 
 export const dynamic = "force-dynamic";
 
@@ -34,6 +39,10 @@ export default async function PublicWorkoutPage({ params }: { params: Promise<{ 
         .select("*")
         .eq("workout_id", id);
 
+    const typedWorkout = workout as Workout;
+    const typedStrengthLogs = (strengthLogs || []) as WorkoutLog[];
+    const typedCardioLogs = (cardioLogs || []) as CardioLog[];
+
     return (
         <div className="min-h-screen bg-gray-100 p-4 md:p-8">
             {/* Floating Header for Actions */}
@@ -44,23 +53,20 @@ export default async function PublicWorkoutPage({ params }: { params: Promise<{ 
                     <span className="text-sm text-gray-500">Public Viewer</span>
                 </div>
 
-                {/* Actions Bar (Only PDF on public page) */}
-                {/* FIX: Cast workout to 'any' to bypass the TS relation error */}
                 <WorkoutActions
-                    workout={workout as any}
-                    strengthLogs={strengthLogs || []}
-                    cardioLogs={cardioLogs || []}
+                    workout={typedWorkout}
+                    strengthLogs={typedStrengthLogs}
+                    cardioLogs={typedCardioLogs}
                     isPublicPage={true}
                 />
             </div>
 
             {/* The Actual Reader View */}
             <div className="shadow-xl">
-                {/* FIX: Cast workout to 'any' here as well */}
                 <WorkoutPrintView
-                    workout={workout as any}
-                    strengthLogs={strengthLogs || []}
-                    cardioLogs={cardioLogs || []}
+                    workout={typedWorkout}
+                    strengthLogs={typedStrengthLogs}
+                    cardioLogs={typedCardioLogs}
                 />
             </div>
 

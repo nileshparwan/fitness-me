@@ -7,6 +7,11 @@ const setSchema = z.object({
   set_number: z.coerce.number(),
   reps: z.coerce.number().min(0, "Reps must be 0+"),
   weight: z.coerce.number().min(0, "Weight must be 0+"),
+  rest_seconds: z.coerce.number().min(0).optional(),
+  tempo: z.string().max(20).optional(),
+  is_warmup: z.boolean().default(false).optional(),
+  is_dropset: z.boolean().default(false).optional(),
+  form_video_url: z.string().url().optional().or(z.literal("")),
   is_completed: z.boolean().default(false).optional(),
 });
 
@@ -14,6 +19,7 @@ const setSchema = z.object({
 const exerciseSchema = z.object({
   exercise_id: z.string().optional(),
   name: z.string().min(1, "Exercise name is required"),
+  group_id: z.string().optional(),
   notes: z.string().optional(),
   sets: z.array(setSchema),
 });
@@ -24,6 +30,9 @@ export const workoutFormSchema = z.object({
   date: z.date(), 
   programIds: z.array(z.string()).optional(),
   notes: z.string().optional(),
+  overall_rating: z.coerce.number().min(1).max(10).optional(),
+  ai_feedback: z.string().optional(),
+  template_id: z.string().optional(),
   exercises: z.array(exerciseSchema),
 });
 

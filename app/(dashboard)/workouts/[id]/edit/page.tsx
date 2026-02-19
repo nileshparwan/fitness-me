@@ -44,15 +44,24 @@ export default function EditWorkoutPage() {
     name: workout.name,
     notes: workout.notes || "",
     date: new Date(workout.date),
-    exercises: groupedExercises.map((ex: any) => ({
-      exercise_id: ex.exercise_id,
+    overall_rating: workout.overall_rating ?? undefined,
+    ai_feedback: workout.ai_feedback || "",
+    template_id: workout.template_id || "",
+    exercises: groupedExercises.map((ex) => ({
+      exercise_id: ex.exercise_id ?? undefined,
+      group_id: ex.group_id || undefined,
       name: ex.name,
       notes: "",
       sets: ex.sets.map((set: WorkoutLog) => ({
         id: set.id,
         set_number: set.set_number,
-        reps: set.reps, // Number
-        weight: set.weight, // Number
+        reps: set.reps ?? 0,
+        weight: set.weight ?? 0,
+        rest_seconds: set.rest_seconds ?? undefined,
+        tempo: set.tempo || undefined,
+        is_warmup: set.is_warmup ?? false,
+        is_dropset: set.is_dropset ?? false,
+        form_video_url: set.form_video_url || "",
         is_completed: true
       }))
     }))

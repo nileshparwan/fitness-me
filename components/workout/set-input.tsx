@@ -2,6 +2,7 @@
 
 import { Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { FormControl, FormField, FormItem } from "@/components/ui/form";
 import { cn } from "@/utils";
@@ -18,71 +19,146 @@ interface SetInputProps {
 
 export function SetInput({ index, setIndex, control, onRemove }: SetInputProps) {
   return (
-    <div className={cn("grid grid-cols-8 gap-2 p-2 items-center", setIndex % 2 === 0 ? "bg-background" : "bg-muted/20")}>
-      
-      {/* Set Number Badge */}
-      <div className="col-span-1 flex justify-center">
-        <div className="flex h-5 w-5 items-center justify-center rounded-full bg-muted text-[10px] font-bold border text-muted-foreground">
-          {setIndex + 1}
+    <div className={cn("p-2", setIndex % 2 === 0 ? "bg-background" : "bg-muted/20")}>
+      <div className="grid grid-cols-8 gap-2 items-center">
+        {/* Set Number Badge */}
+        <div className="col-span-1 flex justify-center">
+          <div className="flex h-5 w-5 items-center justify-center rounded-full bg-muted text-[10px] font-bold border text-muted-foreground">
+            {setIndex + 1}
+          </div>
+        </div>
+
+        {/* Weight Input */}
+        <div className="col-span-3">
+          <FormField
+            control={control}
+            name={`exercises.${index}.sets.${setIndex}.weight`}
+            render={({ field }) => (
+              <FormItem>
+                <FormControl>
+                  <Input
+                    {...field}
+                    value={field.value ?? ""}
+                    type="number"
+                    className="h-8 text-center font-medium focus:bg-accent/20 p-1"
+                    placeholder="0"
+                  />
+                </FormControl>
+              </FormItem>
+            )}
+          />
+        </div>
+
+        {/* Reps Input */}
+        <div className="col-span-3">
+          <FormField
+            control={control}
+            name={`exercises.${index}.sets.${setIndex}.reps`}
+            render={({ field }) => (
+              <FormItem>
+                <FormControl>
+                  <Input
+                    {...field}
+                    value={field.value ?? ""}
+                    type="number"
+                    className="h-8 text-center font-medium focus:bg-accent/20 p-1"
+                    placeholder="0"
+                  />
+                </FormControl>
+              </FormItem>
+            )}
+          />
+        </div>
+
+        {/* Delete Button */}
+        <div className="col-span-1 flex justify-center">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+            onClick={onRemove}
+            tabIndex={-1}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </Button>
         </div>
       </div>
 
-      {/* Weight Input */}
-      <div className="col-span-3">
+      <div className="grid grid-cols-2 md:grid-cols-6 gap-2 mt-2">
         <FormField
           control={control}
-          name={`exercises.${index}.sets.${setIndex}.weight`}
+          name={`exercises.${index}.sets.${setIndex}.rest_seconds`}
           render={({ field }) => (
             <FormItem>
               <FormControl>
-                <Input 
-                  {...field}
-                  // FIX: Handle null/undefined by defaulting to empty string
+                <Input
                   value={field.value ?? ""}
-                  type="number" 
-                  className="h-8 text-center font-medium focus:bg-accent/20 p-1" 
-                  placeholder="0" 
+                  onChange={(e) => field.onChange(e.target.value === "" ? undefined : Number(e.target.value))}
+                  type="number"
+                  className="h-8 text-xs"
+                  placeholder="Rest (sec)"
                 />
               </FormControl>
             </FormItem>
           )}
         />
-      </div>
-
-      {/* Reps Input */}
-      <div className="col-span-3">
         <FormField
           control={control}
-          name={`exercises.${index}.sets.${setIndex}.reps`}
+          name={`exercises.${index}.sets.${setIndex}.tempo`}
           render={({ field }) => (
             <FormItem>
               <FormControl>
-                <Input 
-                  {...field} 
-                  // FIX: Handle null/undefined by defaulting to empty string
+                <Input
                   value={field.value ?? ""}
-                  type="number" 
-                  className="h-8 text-center font-medium focus:bg-accent/20 p-1" 
-                  placeholder="0" 
+                  onChange={field.onChange}
+                  className="h-8 text-xs"
+                  placeholder="Tempo (e.g. 3-1-1)"
                 />
               </FormControl>
             </FormItem>
           )}
         />
-      </div>
-
-      {/* Delete Button */}
-      <div className="col-span-1 flex justify-center">
-         <Button 
-            type="button" 
-            variant="ghost" 
-            size="icon" 
-            className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10" 
-            onClick={onRemove}
-            tabIndex={-1}
-         >
-           <Trash2 className="h-3.5 w-3.5" />
-         </Button>
+        <FormField
+          control={control}
+          name={`exercises.${index}.sets.${setIndex}.is_warmup`}
+          render={({ field }) => (
+            <FormItem className="flex flex-row items-center gap-2 rounded-md border px-2">
+              <FormControl>
+                <Checkbox checked={Boolean(field.value)} onCheckedChange={(checked) => field.onChange(checked === true)} />
+              </FormControl>
+              <span className="text-xs text-muted-foreground">Warmup</span>
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={control}
+          name={`exercises.${index}.sets.${setIndex}.is_dropset`}
+          render={({ field }) => (
+            <FormItem className="flex flex-row items-center gap-2 rounded-md border px-2">
+              <FormControl>
+                <Checkbox checked={Boolean(field.value)} onCheckedChange={(checked) => field.onChange(checked === true)} />
+              </FormControl>
+              <span className="text-xs text-muted-foreground">Drop Set</span>
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={control}
+          name={`exercises.${index}.sets.${setIndex}.form_video_url`}
+          render={({ field }) => (
+            <FormItem className="md:col-span-2">
+              <FormControl>
+                <Input
+                  value={field.value ?? ""}
+                  onChange={field.onChange}
+                  className="h-8 text-xs"
+                  placeholder="Form Video URL (Optional)"
+                />
+              </FormControl>
+            </FormItem>
+          )}
+        />
       </div>
     </div>
   );

@@ -4,6 +4,7 @@ type WorkoutLog = Database["public"]["Tables"]["workout_logs"]["Row"];
 
 type GroupedExerciseLogs = {
   exercise_id: string | null;
+  group_id: string | null;
   name: string;
   sets: WorkoutLog[];
 };
@@ -24,6 +25,7 @@ export function groupLogsByExercise(logs: WorkoutLog[] | null | undefined): Grou
 
     groups.set(key, {
       exercise_id: log.exercise_id,
+      group_id: log.group_id,
       name: key,
       sets: [log],
     });

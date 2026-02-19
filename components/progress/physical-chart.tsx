@@ -8,6 +8,9 @@ type PhysioPoint = {
   date: string;
   estimated_1rm: number;
   bodyWeight: number | null;
+  bodyFatPercent?: number | null;
+  muscleMassKg?: number | null;
+  waistCm?: number | null;
 };
 
 export function PhysioChart({ data }: { data: PhysioPoint[] }) {
@@ -42,6 +45,9 @@ export function PhysioChart({ data }: { data: PhysioPoint[] }) {
             
             <Area yAxisId="left" type="monotone" dataKey="estimated_1rm" name="Est. 1RM (kg)" fill="hsl(var(--primary))" fillOpacity={0.2} stroke="hsl(var(--primary))" strokeWidth={2} />
             <Line yAxisId="right" type="monotone" dataKey="bodyWeight" name="Body Weight (kg)" stroke="#82ca9d" strokeWidth={2} dot={{r:3}} />
+            <Line yAxisId="right" type="monotone" dataKey="bodyFatPercent" name="Body Fat (%)" stroke="#ef4444" strokeWidth={1.5} dot={false} />
+            <Line yAxisId="right" type="monotone" dataKey="muscleMassKg" name="Muscle Mass (kg)" stroke="#a855f7" strokeWidth={1.5} dot={false} />
+            <Line yAxisId="right" type="monotone" dataKey="waistCm" name="Waist (cm)" stroke="#0ea5e9" strokeWidth={1.5} dot={false} />
           </ComposedChart>
         </ResponsiveContainer>
       </CardContent>

@@ -26,7 +26,7 @@ import { EditableText } from "@/components/shared/editable-text";
 import { WorkoutDetailSkeleton } from "./_components/workout-detailed-skeleton";
 import { WorkoutActions } from "@/components/workout/workout-actions";
 import { Database } from "@/types/database";
-import { cn } from "@/utils";
+import { LucideIcon } from "lucide-react";
 
 // Types
 type WorkoutLog = Database['public']['Tables']['workout_logs']['Row'];
@@ -52,7 +52,6 @@ export default function WorkoutDetailPage() {
 
   const handleRename = async (newName: string) => {
     try {
-      // @ts-ignore
       await updateWorkout.mutateAsync({ id, data: { name: newName } });
     } catch (error) {
       console.error("Failed to rename:", error);
@@ -169,6 +168,8 @@ export default function WorkoutDetailPage() {
            <DetailStat icon={Weight} label="Volume" value={`${(totalVolume / 1000).toFixed(1)}k kg`} />
            <DetailStat icon={Hash} label="Strength" value={`${exercises.length} Exercises`} />
            <DetailStat icon={Activity} label="Cardio" value={`${cardioLogs.length} Sessions`} />
+           <DetailStat icon={HeartPulse} label="Rating" value={workout.overall_rating ? `${workout.overall_rating}/10` : "--"} />
+           <DetailStat icon={Timer} label="Template" value={workout.template_id ? "Linked" : "Custom"} />
         </div>
       </div>
 
@@ -187,7 +188,7 @@ export default function WorkoutDetailPage() {
           </div>
 
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-             {exercises.map((ex: any, i: number) => (
+             {exercises.map((ex, i: number) => (
                 <Card key={i} className="overflow-hidden border-none shadow-sm ring-1 ring-border">
                    {/* Card Header */}
                    <div className="bg-muted/40 p-3 border-b flex justify-between items-start">
@@ -213,11 +214,26 @@ export default function WorkoutDetailPage() {
                         {ex.sets.map((set: WorkoutLog, idx: number) => (
                            <div key={set.id} className="grid grid-cols-3 text-xs text-center items-center py-1.5 rounded-sm hover:bg-muted/50 transition-colors">
                               <span className="font-medium text-muted-foreground">{idx + 1}</span>
-                              <span className="font-semibold">{set.weight}</span>
+                              <span className="font-semibold">
+                                {set.weight}
+                                {set.is_warmup ? "W" : ""}
+                              </span>
                               <span>{set.reps}</span>
                            </div>
                         ))}
                       </div>
+                      {ex.sets.some((set) => set.rest_seconds || set.tempo || set.is_dropset) && (
+                        <div className="mt-2 text-[10px] text-muted-foreground space-y-1">
+                          {ex.sets.map((set) => (
+                            <div key={`${set.id}-meta`} className="flex gap-2">
+                              <span>#{set.set_number}</span>
+                              {set.rest_seconds ? <span>Rest {set.rest_seconds}s</span> : null}
+                              {set.tempo ? <span>Tempo {set.tempo}</span> : null}
+                              {set.is_dropset ? <span>Drop Set</span> : null}
+                            </div>
+                          ))}
+                        </div>
+                      )}
                    </div>
                 </Card>
              ))}
@@ -275,12 +291,25 @@ export default function WorkoutDetailPage() {
           </div>
         </section>
       )}
+
+      {workout.ai_feedback && (
+        <section className="px-2 md:px-0 mt-8">
+          <Card className="border-primary/20 bg-primary/5">
+            <CardHeader>
+              <CardTitle className="text-sm">AI Feedback</CardTitle>
+            </CardHeader>
+            <CardContent className="text-sm text-muted-foreground">
+              {workout.ai_feedback}
+            </CardContent>
+          </Card>
+        </section>
+      )}
     </div>
   );
 }
 
 // Minimal Stat Component
-function DetailStat({ icon: Icon, label, value }: { icon: any, label: string, value: string }) {
+function DetailStat({ icon: Icon, label, value }: { icon: LucideIcon, label: string, value: string }) {
    return (
       <div className="bg-card border rounded-lg p-3 flex items-center gap-3 shadow-sm">
          <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">

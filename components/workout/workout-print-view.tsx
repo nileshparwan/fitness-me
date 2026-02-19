@@ -18,14 +18,10 @@ import { Database } from "@/types/database";
 
 type WorkoutLog = Database["public"]["Tables"]["workout_logs"]["Row"];
 type CardioLog = Database["public"]["Tables"]["cardio_logs"]["Row"];
+type Workout = Database["public"]["Tables"]["workouts"]["Row"];
 
 interface PrintViewProps {
-  workout: {
-    name: string;
-    date: string;
-    notes?: string | null;
-    user?: { email: string } | null;
-  };
+  workout: Workout & { user?: { email: string } | null };
   strengthLogs: WorkoutLog[];
   cardioLogs: CardioLog[];
 }
@@ -54,6 +50,15 @@ export const WorkoutPrintView = React.forwardRef<HTMLDivElement, PrintViewProps>
                   <Calendar className="h-4 w-4" /> 
                   {format(new Date(workout.date), "PPP")}
                 </span>
+                {workout.overall_rating ? (
+                  <span className="flex items-center gap-1.5">
+                    <Heart className="h-4 w-4" />
+                    {workout.overall_rating}/10
+                  </span>
+                ) : null}
+                {workout.template_id ? (
+                  <span className="text-xs uppercase tracking-wide">Template Linked</span>
+                ) : null}
                 {workout.user && (
                    <span className="flex items-center gap-1.5">
                      <User className="h-4 w-4" /> 
@@ -96,6 +101,7 @@ export const WorkoutPrintView = React.forwardRef<HTMLDivElement, PrintViewProps>
                         <th className="px-4 py-2 w-16">Set</th>
                         <th className="px-4 py-2">Weight</th>
                         <th className="px-4 py-2">Reps</th>
+                        <th className="px-4 py-2">Meta</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y">
@@ -106,6 +112,16 @@ export const WorkoutPrintView = React.forwardRef<HTMLDivElement, PrintViewProps>
                             {set.weight} <span className="text-xs font-normal text-muted-foreground">kg</span>
                           </td>
                           <td className="px-4 py-3">{set.reps}</td>
+                          <td className="px-4 py-3 text-xs text-muted-foreground">
+                            {[
+                              set.is_warmup ? "Warmup" : null,
+                              set.is_dropset ? "Drop" : null,
+                              set.rest_seconds ? `Rest ${set.rest_seconds}s` : null,
+                              set.tempo ? `Tempo ${set.tempo}` : null,
+                            ]
+                              .filter(Boolean)
+                              .join(" • ") || "-"}
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -115,6 +131,13 @@ export const WorkoutPrintView = React.forwardRef<HTMLDivElement, PrintViewProps>
             </div>
           </div>
         )}
+
+        {workout.ai_feedback ? (
+          <div className="mb-10 rounded-lg border bg-muted/20 p-4">
+            <h3 className="text-sm font-semibold uppercase tracking-wider mb-1">AI Feedback</h3>
+            <p className="text-sm text-muted-foreground">{workout.ai_feedback}</p>
+          </div>
+        ) : null}
 
         {/* --- CARDIO SECTION --- */}
         {cardioLogs.length > 0 && (

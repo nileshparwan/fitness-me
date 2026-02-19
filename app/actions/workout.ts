@@ -15,9 +15,13 @@ export type WorkoutActionInput = {
   date: Date;
   notes?: string | null;
   status?: WorkoutInsert['status'];
+  overall_rating?: number;
+  ai_feedback?: string;
+  template_id?: string;
   exercises?: {
     type?: 'strength' | 'cardio'; 
     exercise_id?: string;
+    group_id?: string;
     name: string;
     notes?: string;
     // Strength fields
@@ -25,6 +29,11 @@ export type WorkoutActionInput = {
       set_number: number;
       reps: number | string;
       weight: number | string;
+      rest_seconds?: number | string;
+      tempo?: string;
+      is_warmup?: boolean;
+      is_dropset?: boolean;
+      form_video_url?: string;
     }[];
     // Cardio fields
     duration?: number | string;
@@ -68,10 +77,17 @@ function buildWorkoutLogs(
       strengthLogs.push({
         workout_id: workoutId,
         exercise_id: ex.exercise_id || null,
+        group_id: ex.group_id || null,
         exercise_name: ex.name,
         set_number: set.set_number,
         reps: Number(set.reps || 0),
         weight: Number(set.weight || 0),
+        rest_seconds: set.rest_seconds !== undefined ? Number(set.rest_seconds) : null,
+        tempo: set.tempo || null,
+        is_warmup: Boolean(set.is_warmup),
+        is_dropset: Boolean(set.is_dropset),
+        form_video_url: set.form_video_url || null,
+        notes: ex.notes || null,
       });
     });
   }
@@ -94,7 +110,10 @@ export async function createWorkoutAction(data: WorkoutActionInput) {
     name: data.name,
     date: data.date.toISOString(),
     status: data.status || "active",
-    notes: data.notes || null
+    notes: data.notes || null,
+    overall_rating: data.overall_rating ?? null,
+    ai_feedback: data.ai_feedback || null,
+    template_id: data.template_id || null,
   };
 
   const { data: workout, error: wError } = await supabase
@@ -134,6 +153,9 @@ export async function updateWorkoutAction(id: string, data: Partial<WorkoutActio
   if (data.date) updateData.date = data.date.toISOString();
   if (data.notes !== undefined) updateData.notes = data.notes;
   if (data.status) updateData.status = data.status;
+  if (data.overall_rating !== undefined) updateData.overall_rating = data.overall_rating;
+  if (data.ai_feedback !== undefined) updateData.ai_feedback = data.ai_feedback || null;
+  if (data.template_id !== undefined) updateData.template_id = data.template_id || null;
 
   if (Object.keys(updateData).length > 0) {
     const { error } = await supabase.from("workouts").update(updateData).eq("id", id);

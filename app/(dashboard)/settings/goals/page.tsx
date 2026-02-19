@@ -4,6 +4,14 @@ import { GoalsForm } from "@/components/settings/goals-form";
 import { Database } from "@/types/database";
 
 type GoalRow = Database['public']['Tables']['goals']['Row'];
+type GoalStatus = "active" | "paused" | "completed" | "cancelled";
+
+const normalizeGoalStatus = (status: string | null): GoalStatus | null => {
+  if (status === "active" || status === "paused" || status === "completed" || status === "cancelled") {
+    return status;
+  }
+  return null;
+};
 
 export default async function GoalsPage() {
   const supabase = await createClient();
@@ -32,6 +40,10 @@ export default async function GoalsPage() {
           // Use DB values or intelligent defaults
           current_weight: userGoals?.current_weight ?? 0,
           target_weight: userGoals?.target_weight ?? 0,
+          target_body_fat_percent: userGoals?.target_body_fat_percent ?? null,
+          target_date: userGoals?.target_date ?? null,
+          custom_description: userGoals?.custom_description ?? null,
+          status: normalizeGoalStatus(userGoals?.status ?? null),
           weekly_workouts: userGoals?.weekly_workouts ?? 3,
           daily_calories: userGoals?.daily_calories ?? 2000,
           protein_target: userGoals?.protein_target ?? 150,
