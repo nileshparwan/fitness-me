@@ -1,20 +1,18 @@
-// hooks/use-media-query.ts
-import { useEffect, useState } from "react"
+import { useSyncExternalStore } from "react"
 
 export function useMediaQuery(query: string) {
-  const [value, setValue] = useState(false)
+  const subscribe = (onStoreChange: () => void) => {
+    if (typeof window === "undefined") return () => {};
 
-  useEffect(() => {
-    function onChange(event: MediaQueryListEvent) {
-      setValue(event.matches)
-    }
+    const mediaQuery = window.matchMedia(query);
+    mediaQuery.addEventListener("change", onStoreChange);
+    return () => mediaQuery.removeEventListener("change", onStoreChange);
+  };
 
-    const result = window.matchMedia(query)
-    setValue(result.matches)
+  const getSnapshot = () => {
+    if (typeof window === "undefined") return false;
+    return window.matchMedia(query).matches;
+  };
 
-    result.addEventListener("change", onChange)
-    return () => result.removeEventListener("change", onChange)
-  }, [query])
-
-  return value
+  return useSyncExternalStore(subscribe, getSnapshot, () => false);
 }

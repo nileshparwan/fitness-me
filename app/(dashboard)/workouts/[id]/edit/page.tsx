@@ -5,7 +5,7 @@ import { WorkoutForm } from "@/components/workout/workout-form";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertCircle, ArrowLeft } from "lucide-react";
-import { useWorkouts } from "@/hooks/use-workout";
+import { useWorkout } from "@/hooks/use-workout";
 import { groupLogsByExercise } from "@/utils/log";
 import { Button } from "@/components/ui/button";
 import { Database } from "@/types/database";
@@ -15,8 +15,7 @@ type WorkoutLog = Database['public']['Tables']['workout_logs']['Row'];
 export default function EditWorkoutPage() {
   const { id } = useParams() as { id: string };
   const router = useRouter();
-  const { getWorkout } = useWorkouts();
-  const { data: workout, isLoading, error } = getWorkout(id);
+  const { data: workout, isLoading, error } = useWorkout(id);
 
   if (isLoading) {
     return (

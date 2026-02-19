@@ -22,7 +22,7 @@ import {
   SheetDescription,
   SheetTrigger,
 } from "@/components/ui/sheet"; // Use Sheet for Mobile Form
-import { useWorkouts } from "@/hooks/use-workout";
+import { useWorkout } from "@/hooks/use-workout";
 import { deleteCardioLog } from "@/app/actions/cardio";
 import { CardioLogForm } from "@/components/workout/cardio-log-form";
 import { cn } from "@/utils";
@@ -33,8 +33,7 @@ export default function ManageCardioPage() {
   const router = useRouter();
   const queryClient = useQueryClient(); // Initialize Query Client
   
-  const { getWorkout } = useWorkouts();
-  const { data: workout, isLoading } = getWorkout(id);
+  const { data: workout, isLoading } = useWorkout(id);
 
   // State
   const [editingLog, setEditingLog] = useState<any | null>(null);

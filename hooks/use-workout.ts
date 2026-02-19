@@ -2,14 +2,30 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { createWorkoutAction, deleteWorkoutAction, updateWorkoutAction } from "@/app/actions/workout";
+import { createWorkoutAction, deleteWorkoutAction, updateWorkoutAction, type WorkoutActionInput } from "@/app/actions/workout";
+
+export function useWorkout(id: string) {
+  const supabase = createClient();
+
+  return useQuery({
+    queryKey: ["workout", id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("workouts")
+        .select(`*, workout_logs (*), cardio_logs (*)`)
+        .eq("id", id)
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!id,
+  });
+}
 
 export function useWorkouts() {
   const supabase = createClient();
   const queryClient = useQueryClient();
-  const router = useRouter();
 
   // 1. Fetch History (Read operations usually stay client-side in hooks for React Query cache)
   const history = useQuery({
@@ -24,24 +40,9 @@ export function useWorkouts() {
     },
   });
 
-  // 2. Fetch Single Workout
-  const getWorkout = (id: string) => useQuery({
-    queryKey: ["workout", id],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("workouts")
-        .select(`*, workout_logs (*), cardio_logs (*)`)
-        .eq("id", id)
-        .single();
-      if (error) throw error;
-      return data;
-    },
-    enabled: !!id,
-  });
-
   // 3. Create Workout (Using Server Action)
   const createWorkout = useMutation({
-    mutationFn: async (workoutData: any) => {
+    mutationFn: async (workoutData: WorkoutActionInput) => {
       // Pass data directly to the server action
       return await createWorkoutAction({
         name: workoutData.name,
@@ -62,7 +63,7 @@ export function useWorkouts() {
 
   // 4. Update Workout (Using Server Action)
   const updateWorkout = useMutation({
-    mutationFn: async ({ id, data }: { id: string; data: any }) => {
+    mutationFn: async ({ id, data }: { id: string; data: Partial<WorkoutActionInput> }) => {
       // Pass data directly to server action
       // Handles both full updates (with exercises) and partial updates (name/status only)
       await updateWorkoutAction(id, {
@@ -102,5 +103,5 @@ export function useWorkouts() {
     }
   });
 
-  return { history, getWorkout, createWorkout, updateWorkout, deleteWorkout };
+  return { history, createWorkout, updateWorkout, deleteWorkout };
 }

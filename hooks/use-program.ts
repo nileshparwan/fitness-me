@@ -6,7 +6,6 @@ import { createClient } from "@/lib/supabase/client";
 export function usePrograms() {
   const supabase = createClient();
 
-  // 1. Fetch All Programs (Folders)
   const programs = useQuery({
     queryKey: ["workout-programs"],
     queryFn: async () => {
@@ -19,44 +18,5 @@ export function usePrograms() {
     },
   });
 
-  // 2. Fetch Single Program with Nested Workouts
-  const getProgram = (id: string) => useQuery({
-    queryKey: ["program", id],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("programs")
-        .select(`
-          *,
-          program_items (
-            id,
-            program_id,
-            workout_id,
-            order_index,
-            day_label,
-            workouts (
-              id,
-              name,
-              duration_minutes,
-              status,
-              date,
-              workout_logs (count)
-            )
-          )
-        `)
-        .eq("id", id)
-        // FIX: Use 'referencedTable' instead of 'foreignTable'
-        .order("order_index", { referencedTable: "program_items", ascending: true }) 
-        .single();
-      
-      if (error) {
-        console.error("Error fetching program:", error);
-        throw error;
-      }
-      
-      return data;
-    },
-    enabled: !!id,
-  });
-
-  return { programs, getProgram };
+  return { programs };
 }

@@ -20,7 +20,7 @@ import {
   Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger, SheetClose
 } from "@/components/ui/sheet";
 
-import { useWorkouts } from "@/hooks/use-workout";
+import { useWorkout, useWorkouts } from "@/hooks/use-workout";
 import { groupLogsByExercise } from "@/utils/log";
 import { EditableText } from "@/components/shared/editable-text";
 import { WorkoutDetailSkeleton } from "./_components/workout-detailed-skeleton";
@@ -36,8 +36,8 @@ export default function WorkoutDetailPage() {
   const { id } = useParams() as { id: string };
   const router = useRouter();
 
-  const { getWorkout, deleteWorkout, updateWorkout } = useWorkouts();
-  const { data: workout, isLoading } = getWorkout(id);
+  const { deleteWorkout, updateWorkout } = useWorkouts();
+  const { data: workout, isLoading } = useWorkout(id);
 
   if (isLoading) return <WorkoutDetailSkeleton />;
   if (!workout) return <div className="p-12 text-center text-muted-foreground">Workout not found</div>;
