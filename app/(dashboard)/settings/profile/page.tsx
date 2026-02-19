@@ -1,9 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
-import { ProfileForm } from "@/components/settings/profile-form";
-import { Database } from "@/types/database";
-
-type Profile = Database['public']['Tables']['profiles']['Row'];
+import { ProfileForm } from "@/components/settings/profile-form"; 
+import { ProfileFormValues } from "@/lib/validations/settings";
+// Make sure this imports the SAME type used in the form component
 
 export default async function ProfilePage() {
   const supabase = await createClient();
@@ -11,14 +10,29 @@ export default async function ProfilePage() {
 
   if (!user) redirect("/login");
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("*")
-    .eq("id", user.id)
-    .single();
+  // Safely cast metadata to avoid 'any' issues, or just access properties loosely
+  const meta = user.user_metadata || {};
 
-  // Type assertion is safer now that columns exist
-  const userProfile = profile as Profile;
+  // Construct the full object required by the form
+  const initialData: ProfileFormValues = {
+    // Basic Info
+    full_name: meta.full_name ?? meta.display_name ?? "",
+    username: meta.username ?? "",
+    bio: meta.bio ?? "",
+    website: meta.website ?? "",
+    avatar_url: meta.avatar_url ?? undefined, // Optional in schema
+
+    // REQUIRED FIELDS (These caused the error because they were missing)
+    // We provide fallbacks here so the form always has a valid string
+    activity_level: meta.activity_level ?? "moderately_active",
+    preferred_units: meta.preferred_units ?? "metric",
+    timezone: meta.timezone ?? "UTC",
+
+    // Optional Fields (Can be undefined)
+    height: meta.height ? Number(meta.height) : undefined,
+    birth_date: meta.birth_date ?? undefined,
+    gender: meta.gender ?? undefined,
+  };
 
   return (
     <div className="space-y-6">
@@ -28,14 +42,9 @@ export default async function ProfilePage() {
           This is how others will see you on the site.
         </p>
       </div>
+      
       <ProfileForm 
-        initialData={{
-          full_name: userProfile?.full_name ?? userProfile?.display_name ?? "", // Fallback logic
-          username: userProfile?.username ?? "",
-          bio: userProfile?.bio ?? "",
-          website: userProfile?.website ?? "",
-        }} 
-        avatarUrl={userProfile?.avatar_url}
+        initialData={initialData} 
         email={user.email ?? ""}
       />
     </div>

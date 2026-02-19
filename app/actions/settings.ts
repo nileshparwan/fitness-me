@@ -6,28 +6,40 @@ import { profileSchema, goalsSchema, ProfileFormValues, GoalsFormValues } from "
 
 export async function updateProfile(data: ProfileFormValues) {
   const supabase = await createClient();
+  
+  // 1. Check Auth
   const { data: { user } } = await supabase.auth.getUser();
-
   if (!user) throw new Error("Unauthorized");
 
-  // Validate data server-side before sending to DB
+  // 2. Validate Data (Crucial now that DB constraints are gone)
   const parsed = profileSchema.parse(data);
 
-  const { error } = await supabase
-    .from("profiles")
-    .update({
+  // 3. Update User Metadata
+  const { error } = await supabase.auth.updateUser({
+    data: {
       full_name: parsed.full_name,
       username: parsed.username,
       bio: parsed.bio,
       website: parsed.website,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", user.id);
+      avatar_url: parsed.avatar_url,
+      
+      // Fitness Data
+      height: parsed.height,
+      birth_date: parsed.birth_date,
+      gender: parsed.gender,
+      activity_level: parsed.activity_level,
+      preferred_units: parsed.preferred_units,
+      timezone: parsed.timezone,
+      
+      updatedAt: new Date().toISOString(),
+    }
+  });
 
   if (error) throw error;
+  
   revalidatePath("/settings/profile");
+  return { success: true };
 }
-
 export async function updateGoals(data: GoalsFormValues) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();

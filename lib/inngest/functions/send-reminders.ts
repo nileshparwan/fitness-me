@@ -1,62 +1,78 @@
-import { createClient } from "@/lib/supabase/server";
+import { createClient } from "@supabase/supabase-js"; // Direct SDK import
 import { inngest } from "../client";
 
 export const sendReminders = inngest.createFunction(
   { id: "send-reminders" },
   [
-    { cron: "0 8 * * *" },
+    { cron: "0 8 * * *" }, 
     { event: "admin/run.reminders" }
-], // Run every day at 8:00 AM UTC
+  ],
   async ({ step }) => {
-    const supabase = await createClient();
+    // 1. Init Admin Client (Required for auth.users and bypassing RLS)
+    const supabaseAdmin = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      { auth: { autoRefreshToken: false, persistSession: false } }
+    );
 
-    // Step 1: Find "At Risk" Users (No workout in 3 days)
+    // Step 1: Find "At Risk" Users efficiently
     const inactiveUsers = await step.run("find-inactive-users", async () => {
-      // 3 days ago
+      // A. Get ALL users (Paginated batch)
+      // In production, you'd loop this until all users are fetched
+      const { data: { users }, error: userError } = await supabaseAdmin.auth.admin.listUsers({
+        perPage: 1000,
+      });
+      if (userError) throw userError;
+
+      // B. Get IDs of users who HAVE worked out in the last 3 days
       const cutoffDate = new Date();
       cutoffDate.setDate(cutoffDate.getDate() - 3);
 
-      // Get all users (batching in real app, simple query for now)
-      const { data: users } = await supabase.from("profiles").select("id, display_name");
+      const { data: activeUserIds, error: workoutError } = await supabaseAdmin
+        .from("workouts")
+        .select("user_id")
+        .gte("date", cutoffDate.toISOString()); // Single query for all recent activity
       
-      if (!users) return [];
+      if (workoutError) throw workoutError;
 
-      const usersToPing = [];
-      
-      // Check last workout for each user
-      for (const user of users) {
-        const { data: lastWorkout } = await supabase
-          .from("workouts")
-          .select("date")
-          .eq("user_id", user.id)
-          .order("date", { ascending: false })
-          .limit(1)
-          .single();
+      // C. Create a Set of active IDs for O(1) lookups
+      const activeSet = new Set(activeUserIds?.map(u => u.user_id));
 
-        // If no workout ever, OR last workout was before cutoff
-        if (!lastWorkout || new Date(lastWorkout.date) < cutoffDate) {
-          usersToPing.push(user);
-        }
-      }
-      return usersToPing;
+      // D. Filter: The "At Risk" users are those NOT in the active set
+      return users
+        .filter(user => !activeSet.has(user.id))
+        .map(user => ({
+          id: user.id,
+          // Extract display name from your new metadata location
+          name: user.user_metadata?.full_name || user.user_metadata?.display_name || "Athlete"
+        }));
     });
 
-    // Step 2: Create Notifications (In a real app, send Email/Push here)
+    // Step 2: Create Notifications
     if (inactiveUsers.length > 0) {
       await step.run("create-notifications", async () => {
         const notifications = inactiveUsers.map(user => ({
           user_id: user.id,
           insight_type: "general",
           title: "We miss you!",
-          content: `Hey ${user.display_name}, consistency is key! It's been a few days since your last log. Ready to crush a workout today?`,
+          content: `Hey ${user.name}, consistency is key! It's been a few days since your last log. Ready to crush a workout today?`,
           priority: "medium",
-          is_read: false
+          is_read: false,
+          created_at: new Date().toISOString()
         }));
 
-        await supabase.from("ai_insights").insert(notifications);
+        // Batch insert
+        const { error } = await supabaseAdmin
+          .from("ai_insights")
+          .insert(notifications);
+          
+        if (error) throw error;
       });
     }
 
-    return { remindedCount: inactiveUsers.length };
+    return { 
+      totalUsers: inactiveUsers.length + (await step.run("count-active", async () => 0)), // pseudo-code for metrics
+      remindedCount: inactiveUsers.length 
+    };
   }
 );

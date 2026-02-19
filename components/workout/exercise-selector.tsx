@@ -22,6 +22,7 @@ export function ExerciseSelector({ onSelect }: ExerciseSelectorProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const { data: exercises, isLoading } = useExercises(search);
+  const exerciseList = Array.isArray(exercises) ? exercises : [];
 
   const handleSelect = (ex: any) => {
     onSelect({ id: ex.id, name: ex.name });
@@ -54,11 +55,11 @@ export function ExerciseSelector({ onSelect }: ExerciseSelectorProps) {
           <ScrollArea className="h-[300px]">
             {isLoading ? (
               <div className="p-4 text-center text-sm text-muted-foreground">Loading...</div>
-            ) : exercises?.length === 0 ? (
+            ) : exerciseList?.length === 0 ? (
               <div className="p-4 text-center text-sm text-muted-foreground">No exercises found.</div>
             ) : (
               <div className="space-y-1">
-                {exercises?.map((ex) => (
+                {exerciseList?.map((ex) => (
                   <Button
                     key={ex.id}
                     variant="ghost"

@@ -44,10 +44,36 @@ export function NavUser({ user }: { user: any }) {
     router.push("/login")
   }
 
-  // Fallback data if hook is loading
-  const name = userData?.profile?.display_name || "Athlete"
-  const email = userData?.email || "user@example.com"
-  const initials = email.substring(0, 2).toUpperCase()
+  // --- LOGIC START ---
+  // 1. Unified User Object: Use the hook data if loaded, otherwise fallback to prop
+  const activeUser = userData || user;
+
+  // 2. Access Metadata safely
+  // Note: Your useUser hook maps metadata to .profile, but it also exists on .user_metadata
+  const meta = activeUser?.profile || activeUser?.user_metadata || {};
+
+  // 3. Name Priority: Full Name -> Display Name -> Username -> Email segment -> Fallback
+  const name = 
+    meta.full_name || 
+    meta.display_name || 
+    meta.username || 
+    activeUser?.email?.split('@')[0] || 
+    "Athlete";
+
+  // 4. Email Fallback
+  const email = activeUser?.email || "user@example.com";
+
+  // 5. Smart Initials: Generate from the actual name (e.g. "John Doe" -> "JD")
+  const initials = name
+    .split(' ')
+    .map((n: string) => n[0])
+    .join('')
+    .substring(0, 2)
+    .toUpperCase();
+  
+  // 6. Avatar URL
+  const avatarUrl = meta.avatar_url;
+  // --- LOGIC END ---
 
   return (
     <SidebarMenu>
@@ -59,7 +85,8 @@ export function NavUser({ user }: { user: any }) {
               className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
             >
               <Avatar className="h-8 w-8 rounded-lg">
-                <AvatarImage src={userData?.user_metadata?.avatar_url} alt={name} />
+                {/* Update: Use the extracted avatarUrl variable */}
+                <AvatarImage src={avatarUrl} alt={name} />
                 <AvatarFallback className="rounded-lg">{initials}</AvatarFallback>
               </Avatar>
               <div className="grid flex-1 text-left text-sm leading-tight">
@@ -78,7 +105,7 @@ export function NavUser({ user }: { user: any }) {
             <DropdownMenuLabel className="p-0 font-normal">
               <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
                 <Avatar className="h-8 w-8 rounded-lg">
-                  <AvatarImage src={userData?.user_metadata?.avatar_url} alt={name} />
+                  <AvatarImage src={avatarUrl} alt={name} />
                   <AvatarFallback className="rounded-lg">{initials}</AvatarFallback>
                 </Avatar>
                 <div className="grid flex-1 text-left text-sm leading-tight">

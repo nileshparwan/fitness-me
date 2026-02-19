@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { 
-  getPrograms, createProgram, deleteProgram, updateProgramStatus, duplicateProgram, updateProgram 
+  getPrograms, createNutritionProgram, deleteProgram, updateProgramStatus, duplicateProgram, updateNutritionProgram
 } from "@/app/actions/nutrition";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -154,7 +154,7 @@ export default function NutritionDashboard() {
   };
 
   const handleCreateSubmit = async (formData: FormData) => {
-    await createProgram(formData); 
+    await createNutritionProgram(formData); 
     refetch(); 
     setIsCreateOpen(false); 
     toast.success("Program created");
@@ -162,7 +162,7 @@ export default function NutritionDashboard() {
 
   const handleEditSubmit = async (formData: FormData) => {
     if(!editingProgram) return;
-    await updateProgram(formData, editingProgram.id); 
+    await updateNutritionProgram(formData, editingProgram.id); 
     setIsEditOpen(false); 
     refetch(); 
     toast.success("Updated successfully"); 

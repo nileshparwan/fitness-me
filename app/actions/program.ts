@@ -6,7 +6,6 @@ import { Database } from "@/types/database";
 
 type ProgramInsert = Database['public']['Tables']['programs']['Insert'];
 type ProgramItemInsert = Database['public']['Tables']['program_items']['Insert'];
-type ProgramItemUpdate = Database['public']['Tables']['program_items']['Update'];
 
 export async function createProgram(formData: FormData) {
     const supabase = await createClient();
@@ -25,30 +24,6 @@ export async function createProgram(formData: FormData) {
 
     if (error) throw new Error(error.message);
     revalidatePath("/programs");
-}
-
-export async function attachItemToProgram(
-    programId: string,
-    itemId: string,
-    type: "workout" | "nutrition",
-    label: string
-) {
-    const supabase = await createClient();
-
-    const payload: ProgramItemInsert = {
-        program_id: programId,
-        item_type: type,
-        day_label: label,
-        order_index: 999, // Will be fixed by reorder or DB default
-    };
-
-    if (type === "workout") payload.workout_id = itemId;
-    if (type === "nutrition") payload.nutrition_log_id = itemId;
-
-    const { error } = await supabase.from("program_items").insert(payload);
-
-    if (error) throw new Error(error.message);
-    revalidatePath(`/programs/${programId}`);
 }
 
 export async function updateProgram(id: string, data: Database['public']['Tables']['programs']['Update']) {
@@ -77,6 +52,24 @@ export async function deletePrograms(ids: string[]) {
 // 1. Bulk Add Workouts
 export async function addWorkoutsToProgram(programId: string, workoutIds: string[]) {
     const supabase = await createClient();
+    const uniqueWorkoutIds = Array.from(new Set(workoutIds));
+
+    if (uniqueWorkoutIds.length === 0) return;
+
+    const { data: existingItems } = await supabase
+        .from("program_items")
+        .select("workout_id")
+        .eq("program_id", programId)
+        .in("workout_id", uniqueWorkoutIds);
+
+    const existingWorkoutIds = new Set(
+        (existingItems || [])
+            .map((item) => item.workout_id)
+            .filter((id): id is string => Boolean(id))
+    );
+
+    const workoutIdsToInsert = uniqueWorkoutIds.filter((id) => !existingWorkoutIds.has(id));
+    if (workoutIdsToInsert.length === 0) return;
 
     // Get current count to append at the end
     const { count } = await supabase
@@ -86,7 +79,7 @@ export async function addWorkoutsToProgram(programId: string, workoutIds: string
 
     const startOrder = count || 0;
 
-    const items: ProgramItemInsert[] = workoutIds.map((wid, index) => ({
+    const items: ProgramItemInsert[] = workoutIdsToInsert.map((wid, index) => ({
         program_id: programId,
         workout_id: wid,
         item_type: "workout",
@@ -139,8 +132,25 @@ export async function updateProgramItemOrder(items: { id: string; order_index: n
 // 4. Reverse Link
 export async function linkWorkoutToPrograms(workoutId: string, programIds: string[]) {
     const supabase = await createClient();
+    const uniqueProgramIds = Array.from(new Set(programIds));
+    if (uniqueProgramIds.length === 0) return;
 
-    const items: ProgramItemInsert[] = programIds.map(pid => ({
+    const { data: existingItems } = await supabase
+        .from("program_items")
+        .select("program_id")
+        .in("program_id", uniqueProgramIds)
+        .eq("workout_id", workoutId);
+
+    const existingProgramIds = new Set(
+        (existingItems || [])
+            .map((item) => item.program_id)
+            .filter((id): id is string => Boolean(id))
+    );
+
+    const programIdsToInsert = uniqueProgramIds.filter((id) => !existingProgramIds.has(id));
+    if (programIdsToInsert.length === 0) return;
+
+    const items: ProgramItemInsert[] = programIdsToInsert.map(pid => ({
         program_id: pid,
         workout_id: workoutId,
         item_type: "workout",

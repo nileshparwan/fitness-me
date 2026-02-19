@@ -95,27 +95,16 @@ export async function getMuscleBalance() {
     ];
 }
 
-export async function getConsistencyData() {
-    const supabase = await createClient();
-    const startDate = subMonths(new Date(), 1);
-
-    const { data } = await supabase
-        .from("workouts")
-        .select("date, duration_minutes, overall_rating")
-        .gte("date", startDate.toISOString())
-        .order("date", { ascending: true });
-
-    return data || [];
-}
-
 export async function getUserProfile() {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
+    
     if (!user) return null;
-
-    const { data } = await supabase.from("profiles").select("birth_date").eq("id", user.id).single();
-    return data;
-}
+  
+    return {
+      birth_date: user.user_metadata.birth_date
+    };
+  }
 
 
 export async function getExerciseDetails(exerciseName: string) {
@@ -129,19 +118,6 @@ export async function getExerciseDetails(exerciseName: string) {
         .single();
 
     return data;
-}
-
-export async function getPhysioCorrelation(startDate: Date) {
-    const supabase = await createClient();
-
-    // Fetch Body Metrics (Weight, Body Fat)
-    const { data: body } = await supabase
-        .from("body_metrics")
-        .select("date, weight, body_fat_percent, muscle_mass_kg")
-        .gte("date", startDate.toISOString())
-        .order("date", { ascending: true });
-
-    return body || [];
 }
 
 export async function getExerciseMetrics(exerciseName: string, range: string) {

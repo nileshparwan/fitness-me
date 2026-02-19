@@ -11,7 +11,7 @@ import { useMediaQuery } from "@/hooks/use-media-query"; // Ensure you have this
 
 // Actions
 import { 
-  getProgramMeals, updateProgramStatus, updateProgramNotes, deleteMeal, updateMealPositions, getPrograms, getProgramOptions, updateMealStatus 
+  getProgramMeals, updateProgramStatus, updateProgramNotes, deleteMeal, updateMealPositions, getProgramOptions, updateMealStatus
 } from "@/app/actions/nutrition";
 
 // dnd-kit
@@ -36,7 +36,7 @@ import { AddMealDialog } from "@/components/nutrition/add-meal-dialog";
 import { SortableMealCard } from "@/components/nutrition/sortable-meal-card";
 import { NutritionAnalytics } from "@/components/nutrition/nutrition-analytics";
 import { ShareProgramDialog } from "@/components/nutrition/share-program-dialog";
-import { NutritionProgramDetailSkeleton } from "../../_components/nutrition-program-skeleton";
+import { NutritionProgramDetailSkeleton } from "../_components/nutrition-program-skeleton";
 import { NutritionMeal, NutritionProgram, ProgramSummary } from "@/types/nutrition";
 import NotFound from "@/app/not-found";
 

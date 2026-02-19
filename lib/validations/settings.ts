@@ -1,11 +1,30 @@
 import { z } from "zod";
 
 export const profileSchema = z.object({
-  full_name: z.string().min(2, "Name must be at least 2 characters"),
-  username: z.string().min(2).max(30),
+  // Basic
+  full_name: z.string().min(2).optional(),
+  username: z.string().min(3).max(20).optional(),
   bio: z.string().max(160).optional(),
   website: z.string().url().optional().or(z.literal("")),
+  avatar_url: z.string().url().optional(),
+
+  height: z.number().min(0).max(300).optional(), // cm
+  birth_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid date format").optional(), // YYYY-MM-DD
+  
+  gender: z.enum(['male', 'female', 'other', 'prefer_not_to_say']).optional(),
+  
+  activity_level: z.enum([
+    'sedentary', 
+    'lightly_active', 
+    'moderately_active', 
+    'very_active', 
+    'extremely_active'
+  ]).default('moderately_active'),
+
+  preferred_units: z.enum(['metric', 'imperial']).default('metric'),
+  timezone: z.string().default('UTC'),
 });
+
 
 export const goalsSchema = z.object({
   current_weight: z.number().min(0),

@@ -25,7 +25,7 @@ export async function getProgramOptions(): Promise<ProgramSummary[]> {
     return data || [];
 }
 
-export async function createProgram(formData: FormData) {
+export async function createNutritionProgram(formData: FormData) {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
 
@@ -48,7 +48,7 @@ export async function createProgram(formData: FormData) {
     revalidatePath("/nutrition");
 }
 
-export async function updateProgram(formData: FormData, programId: string) {
+export async function updateNutritionProgram(formData: FormData, programId: string) {
     const supabase = await createClient();
 
     const updates = {

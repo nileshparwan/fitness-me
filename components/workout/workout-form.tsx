@@ -20,7 +20,6 @@ import { cn } from "@/utils";
 import { ExerciseSelector } from "./exercise-selector";
 
 import { useUser } from "@/hooks/use-user";
-import { saveWorkoutFromText } from "@/app/actions/workout-ai";
 import { ExerciseCard } from "./exercise-card";
 // IMPORT THE MATCHING TYPES
 import { WorkoutFormValues, workoutFormSchema } from "@/types/workout";
@@ -87,13 +86,20 @@ export function WorkoutForm({ initialData, workoutId }: WorkoutFormProps) {
         savedId = result?.id; 
       }
 
-      if (autoLinkProgramId && savedId) {
-        await linkWorkoutToPrograms(savedId, [autoLinkProgramId]);
-        toast.success("Linked to Program!");
-      }
-      
-      if (data.programIds && data.programIds.length > 0 && savedId) {
-         await linkWorkoutToPrograms(savedId, data.programIds);
+      if (savedId) {
+        const uniqueProgramIds = Array.from(
+          new Set([
+            ...(autoLinkProgramId ? [autoLinkProgramId] : []),
+            ...(data.programIds || []),
+          ])
+        );
+
+        if (uniqueProgramIds.length > 0) {
+          await linkWorkoutToPrograms(savedId, uniqueProgramIds);
+          if (autoLinkProgramId) {
+            toast.success("Linked to Program!");
+          }
+        }
       }
 
       if (autoLinkProgramId) {
@@ -112,10 +118,7 @@ export function WorkoutForm({ initialData, workoutId }: WorkoutFormProps) {
 
     setIsAiProcessing(true);
     try {
-      const selectedDate = form.getValues("date");
-      await saveWorkoutFromText(user.id, aiText, selectedDate);
-      toast.success(`Success! Created workout`);
-      router.push("/workouts");
+      toast.error("AI text workout parsing is not available yet.");
     } catch (error: any) {
       console.error(error);
       toast.error(error.message || "Failed to parse workout");

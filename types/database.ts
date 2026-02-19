@@ -400,60 +400,6 @@ export type Database = {
         }
         Relationships: []
       }
-      profiles: {
-        Row: {
-          activity_level: string | null
-          avatar_url: string | null
-          bio: string | null
-          birth_date: string | null
-          created_at: string | null
-          display_name: string | null
-          full_name: string | null
-          gender: string | null
-          height: number | null
-          id: string
-          preferred_units: string | null
-          timezone: string | null
-          updated_at: string | null
-          username: string | null
-          website: string | null
-        }
-        Insert: {
-          activity_level?: string | null
-          avatar_url?: string | null
-          bio?: string | null
-          birth_date?: string | null
-          created_at?: string | null
-          display_name?: string | null
-          full_name?: string | null
-          gender?: string | null
-          height?: number | null
-          id: string
-          preferred_units?: string | null
-          timezone?: string | null
-          updated_at?: string | null
-          username?: string | null
-          website?: string | null
-        }
-        Update: {
-          activity_level?: string | null
-          avatar_url?: string | null
-          bio?: string | null
-          birth_date?: string | null
-          created_at?: string | null
-          display_name?: string | null
-          full_name?: string | null
-          gender?: string | null
-          height?: number | null
-          id?: string
-          preferred_units?: string | null
-          timezone?: string | null
-          updated_at?: string | null
-          username?: string | null
-          website?: string | null
-        }
-        Relationships: []
-      }
       program_items: {
         Row: {
           created_at: string | null
