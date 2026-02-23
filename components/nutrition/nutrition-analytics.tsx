@@ -11,7 +11,7 @@ export function NutritionAnalytics({ meals }: { meals: any[] }) {
   }), { calories: 0, protein: 0, carbs: 0, fats: 0 });
 
   return (
-    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-muted/30 border rounded-lg p-3 text-sm mb-6">
+    <div className="surface-pad mb-6 flex flex-col items-start justify-between gap-4 rounded-lg border bg-muted/30 text-sm sm:flex-row sm:items-center">
       
       {/* Total Calories */}
       <div className="flex items-center gap-2 min-w-[120px]">

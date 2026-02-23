@@ -213,7 +213,7 @@ export default function NutritionDashboard() {
     <div className="page-shell max-w-[1600px] mx-auto min-h-screen section-gap">
 
       {/* Header & Controls */}
-      <div className="native-surface md:desktop-surface p-4 md:p-5 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+      <div className="native-surface md:desktop-surface surface-pad flex flex-col justify-between gap-4 items-start md:flex-row md:items-center">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Nutrition Plans</h1>
           <p className="text-muted-foreground">Manage your meal schedules.</p>
@@ -254,7 +254,7 @@ export default function NutritionDashboard() {
                 <DialogTrigger asChild>
                     <Button className="w-full sm:w-auto"><Plus className="mr-2 h-4 w-4" /> New</Button>
                 </DialogTrigger>
-                <DialogContent className="px-2">
+                <DialogContent className="px-3 sm:px-4">
                     <DialogHeader><DialogTitle>Create New Plan</DialogTitle></DialogHeader>
                     {createFormContent}
                 </DialogContent>
@@ -264,7 +264,7 @@ export default function NutritionDashboard() {
                 <SheetTrigger asChild>
                   <Button size="icon" className="rounded-xl"><Plus className="h-4 w-4" /></Button>
                 </SheetTrigger>
-                <SheetContent side="bottom" className="h-[85vh] rounded-t-xl px-2">
+                <SheetContent side="bottom" className="h-[85vh] rounded-t-xl px-3 sm:px-4">
                     <SheetHeader className="text-left"><SheetTitle>Create New Plan</SheetTitle></SheetHeader>
                     {createFormContent}
                 </SheetContent>

@@ -31,7 +31,7 @@ export function ProgramsTableSkeleton() {
 
 function ProgramDetailSkeleton() {
   return (
-    <div className="p-4 md:p-8 space-y-8 max-w-7xl mx-auto">
+    <div className="page-shell section-gap mx-auto max-w-7xl">
       {/* Header Skeleton */}
       <div className="flex flex-col lg:flex-row justify-between gap-6 border rounded-xl p-6">
         <div className="space-y-3">

@@ -4,7 +4,7 @@ import { Suspense } from "react";
 
 export default function NewWorkoutPage() {
   return (
-    <div className="space-y-6">
+    <div className="page-shell section-gap">
       <div>
         <h3 className="text-lg font-medium">Log Workout</h3>
         <p className="text-sm text-muted-foreground">

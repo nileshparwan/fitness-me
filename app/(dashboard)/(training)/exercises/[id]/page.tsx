@@ -42,7 +42,7 @@ export default async function ExerciseDetailPage({ params }: PageProps) {
   });
 
   return (
-    <div className="flex flex-col h-full space-y-6 p-4 md:p-8 max-w-7xl mx-auto w-full">
+    <div className="page-shell section-gap mx-auto flex h-full w-full max-w-7xl flex-col">
       {/* Header Navigation */}
       <div className="flex items-center justify-between">
         <Link

@@ -40,7 +40,7 @@ export default function WorkoutDetailPage() {
   const { data: workout, isLoading } = useWorkout(id);
 
   if (isLoading) return <WorkoutDetailSkeleton />;
-  if (!workout) return <div className="p-12 text-center text-muted-foreground">Workout not found</div>;
+  if (!workout) return <div className="page-shell text-center text-muted-foreground">Workout not found</div>;
 
   const strengthLogs = (workout.strength_sets || []) as WorkoutLog[];
   const cardioLogs = (workout.cardio_sessions || []) as CardioLog[];
@@ -64,11 +64,11 @@ export default function WorkoutDetailPage() {
   };
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6 pb-24 md:pb-12 animate-in fade-in duration-300">
+    <div className="page-shell section-gap mx-auto max-w-5xl pb-24 md:pb-12 animate-in fade-in duration-300">
 
       {/* --- HEADER --- */}
       <div className="flex flex-col gap-4">
-        <div className="flex items-start justify-between gap-3 px-3 md:px-0">
+        <div className="flex items-start justify-between gap-3">
            {/* Title Area */}
            <div className="flex items-center gap-3 overflow-hidden flex-1">
               <Button variant="outline" size="icon" className="h-9 w-9 shrink-0 rounded-full" onClick={() => router.back()}>
@@ -163,7 +163,7 @@ export default function WorkoutDetailPage() {
         </div>
 
         {/* --- STATS GRID --- */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 px-3 md:px-0">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
            <DetailStat icon={Clock} label="Duration" value={`${workout.duration_minutes || "--"} min`} />
            <DetailStat icon={Weight} label="Volume" value={`${(totalVolume / 1000).toFixed(1)}k kg`} />
            <DetailStat icon={Hash} label="Strength" value={`${exercises.length} Exercises`} />
@@ -177,7 +177,7 @@ export default function WorkoutDetailPage() {
 
       {/* --- STRENGTH SECTION --- */}
       {exercises.length > 0 && (
-        <section className="space-y-4 px-3 md:px-0">
+        <section className="space-y-4">
           <div className="flex items-center justify-between">
              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
                 <Dumbbell className="h-4 w-4" /> Strength Routine
@@ -243,7 +243,7 @@ export default function WorkoutDetailPage() {
 
       {/* --- CARDIO SECTION --- */}
       {cardioLogs.length > 0 && (
-        <section className="space-y-4 px-3 md:px-0 mt-8">
+        <section className="mt-8 space-y-4">
            <div className="flex items-center justify-between">
              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
                 <HeartPulse className="h-4 w-4" /> Cardio Sessions
@@ -256,7 +256,7 @@ export default function WorkoutDetailPage() {
           <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
              {cardioLogs.map((log) => (
                 <Card key={log.id} className="group relative overflow-hidden border-l-4 border-l-blue-500 bg-blue-50/10 dark:bg-blue-900/5">
-                   <CardContent className="p-4 flex flex-col gap-3">
+                   <CardContent className="surface-pad flex flex-col gap-3">
                       <div className="flex justify-between items-start">
                          <span className="font-semibold text-sm">{log.activity_type}</span>
                          <Badge variant="outline" className="bg-background/50 font-normal text-xs">{log.duration_minutes}m</Badge>
@@ -293,7 +293,7 @@ export default function WorkoutDetailPage() {
       )}
 
       {workout.ai_feedback && (
-        <section className="px-3 md:px-0 mt-8">
+        <section className="mt-8">
           <Card className="border-primary/20 bg-primary/5">
             <CardHeader>
               <CardTitle className="text-sm">AI Feedback</CardTitle>

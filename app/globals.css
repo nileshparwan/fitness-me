@@ -160,10 +160,19 @@
     @apply rounded-2xl border bg-card shadow-[0_12px_30px_-16px_rgba(0,0,0,0.25)];
   }
   .page-shell {
-    @apply p-4 md:p-6;
+    @apply px-3 py-4 md:px-5 md:py-5 lg:px-6 lg:py-6;
   }
   .section-gap {
-    @apply space-y-4 md:space-y-6;
+    @apply space-y-4 md:space-y-5 lg:space-y-6;
+  }
+  .surface-pad {
+    @apply p-3 md:p-4 lg:p-5;
+  }
+  .surface-gap {
+    @apply gap-3 md:gap-4 lg:gap-5;
+  }
+  .stack-gap {
+    @apply space-y-3 md:space-y-4 lg:space-y-5;
   }
 }
 

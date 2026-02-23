@@ -35,7 +35,7 @@ export default async function ProfilePage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="stack-gap">
       <div className="flex flex-col gap-1">
         <h3 className="text-2xl font-bold tracking-tight">Profile</h3>
         <p className="text-muted-foreground text-sm">

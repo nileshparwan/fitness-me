@@ -54,7 +54,7 @@ export default function DashboardPage() {
         {quickActions.map((action) => (
           <Link key={action.title} href={action.href}>
             <Card className="h-full transition-all duration-200 hover:shadow-md hover:-translate-y-0.5">
-              <CardContent className="p-4">
+              <CardContent className="surface-pad">
                 <div className="flex items-start justify-between gap-2">
                   <div>
                     <p className="text-sm font-semibold">{action.title}</p>

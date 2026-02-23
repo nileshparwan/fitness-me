@@ -104,7 +104,7 @@ export function CardioLogForm({ workoutId, initialData, onSuccess, onCancel }: C
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4 rounded-xl border bg-card p-3 sm:p-4">
+    <form onSubmit={handleSubmit} className="stack-gap surface-pad rounded-xl border bg-card">
       <h3 className="font-semibold text-lg flex items-center gap-2">
         <Activity className="h-5 w-5 text-primary" />
         {initialData ? "Edit Cardio Log" : "Add Cardio Log"}

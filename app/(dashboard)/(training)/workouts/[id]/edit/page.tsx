@@ -19,7 +19,7 @@ export default function EditWorkoutPage() {
 
   if (isLoading) {
     return (
-      <div className="max-w-3xl mx-auto space-y-8 p-4">
+      <div className="page-shell section-gap mx-auto max-w-3xl">
         <div className="flex items-center gap-4"><Skeleton className="h-10 w-10 rounded-full" /><Skeleton className="h-8 w-48" /></div>
         <Skeleton className="h-[400px] w-full rounded-xl" />
       </div>
@@ -28,11 +28,13 @@ export default function EditWorkoutPage() {
 
   if (error || !workout) {
     return (
-      <Alert variant="destructive" className="m-4">
-        <AlertCircle className="h-4 w-4" />
-        <AlertTitle>Error</AlertTitle>
-        <AlertDescription>Failed to load workout data.</AlertDescription>
-      </Alert>
+      <div className="page-shell">
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Error</AlertTitle>
+          <AlertDescription>Failed to load workout data.</AlertDescription>
+        </Alert>
+      </div>
     );
   }
 
@@ -68,8 +70,8 @@ export default function EditWorkoutPage() {
   };
 
   return (
-    <div className="space-y-6 pb-24 md:pb-10">
-      <div className="flex items-center gap-2 px-1">
+    <div className="page-shell section-gap mx-auto max-w-3xl pb-24 md:pb-10">
+      <div className="flex items-center gap-2">
         <Button variant="ghost" size="icon" onClick={() => router.back()}>
           <ArrowLeft className="h-5 w-5" />
         </Button>

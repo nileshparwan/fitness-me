@@ -100,10 +100,10 @@ export function AnalyticsView({ initialEvents, totalHistoricalEvents, activeUser
   [initialEvents]);
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
+    <div className="section-gap animate-in fade-in duration-500">
       
       {/* --- CONTROLS TOOLBAR --- */}
-      <div className="flex flex-col md:flex-row gap-4 justify-between items-start md:items-center bg-card p-4 rounded-xl border shadow-sm">
+      <div className="surface-pad flex flex-col items-start justify-between gap-4 rounded-xl border bg-card shadow-sm md:flex-row md:items-center">
         <div className="flex flex-1 items-center gap-2 w-full md:w-auto">
           <div className="relative flex-1 md:max-w-sm">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />

@@ -223,7 +223,7 @@ export default function ProgressPage() {
 
   if (exercises && exercises.length === 0) {
     return (
-      <div className="p-12 text-center min-h-screen flex flex-col items-center justify-center text-muted-foreground">
+      <div className="page-shell flex min-h-screen flex-col items-center justify-center text-center text-muted-foreground">
         <h2 className="text-2xl font-semibold mb-2">No Data Found</h2>
         <p>Complete a workout to see your progress analytics here.</p>
       </div>
@@ -234,7 +234,7 @@ export default function ProgressPage() {
     <div className="page-shell max-w-[1600px] mx-auto section-gap pb-24 min-h-screen animate-in fade-in duration-500">
 
       {/* HEADER */}
-      <div className="native-surface md:desktop-surface p-4 md:p-5 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+      <div className="native-surface md:desktop-surface surface-pad flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Progress Hub</h1>
           <p className="text-muted-foreground">Deep analysis of your {isCardio ? "endurance" : "strength"} journey.</p>

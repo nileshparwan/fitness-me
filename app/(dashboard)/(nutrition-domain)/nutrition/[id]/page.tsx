@@ -198,7 +198,7 @@ export default function ProgramPage({ params }: { params: Promise<{ id: string }
   if (!program) return NotFound();
 
   return (
-    <div className="p-3 md:p-6 max-w-4xl mx-auto pb-40 space-y-4 relative">
+    <div className="page-shell section-gap relative mx-auto max-w-4xl pb-40">
       
       {/* RESPONSIVE HEADER */}
       <div className="flex flex-col gap-4">
@@ -309,7 +309,7 @@ export default function ProgramPage({ params }: { params: Promise<{ id: string }
         </Dialog>
       ) : (
         <Sheet open={isNotesOpen} onOpenChange={setIsNotesOpen}>
-          <SheetContent side="bottom" className="rounded-t-xl h-[80vh] px-2">
+          <SheetContent side="bottom" className="h-[80vh] rounded-t-xl px-3 sm:px-4">
             <SheetHeader className="text-left"><SheetTitle>Program Notes</SheetTitle></SheetHeader>
             {NotesForm}
           </SheetContent>

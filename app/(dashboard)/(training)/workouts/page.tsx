@@ -20,7 +20,7 @@ export default function WorkoutsPage() {
   return (
     <div className="page-shell section-gap">
       {/* Header & Controls */}
-      <div className="native-surface md:desktop-surface p-4 md:p-5 flex flex-col gap-4 sm:flex-row sm:items-center justify-between">
+      <div className="native-surface md:desktop-surface surface-pad flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
         <div className="min-w-0">
           <h2 className="text-2xl md:text-3xl font-bold tracking-tight">Workouts</h2>
           <p className="text-muted-foreground">Manage your training history</p>

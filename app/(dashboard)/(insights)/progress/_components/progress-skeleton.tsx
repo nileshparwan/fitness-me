@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 
 export function ProgressSkeleton() {
   return (
-    <div className="p-4 md:p-8 max-w-[1600px] mx-auto space-y-8 pb-24 bg-gray-50/30 min-h-screen">
+    <div className="page-shell section-gap mx-auto min-h-screen max-w-[1600px] bg-gray-50/30 pb-24">
       
       {/* HEADER SKELETON */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">

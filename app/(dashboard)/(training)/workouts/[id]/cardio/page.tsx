@@ -40,7 +40,7 @@ export default function ManageCardioPage() {
   const [isMobileSheetOpen, setIsMobileSheetOpen] = useState(false);
 
   if (isLoading) return <CardioSkeleton />;
-  if (!workout) return <div className="p-8 text-center">Workout not found</div>;
+  if (!workout) return <div className="page-shell text-center">Workout not found</div>;
 
   const cardioLogs = workout.cardio_sessions || [];
 
@@ -100,11 +100,11 @@ export default function ManageCardioPage() {
   );
 
   return (
-    <div className="flex flex-col h-[calc(100vh-4rem)] lg:h-auto lg:block">
+    <div className="page-shell section-gap mx-auto flex h-[calc(100vh-4rem)] max-w-7xl flex-col lg:block lg:h-auto">
       
       {/* HEADER */}
-      <div className="flex-none p-4 lg:px-0 lg:pt-0 lg:pb-6 border-b lg:border-none bg-background z-10">
-        <div className="flex items-center gap-3 container max-w-5xl mx-auto lg:mx-0 lg:px-0">
+      <div className="z-10 flex-none border-b bg-background pb-4 lg:border-none">
+        <div className="flex items-center gap-3">
           <Button variant="ghost" size="icon" onClick={() => router.push(`/workouts/${id}`)} className="-ml-2">
             <ArrowLeft className="h-5 w-5" />
           </Button>
@@ -121,10 +121,10 @@ export default function ManageCardioPage() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-hidden lg:overflow-visible container max-w-7xl mx-auto lg:px-0 lg:grid lg:grid-cols-12 lg:gap-8 lg:items-start">
+      <div className="flex-1 overflow-hidden lg:grid lg:grid-cols-12 lg:items-start lg:gap-8 lg:overflow-visible">
         
         {/* --- LEFT COLUMN: LIST (Scrollable on Mobile) --- */}
-        <div className="h-full overflow-y-auto lg:h-auto lg:col-span-7 xl:col-span-8 p-4 lg:p-0 space-y-4">
+        <div className="h-full space-y-4 overflow-y-auto lg:col-span-7 lg:h-auto xl:col-span-8">
           <div className="flex items-center justify-between hidden lg:flex">
              <h2 className="text-lg font-semibold">Session History ({cardioLogs.length})</h2>
           </div>
@@ -147,7 +147,7 @@ export default function ManageCardioPage() {
                   )}
                   onClick={() => openEdit(log)}
                 >
-                  <CardContent className="p-4">
+                  <CardContent className="surface-pad">
                     <div className="flex justify-between items-start gap-3">
                       
                       {/* Icon & Main Info */}
@@ -213,13 +213,13 @@ export default function ManageCardioPage() {
         {/* --- RIGHT COLUMN: DESKTOP STICKY FORM --- */}
         <div className="hidden lg:block lg:col-span-5 xl:col-span-4 sticky top-6">
            <div className="bg-card border rounded-xl shadow-sm overflow-hidden">
-             <div className="bg-muted/30 p-4 border-b">
+             <div className="surface-pad border-b bg-muted/30">
                <h3 className="font-semibold flex items-center gap-2">
                  {editingLog ? <Edit2 className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
                  {editingLog ? "Edit Entry" : "Add New Entry"}
                </h3>
              </div>
-             <div className="p-4">
+             <div className="surface-pad">
                <FormInstance />
                {editingLog && (
                   <Button variant="ghost" className="w-full mt-2" onClick={() => setEditingLog(null)}>

@@ -49,7 +49,7 @@ export function WorkoutDetailSkeleton() {
                 <Skeleton className="h-5 w-3/4" /> {/* Exercise Name */}
               </CardHeader>
               <CardContent className="p-0">
-                <div className="p-4 space-y-2">
+                <div className="surface-pad space-y-2">
                   <div className="flex justify-between gap-4">
                     <Skeleton className="h-4 w-8" />
                     <Skeleton className="h-4 w-12" />

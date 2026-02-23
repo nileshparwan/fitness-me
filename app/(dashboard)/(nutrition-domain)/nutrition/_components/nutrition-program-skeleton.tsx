@@ -2,7 +2,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 export function NutritionProgramDetailSkeleton() {
   return (
-    <div className="p-3 md:p-6 max-w-4xl mx-auto pb-40 space-y-6 relative animate-in fade-in duration-500">
+    <div className="page-shell section-gap relative mx-auto max-w-4xl pb-40 animate-in fade-in duration-500">
       
       {/* --- HEADER SKELETON --- */}
       <div className="flex flex-col gap-4">

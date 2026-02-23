@@ -164,7 +164,7 @@ export default function ProgramsPage() {
   );
 
   return (
-    <div className="space-y-6 pb-24 md:pb-12 px-2">
+    <div className="page-shell section-gap pb-24 md:pb-12">
       {/* HEADER BAR */}
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between min-h-[3.5rem]">
         
@@ -243,7 +243,7 @@ export default function ProgramsPage() {
                     <SheetTrigger asChild>
                       <Button size="icon" className="w-10 h-10"><Plus className="h-5 w-5" /></Button>
                     </SheetTrigger>
-                    <SheetContent side="bottom" className="rounded-t-xl h-[80vh] px-2">
+                    <SheetContent side="bottom" className="h-[80vh] rounded-t-xl px-3 sm:px-4">
                       <SheetHeader className="text-left mb-4"><SheetTitle>Create New Program</SheetTitle></SheetHeader>
                       <CreateProgramForm />
                     </SheetContent>

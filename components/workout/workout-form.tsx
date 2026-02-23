@@ -156,9 +156,9 @@ export function WorkoutForm({ initialData, workoutId }: WorkoutFormProps) {
   const isSaving = createWorkout.isPending || updateWorkout.isPending || isAiProcessing;
 
   return (
-    <div className="max-w-3xl mx-auto px-2">
+    <div className="mx-auto w-full max-w-3xl">
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onFormSubmit)} className="space-y-6">
+        <form onSubmit={form.handleSubmit(onFormSubmit)} className="stack-gap">
           <Tabs
             value={mode}
             onValueChange={(value) => {
@@ -166,7 +166,7 @@ export function WorkoutForm({ initialData, workoutId }: WorkoutFormProps) {
             }}
             className="w-full"
           >
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+            <div className="mb-6 flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
               <TabsList className="grid w-full sm:w-[400px] grid-cols-2">
                 <TabsTrigger value="form">Builder</TabsTrigger>
                 <TabsTrigger value="text"><Sparkles className="w-3 h-3 mr-2 text-purple-500" />AI Text</TabsTrigger>
@@ -177,9 +177,9 @@ export function WorkoutForm({ initialData, workoutId }: WorkoutFormProps) {
               </Button>
             </div>
 
-            <TabsContent value="form" className="space-y-6">
+            <TabsContent value="form" className="stack-gap">
               <Card>
-                <CardContent className="p-4 md:p-6 space-y-4">
+                <CardContent className="surface-pad stack-gap">
                     <FormField
                       control={form.control}
                       name="name"
@@ -191,7 +191,7 @@ export function WorkoutForm({ initialData, workoutId }: WorkoutFormProps) {
                         </FormItem>
                       )}
                     />
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2 md:gap-4">
                       <FormField
                         control={form.control}
                         name="date"
@@ -229,7 +229,7 @@ export function WorkoutForm({ initialData, workoutId }: WorkoutFormProps) {
               </Card>
 
               <Card>
-                <CardContent className="p-4 md:p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+                <CardContent className="surface-pad grid grid-cols-1 gap-3 md:grid-cols-2 md:gap-4">
                   <FormField
                     control={form.control}
                     name="overall_rating"
@@ -284,7 +284,7 @@ export function WorkoutForm({ initialData, workoutId }: WorkoutFormProps) {
                 </CardContent>
               </Card>
 
-              <div className="space-y-4">
+              <div className="stack-gap">
                 {fields.map((field, index) => (
                   <ExerciseCard key={field.id} index={index} remove={() => remove(index)} control={form.control} />
                 ))}

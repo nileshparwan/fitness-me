@@ -15,7 +15,7 @@ export default function NutritionProgressPage() {
   });
 
   return (
-    <div className="p-4 md:p-8 max-w-[1200px] mx-auto min-h-screen space-y-6">
+    <div className="page-shell section-gap mx-auto min-h-screen max-w-[1200px]">
       <div className="flex items-center gap-4">
         <Link href="/nutrition">
             <Button variant="ghost" size="icon"><ArrowLeft className="h-5 w-5" /></Button>

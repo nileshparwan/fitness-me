@@ -77,7 +77,7 @@ export function ExerciseActions({ exercise, onEdit }: ExerciseActionsProps) {
           <MoreHorizontal className="h-5 w-5" />
         </Button>
       </SheetTrigger>
-      <SheetContent side="bottom" className="rounded-t-xl pb-8 px-2">
+      <SheetContent side="bottom" className="rounded-t-xl px-3 pb-8 sm:px-4">
         <SheetHeader className="text-left mb-4">
           <SheetTitle>Manage {exercise.name}</SheetTitle>
         </SheetHeader>

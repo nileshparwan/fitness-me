@@ -66,7 +66,7 @@ export default async function ProgramPage({ params }: ProgramPageProps) {
     <div className="flex min-h-screen flex-col bg-background">
       {/* Header */}
       <header className="sticky top-0 z-10 border-b bg-background/95 backdrop-blur">
-        <div className="flex items-center justify-between gap-4 p-4 md:px-8">
+        <div className="page-shell mx-auto flex w-full max-w-7xl items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <Button variant="ghost" size="icon" asChild>
               <Link href="/programs" aria-label="Back">
@@ -93,7 +93,7 @@ export default async function ProgramPage({ params }: ProgramPageProps) {
       </header>
 
       {/* Main Content */}
-      <div className="flex-1 overflow-y-auto p-4 md:p-8">
+      <div className="page-shell section-gap mx-auto flex w-full max-w-7xl flex-1 overflow-y-auto">
         <ProgramBuilder
           program={program}
           allWorkouts={(allWorkouts as Workout[]) || []}

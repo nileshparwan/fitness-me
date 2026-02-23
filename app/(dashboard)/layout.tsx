@@ -18,7 +18,7 @@ export default function DashboardLayout({
       
       <SidebarInset>
         <header className="sticky top-0 z-40 pt-safe border-b border-border bg-background">
-          <div className="flex h-14 items-center gap-3 px-safe px-3 md:h-16 md:px-4">
+          <div className="flex h-14 items-center gap-3 px-safe px-3 md:h-16 md:px-5 lg:px-6">
             <SidebarTrigger className="h-9 w-9 rounded-xl border bg-background/80 ml-1 -mr-1" />
             <Separator orientation="vertical" className="mr-1 h-5 hidden md:block" />
             <div className="flex flex-col">
@@ -28,7 +28,7 @@ export default function DashboardLayout({
           </div>
         </header>
         
-        <main className="flex flex-1 flex-col gap-4 px-safe px-3 pb-[88px] md:px-4 md:pb-4">
+        <main className="flex flex-1 flex-col gap-4 px-safe px-3 pb-[88px] md:gap-5 md:px-5 md:pb-4 lg:gap-6 lg:px-6">
           <div className="min-h-[calc(100svh-3.5rem)] flex-1 rounded-2xl md:desktop-surface md:min-h-min overflow-hidden">
              {children}
           </div>

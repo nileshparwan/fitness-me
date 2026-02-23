@@ -6,7 +6,7 @@ export function CardioSkeleton() {
     <div className="flex flex-col h-screen lg:h-auto animate-pulse">
       
       {/* 1. Header Section */}
-      <div className="flex-none p-4 lg:px-0 lg:pb-6 border-b lg:border-none">
+      <div className="surface-pad flex-none border-b lg:border-none lg:px-0 lg:pb-6">
         <div className="flex items-center gap-3">
           <Skeleton className="h-8 w-8 rounded-md" /> {/* Back Button */}
           <div className="space-y-2">
@@ -16,7 +16,7 @@ export function CardioSkeleton() {
         </div>
       </div>
 
-      <div className="flex-1 container max-w-7xl mx-auto lg:px-0 lg:grid lg:grid-cols-12 lg:gap-8 lg:items-start p-4 lg:p-0">
+      <div className="surface-pad container mx-auto flex-1 max-w-7xl lg:grid lg:grid-cols-12 lg:items-start lg:gap-8 lg:p-0 lg:px-0">
         
         {/* --- LEFT COLUMN: LIST SKELETON --- */}
         <div className="lg:col-span-7 xl:col-span-8 space-y-4">
@@ -28,7 +28,7 @@ export function CardioSkeleton() {
           {/* List Items */}
           {[1, 2, 3, 4].map((i) => (
             <Card key={i} className="border-l-4 border-l-muted">
-              <CardContent className="p-4">
+              <CardContent className="surface-pad">
                 <div className="flex justify-between items-start gap-3">
                   <div className="flex gap-3 w-full">
                     {/* Icon Circle */}
@@ -62,11 +62,11 @@ export function CardioSkeleton() {
         <div className="hidden lg:block lg:col-span-5 xl:col-span-4 sticky top-6">
           <div className="border rounded-xl overflow-hidden bg-card">
             {/* Form Header */}
-            <div className="bg-muted/30 p-4 border-b">
+            <div className="surface-pad border-b bg-muted/30">
               <Skeleton className="h-5 w-32" />
             </div>
             {/* Form Fields */}
-            <div className="p-4 space-y-4">
+            <div className="surface-pad space-y-4">
               <div className="grid grid-cols-2 gap-4">
                  <div className="space-y-2">
                     <Skeleton className="h-4 w-20" />

@@ -26,7 +26,7 @@ export default async function AnalyticsPage() {
   const uniqueUsers = new Set(events.map(e => e.user_id).filter(id => id !== "anonymous"));
 
   return (
-    <div className="p-4 md:p-8 max-w-[1600px] mx-auto space-y-8">
+    <div className="page-shell section-gap mx-auto max-w-[1600px]">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Analytics Dashboard</h1>
         <p className="text-muted-foreground">
