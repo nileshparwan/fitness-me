@@ -61,11 +61,9 @@ export default function WorkoutsPage() {
       ) : (
         <>
           {/* GRID VIEW */}
-          <div className={view === "grid" ? "grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4" : "hidden"}>
+          <div className={view === "grid" ? "flex flex-wrap gap-4" : "hidden"}>
             {workouts.map((workout: any) => (
-              <div key={workout.id} className="w-full">
-                <WorkoutCard workout={workout} />
-              </div>
+              <WorkoutCard key={workout.id} workout={workout} />
             ))}
           </div>
 
