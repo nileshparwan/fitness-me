@@ -33,7 +33,7 @@ export function ProgramListItem({ program, isSelected, isSelectionMode }: Progra
         <div className="flex items-center justify-between mb-1">
            <h3 className="font-semibold text-base truncate">{program.name}</h3>
            <Badge variant="secondary" className="text-[10px] h-5 px-1.5 shrink-0">
-              {program.program_items?.[0]?.count || 0} Items
+              {program.training_plan_items?.[0]?.count || 0} Items
            </Badge>
         </div>
         <p className="text-xs text-muted-foreground line-clamp-1">

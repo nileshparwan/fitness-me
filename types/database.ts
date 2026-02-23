@@ -80,7 +80,7 @@ export type Database = {
         }
         Relationships: []
       }
-      body_metrics: {
+      body_measurements: {
         Row: {
           ai_analysis: string | null
           arms_cm: number | null
@@ -137,7 +137,7 @@ export type Database = {
         }
         Relationships: []
       }
-      cardio_logs: {
+      cardio_sessions: {
         Row: {
           activity_type: string
           average_heart_rate: number | null
@@ -197,12 +197,12 @@ export type Database = {
             foreignKeyName: "cardio_logs_workout_id_fkey"
             columns: ["workout_id"]
             isOneToOne: false
-            referencedRelation: "workouts"
+            referencedRelation: "training_sessions"
             referencedColumns: ["id"]
           },
         ]
       }
-      exercise_library: {
+      exercise_catalog: {
         Row: {
           aliases: string[] | null
           category: string | null
@@ -238,7 +238,7 @@ export type Database = {
         }
         Relationships: []
       }
-      goals: {
+      fitness_goals: {
         Row: {
           carbs_target: number | null
           created_at: string | null
@@ -295,7 +295,7 @@ export type Database = {
         }
         Relationships: []
       }
-      nutrition_meals: {
+      meal_plan_meals: {
         Row: {
           alternatives: string | null
           calories: number | null
@@ -349,12 +349,12 @@ export type Database = {
             foreignKeyName: "nutrition_meals_program_id_fkey"
             columns: ["program_id"]
             isOneToOne: false
-            referencedRelation: "nutrition_programs"
+            referencedRelation: "meal_plans"
             referencedColumns: ["id"]
           },
         ]
       }
-      nutrition_programs: {
+      meal_plans: {
         Row: {
           created_at: string | null
           description: string | null
@@ -393,7 +393,7 @@ export type Database = {
         }
         Relationships: []
       }
-      program_items: {
+      training_plan_items: {
         Row: {
           created_at: string | null
           day_label: string | null
@@ -429,19 +429,19 @@ export type Database = {
             foreignKeyName: "program_items_program_id_fkey"
             columns: ["program_id"]
             isOneToOne: false
-            referencedRelation: "programs"
+            referencedRelation: "training_plans"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "program_items_workout_id_fkey"
             columns: ["workout_id"]
             isOneToOne: false
-            referencedRelation: "workouts"
+            referencedRelation: "training_sessions"
             referencedColumns: ["id"]
           },
         ]
       }
-      programs: {
+      training_plans: {
         Row: {
           created_at: string | null
           description: string | null
@@ -468,7 +468,7 @@ export type Database = {
         }
         Relationships: []
       }
-      workout_logs: {
+      strength_sets: {
         Row: {
           calculated_1rm: number | null
           created_at: string | null
@@ -531,19 +531,19 @@ export type Database = {
             foreignKeyName: "workout_logs_exercise_id_fkey"
             columns: ["exercise_id"]
             isOneToOne: false
-            referencedRelation: "exercise_library"
+            referencedRelation: "exercise_catalog"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "workout_logs_workout_id_fkey"
             columns: ["workout_id"]
             isOneToOne: false
-            referencedRelation: "workouts"
+            referencedRelation: "training_sessions"
             referencedColumns: ["id"]
           },
         ]
       }
-      workouts: {
+      training_sessions: {
         Row: {
           ai_feedback: string | null
           created_at: string | null

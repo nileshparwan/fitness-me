@@ -15,19 +15,19 @@ export async function getProgressData() {
   if (!user) throw new Error("Unauthorized");
 
   const { data: programs } = await supabase
-    .from("nutrition_programs")
-    .select(`*, nutrition_meals (*)`)
+    .from("meal_plans")
+    .select(`*, meal_plan_meals (*)`)
     .eq("user_id", user.id)
     .order("start_date", { ascending: true });
 
   const { data: goals } = await supabase
-    .from("goals")
+    .from("fitness_goals")
     .select("daily_calories, target_weight, goal_type")
     .eq("user_id", user.id)
     .single();
 
   return {
-    programs: (programs || []) as (NutritionProgram & { nutrition_meals: NutritionMeal[] })[],
+    programs: (programs || []) as (NutritionProgram & { meal_plan_meals: NutritionMeal[] })[],
     goals: (goals || null) as GoalData | null
   };
 }

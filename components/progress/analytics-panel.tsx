@@ -5,7 +5,7 @@ import { Dumbbell, Zap, RotateCcw } from "lucide-react";
 import { cn } from "@/utils";
 import { LucideIcon } from "lucide-react";
 
-type WorkoutLog = Database['public']['Tables']['workout_logs']['Row'];
+type WorkoutLog = Database['public']['Tables']['strength_sets']['Row'];
 type StatTileProps = {
   label: string;
   value: string | number;

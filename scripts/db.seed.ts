@@ -27,10 +27,10 @@ const main = async () => {
   // ===========================================================================
   console.log('🧹 Cleaning up database...');
   const tables = [
-    'program_items', 'nutrition_meals', 'nutrition_programs', 
-    'workout_logs', 'cardio_logs', 'workouts', 
-    'ai_processing_queue', 'ai_insights', 'body_metrics', 
-    'goals', 'programs', 'profiles', 'exercise_library'
+    'training_plan_items', 'meal_plan_meals', 'meal_plans', 
+    'strength_sets', 'cardio_sessions', 'training_sessions', 
+    'ai_processing_queue', 'ai_insights', 'body_measurements', 
+    'fitness_goals', 'training_plans', 'profiles', 'exercise_catalog'
   ] as const;
 
   for (const table of tables) {
@@ -80,7 +80,7 @@ const main = async () => {
     { name: 'Jump Rope', category: 'cardio', muscle_groups: ['legs', 'heart'], equipment: 'rope' },
   ];
 
-  const { data: exData, error: exError } = await supabase.from('exercise_library').insert(exercises).select();
+  const { data: exData, error: exError } = await supabase.from('exercise_catalog').insert(exercises).select();
   if (exError) throw new Error(`Exercise insert failed: ${exError.message}`);
 
   const strengthExercises = exData?.filter(e => e.category !== 'cardio') || [];
@@ -116,7 +116,7 @@ const main = async () => {
   // 4. CREATE PROGRAM
   // ===========================================================================
   console.log('📁 Creating Program...');
-  const { data: program } = await supabase.from('programs').insert({
+  const { data: program } = await supabase.from('training_plans').insert({
     user_id: userId,
     name: 'High Volume Block',
     description: '10 Unique Workouts, High Volume Intensity',
@@ -133,7 +133,7 @@ const main = async () => {
   
   const referenceWorkouts = [];
   for (let i = 1; i <= 10; i++) {
-    const { data: w, error: wError } = await supabase.from('workouts').insert({
+    const { data: w, error: wError } = await supabase.from('training_sessions').insert({
       user_id: userId,
       name: `Block Day ${i}`,
       status: 'draft',
@@ -155,7 +155,7 @@ const main = async () => {
     item_type: 'workout',
     created_at: now
   }));
-  await supabase.from('program_items').insert(programItems);
+  await supabase.from('training_plan_items').insert(programItems);
 
   // ===========================================================================
   // 6. GENERATE 30 DAYS OF HISTORY
@@ -177,7 +177,7 @@ const main = async () => {
     if (!refWorkout) continue;
 
     // Create Completed Workout (History)
-    const { data: doneWorkout } = await supabase.from('workouts').insert({
+    const { data: doneWorkout } = await supabase.from('training_sessions').insert({
       user_id: userId,
       name: `${refWorkout.name} (Completed)`,
       date: dateISO,
@@ -252,19 +252,19 @@ const main = async () => {
   console.log(`📝 Inserting ${historyLogs.length} Strength Logs...`);
   const chunkSize = 200;
   for (let i = 0; i < historyLogs.length; i += chunkSize) {
-    const { error } = await supabase.from('workout_logs').insert(historyLogs.slice(i, i + chunkSize));
+    const { error } = await supabase.from('strength_sets').insert(historyLogs.slice(i, i + chunkSize));
     if (error) console.error("Error inserting logs:", error.message);
   }
 
   console.log(`🏃 Inserting ${historyCardio.length} Cardio Logs...`);
-  const { error: cardioError } = await supabase.from('cardio_logs').insert(historyCardio);
+  const { error: cardioError } = await supabase.from('cardio_sessions').insert(historyCardio);
   if (cardioError) console.error("Error inserting cardio:", cardioError.message);
 
   // ===========================================================================
   // 7. NUTRITION
   // ===========================================================================
   console.log('🍎 Adding Nutrition Data...');
-  const { data: nutProgram } = await supabase.from('nutrition_programs').insert({
+  const { data: nutProgram } = await supabase.from('meal_plans').insert({
     user_id: userId,
     name: 'Volume Phase Diet',
     start_date: now,
@@ -285,7 +285,7 @@ const main = async () => {
             fats_g: 20
         });
     }
-    await supabase.from('nutrition_meals').insert(meals);
+    await supabase.from('meal_plan_meals').insert(meals);
   }
 
   console.log('✅ SEED COMPLETE!');

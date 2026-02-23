@@ -24,7 +24,7 @@ export default async function PublicNutritionPage({ params }: { params: Promise<
 
     // 1. Fetch Program
     const { data: program } = await supabase
-        .from("nutrition_programs")
+        .from("meal_plans")
         .select("*")
         .eq("id", id)
         .eq("is_public", true) // Enforce public check
@@ -34,7 +34,7 @@ export default async function PublicNutritionPage({ params }: { params: Promise<
 
     // 2. Fetch Meals (Ordered by position now, not date)
     const { data: meals } = await supabase
-        .from("nutrition_meals")
+        .from("meal_plan_meals")
         .select("*")
         .eq("program_id", id)
         .order("position", { ascending: true });

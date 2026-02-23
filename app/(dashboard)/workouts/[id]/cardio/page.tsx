@@ -42,7 +42,7 @@ export default function ManageCardioPage() {
   if (isLoading) return <CardioSkeleton />;
   if (!workout) return <div className="p-8 text-center">Workout not found</div>;
 
-  const cardioLogs = workout.cardio_logs || [];
+  const cardioLogs = workout.cardio_sessions || [];
 
   // --- Handlers ---
 

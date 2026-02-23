@@ -4,7 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Database } from "@/types/database";
 import { Trophy, Scale, Repeat } from "lucide-react";
 
-type WorkoutLog = Database['public']['Tables']['workout_logs']['Row'];
+type WorkoutLog = Database['public']['Tables']['strength_sets']['Row'];
 
 export function PersonalRecords({ logs }: { logs: WorkoutLog[] }) {
   if (!logs.length) return null;

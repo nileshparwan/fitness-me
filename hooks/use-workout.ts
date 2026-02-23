@@ -12,8 +12,8 @@ export function useWorkout(id: string) {
     queryKey: ["workout", id],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("workouts")
-        .select(`*, workout_logs (*), cardio_logs (*)`)
+        .from("training_sessions")
+        .select(`*, strength_sets (*), cardio_sessions (*)`)
         .eq("id", id)
         .single();
       if (error) throw error;
@@ -32,8 +32,8 @@ export function useWorkouts() {
     queryKey: ["workouts"],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("workouts")
-        .select(`*, workout_logs (*)`)
+        .from("training_sessions")
+        .select(`*, strength_sets (*)`)
         .order("date", { ascending: false });
       if (error) throw error;
       return data;

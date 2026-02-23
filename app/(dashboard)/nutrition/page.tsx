@@ -44,7 +44,7 @@ const NutritionGridCard = ({
        "group relative overflow-hidden transition-all duration-200",
        "w-[200px] h-[130px] shrink-0", 
        "flex flex-col justify-between",
-       "hover:shadow-md hover:border-primary/50 border-border bg-card"
+       "hover:shadow-md hover:border-primary/50 border-border bg-card py-0"
     )}>
      <CardContent className="p-3 flex flex-col h-full">
        

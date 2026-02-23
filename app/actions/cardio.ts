@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { Database } from "@/types/database";
 import { calculatePaceMinutesPerKm, formatPace } from "@/utils/fitness-logic";
 
-type CardioLogInsert = Database["public"]["Tables"]["cardio_logs"]["Insert"];
+type CardioLogInsert = Database["public"]["Tables"]["cardio_sessions"]["Insert"];
 type CardioLogUpsertInput = Omit<CardioLogInsert, "user_id" | "created_at" | "updated_at">;
 
 export async function upsertCardioLog(data: CardioLogUpsertInput) {
@@ -17,7 +17,7 @@ export async function upsertCardioLog(data: CardioLogUpsertInput) {
 
   if (data.workout_id) {
     const { data: workout } = await supabase
-      .from("workouts")
+      .from("training_sessions")
       .select("id")
       .eq("id", data.workout_id)
       .eq("user_id", user.id)
@@ -41,7 +41,7 @@ export async function upsertCardioLog(data: CardioLogUpsertInput) {
 
   // 3. Upsert
   const { error } = await supabase
-    .from("cardio_logs")
+    .from("cardio_sessions")
     .upsert(payload)
     .select();
 
@@ -65,7 +65,7 @@ export async function deleteCardioLog(id: string, workoutId: string) {
     if (!user) throw new Error("Unauthorized");
 
     const { data: ownedWorkout } = await supabase
-      .from("workouts")
+      .from("training_sessions")
       .select("id")
       .eq("id", workoutId)
       .eq("user_id", user.id)
@@ -73,7 +73,7 @@ export async function deleteCardioLog(id: string, workoutId: string) {
     if (!ownedWorkout) throw new Error("Forbidden");
     
     const { error } = await supabase
-      .from("cardio_logs")
+      .from("cardio_sessions")
       .delete()
       .eq("id", id)
       .eq("user_id", user.id);

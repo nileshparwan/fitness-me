@@ -15,7 +15,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useExercises } from "@/hooks/use-exercise";
 import { Database } from "@/types/database";
 
-type Exercise = Database["public"]["Tables"]["exercise_library"]["Row"];
+type Exercise = Database["public"]["Tables"]["exercise_catalog"]["Row"];
 
 interface ExerciseSelectorProps {
   onSelect: (exercise: { id: string; name: string }) => void;

@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { profileSchema, goalsSchema, ProfileFormValues, GoalsFormValues } from "@/lib/validations/settings";
 import { Database } from "@/types/database";
 
-type GoalsInsert = Database["public"]["Tables"]["goals"]["Insert"];
+type GoalsInsert = Database["public"]["Tables"]["fitness_goals"]["Insert"];
 
 const inferGoalType = (currentWeight: number, targetWeight: number) => {
   if (targetWeight < currentWeight) return "weight_loss";
@@ -57,7 +57,7 @@ export async function updateGoals(data: GoalsFormValues) {
 
   const parsed = goalsSchema.parse(data);
   const { data: existingGoal } = await supabase
-    .from("goals")
+    .from("fitness_goals")
     .select("goal_type")
     .eq("user_id", user.id)
     .maybeSingle();
@@ -82,7 +82,7 @@ export async function updateGoals(data: GoalsFormValues) {
   };
 
   const { error } = await supabase
-    .from("goals")
+    .from("fitness_goals")
     .upsert(payload, { onConflict: 'user_id' });
 
   if (error) throw error;

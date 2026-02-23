@@ -30,7 +30,7 @@ import { linkWorkoutToPrograms } from "@/app/actions/program";
 import { Database } from "@/types/database";
 import type { WorkoutActionInput } from "@/app/actions/workout";
 
-type Program = Database['public']['Tables']['programs']['Row'];
+type Program = Database['public']['Tables']['training_plans']['Row'];
 
 interface WorkoutFormProps {
   initialData?: WorkoutFormValues;

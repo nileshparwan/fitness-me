@@ -5,7 +5,7 @@ import { Database } from "@/types/database";
 import { calculateCardioInsights } from "@/utils/fitness-logic";
 import { Brain, Flame, Timer } from "lucide-react";
 
-type CardioLog = Database['public']['Tables']['cardio_logs']['Row'];
+type CardioLog = Database['public']['Tables']['cardio_sessions']['Row'];
 
 export function CardioCoach({ logs, birthDate }: { logs: CardioLog[], birthDate?: string | null }) {
   // Ensure we have enough data before calculating

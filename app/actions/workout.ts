@@ -5,9 +5,9 @@ import { revalidatePath } from "next/cache";
 import { Database } from "@/types/database";
 
 // 1. DERIVED TYPES FROM DATABASE
-type WorkoutInsert = Database['public']['Tables']['workouts']['Insert'];
-type WorkoutLogInsert = Database['public']['Tables']['workout_logs']['Insert'];
-type CardioLogInsert = Database['public']['Tables']['cardio_logs']['Insert'];
+type WorkoutInsert = Database['public']['Tables']['training_sessions']['Insert'];
+type WorkoutLogInsert = Database['public']['Tables']['strength_sets']['Insert'];
+type CardioLogInsert = Database['public']['Tables']['cardio_sessions']['Insert'];
 
 // 2. FORM INPUT TYPE
 export type WorkoutActionInput = {
@@ -117,7 +117,7 @@ export async function createWorkoutAction(data: WorkoutActionInput) {
   };
 
   const { data: workout, error: wError } = await supabase
-    .from("workouts")
+    .from("training_sessions")
     .insert(workoutPayload)
     .select()
     .single();
@@ -131,8 +131,8 @@ export async function createWorkoutAction(data: WorkoutActionInput) {
     data.date.toISOString()
   );
 
-  if (strengthLogs.length > 0) await supabase.from("workout_logs").insert(strengthLogs);
-  if (cardioLogs.length > 0) await supabase.from("cardio_logs").insert(cardioLogs);
+  if (strengthLogs.length > 0) await supabase.from("strength_sets").insert(strengthLogs);
+  if (cardioLogs.length > 0) await supabase.from("cardio_sessions").insert(cardioLogs);
 
   revalidatePath("/workouts");
   return workout;
@@ -148,7 +148,7 @@ export async function updateWorkoutAction(id: string, data: Partial<WorkoutActio
   if (!user) throw new Error("Unauthorized");
 
   const { data: ownedWorkout } = await supabase
-    .from("workouts")
+    .from("training_sessions")
     .select("id")
     .eq("id", id)
     .eq("user_id", user.id)
@@ -156,7 +156,7 @@ export async function updateWorkoutAction(id: string, data: Partial<WorkoutActio
   if (!ownedWorkout) throw new Error("Forbidden");
 
   // A. Update Header
-  const updateData: Database['public']['Tables']['workouts']['Update'] = {};
+  const updateData: Database['public']['Tables']['training_sessions']['Update'] = {};
   if (data.name) updateData.name = data.name;
   if (data.date) updateData.date = data.date.toISOString();
   if (data.notes !== undefined) updateData.notes = data.notes;
@@ -167,7 +167,7 @@ export async function updateWorkoutAction(id: string, data: Partial<WorkoutActio
 
   if (Object.keys(updateData).length > 0) {
     const { error } = await supabase
-      .from("workouts")
+      .from("training_sessions")
       .update(updateData)
       .eq("id", id)
       .eq("user_id", user.id);
@@ -177,14 +177,14 @@ export async function updateWorkoutAction(id: string, data: Partial<WorkoutActio
   // B. Wipe & Rewrite Logs
   if (data.exercises) {
     // 1. Delete existing
-    await supabase.from("workout_logs").delete().eq("workout_id", id);
-    await supabase.from("cardio_logs").delete().eq("workout_id", id);
+    await supabase.from("strength_sets").delete().eq("workout_id", id);
+    await supabase.from("cardio_sessions").delete().eq("workout_id", id);
 
     // 2. Prepare new
     const dateStr = data.date ? data.date.toISOString() : new Date().toISOString();
     const { strengthLogs, cardioLogs } = buildWorkoutLogs(data.exercises, id, user.id, dateStr);
-    if (strengthLogs.length > 0) await supabase.from("workout_logs").insert(strengthLogs);
-    if (cardioLogs.length > 0) await supabase.from("cardio_logs").insert(cardioLogs);
+    if (strengthLogs.length > 0) await supabase.from("strength_sets").insert(strengthLogs);
+    if (cardioLogs.length > 0) await supabase.from("cardio_sessions").insert(cardioLogs);
   }
 
   revalidatePath("/workouts");
@@ -202,7 +202,7 @@ export async function deleteWorkoutAction(ids: string | string[]) {
   const idArray = Array.isArray(ids) ? ids : [ids];
 
   const { error } = await supabase
-    .from("workouts")
+    .from("training_sessions")
     .delete()
     .eq("user_id", user.id)
     .in("id", idArray);

@@ -10,8 +10,8 @@ import { cn } from "@/utils";
 import { WorkoutStatusSelect } from "@/components/workout/workout-status-select"; 
 import { Database } from "@/types/database";
 
-type Workout = Database['public']['Tables']['workouts']['Row'] & {
-  workout_logs: Database['public']['Tables']['workout_logs']['Row'][];
+type Workout = Database['public']['Tables']['training_sessions']['Row'] & {
+  strength_sets: Database['public']['Tables']['strength_sets']['Row'][];
 };
 
 interface WorkoutCardProps {
@@ -88,7 +88,7 @@ export function WorkoutCard({ workout }: WorkoutCardProps) {
                <div className="h-3 w-px bg-border" /> {/* Divider */}
                <div className="flex items-center gap-1.5">
                   <Dumbbell className="h-3.5 w-3.5" />
-                  <span>{workout.workout_logs?.length || 0} Exercises</span>
+                  <span>{workout.strength_sets?.length || 0} Exercises</span>
                </div>
             </div>
 

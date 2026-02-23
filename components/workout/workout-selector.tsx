@@ -12,7 +12,7 @@ import { addWorkoutsToProgram } from "@/app/actions/program";
 import { useProgramStore } from "@/stores/use-program-store";
 import { Database } from "@/types/database";
 
-type Workout = Database['public']['Tables']['workouts']['Row'];
+type Workout = Database['public']['Tables']['training_sessions']['Row'];
 
 export function WorkoutSelector({ programId, onClose }: { programId: string; onClose: () => void }) {
   const { history } = useWorkouts();

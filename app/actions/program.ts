@@ -4,8 +4,8 @@ import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { Database } from "@/types/database";
 
-type ProgramInsert = Database['public']['Tables']['programs']['Insert'];
-type ProgramItemInsert = Database['public']['Tables']['program_items']['Insert'];
+type ProgramInsert = Database['public']['Tables']['training_plans']['Insert'];
+type ProgramItemInsert = Database['public']['Tables']['training_plan_items']['Insert'];
 
 export async function createProgram(formData: FormData) {
     const supabase = await createClient();
@@ -20,16 +20,16 @@ export async function createProgram(formData: FormData) {
         // Add other defaults if your DB requires them (e.g. is_public: false)
     };
 
-    const { error } = await supabase.from("programs").insert(payload);
+    const { error } = await supabase.from("training_plans").insert(payload);
 
     if (error) throw new Error(error.message);
     revalidatePath("/programs");
 }
 
-export async function updateProgram(id: string, data: Database['public']['Tables']['programs']['Update']) {
+export async function updateProgram(id: string, data: Database['public']['Tables']['training_plans']['Update']) {
     const supabase = await createClient();
     const { error } = await supabase
-        .from("programs")
+        .from("training_plans")
         .update(data)
         .eq("id", id);
 
@@ -41,7 +41,7 @@ export async function updateProgram(id: string, data: Database['public']['Tables
 export async function deletePrograms(ids: string[]) {
     const supabase = await createClient();
     const { error } = await supabase
-        .from("programs")
+        .from("training_plans")
         .delete()
         .in("id", ids);
 
@@ -57,7 +57,7 @@ export async function addWorkoutsToProgram(programId: string, workoutIds: string
     if (uniqueWorkoutIds.length === 0) return;
 
     const { data: existingItems } = await supabase
-        .from("program_items")
+        .from("training_plan_items")
         .select("workout_id")
         .eq("program_id", programId)
         .in("workout_id", uniqueWorkoutIds);
@@ -73,7 +73,7 @@ export async function addWorkoutsToProgram(programId: string, workoutIds: string
 
     // Get current count to append at the end
     const { count } = await supabase
-        .from("program_items")
+        .from("training_plan_items")
         .select("*", { count: 'exact', head: true })
         .eq("program_id", programId);
 
@@ -87,7 +87,7 @@ export async function addWorkoutsToProgram(programId: string, workoutIds: string
         day_label: "Unscheduled"
     }));
 
-    const { error } = await supabase.from("program_items").insert(items);
+    const { error } = await supabase.from("training_plan_items").insert(items);
     if (error) throw new Error(error.message);
 
     revalidatePath(`/programs/${programId}`);
@@ -97,7 +97,7 @@ export async function addWorkoutsToProgram(programId: string, workoutIds: string
 export async function removeItemsFromProgram(itemIds: string[], programId: string) {
     const supabase = await createClient();
     const { error } = await supabase
-        .from("program_items")
+        .from("training_plan_items")
         .delete()
         .in("id", itemIds);
 
@@ -121,7 +121,7 @@ export async function updateProgramItemOrder(items: { id: string; order_index: n
     // We cast to ProgramItemInsert[] because upsert validates against the Insert schema
     // which requires non-null fields (like item_type), even though we are updating.
     const { error } = await supabase
-        .from("program_items")
+        .from("training_plan_items")
         .upsert(updates as ProgramItemInsert[], { onConflict: 'id' });
 
     if (error) throw new Error(error.message);
@@ -136,7 +136,7 @@ export async function linkWorkoutToPrograms(workoutId: string, programIds: strin
     if (uniqueProgramIds.length === 0) return;
 
     const { data: existingItems } = await supabase
-        .from("program_items")
+        .from("training_plan_items")
         .select("program_id")
         .in("program_id", uniqueProgramIds)
         .eq("workout_id", workoutId);
@@ -158,6 +158,6 @@ export async function linkWorkoutToPrograms(workoutId: string, programIds: strin
         order_index: 999 // Append to end
     }));
 
-    const { error } = await supabase.from("program_items").insert(items);
+    const { error } = await supabase.from("training_plan_items").insert(items);
     if (error) throw new Error("Failed to link programs");
 }

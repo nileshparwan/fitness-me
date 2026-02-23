@@ -10,7 +10,7 @@ import { groupLogsByExercise } from "@/utils/log";
 import { Button } from "@/components/ui/button";
 import { Database } from "@/types/database";
 
-type WorkoutLog = Database['public']['Tables']['workout_logs']['Row'];
+type WorkoutLog = Database['public']['Tables']['strength_sets']['Row'];
 
 export default function EditWorkoutPage() {
   const { id } = useParams() as { id: string };
@@ -38,7 +38,7 @@ export default function EditWorkoutPage() {
 
   // --- TRANSFORMATION LOGIC ---
   // Ensure we pass the logs as strictly typed rows
-  const groupedExercises = groupLogsByExercise((workout.workout_logs as WorkoutLog[]) || []);
+  const groupedExercises = groupLogsByExercise((workout.strength_sets as WorkoutLog[]) || []);
 
   const initialData = {
     name: workout.name,

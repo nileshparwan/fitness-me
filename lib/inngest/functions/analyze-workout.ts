@@ -36,7 +36,7 @@ export const analyzeWorkout = inngest.createFunction(
       // // Step 3: Save Data to Supabase Tables
       // await step.run("save-to-database", async () => {
       //   // A. Create Workout Header
-      //   const { data: workout } = await supabase.from("workouts").insert({
+      //   const { data: workout } = await supabase.from("training_sessions").insert({
       //     user_id: userId,
       //     name: result.name,
       //     status: "active",
@@ -56,7 +56,7 @@ export const analyzeWorkout = inngest.createFunction(
       //     }))
       //   );
   
-      //   await supabase.from("workout_logs").insert(logs);
+      //   await supabase.from("strength_sets").insert(logs);
       // });
   
       // // Step 4: Finalize Queue Status

@@ -14,8 +14,8 @@ import { format, parseISO, isValid } from "date-fns";
 import { Dumbbell, Activity, CalendarDays } from "lucide-react";
 import { Database } from "@/types/database";
 
-type WorkoutLog = Database["public"]["Tables"]["workout_logs"]["Row"];
-type CardioLog = Database["public"]["Tables"]["cardio_logs"]["Row"];
+type WorkoutLog = Database["public"]["Tables"]["strength_sets"]["Row"];
+type CardioLog = Database["public"]["Tables"]["cardio_sessions"]["Row"];
 type HistoryLog = WorkoutLog | CardioLog;
 
 interface Props {

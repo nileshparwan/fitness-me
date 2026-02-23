@@ -1,6 +1,6 @@
 import { Database } from "@/types/database";
 
-type WorkoutLog = Database["public"]["Tables"]["workout_logs"]["Row"];
+type WorkoutLog = Database["public"]["Tables"]["strength_sets"]["Row"];
 
 type GroupedExerciseLogs = {
   exercise_id: string | null;

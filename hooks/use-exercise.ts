@@ -21,7 +21,7 @@ export function useExercises(search?: string) {
     queryKey: exerciseKeys.list(search),
     queryFn: async () => {
       let query = supabase
-        .from("exercise_library")
+        .from("exercise_catalog")
         .select("*")
         .order("name");
 

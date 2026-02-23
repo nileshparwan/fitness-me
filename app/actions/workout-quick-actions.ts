@@ -4,10 +4,10 @@ import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { Database } from "@/types/database";
 
-type ExerciseLibraryRow = Database["public"]["Tables"]["exercise_library"]["Row"];
+type ExerciseLibraryRow = Database["public"]["Tables"]["exercise_catalog"]["Row"];
 type QuickExercise = Pick<ExerciseLibraryRow, "id" | "name" | "category">;
-type CardioInsert = Database["public"]["Tables"]["cardio_logs"]["Insert"];
-type WorkoutLogInsert = Database["public"]["Tables"]["workout_logs"]["Insert"];
+type CardioInsert = Database["public"]["Tables"]["cardio_sessions"]["Insert"];
+type WorkoutLogInsert = Database["public"]["Tables"]["strength_sets"]["Insert"];
 
 export async function getOpenWorkouts() {
   const supabase = await createClient();
@@ -15,7 +15,7 @@ export async function getOpenWorkouts() {
   if (!user) return [];
 
   const { data } = await supabase
-    .from("workouts")
+    .from("training_sessions")
     .select("id, name, date, status")
     .in("status", ["active", "draft"]) 
     .eq("user_id", user.id)
@@ -31,7 +31,7 @@ export async function addExerciseToWorkout(workoutId: string, exercise: QuickExe
   if (!user) throw new Error("Unauthorized");
 
   const { data: workout } = await supabase
-    .from("workouts")
+    .from("training_sessions")
     .select("id")
     .eq("id", workoutId)
     .eq("user_id", user.id)
@@ -50,7 +50,7 @@ export async function addExerciseToWorkout(workoutId: string, exercise: QuickExe
       distance_km: 0,
     };
 
-    const { error } = await supabase.from("cardio_logs").insert(payload);
+    const { error } = await supabase.from("cardio_sessions").insert(payload);
     if (error) {
       console.error("Add Exercise Error:", error.message);
       throw new Error(error.message);
@@ -65,7 +65,7 @@ export async function addExerciseToWorkout(workoutId: string, exercise: QuickExe
       weight: 0,
     };
 
-    const { error } = await supabase.from("workout_logs").insert(payload);
+    const { error } = await supabase.from("strength_sets").insert(payload);
     if (error) {
       console.error("Add Exercise Error:", error.message);
       throw new Error(error.message);
@@ -84,7 +84,7 @@ export async function createWorkoutWithExercise(exercise: QuickExercise) {
 
   // 1. Create Workout Header
   const { data: workout, error: wError } = await supabase
-    .from("workouts")
+    .from("training_sessions")
     .insert({
       user_id: user.id,
       name: `${exercise.name} Session`,

@@ -16,9 +16,9 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Database } from "@/types/database";
 
-type WorkoutLog = Database["public"]["Tables"]["workout_logs"]["Row"];
-type CardioLog = Database["public"]["Tables"]["cardio_logs"]["Row"];
-type Workout = Database["public"]["Tables"]["workouts"]["Row"];
+type WorkoutLog = Database["public"]["Tables"]["strength_sets"]["Row"];
+type CardioLog = Database["public"]["Tables"]["cardio_sessions"]["Row"];
+type Workout = Database["public"]["Tables"]["training_sessions"]["Row"];
 
 interface PrintViewProps {
   workout: Workout & { user?: { email: string } | null };

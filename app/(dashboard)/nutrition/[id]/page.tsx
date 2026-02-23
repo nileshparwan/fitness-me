@@ -63,7 +63,7 @@ export default function ProgramPage({ params }: { params: Promise<{ id: string }
     queryKey: ["program-meta", id],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("nutrition_programs")
+        .from("meal_plans")
         .select("*")
         .eq("id", id)
         .maybeSingle();

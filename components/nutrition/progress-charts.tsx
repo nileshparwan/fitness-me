@@ -14,7 +14,7 @@ import { ProgramSelector } from "./program-selector";
 
 // --- TYPES ---
 interface Props {
-  programs: (NutritionProgram & { nutrition_meals: NutritionMeal[] })[];
+  programs: (NutritionProgram & { meal_plan_meals: NutritionMeal[] })[];
   goals: GoalData | null;
 }
 
@@ -56,7 +56,7 @@ export function ProgressCharts({ programs, goals }: Props) {
       const today = startOfToday();
 
       // 1. Calculate Daily Template Stats
-      const dailyBase = selectedProgram.nutrition_meals
+      const dailyBase = selectedProgram.meal_plan_meals
       .filter(meal => meal.status === 'active')
       .reduce((acc, meal) => ({
         calories: acc.calories + (meal.calories || 0),

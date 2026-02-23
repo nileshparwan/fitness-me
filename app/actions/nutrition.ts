@@ -9,7 +9,7 @@ import { NutritionProgram, NutritionMeal, ProgramSummary } from "@/types/nutriti
 export async function getPrograms(): Promise<NutritionProgram[]> {
     const supabase = await createClient();
     const { data } = await supabase
-        .from("nutrition_programs")
+        .from("meal_plans")
         .select("*")
         .order("start_date", { ascending: false });
     return data || [];
@@ -19,7 +19,7 @@ export async function getPrograms(): Promise<NutritionProgram[]> {
 export async function getProgramOptions(): Promise<ProgramSummary[]> {
     const supabase = await createClient();
     const { data } = await supabase
-        .from("nutrition_programs")
+        .from("meal_plans")
         .select("id, name")
         .order("start_date", { ascending: false });
     return data || [];
@@ -42,7 +42,7 @@ export async function createNutritionProgram(formData: FormData) {
         status: 'active' // Default status
     };
 
-    const { error } = await supabase.from("nutrition_programs").insert(programData);
+    const { error } = await supabase.from("meal_plans").insert(programData);
     if (error) throw new Error(error.message);
 
     revalidatePath("/nutrition");
@@ -61,7 +61,7 @@ export async function updateNutritionProgram(formData: FormData, programId: stri
     };
 
     const { error } = await supabase
-        .from("nutrition_programs")
+        .from("meal_plans")
         .update(updates)
         .eq("id", programId);
 
@@ -73,20 +73,20 @@ export async function updateNutritionProgram(formData: FormData, programId: stri
 
 export async function deleteProgram(id: string) {
     const supabase = await createClient();
-    await supabase.from("nutrition_programs").delete().eq("id", id);
+    await supabase.from("meal_plans").delete().eq("id", id);
     revalidatePath("/nutrition");
 }
 
 export async function updateProgramStatus(programId: string, status: string) {
     const supabase = await createClient();
-    await supabase.from("nutrition_programs").update({ status }).eq("id", programId);
+    await supabase.from("meal_plans").update({ status }).eq("id", programId);
     revalidatePath("/nutrition");
     revalidatePath(`/nutrition/program/${programId}`);
 }
 
 export async function updateProgramNotes(programId: string, notes: string) {
     const supabase = await createClient();
-    await supabase.from("nutrition_programs").update({ notes }).eq("id", programId);
+    await supabase.from("meal_plans").update({ notes }).eq("id", programId);
     revalidatePath(`/nutrition/program/${programId}`);
 }
 
@@ -97,7 +97,7 @@ export async function duplicateProgram(programId: string) {
 
     // 1. Fetch Original
     const { data: original } = await supabase
-        .from("nutrition_programs")
+        .from("meal_plans")
         .select("*")
         .eq("id", programId)
         .single();
@@ -106,7 +106,7 @@ export async function duplicateProgram(programId: string) {
 
     // 2. Create Copy
     const { data: newProgram, error: progError } = await supabase
-        .from("nutrition_programs")
+        .from("meal_plans")
         .insert({
             user_id: user.id,
             name: `Copy of ${original.name}`,
@@ -124,7 +124,7 @@ export async function duplicateProgram(programId: string) {
 
     // 3. Fetch Meals
     const { data: meals } = await supabase
-        .from("nutrition_meals")
+        .from("meal_plan_meals")
         .select("*")
         .eq("program_id", programId);
 
@@ -143,7 +143,7 @@ export async function duplicateProgram(programId: string) {
             position: m.position
         }));
 
-        const { error: mealError } = await supabase.from("nutrition_meals").insert(newMeals);
+        const { error: mealError } = await supabase.from("meal_plan_meals").insert(newMeals);
         if (mealError) throw new Error(mealError.message);
     }
 
@@ -155,7 +155,7 @@ export async function duplicateProgram(programId: string) {
 export async function getProgramMeals(programId: string): Promise<NutritionMeal[]> {
     const supabase = await createClient();
     const { data } = await supabase
-        .from("nutrition_meals")
+        .from("meal_plan_meals")
         .select("*")
         .eq("program_id", programId)
         .order("position", { ascending: true }); 
@@ -167,7 +167,7 @@ export async function addMeal(formData: FormData, programId: string) {
     
     // Get max position (Optimized: select only position)
     const { data: maxPos } = await supabase
-      .from("nutrition_meals")
+      .from("meal_plan_meals")
       .select("position")
       .eq("program_id", programId)
       .order("position", { ascending: false })
@@ -189,7 +189,7 @@ export async function addMeal(formData: FormData, programId: string) {
       position: nextPosition
     };
   
-    const { error } = await supabase.from("nutrition_meals").insert(mealData);
+    const { error } = await supabase.from("meal_plan_meals").insert(mealData);
     if (error) throw new Error(error.message);
   
     revalidatePath(`/nutrition/program/${programId}`);
@@ -210,7 +210,7 @@ export async function updateMeal(formData: FormData, mealId: string, programId: 
       // Note: We don't update date/position here usually
     };
   
-    const { error } = await supabase.from("nutrition_meals").update(updates).eq("id", mealId);
+    const { error } = await supabase.from("meal_plan_meals").update(updates).eq("id", mealId);
     if (error) throw new Error(error.message);
     
     revalidatePath(`/nutrition/program/${programId}`);
@@ -218,22 +218,22 @@ export async function updateMeal(formData: FormData, mealId: string, programId: 
 
 export async function deleteMeal(mealId: string) {
     const supabase = await createClient();
-    await supabase.from("nutrition_meals").delete().eq("id", mealId);
+    await supabase.from("meal_plan_meals").delete().eq("id", mealId);
     revalidatePath("/nutrition");
 }
 
 export async function copyMeal(originalMealId: string, targetProgramId: string) {
     const supabase = await createClient();
   
-    const { data: original } = await supabase.from("nutrition_meals").select("*").eq("id", originalMealId).single();
+    const { data: original } = await supabase.from("meal_plan_meals").select("*").eq("id", originalMealId).single();
     if (!original) throw new Error("Meal not found");
   
-    const { data: maxPos } = await supabase.from("nutrition_meals").select("position").eq("program_id", targetProgramId).order("position", { ascending: false }).limit(1).single();
+    const { data: maxPos } = await supabase.from("meal_plan_meals").select("position").eq("program_id", targetProgramId).order("position", { ascending: false }).limit(1).single();
     
     // Strip system fields
     const { id, created_at, updated_at, ...mealData } = original;
     
-    await supabase.from("nutrition_meals").insert({
+    await supabase.from("meal_plan_meals").insert({
       ...mealData,
       program_id: targetProgramId,
       position: (maxPos?.position ?? 0) + 1
@@ -245,9 +245,9 @@ export async function copyMeal(originalMealId: string, targetProgramId: string) 
 export async function moveMeal(mealId: string, targetProgramId: string) {
     const supabase = await createClient();
 
-    const { data: maxPos } = await supabase.from("nutrition_meals").select("position").eq("program_id", targetProgramId).order("position", { ascending: false }).limit(1).single();
+    const { data: maxPos } = await supabase.from("meal_plan_meals").select("position").eq("program_id", targetProgramId).order("position", { ascending: false }).limit(1).single();
 
-    const { error } = await supabase.from("nutrition_meals").update({
+    const { error } = await supabase.from("meal_plan_meals").update({
         program_id: targetProgramId,
         position: (maxPos?.position ?? 0) + 1
     }).eq("id", mealId);
@@ -265,7 +265,7 @@ export async function updateMealPositions(updates: { id: string; position: numbe
 
     await Promise.all(
         updates.map(u =>
-            supabase.from("nutrition_meals").update({ position: u.position }).eq("id", u.id)
+            supabase.from("meal_plan_meals").update({ position: u.position }).eq("id", u.id)
         )
     );
 
@@ -277,7 +277,7 @@ export async function updateMealStatus(mealId: string, status: 'active' | 'draft
     const supabase = await createClient();
     
     const { error } = await supabase
-      .from("nutrition_meals")
+      .from("meal_plan_meals")
       .update({ status })
       .eq("id", mealId);
   

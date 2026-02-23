@@ -8,7 +8,7 @@ import { cn } from "@/utils";
 import { WorkoutStatusSelect } from "@/components/workout/workout-status-select";
 import { Database } from "@/types/database";
 
-type WorkoutLog = Database["public"]["Tables"]["workout_logs"]["Row"];
+type WorkoutLog = Database["public"]["Tables"]["strength_sets"]["Row"];
 
 interface WorkoutListItemProps {
   workout: {
@@ -17,7 +17,7 @@ interface WorkoutListItemProps {
     status: string | null;
     date: string | Date;
     duration_minutes: number | null;
-    workout_logs: WorkoutLog[];
+    strength_sets: WorkoutLog[];
   };
 }
 
@@ -65,7 +65,7 @@ export function WorkoutListItem({ workout }: WorkoutListItemProps) {
             <Clock className="h-3 w-3" /> {workout.duration_minutes || 0}m
           </span>
           <span className="flex items-center gap-1">
-            <Dumbbell className="h-3 w-3" /> {workout.workout_logs?.length || 0} Ex
+            <Dumbbell className="h-3 w-3" /> {workout.strength_sets?.length || 0} Ex
           </span>
         </div>
       </Link>

@@ -9,14 +9,14 @@ import { EditableText } from "@/components/shared/editable-text";
 import { updateProgram } from "@/app/actions/program";
 import { Database } from "@/types/database";
 
-type Workout = Database['public']['Tables']['workouts']['Row'];
-type Program = Database['public']['Tables']['programs']['Row'];
-type ProgramItem = Database['public']['Tables']['program_items']['Row'] & {
+type Workout = Database['public']['Tables']['training_sessions']['Row'];
+type Program = Database['public']['Tables']['training_plans']['Row'];
+type ProgramItem = Database['public']['Tables']['training_plan_items']['Row'] & {
   workouts: Workout | null;
 };
 
 type ProgramWithDetails = Program & {
-  program_items: ProgramItem[];
+  training_plan_items: ProgramItem[];
 };
 
 interface ProgramPageProps {
@@ -30,24 +30,24 @@ export default async function ProgramPage({ params }: ProgramPageProps) {
 
   // 1. Fetch Program & Items
   const { data: rawProgram, error } = await supabase
-    .from("programs")
+    .from("training_plans")
     .select(`
       *, 
-      program_items (
+      training_plan_items (
         id,
         program_id,
         order_index,
         day_label,
         workout_id,
         item_type,
-        workouts (
+        workouts:training_sessions (
           *
         )
       )
     `)
     .eq("id", programId)
     // FIX: Add server-side sorting with correct syntax
-    .order("order_index", { referencedTable: "program_items", ascending: true })
+    .order("order_index", { referencedTable: "training_plan_items", ascending: true })
     .single();
 
   if (error || !rawProgram) {
@@ -58,7 +58,7 @@ export default async function ProgramPage({ params }: ProgramPageProps) {
 
   // 2. Fetch Library
   const { data: allWorkouts } = await supabase
-    .from("workouts")
+    .from("training_sessions")
     .select("*")
     .order("date", { ascending: false });
 

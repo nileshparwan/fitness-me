@@ -6,7 +6,7 @@ import { Brain, TrendingUp, Minus, Info } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Database } from "@/types/database";
 
-type WorkoutLogRow = Database['public']['Tables']['workout_logs']['Row'];
+type WorkoutLogRow = Database['public']['Tables']['strength_sets']['Row'];
 
 interface Props {
   logs: WorkoutLogRow[];

@@ -10,8 +10,8 @@ export function usePrograms() {
     queryKey: ["workout-programs"],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("programs")
-        .select("*, program_items(count)")
+        .from("training_plans")
+        .select("*, training_plan_items(count)")
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data;

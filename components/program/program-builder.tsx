@@ -28,14 +28,14 @@ import { addWorkoutsToProgram, updateProgramItemOrder } from "@/app/actions/prog
 import { WorkoutPicker } from "../workout/workout-picker";
 import { Database } from "@/types/database";
 
-type Workout = Database['public']['Tables']['workouts']['Row'];
-type Program = Database['public']['Tables']['programs']['Row'];
-type ProgramItem = Database['public']['Tables']['program_items']['Row'] & {
+type Workout = Database['public']['Tables']['training_sessions']['Row'];
+type Program = Database['public']['Tables']['training_plans']['Row'];
+type ProgramItem = Database['public']['Tables']['training_plan_items']['Row'] & {
   workouts: Workout | null;
 };
 
 type ProgramWithDetails = Program & {
-  program_items: ProgramItem[];
+  training_plan_items: ProgramItem[];
 };
 
 interface ProgramBuilderProps {
@@ -52,9 +52,9 @@ export function ProgramBuilder({ program, allWorkouts }: ProgramBuilderProps) {
   const isDesktop = useMediaQuery("(min-width: 1024px)");
 
   useEffect(() => {
-    const sorted = program.program_items?.sort((a, b) => (a.order_index ?? 0) - (b.order_index ?? 0)) || [];
+    const sorted = program.training_plan_items?.sort((a, b) => (a.order_index ?? 0) - (b.order_index ?? 0)) || [];
     setItems(sorted as any); 
-  }, [program.program_items, setItems]);
+  }, [program.training_plan_items, setItems]);
 
   const availableWorkouts = allWorkouts.filter(
     (w) => !items.some((item) => item.workout_id === w.id)

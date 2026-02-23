@@ -14,14 +14,14 @@ export const generateInsights = inngest.createFunction(
     // Step 1: Gather Context (Recent Workouts + Goal)
     const context = await step.run("fetch-user-data", async () => {
       const { data: workouts } = await supabase
-        .from("workouts")
+        .from("training_sessions")
         .select("name, date, status, overall_rating, duration_minutes")
         .eq("user_id", userId)
         .order("date", { ascending: false })
         .limit(5);
 
       const { data: goals } = await supabase
-        .from("goals")
+        .from("fitness_goals")
         .select("*")
         .eq("user_id", userId)
         .eq("status", "active")

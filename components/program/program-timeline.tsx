@@ -15,7 +15,7 @@ import { useProgramStore } from "@/stores/use-program-store";
 import { removeItemsFromProgram } from "@/app/actions/program";
 import { Database } from "@/types/database";
 
-type Workout = Database['public']['Tables']['workouts']['Row'];
+type Workout = Database['public']['Tables']['training_sessions']['Row'];
 
 interface UIProgramItem {
   id: string;
@@ -81,7 +81,7 @@ const TimelineItem = memo(function TimelineItem({ item, index, programId }: { it
   };
 
   // @ts-ignore 
-  const exerciseCount = item.workouts?.workout_logs?.[0]?.count ?? 0;
+  const exerciseCount = item.workouts?.strength_sets?.[0]?.count ?? 0;
 
   const handleRemove = async (e: React.MouseEvent) => {
     e.preventDefault();   // Prevent default link behavior

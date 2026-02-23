@@ -29,8 +29,8 @@ import { Database } from "@/types/database";
 import { LucideIcon } from "lucide-react";
 
 // Types
-type WorkoutLog = Database['public']['Tables']['workout_logs']['Row'];
-type CardioLog = Database['public']['Tables']['cardio_logs']['Row'];
+type WorkoutLog = Database['public']['Tables']['strength_sets']['Row'];
+type CardioLog = Database['public']['Tables']['cardio_sessions']['Row'];
 
 export default function WorkoutDetailPage() {
   const { id } = useParams() as { id: string };
@@ -42,8 +42,8 @@ export default function WorkoutDetailPage() {
   if (isLoading) return <WorkoutDetailSkeleton />;
   if (!workout) return <div className="p-12 text-center text-muted-foreground">Workout not found</div>;
 
-  const strengthLogs = (workout.workout_logs || []) as WorkoutLog[];
-  const cardioLogs = (workout.cardio_logs || []) as CardioLog[];
+  const strengthLogs = (workout.strength_sets || []) as WorkoutLog[];
+  const cardioLogs = (workout.cardio_sessions || []) as CardioLog[];
   const exercises = groupLogsByExercise(strengthLogs);
 
   const totalVolume = strengthLogs.reduce(

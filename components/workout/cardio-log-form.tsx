@@ -10,8 +10,8 @@ import { toast } from "sonner";
 import { upsertCardioLog } from "@/app/actions/cardio";
 import { Database } from "@/types/database";
 
-type CardioLog = Database['public']['Tables']['cardio_logs']['Row'];
-type CardioLogInsert = Database['public']['Tables']['cardio_logs']['Insert'];
+type CardioLog = Database['public']['Tables']['cardio_sessions']['Row'];
+type CardioLogInsert = Database['public']['Tables']['cardio_sessions']['Insert'];
 
 interface CardioLogFormProps {
   workoutId: string;

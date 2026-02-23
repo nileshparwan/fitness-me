@@ -7,9 +7,9 @@ import { Button } from "@/components/ui/button";
 import { WorkoutPDF } from "./workout-pdf-document";
 import { Database } from "@/types/database";
 
-type Workout = Database['public']['Tables']['workouts']['Row'];
-type WorkoutLog = Database['public']['Tables']['workout_logs']['Row'];
-type CardioLog = Database['public']['Tables']['cardio_logs']['Row'];
+type Workout = Database['public']['Tables']['training_sessions']['Row'];
+type WorkoutLog = Database['public']['Tables']['strength_sets']['Row'];
+type CardioLog = Database['public']['Tables']['cardio_sessions']['Row'];
 
 interface Props {
   workout: Workout & { user?: { email: string } | null };

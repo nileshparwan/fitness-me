@@ -17,9 +17,9 @@ export type HistoryEntry = {
     duration_minutes: number | null;
   };
 
-type WorkoutLogRow = Database["public"]["Tables"]["workout_logs"]["Row"];
-type CardioLogRow = Database["public"]["Tables"]["cardio_logs"]["Row"];
-type WorkoutRow = Database["public"]["Tables"]["workouts"]["Row"];
+type WorkoutLogRow = Database["public"]["Tables"]["strength_sets"]["Row"];
+type CardioLogRow = Database["public"]["Tables"]["cardio_sessions"]["Row"];
+type WorkoutRow = Database["public"]["Tables"]["training_sessions"]["Row"];
 
 export async function getExerciseHistory(exerciseName: string) {
     const supabase = await createClient();
@@ -28,7 +28,7 @@ export async function getExerciseHistory(exerciseName: string) {
     if (!user) return [];
 
     const { data: userWorkouts, error: workoutError } = await supabase
-      .from("workouts")
+      .from("training_sessions")
       .select("id")
       .eq("user_id", user.id);
 
@@ -42,7 +42,7 @@ export async function getExerciseHistory(exerciseName: string) {
     let strengthLogs: Pick<WorkoutLogRow, "created_at" | "weight" | "reps" | "calculated_1rm">[] = [];
     if (workoutIds.length > 0) {
       const { data: strengthData, error: strengthError } = await supabase
-        .from("workout_logs")
+        .from("strength_sets")
         .select("created_at, weight, reps, calculated_1rm")
         .eq("exercise_name", exerciseName)
         .in("workout_id", workoutIds)
@@ -56,7 +56,7 @@ export async function getExerciseHistory(exerciseName: string) {
     }
 
     const { data: cardioData, error: cardioError } = await supabase
-      .from("cardio_logs")
+      .from("cardio_sessions")
       .select("date, distance_km, duration_minutes")
       .eq("user_id", user.id)
       .eq("activity_type", exerciseName)
@@ -104,7 +104,7 @@ export async function getExercises({
     const supabase = await createClient();
 
     let query = supabase
-        .from("exercise_library")
+        .from("exercise_catalog")
         .select("*", { count: "exact" })
         .order("name", { ascending: true })
         .range(pageParam * PAGE_SIZE, (pageParam + 1) * PAGE_SIZE - 1);
@@ -129,7 +129,7 @@ export async function getExercises({
 export async function createExercise(values: ExerciseFormValues) {
     const supabase = await createClient();
 
-    const { error } = await supabase.from("exercise_library").insert({
+    const { error } = await supabase.from("exercise_catalog").insert({
         name: values.name,
         category: values.category,
         muscle_groups: values.muscle_groups,
@@ -149,7 +149,7 @@ export async function deleteExercise(id: string) {
 
     // FIX: Add select() or count explicitly to verify execution
     const { error, count } = await supabase
-        .from("exercise_library")
+        .from("exercise_catalog")
         .delete({ count: "exact" }) // Request the count of deleted rows
         .eq("id", id);
 
@@ -170,7 +170,7 @@ export async function updateExercise(id: string, values: ExerciseFormValues) {
     const supabase = await createClient();
 
     const { error, count } = await supabase
-        .from("exercise_library")
+        .from("exercise_catalog")
         .update({
             name: values.name,
             category: values.category,

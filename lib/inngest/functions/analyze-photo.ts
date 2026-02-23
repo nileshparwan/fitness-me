@@ -40,8 +40,8 @@ export const analyzePhoto = inngest.createFunction(
 
     // // Step 4: Save results to DB
     // await step.run("save-results", async () => {
-    //   // Upsert into body_metrics
-    //   await supabase.from("body_metrics").upsert({
+    //   // Upsert into body_measurements
+    //   await supabase.from("body_measurements").upsert({
     //     user_id: userId,
     //     date: new Date().toISOString().split('T')[0], // YYYY-MM-DD
     //     body_fat_percent: analysis.estimatedBodyFat,

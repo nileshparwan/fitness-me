@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { GoalsForm } from "@/components/settings/goals-form";
 import { Database } from "@/types/database";
 
-type GoalRow = Database['public']['Tables']['goals']['Row'];
+type GoalRow = Database['public']['Tables']['fitness_goals']['Row'];
 type GoalStatus = "active" | "paused" | "completed" | "cancelled";
 
 const normalizeGoalStatus = (status: string | null): GoalStatus | null => {
@@ -20,7 +20,7 @@ export default async function GoalsPage() {
   if (!user) redirect("/login");
 
   const { data: goals } = await supabase
-    .from("goals")
+    .from("fitness_goals")
     .select("*")
     .eq("user_id", user.id)
     .single();

@@ -38,8 +38,8 @@ import { PhysioChart } from "@/components/progress/physical-chart";
 import { AdvancedCoach } from "@/components/progress/advance-coach";
 import { CardioInsightsBoard, StrengthInsightsBoard } from "@/components/progress/insights-board";
 
-type WorkoutLogRow = Database['public']['Tables']['workout_logs']['Row'];
-type CardioLogRow = Database['public']['Tables']['cardio_logs']['Row'];
+type WorkoutLogRow = Database['public']['Tables']['strength_sets']['Row'];
+type CardioLogRow = Database['public']['Tables']['cardio_sessions']['Row'];
 
 export default function ProgressPage() {
   const [exercise, setExercise] = useState<string>("");

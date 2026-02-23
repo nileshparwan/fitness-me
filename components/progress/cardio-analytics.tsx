@@ -6,7 +6,7 @@ import { cn } from "@/utils";
 import { LucideIcon } from "lucide-react";
 import { calculatePaceMinutesPerKm, formatPace } from "@/utils/fitness-logic";
 
-type CardioLog = Database['public']['Tables']['cardio_logs']['Row'];
+type CardioLog = Database['public']['Tables']['cardio_sessions']['Row'];
 type StatTileProps = {
   label: string;
   value: string;
