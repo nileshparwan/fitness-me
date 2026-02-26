@@ -16,6 +16,7 @@ import { Database } from "@/types/database";
 // UI Components
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Skeleton } from "@/components/ui/skeleton";
 
 // UNIFIED COMPONENTS
 // Note: Adjusted paths to standard naming conventions based on previous components
@@ -31,15 +32,15 @@ import { CardioCharts } from "@/components/progress/cardio-charts";
 import { CardioCoach } from "@/components/progress/cardio-coach";
 import { CardioAnalytics } from "@/components/progress/cardio-analytics";
 
-// SKELETON LOADING
-import { ProgressSkeleton } from "./_components/progress-skeleton";
 import { ProgressCharts } from "@/components/progress/progress-chart";
 import { PhysioChart } from "@/components/progress/physical-chart";
 import { AdvancedCoach } from "@/components/progress/advance-coach";
 import { CardioInsightsBoard, StrengthInsightsBoard } from "@/components/progress/insights-board";
+import { ExerciseProfileSkeleton, ProgressCoreSkeleton } from "./_components/progress-section-skeletons";
 
 type WorkoutLogRow = Database['public']['Tables']['strength_sets']['Row'];
 type CardioLogRow = Database['public']['Tables']['cardio_sessions']['Row'];
+type RadarDatum = { muscle: string; score: number };
 
 export default function ProgressPage() {
   const [exercise, setExercise] = useState<string>("");
@@ -66,24 +67,25 @@ export default function ProgressPage() {
   const { data: profile } = useQuery({
     queryKey: ["profile"],
     queryFn: getUserProfile,
-    staleTime: 1000 * 60 * 30
+    staleTime: 1000 * 60 * 30,
   });
 
-  const { data: radarData } = useQuery({
+  const { data: radarData, isLoading: loadingRadar } = useQuery<RadarDatum[]>({
     queryKey: ["radar-balance"],
     queryFn: getMuscleBalance,
-    staleTime: 1000 * 60 * 10
+    staleTime: 1000 * 60 * 10,
   });
 
-  const { data: exDetails } = useQuery({
+  const { data: exDetails, isLoading: loadingExerciseDetails } = useQuery({
     queryKey: ["ex-details", selectedExercise],
     queryFn: () => getExerciseDetails(selectedExercise),
     enabled: !!selectedExercise,
-    staleTime: 1000 * 60 * 30
+    staleTime: 1000 * 60 * 30,
   });
 
   const isCardio = metrics?.type === "cardio";
   const currentExerciseName = selectedExercise || "Loading...";
+  const hasRadarData = (radarData?.length || 0) > 0;
   const cardioLogs: CardioLogRow[] = useMemo(
     () => (metrics?.type === "cardio" ? metrics.logs : []),
     [metrics],
@@ -209,17 +211,7 @@ export default function ProgressPage() {
     };
   }, [cardioLogs]);
 
-  // =========================================================
-  // ⚡️ PERFORMANCE FIX: ROBUST LOADING GUARD
-  // =========================================================
-
-  if (loadingExercises) {
-    return <ProgressSkeleton />;
-  }
-
-  if (loadingMetrics || (!metrics && fetchingMetrics)) {
-    return <ProgressSkeleton />;
-  }
+  const showMetricsSkeleton = loadingExercises || loadingMetrics || (!metrics && fetchingMetrics);
 
   if (exercises && exercises.length === 0) {
     return (
@@ -261,9 +253,16 @@ export default function ProgressPage() {
         </div>
       </div>
 
-      {!isCardio && <ExerciseProfile details={exDetails || null} />}
+      {!isCardio &&
+        (loadingExerciseDetails && !exDetails ? (
+          <ExerciseProfileSkeleton />
+        ) : (
+          <ExerciseProfile details={exDetails || null} />
+        ))}
 
-      {isCardio ? (
+      {showMetricsSkeleton ? (
+        <ProgressCoreSkeleton />
+      ) : isCardio ? (
         // === CARDIO VIEW ===
         <div className="space-y-6 animate-in slide-in-from-bottom-2 duration-500">
           <CardioInsightsBoard summary={cardioSummary} />
@@ -273,7 +272,11 @@ export default function ProgressPage() {
             <CardioCharts data={cardioChartData} exerciseName={currentExerciseName} />
 
             <div className="col-span-1 h-full">
-              <AthleteRadar data={radarData || []} />
+              {loadingRadar && !hasRadarData ? (
+                <Skeleton className="h-[360px] w-full rounded-xl" />
+              ) : (
+                <AthleteRadar data={radarData || []} />
+              )}
             </div>
           </div>
 
@@ -298,7 +301,11 @@ export default function ProgressPage() {
               timeRange={range}
             />
             <div className="col-span-1 h-full">
-              <AthleteRadar data={radarData || []} />
+              {loadingRadar && !hasRadarData ? (
+                <Skeleton className="h-[360px] w-full rounded-xl" />
+              ) : (
+                <AthleteRadar data={radarData || []} />
+              )}
             </div>
           </div>
 
