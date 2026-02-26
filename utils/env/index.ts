@@ -24,6 +24,21 @@ if(!parsed.success) {
 
 const env = parsed.data;
 
+const criticalEnv = {
+    NEXT_PUBLIC_SUPABASE_URL: env.NEXT_PUBLIC_SUPABASE_URL,
+    SUPABASE_SERVICE_ROLE_KEY: env.SUPABASE_SERVICE_ROLE_KEY,
+    OPENAI_AI_KEY: env.OPENAI_AI_KEY,
+};
+
+const missingCritical = Object.entries(criticalEnv)
+    .filter(([, value]) => !value || String(value).trim().length === 0)
+    .map(([key]) => key);
+
+if (missingCritical.length > 0) {
+    console.error("❌ Missing critical environment variables:", missingCritical.join(", "));
+    throw new Error(`Critical environment variables are missing: ${missingCritical.join(", ")}`);
+}
+
 if (process.env.NODE_ENV !== "production") {
     console.log("✅ Environment variables validated");
 }

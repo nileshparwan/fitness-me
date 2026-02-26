@@ -11,10 +11,10 @@ import {
   Dumbbell,
   Folder,
   LayoutDashboard,
-  LineChart,
   LogOut,
   Menu,
   Sparkles,
+  Shield,
   Target,
   TrendingUp,
   Utensils,
@@ -47,6 +47,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Separator } from "@/components/ui/separator"
 import { cn } from "@/utils"
 import { logoutUser } from "@/app/actions/supabase"
+import { useUser } from "@/hooks/use-user"
 import { NavUser } from "./nav-user"
 
 type NavItem = {
@@ -82,13 +83,16 @@ const data = {
       label: "Insights",
       items: [
         { title: "Progress", url: "/progress", icon: TrendingUp },
-        { title: "Analytics", url: "/analytics", icon: LineChart },
         { title: "AI Coach", url: "/ai-coach", icon: Bot },
       ],
     },
     {
       label: "Account",
       items: [{ title: "Fitness Goals", url: "/settings/goals", icon: Target }],
+    },
+    {
+      label: "Admin",
+      items: [{ title: "Admin Console", url: "/admin", icon: Shield }],
     },
   ] as { label: string; items: NavItem[] }[],
 }
@@ -101,9 +105,6 @@ const mobilePrimaryItems: NavItem[] = [
 ]
 
 const mobilePrimaryUrls = new Set(mobilePrimaryItems.map((item) => item.url))
-const mobileSecondaryItems = data.sections
-  .flatMap((section) => section.items)
-  .filter((item) => !mobilePrimaryUrls.has(item.url))
 
 function isRouteActive(pathname: string, url: string) {
   if (url === "/dashboard") return pathname === "/dashboard"
@@ -113,6 +114,16 @@ function isRouteActive(pathname: string, url: string) {
 function MobileNav() {
   const pathname = usePathname()
   const [isOpen, setIsOpen] = React.useState(false)
+  const { data: activeUser } = useUser()
+  const role =
+    typeof activeUser?.user_metadata?.role === "string"
+      ? String(activeUser.user_metadata.role).toLowerCase()
+      : "user"
+  const isAdmin = role === "admin"
+  const mobileSecondaryItems = data.sections
+    .filter((section) => (section.label === "Admin" ? isAdmin : true))
+    .flatMap((section) => section.items)
+    .filter((item) => !mobilePrimaryUrls.has(item.url))
 
   return (
     <div className="fixed bottom-0 left-0 right-0 z-50 h-16 border-t bg-background pb-safe md:hidden">
@@ -235,6 +246,16 @@ function MobileNav() {
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const pathname = usePathname()
+  const { data: activeUser } = useUser()
+  const role =
+    typeof activeUser?.user_metadata?.role === "string"
+      ? String(activeUser.user_metadata.role).toLowerCase()
+      : "user"
+  const isAdmin = role === "admin"
+  const sections = data.sections
+    .filter((section) => (section.label === "Admin" ? isAdmin : true))
+    .map((section) => ({ ...section, items: section.items }))
+    .filter((section) => section.items.length > 0)
 
   return (
     <>
@@ -258,7 +279,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         </SidebarHeader>
 
         <SidebarContent>
-          {data.sections.map((section) => (
+          {sections.map((section) => (
             <SidebarGroup key={section.label}>
               <SidebarGroupLabel>{section.label}</SidebarGroupLabel>
               <SidebarGroupContent>

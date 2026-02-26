@@ -62,7 +62,7 @@ export async function updateSession(request: NextRequest) {
 
   // 4. Protect Routes
   // This array contains all the paths you want to secure
-  const protectedPaths = ['/dashboard', '/workouts', '/exercises', '/progress', '/settings', '/programs'];
+  const protectedPaths = ['/dashboard', '/workouts', '/exercises', '/progress', '/analytics', '/settings', '/programs', '/admin'];
 
   // Check if the current path starts with any of the protected paths
   const isProtected = protectedPaths.some(path => request.nextUrl.pathname.startsWith(path));
