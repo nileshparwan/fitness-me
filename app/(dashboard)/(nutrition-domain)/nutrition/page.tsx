@@ -1,9 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { 
-  getPrograms, createNutritionProgram, deleteProgram, updateProgramStatus, duplicateProgram, updateNutritionProgram
+  getProgramsPage, createNutritionProgram, deleteProgram, updateProgramStatus, duplicateProgram, updateNutritionProgram
 } from "@/app/actions/nutrition";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,6 +22,7 @@ import { NutritionProgram } from "@/types/nutrition";
 import Link from "next/link";
 import { cn } from "@/utils";
 import { format, parseISO } from "date-fns";
+import { useDebounce } from "@/hooks/use-debounce";
 
 // --- Extracted Grid Card Component ---
 const NutritionGridCard = ({ 
@@ -123,19 +124,30 @@ export default function NutritionDashboard() {
   
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
+  const debouncedSearch = useDebounce(search, 300);
 
   const isDesktop = useMediaQuery("(min-width: 768px)");
+  const queryClient = useQueryClient();
 
-  const { data: programs, isLoading, refetch } = useQuery<NutritionProgram[]>({
-    queryKey: ["nutrition-programs"],
-    queryFn: getPrograms
+  const {
+    data: programPages,
+    isLoading,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery({
+    queryKey: ["nutrition-programs", debouncedSearch],
+    queryFn: ({ pageParam = 0 }) => getProgramsPage({ pageParam, search: debouncedSearch }),
+    getNextPageParam: (lastPage) => lastPage.nextPage,
+    initialPageParam: 0,
   });
+  const programs: NutritionProgram[] = programPages?.pages.flatMap((page) => page.data) || [];
 
   // --- Handlers ---
   const handleDelete = async (id: string) => {
     if(confirm("Delete this program?")) {
       await deleteProgram(id);
-      refetch();
+      await queryClient.invalidateQueries({ queryKey: ["nutrition-programs"] });
       toast.success("Program deleted");
     }
   };
@@ -143,19 +155,19 @@ export default function NutritionDashboard() {
   const handleCopy = async (id: string) => {
     toast.info("Duplicating program...");
     await duplicateProgram(id);
-    refetch();
+    await queryClient.invalidateQueries({ queryKey: ["nutrition-programs"] });
     toast.success("Program duplicated!");
   };
 
   const handleStatusChange = async (id: string, status: string) => {
     await updateProgramStatus(id, status);
-    refetch();
+    await queryClient.invalidateQueries({ queryKey: ["nutrition-programs"] });
     toast.success(`Status updated to ${status}`);
   };
 
   const handleCreateSubmit = async (formData: FormData) => {
     await createNutritionProgram(formData); 
-    refetch(); 
+    await queryClient.invalidateQueries({ queryKey: ["nutrition-programs"] });
     setIsCreateOpen(false); 
     toast.success("Program created");
   };
@@ -164,14 +176,11 @@ export default function NutritionDashboard() {
     if(!editingProgram) return;
     await updateNutritionProgram(formData, editingProgram.id); 
     setIsEditOpen(false); 
-    refetch(); 
+    await queryClient.invalidateQueries({ queryKey: ["nutrition-programs"] });
     toast.success("Updated successfully"); 
   };
 
-  const filteredPrograms = programs?.filter((p) => 
-    p.name.toLowerCase().includes(search.toLowerCase()) || 
-    (p.status || "").toLowerCase().includes(search.toLowerCase())
-  );
+  const filteredPrograms = programs;
 
   // --- Forms ---
   const createFormContent = (
@@ -333,6 +342,14 @@ export default function NutritionDashboard() {
              </>
            )}
         </>
+      )}
+
+      {hasNextPage && !isLoading && (
+        <div className="flex justify-center pt-2">
+          <Button variant="outline" onClick={() => fetchNextPage()} disabled={isFetchingNextPage}>
+            {isFetchingNextPage ? "Loading..." : "Load more plans"}
+          </Button>
+        </div>
       )}
     </div>
   );

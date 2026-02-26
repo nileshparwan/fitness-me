@@ -15,7 +15,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
-import { usePrograms } from "@/hooks/use-program"; 
+import { useInfinitePrograms } from "@/hooks/use-program"; 
 import { createProgram, deletePrograms } from "@/app/actions/program";
 import { cn } from "@/utils"; 
 import { useQueryClient } from "@tanstack/react-query";
@@ -82,9 +82,10 @@ const ProgramGridCard = ({
 );
 
 export default function ProgramsPage() {
-  const { programs } = usePrograms();
+  const programs = useInfinitePrograms();
   const queryClient = useQueryClient();
   const isDesktop = useMediaQuery("(min-width: 768px)");
+  const programRows = programs.data?.pages.flatMap((page) => page.data) || [];
 
   // State
   const [view, setView] = useState<"grid" | "list">("grid"); // Defaulted to grid to show changes
@@ -139,11 +140,11 @@ export default function ProgramsPage() {
   };
 
   const selectAll = () => {
-    if (programs.data) {
-      if (selectedIds.length === programs.data.length) {
+    if (programRows.length > 0) {
+      if (selectedIds.length === programRows.length) {
         setSelectedIds([]); 
       } else {
-        setSelectedIds(programs.data.map((p: any) => p.id));
+        setSelectedIds(programRows.map((p: any) => p.id));
       }
     }
   };
@@ -180,7 +181,7 @@ export default function ProgramsPage() {
             
             <div className="flex items-center gap-2">
               <Button variant="ghost" size="sm" onClick={selectAll}>
-                {programs.data && selectedIds.length === programs.data.length ? "None" : "All"}
+                {programRows.length > 0 && selectedIds.length === programRows.length ? "None" : "All"}
               </Button>
               <Button 
                 variant="destructive" 
@@ -267,7 +268,7 @@ export default function ProgramsPage() {
           {/* GRID VIEW */}
           {/* Use Flex Wrap for tight packing of fixed-width cards */}
           <div className={cn("flex flex-wrap gap-4", view === "list" && "hidden")}>
-             {programs.data?.map((program: any) => {
+             {programRows.map((program: any) => {
                 const isSelected = selectedIds.includes(program.id);
                 
                 return isSelectionMode ? (
@@ -292,7 +293,7 @@ export default function ProgramsPage() {
 
           {/* LIST VIEW */}
           <div className={cn("space-y-3", view === "grid" && "hidden")}>
-            {programs.data?.map((program: any) => {
+            {programRows.map((program: any) => {
               const isSelected = selectedIds.includes(program.id);
               return isSelectionMode ? (
                 <div key={program.id} onClick={() => toggleSelection(program.id)}>
@@ -307,10 +308,18 @@ export default function ProgramsPage() {
           </div>
 
           {/* Empty State */}
-          {programs.data?.length === 0 && (
+          {programRows.length === 0 && (
             <div className="text-center py-12 border-2 border-dashed rounded-xl opacity-50">
                <Folder className="h-10 w-10 mx-auto mb-3" />
                <p>No programs yet.</p>
+            </div>
+          )}
+
+          {programs.hasNextPage && (
+            <div className="flex justify-center pt-2">
+              <Button variant="outline" onClick={() => programs.fetchNextPage()} disabled={programs.isFetchingNextPage}>
+                {programs.isFetchingNextPage ? "Loading..." : "Load more programs"}
+              </Button>
             </div>
           )}
         </>

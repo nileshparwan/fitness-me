@@ -25,10 +25,13 @@ export default function AdminDashboardPage() {
   const { data: users, isLoading: loadingUsers } = useAdminUserStats(90);
 
   const loading = loadingDashboard || loadingTraining || loadingNutrition || loadingUsers;
+  const joinTrend: Array<{ date: string; count: number }> = users?.join_trend || [];
 
   const combinedTrend = useMemo(() => {
-    const sessionMap = new Map((training?.daily_sessions || []).map((item) => [item.date, item.count]));
-    const planMap = new Map((nutrition?.daily_plans || []).map((item) => [item.date, item.count]));
+    const dailySessions: Array<{ date: string; count: number }> = training?.daily_sessions || [];
+    const dailyPlans: Array<{ date: string; count: number }> = nutrition?.daily_plans || [];
+    const sessionMap = new Map(dailySessions.map((item) => [item.date, item.count]));
+    const planMap = new Map(dailyPlans.map((item) => [item.date, item.count]));
 
     const dateKeys = Array.from(new Set([...sessionMap.keys(), ...planMap.keys()])).sort((a, b) => a.localeCompare(b));
     return dateKeys.map((date) => ({
@@ -81,7 +84,7 @@ export default function AdminDashboardPage() {
               <Skeleton className="h-full w-full rounded-xl" />
             ) : (
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={(users?.join_trend || []).slice(-14)}>
+                <BarChart data={joinTrend.slice(-14)}>
                   <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
                   <XAxis dataKey="date" tickFormatter={(value) => String(value).slice(5)} />
                   <YAxis />

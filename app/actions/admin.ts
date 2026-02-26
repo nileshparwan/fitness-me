@@ -10,7 +10,6 @@ type MealRow = Database["public"]["Tables"]["meal_plan_meals"]["Row"];
 type FitnessGoalRow = Database["public"]["Tables"]["fitness_goals"]["Row"];
 type CardioSessionRow = Database["public"]["Tables"]["cardio_sessions"]["Row"];
 type StrengthSetRow = Database["public"]["Tables"]["strength_sets"]["Row"];
-type AnalyticsEventRow = Database["public"]["Tables"]["analytics_events"]["Row"];
 
 type UserRole = "admin" | "user";
 
@@ -40,11 +39,6 @@ export type AdminCardioSession = Pick<
   "id" | "activity_type" | "date" | "duration_minutes" | "distance_km" | "calories_burned"
 >;
 
-export type AdminAnalyticsEvent = Pick<
-  AnalyticsEventRow,
-  "id" | "event_name" | "page_path" | "user_id" | "created_at" | "metadata"
->;
-
 export type AdminUserRow = {
   user_id: string;
   email: string | null;
@@ -55,6 +49,14 @@ export type AdminUserRow = {
   meal_plans_count: number;
   goals_count: number;
   last_activity: string | null;
+};
+
+export type AdminUsersPage = {
+  rows: AdminUserRow[];
+  page: number;
+  page_size: number;
+  has_more: boolean;
+  total: number | null;
 };
 
 export type AdminDashboardStats = {
@@ -302,59 +304,109 @@ export async function getAdminDashboardStats(): Promise<AdminDashboardStats> {
   };
 }
 
-export async function getAdminUsers(search = "", limit = 400): Promise<AdminUserRow[]> {
+async function getUserActivityMap(supabase: ReturnType<typeof createAdminClient>, userIds: string[]) {
+  if (userIds.length === 0) {
+    return new Map<
+      string,
+      { sessions_count: number; meal_plans_count: number; goals_count: number; last_activity: string | null }
+    >();
+  }
+
+  const [sessionsResult, mealPlansResult, goalsResult] = await Promise.all([
+    supabase.from("training_sessions").select("user_id, created_at").in("user_id", userIds),
+    supabase.from("meal_plans").select("user_id, created_at").in("user_id", userIds),
+    supabase.from("fitness_goals").select("user_id, created_at").in("user_id", userIds),
+  ]);
+
+  if (sessionsResult.error) throw sessionsResult.error;
+  if (mealPlansResult.error) throw mealPlansResult.error;
+  if (goalsResult.error) throw goalsResult.error;
+
+  return buildActivityMap(sessionsResult.data || [], mealPlansResult.data || [], goalsResult.data || []);
+}
+
+function toAdminUserRow(
+  user: {
+    id: string;
+    email: string | undefined;
+    created_at: string;
+    last_sign_in_at: string | null;
+    user_metadata: Record<string, unknown> | null;
+  },
+  activityMap: Map<
+    string,
+    { sessions_count: number; meal_plans_count: number; goals_count: number; last_activity: string | null }
+  >
+): AdminUserRow {
+  const roleMetadata = typeof user.user_metadata?.role === "string" ? String(user.user_metadata.role).toLowerCase() : "user";
+  const activity = activityMap.get(user.id);
+
+  return {
+    user_id: user.id,
+    email: user.email ?? null,
+    role: roleMetadata === "admin" ? "admin" : "user",
+    created_at: user.created_at ?? null,
+    last_sign_in_at: user.last_sign_in_at ?? null,
+    sessions_count: activity?.sessions_count || 0,
+    meal_plans_count: activity?.meal_plans_count || 0,
+    goals_count: activity?.goals_count || 0,
+    last_activity: activity?.last_activity || null,
+  };
+}
+
+export async function getAdminUsers(search = "", page = 1, pageSize = 100): Promise<AdminUsersPage> {
   await requireAdmin();
 
   const supabase = createAdminClient();
-  const users = await listAllAuthUsers(5000);
   const normalizedSearch = search.trim().toLowerCase();
+  const safePage = Math.max(1, page);
+  const safePageSize = Math.min(200, Math.max(20, pageSize));
 
-  const filteredUserIds = users
-    .filter((user) => {
-      if (!normalizedSearch) return true;
-      const role = typeof user.user_metadata?.role === "string" ? String(user.user_metadata.role).toLowerCase() : "user";
-      const haystack = [user.id, user.email || "", role].join(" ").toLowerCase();
-      return haystack.includes(normalizedSearch);
-    })
-    .map((user) => user.id)
-    .slice(0, limit);
+  if (!normalizedSearch) {
+    const { data, error } = await supabase.auth.admin.listUsers({
+      page: safePage,
+      perPage: safePageSize,
+    });
+    if (error) throw error;
 
-  let activityMap = new Map<
-    string,
-    { sessions_count: number; meal_plans_count: number; goals_count: number; last_activity: string | null }
-  >();
-  if (filteredUserIds.length > 0) {
-    const [sessionsResult, mealPlansResult, goalsResult] = await Promise.all([
-      supabase.from("training_sessions").select("user_id, created_at").in("user_id", filteredUserIds),
-      supabase.from("meal_plans").select("user_id, created_at").in("user_id", filteredUserIds),
-      supabase.from("fitness_goals").select("user_id, created_at").in("user_id", filteredUserIds),
-    ]);
+    const users = (data.users || []).map((user) => ({
+      id: user.id,
+      email: user.email,
+      created_at: user.created_at,
+      last_sign_in_at: user.last_sign_in_at ?? null,
+      user_metadata: (user.user_metadata as Record<string, unknown> | null) || null,
+    }));
 
-    if (sessionsResult.error) throw sessionsResult.error;
-    if (mealPlansResult.error) throw mealPlansResult.error;
-    if (goalsResult.error) throw goalsResult.error;
-    activityMap = buildActivityMap(sessionsResult.data || [], mealPlansResult.data || [], goalsResult.data || []);
-  }
-
-  const mappedUsers: AdminUserRow[] = users.map((user) => {
-    const roleMetadata = typeof user.user_metadata?.role === "string" ? String(user.user_metadata.role).toLowerCase() : "user";
-    const activity = activityMap.get(user.id);
+    const activityMap = await getUserActivityMap(
+      supabase,
+      users.map((user) => user.id)
+    );
 
     return {
-      user_id: user.id,
-      email: user.email ?? null,
-      role: roleMetadata === "admin" ? "admin" : "user",
-      created_at: user.created_at ?? null,
-      last_sign_in_at: user.last_sign_in_at ?? null,
-      sessions_count: activity?.sessions_count || 0,
-      meal_plans_count: activity?.meal_plans_count || 0,
-      goals_count: activity?.goals_count || 0,
-      last_activity: activity?.last_activity || null,
+      rows: users.map((user) => toAdminUserRow(user, activityMap)),
+      page: safePage,
+      page_size: safePageSize,
+      has_more: users.length === safePageSize,
+      total: null,
     };
+  }
+
+  const users = await listAllAuthUsers(5000);
+  const filteredUsers = users.filter((user) => {
+    const role = typeof user.user_metadata?.role === "string" ? String(user.user_metadata.role).toLowerCase() : "user";
+    const haystack = [user.id, user.email || "", role].join(" ").toLowerCase();
+    return haystack.includes(normalizedSearch);
   });
 
-  return mappedUsers
-    .filter((row) => (filteredUserIds.length > 0 ? filteredUserIds.includes(row.user_id) : !normalizedSearch))
+  const start = (safePage - 1) * safePageSize;
+  const pageUsers = filteredUsers.slice(start, start + safePageSize);
+  const activityMap = await getUserActivityMap(
+    supabase,
+    pageUsers.map((user) => user.id)
+  );
+
+  const rows = pageUsers
+    .map((user) => toAdminUserRow(user, activityMap))
     .sort((a, b) => {
       const aActivity = a.last_activity ? new Date(a.last_activity).getTime() : 0;
       const bActivity = b.last_activity ? new Date(b.last_activity).getTime() : 0;
@@ -363,8 +415,15 @@ export async function getAdminUsers(search = "", limit = 400): Promise<AdminUser
       const aCreated = a.created_at ? new Date(a.created_at).getTime() : 0;
       const bCreated = b.created_at ? new Date(b.created_at).getTime() : 0;
       return bCreated - aCreated;
-    })
-    .slice(0, limit);
+    });
+
+  return {
+    rows,
+    page: safePage,
+    page_size: safePageSize,
+    has_more: start + safePageSize < filteredUsers.length,
+    total: filteredUsers.length,
+  };
 }
 
 export async function getAdminUserStats(days = 90): Promise<AdminUserStats> {
@@ -749,21 +808,6 @@ export async function getAdminNutritionStats(days = 30): Promise<AdminNutritionS
       .map(([meal_type, count]) => ({ meal_type, count }))
       .sort((a, b) => b.count - a.count),
   };
-}
-
-export async function getAdminAnalytics(days = 30): Promise<AdminAnalyticsEvent[]> {
-  const { supabase } = await requireAdmin();
-  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
-
-  const { data, error } = await supabase
-    .from("analytics_events")
-    .select("id, event_name, page_path, user_id, created_at, metadata")
-    .gte("created_at", since)
-    .order("created_at", { ascending: false })
-    .limit(1000);
-
-  if (error) throw error;
-  return (data || []) as AdminAnalyticsEvent[];
 }
 
 export async function getAdminSettingsSnapshot(): Promise<AdminSettingsSnapshot> {

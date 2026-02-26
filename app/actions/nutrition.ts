@@ -4,6 +4,14 @@ import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { NutritionProgram, NutritionMeal, ProgramSummary } from "@/types/nutrition";
 
+const PROGRAMS_PAGE_SIZE = 24;
+
+export type NutritionProgramsPage = {
+    data: NutritionProgram[];
+    nextPage?: number;
+    total: number;
+};
+
 // --- PROGRAMS ---
 
 export async function getPrograms(): Promise<NutritionProgram[]> {
@@ -13,6 +21,40 @@ export async function getPrograms(): Promise<NutritionProgram[]> {
         .select("*")
         .order("start_date", { ascending: false });
     return data || [];
+}
+
+export async function getProgramsPage({
+    pageParam = 0,
+    search = "",
+}: {
+    pageParam?: number;
+    search?: string;
+}): Promise<NutritionProgramsPage> {
+    const supabase = await createClient();
+
+    const from = pageParam * PROGRAMS_PAGE_SIZE;
+    const to = from + PROGRAMS_PAGE_SIZE - 1;
+    const normalized = search.trim();
+
+    let query = supabase
+        .from("meal_plans")
+        .select("id, user_id, name, description, notes, start_date, end_date, is_public, status, created_at", { count: "exact" })
+        .order("start_date", { ascending: false })
+        .range(from, to);
+
+    if (normalized) {
+        query = query.or(`name.ilike.%${normalized}%,status.ilike.%${normalized}%`);
+    }
+
+    const { data, error, count } = await query;
+    if (error) throw new Error(error.message);
+
+    const rows = (data || []) as NutritionProgram[];
+    return {
+        data: rows,
+        nextPage: rows.length === PROGRAMS_PAGE_SIZE ? pageParam + 1 : undefined,
+        total: count || 0,
+    };
 }
 
 // PERFORMANCE FIX: Lean query for dropdowns

@@ -1,17 +1,16 @@
 "use client";
 
 import {
-  getAdminAnalytics,
   getAdminDashboardStats,
   getAdminNutritionStats,
+  getAdminUsers,
   getAdminSettingsSnapshot,
   getAdminTrainingStats,
   getAdminUserDetail,
-  getAdminUsers,
   getAdminUserStats,
   updateAdminUserRole,
 } from "@/app/actions/admin";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 export function useAdminDashboardStats() {
@@ -21,10 +20,12 @@ export function useAdminDashboardStats() {
   });
 }
 
-export function useAdminUsers(search = "", limit = 400) {
-  return useQuery({
-    queryKey: ["admin", "users", search, limit],
-    queryFn: () => getAdminUsers(search, limit),
+export function useInfiniteAdminUsers(search = "", pageSize = 100) {
+  return useInfiniteQuery({
+    queryKey: ["admin", "users", search, pageSize],
+    queryFn: ({ pageParam }) => getAdminUsers(search, pageParam, pageSize),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) => (lastPage.has_more ? lastPage.page + 1 : undefined),
   });
 }
 
@@ -54,13 +55,6 @@ export function useAdminNutritionStats(days = 30) {
   return useQuery({
     queryKey: ["admin", "nutrition-stats", days],
     queryFn: () => getAdminNutritionStats(days),
-  });
-}
-
-export function useAdminAnalytics(days = 30) {
-  return useQuery({
-    queryKey: ["admin", "analytics", days],
-    queryFn: () => getAdminAnalytics(days),
   });
 }
 

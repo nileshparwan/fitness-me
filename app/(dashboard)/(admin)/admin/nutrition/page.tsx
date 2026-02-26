@@ -24,8 +24,11 @@ const dayOptions = ["7", "14", "30", "60", "90"] as const;
 export default function AdminNutritionPage() {
   const [days, setDays] = useState<(typeof dayOptions)[number]>("30");
   const { data, isLoading } = useAdminNutritionStats(Number(days));
-  const velocityData = (data?.daily_plans || []).slice(-30).map((row) => ({ date: row.date.slice(5), count: row.count }));
-  const mealTypeChartData = (data?.meal_type_breakdown || [])
+  const dailyPlans: Array<{ date: string; count: number }> = data?.daily_plans || [];
+  const mealTypeBreakdown: Array<{ meal_type: string; count: number }> = data?.meal_type_breakdown || [];
+  const statusBreakdown: Array<{ label: string; count: number }> = data?.status_breakdown || [];
+  const velocityData = dailyPlans.slice(-30).map((row) => ({ date: row.date.slice(5), count: row.count }));
+  const mealTypeChartData = mealTypeBreakdown
     .slice(0, 6)
     .map((row) => ({ ...row, label: row.meal_type.replaceAll("_", " ").slice(0, 12) }));
 
@@ -112,13 +115,13 @@ export default function AdminNutritionPage() {
             <CardTitle className="text-base">Plan Status Breakdown</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
-            {(data?.status_breakdown || []).map((status) => (
+            {statusBreakdown.map((status) => (
               <div key={status.label} className="flex items-center justify-between rounded-lg border px-3 py-2">
                 <p className="text-sm font-medium capitalize">{status.label}</p>
                 <p className="text-sm text-muted-foreground">{status.count}</p>
               </div>
             ))}
-            {!isLoading && (data?.status_breakdown.length || 0) === 0 && (
+            {!isLoading && statusBreakdown.length === 0 && (
               <p className="text-sm text-muted-foreground">No status data available for this window.</p>
             )}
           </CardContent>
@@ -137,13 +140,13 @@ export default function AdminNutritionPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {(data?.meal_type_breakdown || []).slice(0, 10).map((mealType) => (
+                {mealTypeBreakdown.slice(0, 10).map((mealType) => (
                   <TableRow key={mealType.meal_type}>
                     <TableCell className="font-medium capitalize">{mealType.meal_type}</TableCell>
                     <TableCell>{mealType.count}</TableCell>
                   </TableRow>
                 ))}
-                {!isLoading && (data?.meal_type_breakdown.length || 0) === 0 && (
+                {!isLoading && mealTypeBreakdown.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={2} className="py-8 text-center text-sm text-muted-foreground">
                       No meal type aggregate data.

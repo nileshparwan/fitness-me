@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Plus, Dumbbell, LayoutGrid, List, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,7 @@ import { WorkoutListItem } from "@/components/workout/workout-list-item";
 import { useDebounce } from "@/hooks/use-debounce";
 
 const statusFilters = ["all", "draft", "active", "completed", "archived"] as const;
+const PAGE_SIZE = 24;
 
 export default function WorkoutsPage() {
   const { history } = useWorkouts();
@@ -22,7 +23,12 @@ export default function WorkoutsPage() {
   const [view, setView] = useState<"grid" | "list">("list");
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<(typeof statusFilters)[number]>("all");
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const debouncedSearch = useDebounce(search, 300);
+
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [debouncedSearch, status, view]);
 
   const filteredWorkouts = useMemo(() => {
     const source = workouts || [];
@@ -41,6 +47,12 @@ export default function WorkoutsPage() {
       );
     });
   }, [workouts, debouncedSearch, status]);
+
+  const visibleWorkouts = useMemo(
+    () => filteredWorkouts.slice(0, visibleCount),
+    [filteredWorkouts, visibleCount]
+  );
+  const hasMore = filteredWorkouts.length > visibleCount;
 
   return (
     <div className="page-shell section-gap">
@@ -114,16 +126,24 @@ export default function WorkoutsPage() {
           )}
 
           <div className={view === "grid" ? "flex flex-wrap gap-4" : "hidden"}>
-            {filteredWorkouts.map((workout) => (
+            {visibleWorkouts.map((workout) => (
               <WorkoutCard key={workout.id} workout={workout} />
             ))}
           </div>
 
           <div className={view === "list" ? "space-y-3" : "hidden"}>
-            {filteredWorkouts.map((workout) => (
+            {visibleWorkouts.map((workout) => (
               <WorkoutListItem key={workout.id} workout={workout} />
             ))}
           </div>
+
+          {hasMore && (
+            <div className="flex justify-center pt-2">
+              <Button variant="outline" onClick={() => setVisibleCount((prev) => prev + PAGE_SIZE)}>
+                Load more workouts
+              </Button>
+            </div>
+          )}
         </>
       )}
     </div>

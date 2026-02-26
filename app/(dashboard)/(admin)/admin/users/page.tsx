@@ -26,15 +26,24 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { CompactMetricCard } from "@/components/admin/compact-metric-card";
-import { useAdminUsers, useAdminUserStats, useUpdateAdminUserRole } from "@/hooks/admin/use-admin";
+import { Button } from "@/components/ui/button";
+import { useInfiniteAdminUsers, useAdminUserStats, useUpdateAdminUserRole } from "@/hooks/admin/use-admin";
 import { useDebounce } from "@/hooks/use-debounce";
 
 export default function AdminUsersPage() {
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebounce(search, 350);
-  const { data, isLoading } = useAdminUsers(debouncedSearch, 400);
+  const {
+    data: usersPages,
+    isLoading,
+    hasNextPage,
+    fetchNextPage,
+    isFetchingNextPage,
+  } = useInfiniteAdminUsers(debouncedSearch, 100);
   const { data: userStats, isLoading: loadingStats } = useAdminUserStats(90);
   const { mutate: mutateRole, isPending } = useUpdateAdminUserRole();
+
+  const data = useMemo(() => usersPages?.pages.flatMap((page) => page.rows) || [], [usersPages]);
 
   const trendData = useMemo(() => {
     const joinedMap = new Map((userStats?.join_trend || []).map((item) => [item.date, item.count]));
@@ -166,6 +175,14 @@ export default function AdminUsersPage() {
               )}
             </TableBody>
           </Table>
+        )}
+
+        {!isLoading && (data || []).length > 0 && hasNextPage && (
+          <div className="mt-4 flex justify-center">
+            <Button variant="outline" onClick={() => fetchNextPage()} disabled={isFetchingNextPage}>
+              {isFetchingNextPage ? "Loading more..." : "Load more users"}
+            </Button>
+          </div>
         )}
       </div>
     </div>

@@ -12,7 +12,8 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { useExercises } from "@/hooks/use-exercise";
+import { useInfiniteQueryExercises } from "@/hooks/use-exercise";
+import { useDebounce } from "@/hooks/use-debounce";
 import { Database } from "@/types/database";
 
 type Exercise = Database["public"]["Tables"]["exercise_catalog"]["Row"];
@@ -24,8 +25,9 @@ interface ExerciseSelectorProps {
 export function ExerciseSelector({ onSelect }: ExerciseSelectorProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const { data: exercises, isLoading } = useExercises(search);
-  const exerciseList = Array.isArray(exercises) ? exercises : [];
+  const debouncedSearch = useDebounce(search, 300);
+  const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteQueryExercises(debouncedSearch);
+  const exerciseList = data?.pages.flatMap((page) => page.data) || [];
 
   const handleSelect = (ex: Exercise) => {
     onSelect({ id: ex.id, name: ex.name });
@@ -75,6 +77,19 @@ export function ExerciseSelector({ onSelect }: ExerciseSelectorProps) {
                     </div>
                   </Button>
                 ))}
+
+                {hasNextPage && (
+                  <div className="pt-2">
+                    <Button
+                      variant="outline"
+                      className="w-full"
+                      onClick={() => fetchNextPage()}
+                      disabled={isFetchingNextPage}
+                    >
+                      {isFetchingNextPage ? "Loading..." : "Load more exercises"}
+                    </Button>
+                  </div>
+                )}
               </div>
             )}
           </ScrollArea>
