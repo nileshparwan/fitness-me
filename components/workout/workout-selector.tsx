@@ -10,9 +10,14 @@ import { cn } from "@/utils";
 import { useWorkouts } from "@/hooks/use-workout";
 import { addWorkoutsToProgram } from "@/app/actions/program";
 import { useProgramStore } from "@/stores/use-program-store";
-import { Database } from "@/types/database";
 
-type Workout = Database['public']['Tables']['training_sessions']['Row'];
+type Workout = {
+  id: string;
+  name: string;
+  status: string | null;
+  date: string;
+  duration_minutes: number | null;
+};
 
 export function WorkoutSelector({ programId, onClose }: { programId: string; onClose: () => void }) {
   const { history } = useWorkouts();
@@ -29,7 +34,7 @@ export function WorkoutSelector({ programId, onClose }: { programId: string; onC
   const filteredWorkouts = React.useMemo(() => {
     if (!workouts) return [];
 
-    return (workouts as Workout[]).filter((w) => {
+    return workouts.filter((w) => {
       const matchesSearch = w.name?.toLowerCase().includes(search.toLowerCase());
       const alreadyInProgram = items.some((item) => item.workout_id === w.id);
 
@@ -58,7 +63,7 @@ export function WorkoutSelector({ programId, onClose }: { programId: string; onC
       // 4. Optimistic Update: Add to Store immediately
       // We need to find the full workout object to add it to the store correctly
       selected.forEach((selectedId, index) => {
-        const workoutData = (workouts as Workout[]).find((w) => w.id === selectedId);
+        const workoutData = workouts.find((w) => w.id === selectedId);
         if (workoutData) {
           addItem({
             id: `temp-${Date.now()}-${index}`, // Temporary ID until refresh

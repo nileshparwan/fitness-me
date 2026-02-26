@@ -9,8 +9,11 @@ import { cn } from "@/utils";
 import { WorkoutStatusSelect } from "@/components/workout/workout-status-select"; 
 import { Database } from "@/types/database";
 
-type Workout = Database['public']['Tables']['training_sessions']['Row'] & {
-  strength_sets: Database['public']['Tables']['strength_sets']['Row'][];
+type Workout = Pick<
+  Database["public"]["Tables"]["training_sessions"]["Row"],
+  "id" | "name" | "status" | "date" | "duration_minutes"
+> & {
+  strength_sets: Array<Pick<Database["public"]["Tables"]["strength_sets"]["Row"], "id">>;
 };
 
 interface WorkoutCardProps {

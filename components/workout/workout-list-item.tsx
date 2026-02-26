@@ -8,7 +8,7 @@ import { cn } from "@/utils";
 import { WorkoutStatusSelect } from "@/components/workout/workout-status-select";
 import { Database } from "@/types/database";
 
-type WorkoutLog = Database["public"]["Tables"]["strength_sets"]["Row"];
+type WorkoutLog = Pick<Database["public"]["Tables"]["strength_sets"]["Row"], "id">;
 
 interface WorkoutListItemProps {
   workout: {

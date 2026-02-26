@@ -4,6 +4,17 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { createWorkoutAction, deleteWorkoutAction, updateWorkoutAction, type WorkoutActionInput } from "@/app/actions/workout";
+import { Database } from "@/types/database";
+
+type TrainingSessionRow = Database["public"]["Tables"]["training_sessions"]["Row"];
+type StrengthSetId = Pick<Database["public"]["Tables"]["strength_sets"]["Row"], "id">;
+
+export type WorkoutSummary = Pick<
+  TrainingSessionRow,
+  "id" | "name" | "status" | "date" | "duration_minutes" | "created_at"
+> & {
+  strength_sets: StrengthSetId[];
+};
 
 export function useWorkout(id: string) {
   const supabase = createClient();
@@ -27,17 +38,21 @@ export function useWorkouts() {
   const supabase = createClient();
   const queryClient = useQueryClient();
 
-  // 1. Fetch History (Read operations usually stay client-side in hooks for React Query cache)
+  // Lean payload for list rendering and faster first paint.
   const history = useQuery({
     queryKey: ["workouts"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("training_sessions")
-        .select(`*, strength_sets (*)`)
-        .order("date", { ascending: false });
+        .select("id, name, status, date, duration_minutes, created_at, strength_sets(id)")
+        .order("date", { ascending: false })
+        .limit(200);
       if (error) throw error;
-      return data;
+      return (data || []) as WorkoutSummary[];
     },
+    staleTime: 2 * 60 * 1000,
+    placeholderData: (previousData) => previousData,
+    refetchOnWindowFocus: false,
   });
 
   // 3. Create Workout (Using Server Action)
