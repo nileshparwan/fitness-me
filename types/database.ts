@@ -80,6 +80,42 @@ export type Database = {
         }
         Relationships: []
       }
+      account_deletion_requests: {
+        Row: {
+          deleted_at: string
+          id: string
+          metadata: Json | null
+          reason: string | null
+          recoverable_until: string
+          requested_at: string
+          restored_at: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          deleted_at?: string
+          id?: string
+          metadata?: Json | null
+          reason?: string | null
+          recoverable_until: string
+          requested_at?: string
+          restored_at?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          deleted_at?: string
+          id?: string
+          metadata?: Json | null
+          reason?: string | null
+          recoverable_until?: string
+          requested_at?: string
+          restored_at?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       body_measurements: {
         Row: {
           ai_analysis: string | null

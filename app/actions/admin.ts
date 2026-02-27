@@ -10,6 +10,7 @@ type MealRow = Database["public"]["Tables"]["meal_plan_meals"]["Row"];
 type FitnessGoalRow = Database["public"]["Tables"]["fitness_goals"]["Row"];
 type CardioSessionRow = Database["public"]["Tables"]["cardio_sessions"]["Row"];
 type StrengthSetRow = Database["public"]["Tables"]["strength_sets"]["Row"];
+type AccountDeletionRequestRow = Database["public"]["Tables"]["account_deletion_requests"]["Row"];
 
 type UserRole = "admin" | "user";
 
@@ -43,12 +44,15 @@ export type AdminUserRow = {
   user_id: string;
   email: string | null;
   role: UserRole;
+  is_blocked: boolean;
+  is_deleted: boolean;
   created_at: string | null;
   last_sign_in_at: string | null;
   sessions_count: number;
   meal_plans_count: number;
   goals_count: number;
   last_activity: string | null;
+  deletion_recoverable_until: string | null;
 };
 
 export type AdminUsersPage = {
@@ -333,6 +337,7 @@ function toAdminUserRow(
     last_sign_in_at: string | null;
     user_metadata: Record<string, unknown> | null;
   },
+  requestMap: Map<string, AccountDeletionRequestRow>,
   activityMap: Map<
     string,
     { sessions_count: number; meal_plans_count: number; goals_count: number; last_activity: string | null }
@@ -340,18 +345,38 @@ function toAdminUserRow(
 ): AdminUserRow {
   const roleMetadata = typeof user.user_metadata?.role === "string" ? String(user.user_metadata.role).toLowerCase() : "user";
   const activity = activityMap.get(user.id);
+  const deletionRequest = requestMap.get(user.id);
 
   return {
     user_id: user.id,
     email: user.email ?? null,
     role: roleMetadata === "admin" ? "admin" : "user",
+    is_blocked: Boolean(user.user_metadata?.is_blocked),
+    is_deleted: Boolean(user.user_metadata?.is_deleted),
     created_at: user.created_at ?? null,
     last_sign_in_at: user.last_sign_in_at ?? null,
     sessions_count: activity?.sessions_count || 0,
     meal_plans_count: activity?.meal_plans_count || 0,
     goals_count: activity?.goals_count || 0,
     last_activity: activity?.last_activity || null,
+    deletion_recoverable_until: deletionRequest?.recoverable_until ?? null,
   };
+}
+
+async function getDeletionRequestMap(
+  supabase: ReturnType<typeof createAdminClient>,
+  userIds: string[]
+) {
+  if (userIds.length === 0) return new Map<string, AccountDeletionRequestRow>();
+
+  const { data, error } = await supabase
+    .from("account_deletion_requests")
+    .select("*")
+    .in("user_id", userIds);
+
+  if (error) throw error;
+
+  return new Map((data || []).map((row) => [row.user_id, row]));
 }
 
 export async function getAdminUsers(search = "", page = 1, pageSize = 100): Promise<AdminUsersPage> {
@@ -381,9 +406,13 @@ export async function getAdminUsers(search = "", page = 1, pageSize = 100): Prom
       supabase,
       users.map((user) => user.id)
     );
+    const requestMap = await getDeletionRequestMap(
+      supabase,
+      users.map((user) => user.id)
+    );
 
     return {
-      rows: users.map((user) => toAdminUserRow(user, activityMap)),
+      rows: users.map((user) => toAdminUserRow(user, requestMap, activityMap)),
       page: safePage,
       page_size: safePageSize,
       has_more: users.length === safePageSize,
@@ -404,9 +433,13 @@ export async function getAdminUsers(search = "", page = 1, pageSize = 100): Prom
     supabase,
     pageUsers.map((user) => user.id)
   );
+  const requestMap = await getDeletionRequestMap(
+    supabase,
+    pageUsers.map((user) => user.id)
+  );
 
   const rows = pageUsers
-    .map((user) => toAdminUserRow(user, activityMap))
+    .map((user) => toAdminUserRow(user, requestMap, activityMap))
     .sort((a, b) => {
       const aActivity = a.last_activity ? new Date(a.last_activity).getTime() : 0;
       const bActivity = b.last_activity ? new Date(b.last_activity).getTime() : 0;
@@ -546,6 +579,76 @@ export async function updateAdminUserRole(
     return {
       success: false,
       message: error instanceof Error ? error.message : "Failed to update user role",
+    };
+  }
+}
+
+export async function setAdminUserBlocked(
+  userId: string,
+  blocked: boolean
+): Promise<{ success: boolean; message: string }> {
+  try {
+    const { user } = await requireAdmin();
+    const supabase = createAdminClient();
+
+    if (user.id === userId) {
+      return { success: false, message: "You cannot block your own account" };
+    }
+
+    const targetResult = await supabase.auth.admin.getUserById(userId);
+    if (targetResult.error) {
+      return { success: false, message: targetResult.error.message };
+    }
+    const targetUser = targetResult.data.user;
+    if (!targetUser) {
+      return { success: false, message: "User not found" };
+    }
+
+    const targetRole =
+      typeof targetUser.user_metadata?.role === "string" &&
+      String(targetUser.user_metadata.role).toLowerCase() === "admin"
+        ? "admin"
+        : "user";
+
+    if (targetRole === "admin") {
+      return { success: false, message: "Admin accounts cannot be blocked from this action" };
+    }
+
+    const currentMetadata = (targetUser.user_metadata as Record<string, unknown> | null) || {};
+    const nowIso = new Date().toISOString();
+    const metadata: Record<string, unknown> = {
+      ...currentMetadata,
+      is_blocked: blocked,
+      updated_at: nowIso,
+    };
+    if (blocked) {
+      metadata.blocked_at = nowIso;
+      metadata.blocked_by = user.id;
+    } else {
+      metadata.unblocked_at = nowIso;
+      metadata.unblocked_by = user.id;
+    }
+
+    const { error } = await supabase.auth.admin.updateUserById(userId, {
+      user_metadata: metadata,
+    });
+
+    if (error) {
+      return { success: false, message: error.message };
+    }
+
+    await supabase.from("analytics_events").insert({
+      user_id: user.id,
+      event_name: blocked ? "admin_user_blocked" : "admin_user_unblocked",
+      page_path: "/admin/users",
+      metadata: { target_user_id: userId, blocked },
+    });
+
+    return { success: true, message: blocked ? "User blocked" : "User unblocked" };
+  } catch (error) {
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : "Failed to update block status",
     };
   }
 }

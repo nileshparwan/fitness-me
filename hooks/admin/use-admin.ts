@@ -8,6 +8,7 @@ import {
   getAdminTrainingStats,
   getAdminUserDetail,
   getAdminUserStats,
+  setAdminUserBlocked,
   updateAdminUserRole,
 } from "@/app/actions/admin";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -71,6 +72,29 @@ export function useUpdateAdminUserRole() {
   return useMutation({
     mutationFn: async (payload: { userId: string; role: "admin" | "user" }) => {
       return await updateAdminUserRole(payload.userId, payload.role);
+    },
+    onSuccess: (result) => {
+      if (!result.success) {
+        toast.error(result.message);
+        return;
+      }
+
+      queryClient.invalidateQueries({ queryKey: ["admin", "users"] });
+      queryClient.invalidateQueries({ queryKey: ["admin", "user-stats"] });
+      toast.success(result.message);
+    },
+    onError: (error) => {
+      toast.error(error.message);
+    },
+  });
+}
+
+export function useSetAdminUserBlocked() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (payload: { userId: string; blocked: boolean }) => {
+      return await setAdminUserBlocked(payload.userId, payload.blocked);
     },
     onSuccess: (result) => {
       if (!result.success) {

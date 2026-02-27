@@ -27,7 +27,8 @@ import {
 } from "@/components/ui/table";
 import { CompactMetricCard } from "@/components/admin/compact-metric-card";
 import { Button } from "@/components/ui/button";
-import { useInfiniteAdminUsers, useAdminUserStats, useUpdateAdminUserRole } from "@/hooks/admin/use-admin";
+import { Switch } from "@/components/ui/switch";
+import { useInfiniteAdminUsers, useAdminUserStats, useSetAdminUserBlocked, useUpdateAdminUserRole } from "@/hooks/admin/use-admin";
 import { useDebounce } from "@/hooks/use-debounce";
 
 export default function AdminUsersPage() {
@@ -42,6 +43,7 @@ export default function AdminUsersPage() {
   } = useInfiniteAdminUsers(debouncedSearch, 100);
   const { data: userStats, isLoading: loadingStats } = useAdminUserStats(90);
   const { mutate: mutateRole, isPending } = useUpdateAdminUserRole();
+  const { mutate: mutateBlocked, isPending: blockingPending } = useSetAdminUserBlocked();
 
   const data = useMemo(() => usersPages?.pages.flatMap((page) => page.rows) || [], [usersPages]);
 
@@ -123,6 +125,8 @@ export default function AdminUsersPage() {
                 <TableHead>Meal Plans</TableHead>
                 <TableHead>Goals</TableHead>
                 <TableHead>Last Activity</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Block</TableHead>
                 <TableHead className="text-right">Action</TableHead>
               </TableRow>
             </TableHeader>
@@ -156,6 +160,29 @@ export default function AdminUsersPage() {
                       ? `${formatDistanceToNow(new Date(row.last_activity), { addSuffix: true })}`
                       : "No activity"}
                   </TableCell>
+                  <TableCell>
+                    <div className="flex flex-col gap-2">
+                      {row.is_blocked ? (
+                        <span className="text-xs font-medium text-orange-700">Blocked</span>
+                      ) : null}
+                      {row.is_deleted ? (
+                        <span className="text-xs font-medium text-red-600">Deactivated</span>
+                      ) : !row.is_blocked ? (
+                        <span className="text-xs text-emerald-700">Active</span>
+                      ) : null}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    {row.role === "user" ? (
+                      <Switch
+                        checked={row.is_blocked}
+                        disabled={blockingPending}
+                        onCheckedChange={(checked) => mutateBlocked({ userId: row.user_id, blocked: checked })}
+                      />
+                    ) : (
+                      <span className="text-xs text-muted-foreground">N/A</span>
+                    )}
+                  </TableCell>
                   <TableCell className="text-right">
                     <Link
                       href={`/admin/users/${row.user_id}`}
@@ -168,7 +195,7 @@ export default function AdminUsersPage() {
               ))}
               {(data || []).length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={7} className="py-8 text-center text-sm text-muted-foreground">
+                  <TableCell colSpan={9} className="py-8 text-center text-sm text-muted-foreground">
                     No users matched your search.
                   </TableCell>
                 </TableRow>
