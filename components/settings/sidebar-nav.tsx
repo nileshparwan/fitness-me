@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/utils";
 import { buttonVariants } from "@/components/ui/button";
-import { User, Target } from "lucide-react"; // Make sure you have lucide-react installed
+import { User, Target, ShieldAlert } from "lucide-react"; // Make sure you have lucide-react installed
 
 const sidebarNavItems = [
   {
@@ -16,6 +16,11 @@ const sidebarNavItems = [
     title: "Fitness Goals",
     href: "/settings/goals",
     icon: <Target className="mr-2 h-4 w-4" />,
+  },
+  {
+    title: "Account",
+    href: "/settings/account",
+    icon: <ShieldAlert className="mr-2 h-4 w-4" />,
   },
 ];
 

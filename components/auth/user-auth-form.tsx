@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -68,7 +69,23 @@ export function UserAuthForm({ className, type, ...props }: UserAuthFormProps) {
         });
 
         if (error) throw error;
-        
+
+        const { data: sessionData } = await supabase.auth.getUser();
+        const isDeleted = Boolean(sessionData.user?.user_metadata?.is_deleted);
+        const isBlocked = Boolean(sessionData.user?.user_metadata?.is_blocked);
+        if (isBlocked) {
+          await supabase.auth.signOut();
+          toast.error("Your account is blocked. Contact support.");
+          router.push("/login");
+          return;
+        }
+        if (isDeleted) {
+          await supabase.auth.signOut();
+          toast.error("This account is deactivated. Restore it to continue.");
+          router.push("/restore-account");
+          return;
+        }
+
         toast.success("Welcome back!");
         router.refresh();
         router.push("/dashboard");
@@ -148,6 +165,13 @@ export function UserAuthForm({ className, type, ...props }: UserAuthFormProps) {
             />
             {form.formState.errors.password && (
               <p className="text-sm text-red-500">{form.formState.errors.password.message}</p>
+            )}
+            {type === "login" && (
+              <div className="text-right">
+                <Link href="/forgot-password" className="text-xs text-primary hover:underline">
+                  Forgot password?
+                </Link>
+              </div>
             )}
           </div>
 

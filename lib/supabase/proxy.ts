@@ -39,6 +39,8 @@ export async function updateSession(request: NextRequest) {
   // This will call 'setAll' above if the token needs refreshing
   const { data: { user } } = await supabase.auth.getUser()
   const pathname = request.nextUrl.pathname.toLowerCase()
+  const isDeleted = Boolean(user?.user_metadata?.is_deleted)
+  const isBlocked = Boolean(user?.user_metadata?.is_blocked)
 
   // ---------------------------------------------------------
   // 3.6 NEW: Handle Root Path (localhost:3000 -> /)
@@ -73,8 +75,36 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url) // ⛔️ Stop! Go to login.
   }
 
+  // Blocked users can only reach auth/recovery endpoints.
+  if (user && isBlocked) {
+    const allowedBlockedPaths = ['/login', '/forgot-password', '/reset-password', '/api/auth/callback'];
+    const isAllowed = allowedBlockedPaths.some((path) => request.nextUrl.pathname.startsWith(path));
+    if (!isAllowed) {
+      const url = request.nextUrl.clone()
+      url.pathname = '/login'
+      return NextResponse.redirect(url)
+    }
+  }
+
+  // Soft-deleted users can only access restore/auth paths until account is restored.
+  if (user && isDeleted && !isBlocked) {
+    const allowedDeletedPaths = ['/restore-account', '/login', '/forgot-password', '/reset-password', '/api/auth/callback'];
+    const isAllowed = allowedDeletedPaths.some((path) => request.nextUrl.pathname.startsWith(path));
+    if (!isAllowed) {
+      const url = request.nextUrl.clone()
+      url.pathname = '/restore-account'
+      return NextResponse.redirect(url)
+    }
+  }
+
+  if (user && !isDeleted && request.nextUrl.pathname === '/restore-account') {
+    const url = request.nextUrl.clone()
+    url.pathname = '/dashboard'
+    return NextResponse.redirect(url)
+  }
+
   // Also redirect logged-in users away from login page
-  if (user && (request.nextUrl.pathname === '/login' || request.nextUrl.pathname === '/register')) {
+  if (user && !isDeleted && (request.nextUrl.pathname === '/login' || request.nextUrl.pathname === '/register')) {
     const url = request.nextUrl.clone()
     url.pathname = '/dashboard'
     return NextResponse.redirect(url)
