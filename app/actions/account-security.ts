@@ -1,21 +1,15 @@
 "use server";
 
-import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createPublicAuthClient } from "@/lib/supabase/public-auth";
 import { Database } from "@/types/database";
 
 type DeletionInsert = Database["public"]["Tables"]["account_deletion_requests"]["Insert"];
 
 const RECOVERY_WINDOW_DAYS = 30;
 const CHALLENGE_TTL_SECONDS = 5 * 60;
-
-const authClient = () =>
-  createSupabaseClient<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!
-  );
 
 const toDateIso = (date: Date) => date.toISOString();
 
@@ -162,7 +156,7 @@ export async function createDeleteAccountChallenge() {
 }
 
 export async function requestPasswordReset(email: string) {
-  const client = authClient();
+  const client = createPublicAuthClient();
   const normalizedEmail = email.trim().toLowerCase();
 
   if (!normalizedEmail) {
@@ -278,7 +272,7 @@ export async function requestSoftDeleteAccount(challengeToken: string, challenge
 }
 
 export async function restoreSoftDeletedAccount(email: string, password: string) {
-  const client = authClient();
+  const client = createPublicAuthClient();
   const normalizedEmail = email.trim().toLowerCase();
 
   const signInResult = await client.auth.signInWithPassword({
