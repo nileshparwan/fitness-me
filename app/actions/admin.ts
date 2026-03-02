@@ -34,6 +34,11 @@ type AdminUsersPage = {
   has_more: boolean;
 };
 
+type ListUsersResponse = Awaited<
+  ReturnType<ReturnType<typeof createAdminClient>["auth"]["admin"]["listUsers"]>
+>;
+type AuthAdminUser = NonNullable<ListUsersResponse["data"]>["users"][number];
+
 async function requireAdminUser() {
   const supabase = await createClient();
   const {
@@ -73,19 +78,57 @@ async function safeCount(table: string, filter?: (q: any) => any) {
   }
 }
 
+async function listAllAuthUsers() {
+  const admin = createAdminClient();
+  const perPage = 1000;
+  let page = 1;
+  const users: AuthAdminUser[] = [];
+
+  while (true) {
+    const { data, error } = await admin.auth.admin.listUsers({ page, perPage });
+    if (error) throw new Error(error.message);
+    const chunk = data?.users || [];
+    users.push(...chunk);
+    if (!data?.nextPage || chunk.length === 0) break;
+    page += 1;
+  }
+
+  return users;
+}
+
+const ONLINE_WINDOW_MS = 30 * 60 * 1000;
+
+function isUserCurrentlyLoggedIn(lastSignInAt: string | null | undefined) {
+  if (!lastSignInAt) return false;
+  const lastSignIn = new Date(lastSignInAt).getTime();
+  if (Number.isNaN(lastSignIn)) return false;
+  return Date.now() - lastSignIn <= ONLINE_WINDOW_MS;
+}
+
+function resolveUserRole(user: AuthAdminUser): "admin" | "user" {
+  const role = (user.app_metadata?.role || user.user_metadata?.role) === "admin" ? "admin" : "user";
+  return role;
+}
+
 export async function getAdminDashboardStats() {
   await requireAdminUser();
 
-  const [totalUsers, totalSessions, totalSets, totalMealPlans, recentEvents] = await Promise.all([
-    safeCount("profiles"),
+  const [users, totalSessions, totalSets, totalMealPlans, recentEvents] = await Promise.all([
+    listAllAuthUsers(),
     safeCount("workout_logs"),
     safeCount("exercise_sets"),
     safeCount("meal_plans"),
     safeCount("audit_events", (q) => q.gte("created_at", new Date(Date.now() - 7 * 86400000).toISOString())),
   ]);
+  const currentlyLoggedInUsers = users.filter((user) => isUserCurrentlyLoggedIn(user.last_sign_in_at)).length;
+  const currentlyLoggedInAdmins = users.filter(
+    (user) => isUserCurrentlyLoggedIn(user.last_sign_in_at) && resolveUserRole(user) === "admin"
+  ).length;
 
   return {
-    total_users: totalUsers,
+    total_users: users.length,
+    currently_logged_in_users: currentlyLoggedInUsers,
+    currently_logged_in_admins: currentlyLoggedInAdmins,
     total_sessions: totalSessions,
     total_strength_sets: totalSets,
     total_meal_plans: totalMealPlans,
@@ -136,9 +179,7 @@ export async function getAdminUsers(search = "", page = 1, pageSize = 100): Prom
 
 export async function getAdminUserStats(days = 90) {
   await requireAdminUser();
-  const admin = createAdminClient();
-  const { data } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
-  const users = data?.users || [];
+  const users = await listAllAuthUsers();
   const now = Date.now();
   const daysMs = days * 86400000;
   const thirtyMs = 30 * 86400000;
@@ -254,6 +295,7 @@ export async function getAdminNutritionStats(_days = 30) {
 
 export async function getAdminSettingsSnapshot() {
   await requireAdminUser();
+  const users = await listAllAuthUsers();
 
   return {
     environment: {
@@ -262,7 +304,7 @@ export async function getAdminSettingsSnapshot() {
       has_supabase_url: Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL),
     },
     health: {
-      total_users: await safeCount("profiles"),
+      total_users: users.length,
       total_sessions: await safeCount("workout_logs"),
       total_events: await safeCount("audit_events"),
       last_training_entry_at: null as string | null,

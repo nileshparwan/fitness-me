@@ -98,7 +98,12 @@ const data = {
       label: "Admin",
       items: [
         { title: "Admin Console", url: "/admin", icon: Shield },
+        { title: "Admin Users", url: "/admin/users", icon: BadgeCheck },
+        { title: "Admin Training", url: "/admin/training", icon: Dumbbell },
+        { title: "Admin Nutrition", url: "/admin/nutrition", icon: Utensils },
+        { title: "Admin Analytics", url: "/admin/analytics", icon: TrendingUp },
         { title: "Tickets", url: "/admin/tickets", icon: MessageSquare },
+        { title: "Admin Settings", url: "/admin/settings", icon: CreditCard },
       ],
     },
   ] as { label: string; items: NavItem[] }[],

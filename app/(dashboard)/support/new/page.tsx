@@ -62,7 +62,7 @@ export default function SupportNewTicketPage() {
   };
 
   return (
-    <div className="mx-auto w-full max-w-3xl space-y-4 px-4 pb-20 pt-4 md:space-y-6 md:px-6 md:pb-8 md:pt-6">
+    <div className="mx-auto w-full max-w-3xl space-y-6 px-4 py-6 md:px-8 md:py-10">
       <div className="flex items-center justify-between gap-3">
         <Button asChild variant="ghost" size="sm">
           <Link href="/support">
@@ -82,47 +82,49 @@ export default function SupportNewTicketPage() {
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <FormField
-              control={form.control}
-              name="category"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Category</FormLabel>
-                  <Select value={field.value} onValueChange={field.onChange}>
-                    <FormControl>
-                      <SelectTrigger className="h-10">
-                        <SelectValue />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {CATEGORY_OPTIONS.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {field.value === "bug_report" ? (
-                    <p className="text-xs text-muted-foreground">Bug reports are private by default.</p>
-                  ) : null}
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <FormField
+                control={form.control}
+                name="category"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Category</FormLabel>
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <FormControl>
+                        <SelectTrigger className="h-10 w-full">
+                          <SelectValue />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {CATEGORY_OPTIONS.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {field.value === "bug_report" ? (
+                      <p className="text-xs text-muted-foreground">Bug reports are private by default.</p>
+                    ) : null}
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-            <FormField
-              control={form.control}
-              name="title"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Title</FormLabel>
-                  <FormControl>
-                    <Input {...field} placeholder="Short, specific summary" className="h-10" />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+              <FormField
+                control={form.control}
+                name="title"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Title</FormLabel>
+                    <FormControl>
+                      <Input {...field} placeholder="Short, specific summary" className="h-10 w-full" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
 
             <FormField
               control={form.control}
@@ -133,7 +135,7 @@ export default function SupportNewTicketPage() {
                   <FormControl>
                     <Textarea
                       {...field}
-                      className="min-h-[160px]"
+                      className="min-h-40 w-full"
                       placeholder="Add context, expected behavior, and why this matters."
                     />
                   </FormControl>

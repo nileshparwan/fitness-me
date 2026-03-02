@@ -94,7 +94,7 @@ export default function AdminTicketsPage() {
   const rows = query.data?.rows || [];
 
   return (
-    <div className="mx-auto w-full max-w-7xl space-y-4 px-4 pb-20 pt-4 md:space-y-6 md:px-6 md:pb-8 md:pt-6">
+    <div className="mx-auto w-full max-w-7xl space-y-4 pb-20 pt-4 md:space-y-6 md:pb-8">
       <section className="native-surface surface-pad space-y-4">
         <div className="space-y-1">
           <h1 className="text-xl font-semibold">Ticket Admin Panel</h1>

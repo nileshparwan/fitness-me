@@ -116,7 +116,7 @@ export default function SupportDashboardPage() {
   };
 
   return (
-    <div className="page-shell mx-auto w-full max-w-7xl space-y-6 pb-24 md:pb-10">
+    <div className="mx-auto w-full max-w-7xl space-y-6 px-4 py-6 md:px-8 md:py-10">
       <section className="native-surface surface-pad flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div className="space-y-1">
           <h1 className="text-xl font-semibold">Support & Requests</h1>
@@ -137,14 +137,16 @@ export default function SupportDashboardPage() {
         onValueChange={(value) => setActiveTab(value as "community" | "mine")}
         className="space-y-4"
       >
-        <TabsList className="grid w-full grid-cols-2 md:w-[420px]">
+        <div className="w-full overflow-x-auto">
+          <TabsList className="grid min-w-max grid-cols-2">
           <TabsTrigger value="community">Community Board</TabsTrigger>
           <TabsTrigger value="mine">My Tickets</TabsTrigger>
-        </TabsList>
+          </TabsList>
+        </div>
 
         <TabsContent value="community" className="space-y-4">
           <section className="native-surface surface-pad flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div className="relative w-full md:max-w-xs">
+            <div className="relative w-full md:max-w-sm">
               <Search className="pointer-events-none absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
                 value={publicSearch}
@@ -157,7 +159,7 @@ export default function SupportDashboardPage() {
               />
             </div>
 
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+            <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-3 md:w-auto">
               <Select
                 value={publicCategory}
                 onValueChange={(value) => {
@@ -165,7 +167,7 @@ export default function SupportDashboardPage() {
                   setPublicPage(0);
                 }}
               >
-                <SelectTrigger className="h-9 w-full sm:w-[180px]">
+                <SelectTrigger className="h-9 w-full">
                   <SelectValue placeholder="Category" />
                 </SelectTrigger>
                 <SelectContent>
@@ -185,7 +187,7 @@ export default function SupportDashboardPage() {
                   setPublicPage(0);
                 }}
               >
-                <SelectTrigger className="h-9 w-full sm:w-[150px]">
+                <SelectTrigger className="h-9 w-full">
                   <SelectValue placeholder="Status" />
                 </SelectTrigger>
                 <SelectContent>
@@ -205,7 +207,7 @@ export default function SupportDashboardPage() {
                   setPublicPage(0);
                 }}
               >
-                <SelectTrigger className="h-9 w-full sm:w-[180px]">
+                <SelectTrigger className="h-9 w-full">
                   <SelectValue placeholder="Sort by" />
                 </SelectTrigger>
                 <SelectContent>
@@ -291,7 +293,7 @@ export default function SupportDashboardPage() {
 
         <TabsContent value="mine" className="space-y-4">
           <section className="native-surface surface-pad flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div className="relative w-full md:max-w-xs">
+            <div className="relative w-full md:max-w-sm">
               <Search className="pointer-events-none absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
                 value={mySearch}
@@ -303,7 +305,7 @@ export default function SupportDashboardPage() {
                 className="h-9 pl-8"
               />
             </div>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-2 md:w-auto">
               <Select
                 value={myStatus}
                 onValueChange={(value) => {
@@ -311,7 +313,7 @@ export default function SupportDashboardPage() {
                   setMyPage(0);
                 }}
               >
-                <SelectTrigger className="h-9 w-full md:w-[170px]">
+                <SelectTrigger className="h-9 w-full">
                   <SelectValue placeholder="Status" />
                 </SelectTrigger>
                 <SelectContent>
@@ -330,7 +332,7 @@ export default function SupportDashboardPage() {
                   setMyPage(0);
                 }}
               >
-                <SelectTrigger className="h-9 w-full sm:w-[180px]">
+                <SelectTrigger className="h-9 w-full">
                   <SelectValue placeholder="Sort by" />
                 </SelectTrigger>
                 <SelectContent>

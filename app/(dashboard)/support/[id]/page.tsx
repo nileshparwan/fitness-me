@@ -199,7 +199,7 @@ export default function SupportTicketDetailPage() {
   }, [ticketQuery.isLoading, ticketQuery.isError, ticket]);
 
   return (
-    <div className="mx-auto w-full max-w-4xl space-y-4 px-4 pb-20 pt-4 md:space-y-6 md:px-6 md:pb-8 md:pt-6">
+    <div className="mx-auto w-full max-w-7xl space-y-6 px-4 py-6 md:px-8 md:py-10">
       <Button asChild variant="ghost" size="sm" className="w-fit">
         <Link href="/support">
           <ArrowLeft className="mr-2 h-4 w-4" />
@@ -225,31 +225,169 @@ export default function SupportTicketDetailPage() {
 
       {pageState === "ready" && ticket ? (
         <>
-          <section className="native-surface surface-pad space-y-4">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="space-y-2">
-                <div className="flex flex-wrap items-center gap-2">
-                  <h1 className="text-xl font-semibold">{ticket.title}</h1>
-                  {canEditTicket ? (
-                    <Button variant="outline" size="sm" onClick={onStartEdit}>
-                      <Pencil className="mr-2 h-4 w-4" />
-                      Edit Ticket
-                    </Button>
-                  ) : null}
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_20rem]">
+            <div className="space-y-6">
+              <section className="native-surface surface-pad space-y-4">
+                <div className="space-y-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h1 className="text-xl font-semibold">{ticket.title}</h1>
+                    {canEditTicket ? (
+                      <Button variant="outline" size="sm" onClick={onStartEdit}>
+                        <Pencil className="mr-2 h-4 w-4" />
+                        Edit Ticket
+                      </Button>
+                    ) : null}
+                  </div>
+                  <p className="whitespace-pre-wrap text-sm leading-6">{ticket.description}</p>
                 </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant="outline" className="capitalize">
-                    {humanizeCategory(ticket.category)}
-                  </Badge>
-                  <Badge variant={getStatusVariant(ticket.status)} className="capitalize">
-                    {ticket.status.replaceAll("_", " ")}
-                  </Badge>
-                  <span className="text-xs text-muted-foreground">{ticket.upvotes} upvotes</span>
-                </div>
-              </div>
 
+                <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                  <Avatar size="sm">
+                    <AvatarImage src={ticket.author.avatar_url || undefined} alt={ticket.author.name} />
+                    <AvatarFallback>{initialsFromName(ticket.author.name)}</AvatarFallback>
+                  </Avatar>
+                  <span>{ticket.author.name}</span>
+                  <span>•</span>
+                  <span>{formatDistanceToNow(new Date(ticket.created_at), { addSuffix: true })}</span>
+                </div>
+              </section>
+
+              <section className="native-surface surface-pad space-y-4">
+                <div className="flex items-center gap-2">
+                  <MessageSquare className="h-4 w-4" />
+                  <h2 className="text-base font-semibold">Comments</h2>
+                </div>
+
+                {commentsQuery.isLoading ? (
+                  <p className="text-sm text-muted-foreground">Loading comments...</p>
+                ) : (
+                  <></>
+                )}
+                {commentsQuery.isError ? (
+                  <p className="text-sm text-destructive">
+                    {commentsQuery.error instanceof Error ? commentsQuery.error.message : "Failed to load comments"}
+                  </p>
+                ) : null}
+                {commentsQuery.isPlaceholderData ? (
+                  <p className="text-xs text-muted-foreground">Refreshing comments...</p>
+                ) : null}
+
+                <div className="space-y-3">
+                  {comments.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No comments yet.</p>
+                  ) : (
+                    comments.map((comment) => {
+                      const canManageComment = ticket.viewer_user_id === comment.user_id && !isClosed;
+                      const isEditing = editingCommentId === comment.id;
+                      return (
+                        <div key={comment.id} className="rounded-md border p-3">
+                          <div className="mb-2 flex items-center justify-between gap-2 text-xs text-muted-foreground">
+                            <div className="flex items-center gap-2">
+                              <Avatar size="sm">
+                                <AvatarImage src={comment.author.avatar_url || undefined} alt={comment.author.name} />
+                                <AvatarFallback>{initialsFromName(comment.author.name)}</AvatarFallback>
+                              </Avatar>
+                              <span>{comment.author.name}</span>
+                              <span>•</span>
+                              <span>{formatDistanceToNow(new Date(comment.created_at), { addSuffix: true })}</span>
+                            </div>
+                            {canManageComment ? (
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="ghost" size="icon" className="h-8 w-8">
+                                    <MoreVertical className="h-4 w-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem onClick={() => onStartEditComment(comment)}>
+                                    <Pencil className="mr-2 h-4 w-4" />
+                                    Edit
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem variant="destructive" onClick={() => setDeleteTarget(comment)}>
+                                    <Trash2 className="mr-2 h-4 w-4" />
+                                    Delete
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            ) : null}
+                          </div>
+
+                          {isEditing ? (
+                            <div className="space-y-2">
+                              <Textarea
+                                value={editingCommentText}
+                                onChange={(event) => setEditingCommentText(event.target.value)}
+                                className="min-h-24"
+                              />
+                              <div className="flex justify-end gap-2">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => {
+                                    setEditingCommentId(null);
+                                    setEditingCommentText("");
+                                  }}
+                                  disabled={commentMutations.updateComment.isPending}
+                                >
+                                  Cancel
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  onClick={() => void onSaveComment()}
+                                  disabled={commentMutations.updateComment.isPending || editingCommentText.trim().length === 0}
+                                >
+                                  Save
+                                </Button>
+                              </div>
+                            </div>
+                          ) : (
+                            <p className="whitespace-pre-wrap text-sm leading-6">{comment.content}</p>
+                          )}
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+
+                {isClosed ? (
+                  <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                    This ticket is closed. No further comments can be added.
+                  </div>
+                ) : (
+                  <>
+                    {!showComposer ? (
+                      <div className="flex justify-end">
+                        <Button size="sm" variant="outline" onClick={() => setShowComposer(true)}>
+                          Write Comment
+                        </Button>
+                      </div>
+                    ) : (
+                      <CommentComposer
+                        value={commentText}
+                        onChange={setCommentText}
+                        onSubmit={() => void onSubmitComment()}
+                        isPending={commentMutations.addComment.isPending}
+                      />
+                    )}
+                  </>
+                )}
+              </section>
+            </div>
+
+            <aside className="native-surface surface-pad h-fit space-y-3 lg:sticky lg:top-6">
+              <h2 className="text-sm font-semibold">Ticket Info</h2>
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant="outline" className="capitalize">
+                  {humanizeCategory(ticket.category)}
+                </Badge>
+                <Badge variant={getStatusVariant(ticket.status)} className="capitalize">
+                  {ticket.status.replaceAll("_", " ")}
+                </Badge>
+              </div>
+              <p className="text-sm text-muted-foreground">{ticket.upvotes} upvotes</p>
               {ticket.is_public && !isClosed ? (
                 <Button
+                  className="w-full"
                   variant={ticket.viewer_has_upvoted ? "default" : "outline"}
                   size="sm"
                   onClick={() => void onUpvote()}
@@ -263,145 +401,13 @@ export default function SupportTicketDetailPage() {
                   {ticket.viewer_has_upvoted ? "Remove upvote" : "Upvote"}
                 </Button>
               ) : null}
-            </div>
-
-            <div className="space-y-3">
-              <p className="whitespace-pre-wrap text-sm leading-6">{ticket.description}</p>
-              <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                <Avatar size="sm">
-                  <AvatarImage src={ticket.author.avatar_url || undefined} alt={ticket.author.name} />
-                  <AvatarFallback>{initialsFromName(ticket.author.name)}</AvatarFallback>
-                </Avatar>
-                <span>{ticket.author.name}</span>
-                <span>•</span>
-                <span>{formatDistanceToNow(new Date(ticket.created_at), { addSuffix: true })}</span>
-              </div>
-            </div>
-          </section>
-
-          <section className="native-surface surface-pad space-y-4">
-            <div className="flex items-center gap-2">
-              <MessageSquare className="h-4 w-4" />
-              <h2 className="text-base font-semibold">Comments</h2>
-            </div>
-
-            {commentsQuery.isLoading ? (
-              <p className="text-sm text-muted-foreground">Loading comments...</p>
-            ) : null}
-            {commentsQuery.isError ? (
-              <p className="text-sm text-destructive">
-                {commentsQuery.error instanceof Error ? commentsQuery.error.message : "Failed to load comments"}
-              </p>
-            ) : null}
-            {commentsQuery.isPlaceholderData ? (
-              <p className="text-xs text-muted-foreground">Refreshing comments...</p>
-            ) : null}
-
-            <div className="space-y-3">
-              {comments.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No comments yet.</p>
-              ) : (
-                comments.map((comment) => {
-                  const canManageComment = ticket.viewer_user_id === comment.user_id && !isClosed;
-                  const isEditing = editingCommentId === comment.id;
-                  return (
-                    <div key={comment.id} className="rounded-md border p-3">
-                      <div className="mb-2 flex items-center justify-between gap-2 text-xs text-muted-foreground">
-                        <div className="flex items-center gap-2">
-                          <Avatar size="sm">
-                            <AvatarImage src={comment.author.avatar_url || undefined} alt={comment.author.name} />
-                            <AvatarFallback>{initialsFromName(comment.author.name)}</AvatarFallback>
-                          </Avatar>
-                          <span>{comment.author.name}</span>
-                          <span>•</span>
-                          <span>{formatDistanceToNow(new Date(comment.created_at), { addSuffix: true })}</span>
-                        </div>
-                        {canManageComment ? (
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-8 w-8">
-                                <MoreVertical className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={() => onStartEditComment(comment)}>
-                                <Pencil className="mr-2 h-4 w-4" />
-                                Edit
-                              </DropdownMenuItem>
-                              <DropdownMenuItem variant="destructive" onClick={() => setDeleteTarget(comment)}>
-                                <Trash2 className="mr-2 h-4 w-4" />
-                                Delete
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        ) : null}
-                      </div>
-
-                      {isEditing ? (
-                        <div className="space-y-2">
-                          <Textarea
-                            value={editingCommentText}
-                            onChange={(event) => setEditingCommentText(event.target.value)}
-                            className="min-h-[90px]"
-                          />
-                          <div className="flex justify-end gap-2">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => {
-                                setEditingCommentId(null);
-                                setEditingCommentText("");
-                              }}
-                              disabled={commentMutations.updateComment.isPending}
-                            >
-                              Cancel
-                            </Button>
-                            <Button
-                              size="sm"
-                              onClick={() => void onSaveComment()}
-                              disabled={commentMutations.updateComment.isPending || editingCommentText.trim().length === 0}
-                            >
-                              Save
-                            </Button>
-                          </div>
-                        </div>
-                      ) : (
-                        <p className="whitespace-pre-wrap text-sm leading-6">{comment.content}</p>
-                      )}
-                    </div>
-                  );
-                })
-              )}
-            </div>
-
-            {isClosed ? (
-              <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-                This ticket is closed. No further comments can be added.
-              </div>
-            ) : (
-              <>
-                {!showComposer ? (
-                  <div className="flex justify-end">
-                    <Button size="sm" variant="outline" onClick={() => setShowComposer(true)}>
-                      Write Comment
-                    </Button>
-                  </div>
-                ) : (
-                  <CommentComposer
-                    value={commentText}
-                    onChange={setCommentText}
-                    onSubmit={() => void onSubmitComment()}
-                    isPending={commentMutations.addComment.isPending}
-                  />
-                )}
-              </>
-            )}
-          </section>
+            </aside>
+          </div>
         </>
       ) : null}
 
       <Dialog open={isEditTicketOpen} onOpenChange={setIsEditTicketOpen}>
-        <DialogContent>
+        <DialogContent className="w-[95vw] max-h-[85vh] overflow-y-auto md:max-w-md">
           <DialogHeader>
             <DialogTitle>Edit Ticket</DialogTitle>
             <DialogDescription>Update your ticket title and description.</DialogDescription>
@@ -436,7 +442,7 @@ export default function SupportTicketDetailPage() {
       </Dialog>
 
       <AlertDialog open={Boolean(deleteTarget)} onOpenChange={(open) => !open && setDeleteTarget(null)}>
-        <AlertDialogContent>
+        <AlertDialogContent className="w-[95vw] max-h-[85vh] overflow-y-auto md:max-w-md">
           <AlertDialogHeader>
             <AlertDialogTitle>Delete this comment?</AlertDialogTitle>
             <AlertDialogDescription>This action cannot be undone.</AlertDialogDescription>

@@ -44,8 +44,18 @@ export default function AdminDashboardPage() {
   return (
     <div className="section-gap">
       <section className="grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-6">
-        <CompactMetricCard title="Users" value={dashboard?.total_users ?? 0} isLoading={loadingDashboard} />
-        <CompactMetricCard title="Admins" value={users?.total_admins ?? 0} isLoading={loadingUsers} />
+        <CompactMetricCard
+          title="Users Logged In"
+          value={dashboard?.currently_logged_in_users ?? 0}
+          isLoading={loadingDashboard}
+          subtitle="Last 30 min"
+        />
+        <CompactMetricCard
+          title="Admins Logged In"
+          value={dashboard?.currently_logged_in_admins ?? 0}
+          isLoading={loadingDashboard}
+          subtitle="Last 30 min"
+        />
         <CompactMetricCard title="Sessions" value={dashboard?.total_sessions ?? 0} isLoading={loadingDashboard} />
         <CompactMetricCard title="Strength Sets" value={dashboard?.total_strength_sets ?? 0} isLoading={loadingDashboard} />
         <CompactMetricCard title="Meal Plans" value={dashboard?.total_meal_plans ?? 0} isLoading={loadingDashboard} />
