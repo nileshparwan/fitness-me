@@ -10,6 +10,7 @@ const adminLinks = [
   { href: "/admin/training", label: "Training" },
   { href: "/admin/nutrition", label: "Nutrition" },
   { href: "/admin/analytics", label: "Analytics" },
+  { href: "/admin/tickets", label: "Tickets" },
   { href: "/admin/settings", label: "Settings" },
 ];
 

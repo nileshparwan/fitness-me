@@ -15,6 +15,7 @@ import {
   Menu,
   Sparkles,
   Shield,
+  MessageSquare,
   Target,
   TrendingUp,
   Utensils,
@@ -88,11 +89,17 @@ const data = {
     },
     {
       label: "Account",
-      items: [{ title: "Fitness Goals", url: "/settings/goals", icon: Target }],
+      items: [
+        { title: "Fitness Goals", url: "/settings/goals", icon: Target },
+        { title: "Support", url: "/support", icon: MessageSquare },
+      ],
     },
     {
       label: "Admin",
-      items: [{ title: "Admin Console", url: "/admin", icon: Shield }],
+      items: [
+        { title: "Admin Console", url: "/admin", icon: Shield },
+        { title: "Tickets", url: "/admin/tickets", icon: MessageSquare },
+      ],
     },
   ] as { label: string; items: NavItem[] }[],
 }
