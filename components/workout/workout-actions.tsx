@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { Share2, Eye, Loader2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Share2, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
     Dialog,
@@ -15,8 +15,8 @@ import { QRCodeSVG } from "qrcode.react";
 
 // NEW IMPORTS
 import { toast } from "sonner";
-import dynamic from "next/dynamic";
 import { Database } from "@/types/database";
+import DownloadPDFButton from "./download-pdf-button";
 
 type Workout = Database["public"]["Tables"]["training_sessions"]["Row"];
 type WorkoutLog = Database["public"]["Tables"]["strength_sets"]["Row"];
@@ -29,23 +29,16 @@ interface WorkoutActionsProps {
     isPublicPage?: boolean;
 }
 
-const DownloadPDFButton = dynamic(
-    () => import("./download-pdf-button"),
-    {
-        // 2. DISABLE SERVER RENDER (Crucial)
-        ssr: false,
-
-        // 3. LOADING STATE (Good UX)
-        loading: () => (
-            <Button variant="outline" size="sm" disabled>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading PDF...
-            </Button>
-        )
-    }
-);
-
 export function WorkoutActions({ workout, strengthLogs, cardioLogs, isPublicPage = false }: WorkoutActionsProps) {
     const [showShareDialog, setShowShareDialog] = useState(false);
+
+    useEffect(() => {
+        const idle = window.setTimeout(() => {
+            void import("./workout-pdf-document");
+            void import("@react-pdf/renderer");
+        }, 800);
+        return () => window.clearTimeout(idle);
+    }, []);
 
     const handleReaderMode = () => {
         if (typeof window !== "undefined") {
@@ -63,28 +56,24 @@ export function WorkoutActions({ workout, strengthLogs, cardioLogs, isPublicPage
     };
 
     return (
-        <div className="flex flex-wrap gap-2 sm:flex-nowrap">
+        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 sm:flex-nowrap">
 
             {/* ACTION 1: Direct PDF Download (Safe) */}
             {/* 1. PDF BUTTON (Now Safe & Lazy Loaded) */}
-            <DownloadPDFButton
-                workout={workout}
-                strengthLogs={strengthLogs}
-                cardioLogs={cardioLogs}
-            />
+            <DownloadPDFButton workout={workout} strengthLogs={strengthLogs} cardioLogs={cardioLogs} />
 
             {/* ACTION 2: Reader Mode */}
             {!isPublicPage && (
-                <Button variant="outline" size="sm" onClick={handleReaderMode}>
-                    <Eye className="mr-2 h-4 w-4" /> View
+                <Button variant="outline" size="sm" className="h-8 px-2 text-xs sm:h-9 sm:px-3 sm:text-sm" onClick={handleReaderMode}>
+                    <Eye className="mr-1.5 h-3.5 w-3.5 sm:mr-2 sm:h-4 sm:w-4" /> View
                 </Button>
             )}
 
             {/* ACTION 3: Share */}
             <Dialog open={showShareDialog} onOpenChange={setShowShareDialog}>
                 <DialogTrigger asChild>
-                    <Button size="sm">
-                        <Share2 className="mr-2 h-4 w-4" /> Share
+                    <Button size="sm" className="h-8 px-2 text-xs sm:h-9 sm:px-3 sm:text-sm">
+                        <Share2 className="mr-1.5 h-3.5 w-3.5 sm:mr-2 sm:h-4 sm:w-4" /> Share
                     </Button>
                 </DialogTrigger>
 

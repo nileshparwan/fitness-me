@@ -32,12 +32,14 @@ export default async function PublicWorkoutPage({ params }: { params: Promise<{ 
         .from("strength_sets")
         .select("*")
         .eq("workout_id", id)
+        .order("entry_sequence", { ascending: true })
         .order("set_number");
 
     const { data: cardioLogs } = await supabase
         .from("cardio_sessions")
         .select("*")
-        .eq("workout_id", id);
+        .eq("workout_id", id)
+        .order("entry_sequence", { ascending: true });
 
     const typedWorkout = workout as Workout;
     const typedStrengthLogs = (strengthLogs || []) as WorkoutLog[];

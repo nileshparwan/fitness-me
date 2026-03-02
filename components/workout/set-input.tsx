@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { FormControl, FormField, FormItem } from "@/components/ui/form";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { cn } from "@/utils";
 import { Control } from "react-hook-form";
 import { WorkoutFormValues } from "@/types/workout";
@@ -86,79 +87,78 @@ export function SetInput({ index, setIndex, control, onRemove }: SetInputProps) 
       </div>
 
       <div className="mt-2.5 grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-6">
-        <FormField
-          control={control}
-          name={`exercises.${index}.sets.${setIndex}.rest_seconds`}
-          render={({ field }) => (
-            <FormItem>
-              <FormControl>
-                <Input
-                  value={field.value ?? ""}
-                  onChange={(e) => field.onChange(e.target.value === "" ? undefined : Number(e.target.value))}
-                  type="number"
-                  className="h-9 text-xs sm:h-8"
-                  placeholder="Rest (sec)"
+        <Accordion type="single" collapsible className="w-full md:col-span-6">
+          <AccordionItem value={`set-advanced-${index}-${setIndex}`} className="border-b-0">
+            <AccordionTrigger className="py-1.5 text-xs">Advanced Set Details</AccordionTrigger>
+            <AccordionContent>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-4">
+                <FormField
+                  control={control}
+                  name={`exercises.${index}.sets.${setIndex}.rest_seconds`}
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormControl>
+                        <Input
+                          value={field.value ?? ""}
+                          onChange={(e) => field.onChange(e.target.value === "" ? undefined : Number(e.target.value))}
+                          type="number"
+                          className="h-9 text-xs sm:h-8"
+                          placeholder="Rest (sec)"
+                        />
+                      </FormControl>
+                    </FormItem>
+                  )}
                 />
-              </FormControl>
-            </FormItem>
-          )}
-        />
-        <FormField
-          control={control}
-          name={`exercises.${index}.sets.${setIndex}.tempo`}
-          render={({ field }) => (
-            <FormItem>
-              <FormControl>
-                <Input
-                  value={field.value ?? ""}
-                  onChange={field.onChange}
-                  className="h-9 text-xs sm:h-8"
-                  placeholder="Tempo (e.g. 3-1-1)"
+                <FormField
+                  control={control}
+                  name={`exercises.${index}.sets.${setIndex}.tempo`}
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormControl>
+                        <Input
+                          value={field.value ?? ""}
+                          onChange={field.onChange}
+                          className="h-9 text-xs sm:h-8"
+                          placeholder="Tempo (e.g. 3-1-1)"
+                        />
+                      </FormControl>
+                    </FormItem>
+                  )}
                 />
-              </FormControl>
-            </FormItem>
-          )}
-        />
-        <FormField
-          control={control}
-          name={`exercises.${index}.sets.${setIndex}.is_warmup`}
-          render={({ field }) => (
-            <FormItem className="flex h-9 flex-row items-center gap-2 rounded-md border px-2 sm:h-8">
-              <FormControl>
-                <Checkbox checked={Boolean(field.value)} onCheckedChange={(checked) => field.onChange(checked === true)} />
-              </FormControl>
-              <span className="text-xs text-muted-foreground">Warmup</span>
-            </FormItem>
-          )}
-        />
-        <FormField
-          control={control}
-          name={`exercises.${index}.sets.${setIndex}.is_dropset`}
-          render={({ field }) => (
-            <FormItem className="flex h-9 flex-row items-center gap-2 rounded-md border px-2 sm:h-8">
-              <FormControl>
-                <Checkbox checked={Boolean(field.value)} onCheckedChange={(checked) => field.onChange(checked === true)} />
-              </FormControl>
-              <span className="text-xs text-muted-foreground">Drop Set</span>
-            </FormItem>
-          )}
-        />
-        <FormField
-          control={control}
-          name={`exercises.${index}.sets.${setIndex}.form_video_url`}
-          render={({ field }) => (
-            <FormItem className="md:col-span-2">
-              <FormControl>
-                <Input
-                  value={field.value ?? ""}
-                  onChange={field.onChange}
-                  className="h-9 text-xs sm:h-8"
-                  placeholder="Form Video URL (Optional)"
+                <FormField
+                  control={control}
+                  name={`exercises.${index}.sets.${setIndex}.is_warmup`}
+                  render={({ field }) => (
+                    <FormItem className="flex h-9 flex-row items-center gap-2 rounded-md border px-2 sm:h-8">
+                      <FormControl>
+                        <Checkbox
+                          checked={Boolean(field.value)}
+                          onCheckedChange={(checked) => field.onChange(checked === true)}
+                        />
+                      </FormControl>
+                      <span className="text-xs text-muted-foreground">Warmup</span>
+                    </FormItem>
+                  )}
                 />
-              </FormControl>
-            </FormItem>
-          )}
-        />
+                <FormField
+                  control={control}
+                  name={`exercises.${index}.sets.${setIndex}.is_dropset`}
+                  render={({ field }) => (
+                    <FormItem className="flex h-9 flex-row items-center gap-2 rounded-md border px-2 sm:h-8">
+                      <FormControl>
+                        <Checkbox
+                          checked={Boolean(field.value)}
+                          onCheckedChange={(checked) => field.onChange(checked === true)}
+                        />
+                      </FormControl>
+                      <span className="text-xs text-muted-foreground">Drop Set</span>
+                    </FormItem>
+                  )}
+                />
+              </div>
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
       </div>
     </div>
   );

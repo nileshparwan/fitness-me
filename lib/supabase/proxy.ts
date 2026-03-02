@@ -41,6 +41,13 @@ export async function updateSession(request: NextRequest) {
   const pathname = request.nextUrl.pathname.toLowerCase()
   const isDeleted = Boolean(user?.user_metadata?.is_deleted)
   const isBlocked = Boolean(user?.user_metadata?.is_blocked)
+  const providers = Array.isArray(user?.app_metadata?.providers)
+    ? (user?.app_metadata?.providers as unknown[])
+        .filter((entry): entry is string => typeof entry === "string")
+        .map((entry) => entry.toLowerCase())
+    : []
+  const isSocialOnly = providers.length > 0 && !providers.includes("email")
+  const hasPassword = Boolean(user?.user_metadata?.has_password)
 
   // ---------------------------------------------------------
   // 3.6 NEW: Handle Root Path (localhost:3000 -> /)
@@ -101,6 +108,17 @@ export async function updateSession(request: NextRequest) {
     const url = request.nextUrl.clone()
     url.pathname = '/dashboard'
     return NextResponse.redirect(url)
+  }
+
+  // Social-only accounts must set a password before accessing the app.
+  if (user && !isDeleted && !isBlocked && isSocialOnly && !hasPassword) {
+    const allowedPasswordSetupPaths = ['/settings/account', '/api/auth/callback'];
+    const isAllowed = allowedPasswordSetupPaths.some((path) => request.nextUrl.pathname.startsWith(path));
+    if (!isAllowed) {
+      const url = request.nextUrl.clone()
+      url.pathname = '/settings/account'
+      return NextResponse.redirect(url)
+    }
   }
 
   // Also redirect logged-in users away from login page

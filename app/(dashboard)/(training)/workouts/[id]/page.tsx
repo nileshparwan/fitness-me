@@ -3,34 +3,72 @@
 import { useParams, useRouter } from "next/navigation";
 import { format } from "date-fns";
 import {
-  Calendar, Clock, Dumbbell, Trash2, ArrowLeft, Activity, Flame, MapPin, Heart,
-  MoreVertical, Share2, Pencil, Timer, Hash, Weight, HeartPulse
+  Activity,
+  ArrowLeft,
+  Calendar,
+  Clock,
+  Dumbbell,
+  HeartPulse,
+  MoreVertical,
+  Pencil,
+  Share2,
+  Trash2,
+  Weight,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import {
-  Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger, SheetClose
-} from "@/components/ui/sheet";
 
 import { useWorkout, useWorkouts } from "@/hooks/use-workout";
 import { groupLogsByExercise } from "@/utils/log";
 import { EditableText } from "@/components/shared/editable-text";
-import { WorkoutDetailSkeleton } from "./_components/workout-detailed-skeleton";
 import { WorkoutActions } from "@/components/workout/workout-actions";
+import { WorkoutDetailSkeleton } from "./_components/workout-detailed-skeleton";
 import { Database } from "@/types/database";
-import { LucideIcon } from "lucide-react";
 
-// Types
-type WorkoutLog = Database['public']['Tables']['strength_sets']['Row'];
-type CardioLog = Database['public']['Tables']['cardio_sessions']['Row'];
+type StrengthSetRow = Database["public"]["Tables"]["strength_sets"]["Row"];
+type CardioLogRow = Database["public"]["Tables"]["cardio_sessions"]["Row"];
+
+type SessionItem =
+  | {
+      id: string;
+      type: "strength";
+      title: string;
+      createdAtMs: number;
+      sets: StrengthSetRow[];
+    }
+  | {
+      id: string;
+      type: "cardio";
+      title: string;
+      createdAtMs: number;
+      log: CardioLogRow;
+    };
+
+function safeMs(value: string | null | undefined) {
+  if (!value) return Number.MAX_SAFE_INTEGER;
+  const ms = new Date(value).getTime();
+  return Number.isFinite(ms) ? ms : Number.MAX_SAFE_INTEGER;
+}
+
+function formatMetric(value: number | null | undefined, suffix: string) {
+  if (value === null || value === undefined) return "-";
+  return `${value}${suffix}`;
+}
 
 export default function WorkoutDetailPage() {
   const { id } = useParams() as { id: string };
@@ -40,285 +78,374 @@ export default function WorkoutDetailPage() {
   const { data: workout, isLoading } = useWorkout(id);
 
   if (isLoading) return <WorkoutDetailSkeleton />;
-  if (!workout) return <div className="page-shell text-center text-muted-foreground">Workout not found</div>;
+  if (!workout) {
+    return <div className="page-shell text-center text-sm text-muted-foreground">Workout not found</div>;
+  }
 
-  const strengthLogs = (workout.strength_sets || []) as WorkoutLog[];
-  const cardioLogs = (workout.cardio_sessions || []) as CardioLog[];
-  const exercises = groupLogsByExercise(strengthLogs);
+  const strengthLogs = (workout.strength_sets || []) as StrengthSetRow[];
+  const cardioLogs = (workout.cardio_sessions || []) as CardioLogRow[];
+  const groupedStrength = groupLogsByExercise(strengthLogs);
 
-  const totalVolume = strengthLogs.reduce(
-    (acc, log) => acc + ((log.weight || 0) * (log.reps || 0)), 0
-  );
+  const totalVolume = strengthLogs.reduce((sum, row) => sum + (row.weight || 0) * (row.reps || 0), 0);
 
-  const handleRename = async (newName: string) => {
-    try {
-      await updateWorkout.mutateAsync({ id, data: { name: newName } });
-    } catch (error) {
-      console.error("Failed to rename:", error);
+  const totalStrengthSets = strengthLogs.length;
+  const totalCardioMinutes = cardioLogs.reduce((sum, row) => sum + (row.duration_minutes || 0), 0);
+  const totalCardioCalories = cardioLogs.reduce((sum, row) => sum + (row.calories_burned || 0), 0);
+  const hasSessionNotes = [workout.notes, workout.ai_feedback].some((value) => Boolean(value && value.trim()));
+
+  const sessionTimeline: SessionItem[] = (() => {
+    const strengthItems: SessionItem[] = groupedStrength.map((exercise) => ({
+      id: `strength-${
+        exercise.entry_sequence ??
+        exercise.exercise_id ??
+        exercise.group_id ??
+        exercise.name
+      }`,
+      type: "strength",
+      title: exercise.name,
+      createdAtMs: exercise.entry_sequence ?? Math.min(...exercise.sets.map((set) => safeMs(set.created_at))),
+      sets: exercise.sets,
+    }));
+
+    const cardioItems: SessionItem[] = cardioLogs.map((log) => ({
+      id: `cardio-${log.id}`,
+      type: "cardio",
+      title: log.activity_type || "Cardio",
+      createdAtMs: log.entry_sequence ?? safeMs(log.created_at),
+      log,
+    }));
+
+    return [...strengthItems, ...cardioItems].sort((a, b) => a.createdAtMs - b.createdAtMs);
+  })();
+  const workoutName = workout.name;
+  const advancedSetDetails = (set: StrengthSetRow) =>
+    [
+      set.rest_seconds ? `Rest ${set.rest_seconds}s` : null,
+      set.tempo ? `Tempo ${set.tempo}` : null,
+      set.is_warmup ? "Warm-up" : null,
+      set.is_dropset ? "Drop set" : null,
+    ]
+      .filter(Boolean)
+      .join(" • ");
+
+  async function handleDownloadPdf() {
+    const currentWorkout = workout;
+    if (!currentWorkout) return;
+    const [{ pdf }, { WorkoutPDF }] = await Promise.all([
+      import("@react-pdf/renderer"),
+      import("@/components/workout/workout-pdf-document"),
+    ]);
+    const blob = await pdf(
+      <WorkoutPDF workout={currentWorkout} strengthLogs={strengthLogs} cardioLogs={cardioLogs} />
+    ).toBlob();
+    const objectUrl = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = objectUrl;
+    link.download = `${currentWorkout.name.replace(/\s+/g, "_")}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(objectUrl);
+  }
+
+  function handleShareWorkout() {
+    const currentWorkout = workout;
+    if (!currentWorkout) return;
+    const shareUrl = `${window.location.origin}/share/workout/${id}`;
+    if (navigator.share) {
+      void navigator.share({ url: shareUrl, title: currentWorkout.name });
+      return;
     }
-  };
+    window.open(shareUrl, "_blank");
+  }
 
-  const handleDelete = () => {
+  async function handleRename(nextName: string) {
+    if (!nextName || nextName.trim() === workoutName) return;
+    await updateWorkout.mutateAsync({ id, data: { name: nextName.trim() } });
+  }
+
+  function handleDelete() {
     deleteWorkout.mutate(id);
     router.push("/workouts");
-  };
+  }
 
   return (
-    <div className="page-shell section-gap mx-auto max-w-5xl pb-24 md:pb-12 animate-in fade-in duration-300">
-
-      {/* --- HEADER --- */}
-      <div className="flex flex-col gap-4">
-        <div className="flex items-start justify-between gap-3">
-           {/* Title Area */}
-           <div className="flex items-center gap-3 overflow-hidden flex-1">
-              <Button variant="outline" size="icon" className="h-9 w-9 shrink-0 rounded-full" onClick={() => router.back()}>
-                <ArrowLeft className="h-4 w-4" />
-              </Button>
-              <div className="min-w-0 flex-1">
-                <EditableText
-                  initialValue={workout.name}
-                  onSave={handleRename}
-                  className="text-xl md:text-3xl font-bold tracking-tight truncate block"
-                />
-                <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
-                  <Badge variant="secondary" className="rounded-sm px-1.5 py-0 font-normal text-[10px] h-5">
-                    {workout.status || 'Draft'}
-                  </Badge>
-                  <span className="flex items-center gap-1">
-                     <Calendar className="h-3 w-3" />
-                     {format(new Date(workout.date), "MMMM d, yyyy")}
-                  </span>
+    <div className="page-shell mx-auto w-full max-w-6xl pb-24 md:pb-12">
+      <div className="section-gap">
+        <div className="space-y-6">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex min-w-0 items-start gap-3">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-9 w-9 shrink-0 rounded-full"
+                  onClick={() => router.back()}
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                </Button>
+                <div className="min-w-0 space-y-1">
+                  <EditableText
+                    initialValue={workout.name}
+                    onSave={handleRename}
+                    className="truncate text-xl font-semibold tracking-tight md:text-3xl"
+                  />
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                    <Badge variant="secondary" className="h-5 rounded-sm px-1.5 py-0 text-[10px] font-medium">
+                      {workout.status || "draft"}
+                    </Badge>
+                    <span className="inline-flex items-center gap-1">
+                      <Calendar className="h-3.5 w-3.5" />
+                      {format(new Date(workout.date), "EEEE, MMM d, yyyy")}
+                    </span>
+                  </div>
                 </div>
               </div>
-           </div>
 
-           {/* Desktop Actions */}
-           <div className="hidden md:flex items-center gap-2">
-              <WorkoutActions
-                workout={workout}
-                strengthLogs={strengthLogs}
-                cardioLogs={cardioLogs}
-              />
-              <Separator orientation="vertical" className="h-6 mx-1" />
-              <Button variant="outline" size="sm" onClick={() => router.push(`/workouts/${id}/edit`)}>
-                <Dumbbell className="mr-2 h-3.5 w-3.5" /> Strength
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => router.push(`/workouts/${id}/cardio`)}>
-                <Activity className="mr-2 h-3.5 w-3.5" /> Cardio
-              </Button>
               <AlertDialog>
                 <AlertDialogTrigger asChild>
-                  <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive hover:bg-destructive/10"><Trash2 className="h-4 w-4" /></Button>
+                  <Button variant="ghost" size="icon" className="text-destructive hover:bg-destructive/10 hover:text-destructive">
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
                 </AlertDialogTrigger>
                 <AlertDialogContent>
                   <AlertDialogHeader>
-                    <AlertDialogTitle>Delete Workout?</AlertDialogTitle>
+                    <AlertDialogTitle>Delete this workout?</AlertDialogTitle>
                     <AlertDialogDescription>This action cannot be undone.</AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
                     <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction onClick={handleDelete} className="bg-destructive hover:bg-destructive/90">Delete</AlertDialogAction>
+                    <AlertDialogAction className="bg-destructive hover:bg-destructive/90" onClick={handleDelete}>
+                      Delete
+                    </AlertDialogAction>
                   </AlertDialogFooter>
                 </AlertDialogContent>
               </AlertDialog>
-           </div>
+            </div>
 
-           {/* Mobile Menu */}
-           <div className="md:hidden">
-              <Sheet>
-                <SheetTrigger asChild>
-                  <Button variant="ghost" size="icon"><MoreVertical className="h-5 w-5" /></Button>
-                </SheetTrigger>
-                <SheetContent side="bottom" className="rounded-t-xl px-4 pb-8">
-                  <SheetHeader className="text-left mb-6 border-b pb-4">
-                    <SheetTitle>Workout Options</SheetTitle>
-                  </SheetHeader>
-                  <div className="space-y-2">
-                     <SheetClose asChild>
-                        <Button variant="outline" className="w-full justify-start h-12" onClick={() => window.open(`/share/workout/${id}`, '_blank')}>
-                           <Share2 className="mr-3 h-4 w-4" /> Share / PDF
-                        </Button>
-                     </SheetClose>
-                     <div className="border-t my-2" />
-                     <SheetClose asChild>
-                        <Button variant="outline" className="w-full justify-start h-12" onClick={() => router.push(`/workouts/${id}/edit`)}>
-                           <Dumbbell className="mr-3 h-4 w-4 text-primary" /> Manage Strength
-                        </Button>
-                     </SheetClose>
-                     <SheetClose asChild>
-                        <Button variant="outline" className="w-full justify-start h-12" onClick={() => router.push(`/workouts/${id}/cardio`)}>
-                           <Activity className="mr-3 h-4 w-4 text-blue-500" /> Manage Cardio
-                        </Button>
-                     </SheetClose>
-                     <div className="border-t my-2" />
-                     <SheetClose asChild>
-                        <Button variant="destructive" className="w-full justify-start h-12 mt-4" onClick={() => { if(confirm("Delete?")) handleDelete(); }}>
-                           <Trash2 className="mr-3 h-4 w-4" /> Delete Workout
-                        </Button>
-                     </SheetClose>
+            <Accordion type="single" collapsible className="sm:hidden">
+              <AccordionItem value="session-metrics">
+                <AccordionTrigger className="py-2 text-sm">Session Metrics</AccordionTrigger>
+                <AccordionContent className="space-y-2">
+                  <MetricLine icon={Clock} label="Duration" value={formatMetric(workout.duration_minutes, " min")} />
+                  <MetricLine icon={Weight} label="Total Volume" value={`${(totalVolume / 1000).toFixed(1)}k kg`} />
+                  <MetricLine icon={Dumbbell} label="Strength Sets" value={String(totalStrengthSets)} />
+                  <MetricLine icon={Activity} label="Cardio Time" value={formatMetric(totalCardioMinutes, " min")} />
+                  <MetricLine icon={HeartPulse} label="Calories" value={String(totalCardioCalories || "-")} />
+                </AccordionContent>
+              </AccordionItem>
+              {hasSessionNotes ? (
+                <AccordionItem value="session-general-notes">
+                  <AccordionTrigger className="py-2 text-sm">General Notes</AccordionTrigger>
+                  <AccordionContent className="space-y-2">
+                    {[workout.notes, workout.ai_feedback]
+                      .filter((value): value is string => Boolean(value && value.trim()))
+                      .map((value, idx) => (
+                        <p key={`session-note-mobile-${idx}`} className="whitespace-pre-wrap text-sm text-muted-foreground">
+                          {value}
+                        </p>
+                      ))}
+                  </AccordionContent>
+                </AccordionItem>
+              ) : null}
+            </Accordion>
+
+            <div className="hidden grid-cols-1 gap-x-4 gap-y-1.5 text-sm sm:grid sm:grid-cols-2 lg:grid-cols-5">
+              <MetricLine icon={Clock} label="Duration" value={formatMetric(workout.duration_minutes, " min")} />
+              <MetricLine icon={Weight} label="Total Volume" value={`${(totalVolume / 1000).toFixed(1)}k kg`} />
+              <MetricLine icon={Dumbbell} label="Strength Sets" value={String(totalStrengthSets)} />
+              <MetricLine icon={Activity} label="Cardio Time" value={formatMetric(totalCardioMinutes, " min")} />
+              <MetricLine icon={HeartPulse} label="Calories" value={String(totalCardioCalories || "-")} />
+            </div>
+
+            <div className="hidden flex-wrap items-center gap-1.5 sm:flex sm:gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 px-2 text-xs sm:h-9 sm:px-3 sm:text-sm"
+                onClick={() => router.push(`/workouts/${id}/edit`)}
+              >
+                <Pencil className="mr-1.5 h-3.5 w-3.5" />
+                Edit
+              </Button>
+              <WorkoutActions workout={workout} strengthLogs={strengthLogs} cardioLogs={cardioLogs} />
+            </div>
+
+            {hasSessionNotes && (
+              <Accordion type="single" collapsible className="hidden w-full sm:block">
+                <AccordionItem value="workout-notes">
+                  <AccordionTrigger>General Notes</AccordionTrigger>
+                  <AccordionContent className="space-y-2">
+                    {[workout.notes, workout.ai_feedback]
+                      .filter((value): value is string => Boolean(value && value.trim()))
+                      .map((value, idx) => (
+                        <p key={`session-note-${idx}`} className="whitespace-pre-wrap text-sm text-muted-foreground">
+                          {value}
+                        </p>
+                      ))}
+                  </AccordionContent>
+                </AccordionItem>
+              </Accordion>
+            )}
+        </div>
+
+        <div className="space-y-3">
+          <div className="flex items-start justify-between gap-2">
+            <div className="space-y-1">
+              <h3 className="text-base font-semibold">Session Timeline</h3>
+              <p className="text-sm text-muted-foreground">
+                Strength and cardio are presented in one sequence for a complete session view.
+              </p>
+            </div>
+            <div className="sm:hidden">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="icon" className="h-9 w-9">
+                    <MoreVertical className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => router.push(`/workouts/${id}/edit`)}>
+                    <Pencil className="h-4 w-4" /> Edit
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => window.open(`/share/workout/${id}`, "_blank")}>
+                    View
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={handleShareWorkout}>
+                    <Share2 className="h-4 w-4" /> Share
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => void handleDownloadPdf()}>
+                    PDF
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          </div>
+          {sessionTimeline.length === 0 && (
+            <div className="rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">
+              No training logs found for this session yet.
+            </div>
+          )}
+
+          {sessionTimeline.map((item, index) => (
+            <div key={item.id} className="space-y-3 rounded-xl border-b pb-4 last:border-b-0">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <Badge variant={item.type === "strength" ? "secondary" : "outline"} className="capitalize">
+                      {item.type}
+                    </Badge>
+                    <span className="text-xs text-muted-foreground">Block {index + 1}</span>
                   </div>
-                </SheetContent>
-              </Sheet>
-           </div>
+                  <h4 className="truncate text-sm font-semibold md:text-base">{item.title}</h4>
+                </div>
+              </div>
+
+              {item.type === "strength" ? (
+                <div className="space-y-2">
+                  <div className="grid grid-cols-4 rounded-lg bg-muted/40 px-2 py-1 text-[11px] font-medium text-muted-foreground">
+                    <span>Set</span>
+                    <span className="text-center">Weight</span>
+                    <span className="text-center">Reps</span>
+                    <span className="text-right">Notes</span>
+                  </div>
+                  {item.sets.map((set) => (
+                    <div
+                      key={set.id}
+                      className="grid grid-cols-4 items-center rounded-lg bg-muted/20 px-2 py-2 text-xs md:text-sm"
+                    >
+                      <span className="font-medium">#{set.set_number}</span>
+                      <span className="text-center">{set.weight ?? "-"} kg</span>
+                      <span className="text-center">{set.reps ?? "-"}</span>
+                      <span className="truncate text-right text-[11px] text-muted-foreground md:text-xs">
+                        {advancedSetDetails(set) || "-"}
+                      </span>
+                    </div>
+                  ))}
+
+                  {item.sets.some((set) => Boolean(advancedSetDetails(set))) ? (
+                    <Accordion type="single" collapsible className="w-full">
+                      <AccordionItem value={`coach-notes-${item.id}`} className="border-b-0">
+                        <AccordionTrigger className="py-2 text-sm">Coach Notes</AccordionTrigger>
+                        <AccordionContent>
+                          <ul className="list-disc space-y-1 pl-5 text-xs text-muted-foreground">
+                            {item.sets
+                              .filter((set) => Boolean(advancedSetDetails(set)))
+                              .map((set) => (
+                                <li key={`${set.id}-coach`}>
+                                  <span className="font-medium text-foreground">Set {set.set_number}:</span>{" "}
+                                  {advancedSetDetails(set)}
+                                </li>
+                              ))}
+                          </ul>
+                        </AccordionContent>
+                      </AccordionItem>
+                    </Accordion>
+                  ) : null}
+
+                  {item.sets.some((set) => Boolean(set.notes)) ? (
+                    <Accordion type="single" collapsible className="w-full">
+                      <AccordionItem value={`general-notes-${item.id}`} className="border-b-0">
+                        <AccordionTrigger className="py-2 text-sm">General Notes</AccordionTrigger>
+                        <AccordionContent>
+                          <div className="space-y-2 text-xs text-muted-foreground">
+                            {Array.from(
+                              new Set(
+                                item.sets
+                                  .map((set) => (set.notes || "").trim())
+                                  .filter((note) => note.length > 0)
+                              )
+                            ).map((note) => (
+                              <p key={`general-note-${item.id}-${note}`} className="whitespace-pre-wrap">
+                                {note}
+                              </p>
+                            ))}
+                          </div>
+                        </AccordionContent>
+                      </AccordionItem>
+                    </Accordion>
+                  ) : null}
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+                  <InfoPill label="Duration" value={formatMetric(item.log.duration_minutes, " min")} />
+                  <InfoPill label="Distance" value={formatMetric(item.log.distance_km, " km")} />
+                  <InfoPill label="Calories" value={item.log.calories_burned?.toString() || "-"} />
+                  <InfoPill label="Avg HR" value={formatMetric(item.log.average_heart_rate, " bpm")} />
+                </div>
+              )}
+            </div>
+          ))}
         </div>
 
-        {/* --- STATS GRID --- */}
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-           <DetailStat icon={Clock} label="Duration" value={`${workout.duration_minutes || "--"} min`} />
-           <DetailStat icon={Weight} label="Volume" value={`${(totalVolume / 1000).toFixed(1)}k kg`} />
-           <DetailStat icon={Hash} label="Strength" value={`${exercises.length} Exercises`} />
-           <DetailStat icon={Activity} label="Cardio" value={`${cardioLogs.length} Sessions`} />
-           <DetailStat icon={HeartPulse} label="Rating" value={workout.overall_rating ? `${workout.overall_rating}/10` : "--"} />
-           <DetailStat icon={Timer} label="Template" value={workout.template_id ? "Linked" : "Custom"} />
-        </div>
+        <Separator />
       </div>
-
-      <Separator className="my-6 opacity-50" />
-
-      {/* --- STRENGTH SECTION --- */}
-      {exercises.length > 0 && (
-        <section className="space-y-4">
-          <div className="flex items-center justify-between">
-             <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
-                <Dumbbell className="h-4 w-4" /> Strength Routine
-             </h3>
-             <Button variant="ghost" size="sm" className="h-7 text-xs md:hidden" onClick={() => router.push(`/workouts/${id}/edit`)}>
-                Edit <Pencil className="ml-2 h-3 w-3" />
-             </Button>
-          </div>
-
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-             {exercises.map((ex, i: number) => (
-                <Card key={i} className="overflow-hidden border-none shadow-sm ring-1 ring-border">
-                   {/* Card Header */}
-                   <div className="bg-muted/40 p-3 border-b flex justify-between items-start">
-                      <div>
-                         <h4 className="font-semibold text-sm line-clamp-1" title={ex.name}>{ex.name}</h4>
-                         <p className="text-[10px] text-muted-foreground mt-0.5">{ex.sets.length} Sets</p>
-                      </div>
-                      <div className="h-6 w-6 rounded-full bg-background border flex items-center justify-center text-[10px] font-bold text-muted-foreground">
-                         {i + 1}
-                      </div>
-                   </div>
-                   
-                   {/* Sets Grid - Replaces Table */}
-                   <div className="p-3 space-y-2">
-                      {/* Header Row */}
-                      <div className="grid grid-cols-3 text-[10px] font-medium text-muted-foreground uppercase tracking-wider text-center">
-                         <span>Set</span>
-                         <span>Kg</span>
-                         <span>Reps</span>
-                      </div>
-                      {/* Data Rows */}
-                      <div className="space-y-1">
-                        {ex.sets.map((set: WorkoutLog, idx: number) => (
-                           <div key={set.id} className="grid grid-cols-3 text-xs text-center items-center py-1.5 rounded-sm hover:bg-muted/50 transition-colors">
-                              <span className="font-medium text-muted-foreground">{idx + 1}</span>
-                              <span className="font-semibold">
-                                {set.weight}
-                                {set.is_warmup ? "W" : ""}
-                              </span>
-                              <span>{set.reps}</span>
-                           </div>
-                        ))}
-                      </div>
-                      {ex.sets.some((set) => set.rest_seconds || set.tempo || set.is_dropset) && (
-                        <div className="mt-2 text-[10px] text-muted-foreground space-y-1">
-                          {ex.sets.map((set) => (
-                            <div key={`${set.id}-meta`} className="flex gap-2">
-                              <span>#{set.set_number}</span>
-                              {set.rest_seconds ? <span>Rest {set.rest_seconds}s</span> : null}
-                              {set.tempo ? <span>Tempo {set.tempo}</span> : null}
-                              {set.is_dropset ? <span>Drop Set</span> : null}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                   </div>
-                </Card>
-             ))}
-          </div>
-        </section>
-      )}
-
-      {/* --- CARDIO SECTION --- */}
-      {cardioLogs.length > 0 && (
-        <section className="mt-8 space-y-4">
-           <div className="flex items-center justify-between">
-             <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
-                <HeartPulse className="h-4 w-4" /> Cardio Sessions
-             </h3>
-             <Button variant="ghost" size="sm" className="h-7 text-xs md:hidden" onClick={() => router.push(`/workouts/${id}/cardio`)}>
-                Edit <Pencil className="ml-2 h-3 w-3" />
-             </Button>
-          </div>
-
-          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-             {cardioLogs.map((log) => (
-                <Card key={log.id} className="group relative overflow-hidden border-l-4 border-l-blue-500 bg-blue-50/10 dark:bg-blue-900/5">
-                   <CardContent className="surface-pad flex flex-col gap-3">
-                      <div className="flex justify-between items-start">
-                         <span className="font-semibold text-sm">{log.activity_type}</span>
-                         <Badge variant="outline" className="bg-background/50 font-normal text-xs">{log.duration_minutes}m</Badge>
-                      </div>
-                      
-                      <div className="grid grid-cols-3 gap-2 text-xs">
-                         <div className="flex flex-col gap-0.5">
-                            <span className="text-[10px] text-muted-foreground uppercase">Dist</span>
-                            <div className="font-medium flex items-center gap-1">
-                               <MapPin className="h-3 w-3 text-blue-500" />
-                               {log.distance_km || "-"}
-                            </div>
-                         </div>
-                         <div className="flex flex-col gap-0.5">
-                            <span className="text-[10px] text-muted-foreground uppercase">Cals</span>
-                            <div className="font-medium flex items-center gap-1">
-                               <Flame className="h-3 w-3 text-orange-500" />
-                               {log.calories_burned || "-"}
-                            </div>
-                         </div>
-                         <div className="flex flex-col gap-0.5">
-                            <span className="text-[10px] text-muted-foreground uppercase">HR</span>
-                            <div className="font-medium flex items-center gap-1">
-                               <Heart className="h-3 w-3 text-red-500" />
-                               {log.average_heart_rate || "-"}
-                            </div>
-                         </div>
-                      </div>
-                   </CardContent>
-                </Card>
-             ))}
-          </div>
-        </section>
-      )}
-
-      {workout.ai_feedback && (
-        <section className="mt-8">
-          <Card className="border-primary/20 bg-primary/5">
-            <CardHeader>
-              <CardTitle className="text-sm">AI Feedback</CardTitle>
-            </CardHeader>
-            <CardContent className="text-sm text-muted-foreground">
-              {workout.ai_feedback}
-            </CardContent>
-          </Card>
-        </section>
-      )}
     </div>
   );
 }
 
-// Minimal Stat Component
-function DetailStat({ icon: Icon, label, value }: { icon: LucideIcon, label: string, value: string }) {
-   return (
-      <div className="bg-card border rounded-lg p-3 flex items-center gap-3 shadow-sm">
-         <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-            <Icon className="h-4 w-4 text-primary" />
-         </div>
-         <div>
-            <p className="text-[10px] font-medium text-muted-foreground uppercase">{label}</p>
-            <p className="text-sm font-bold leading-none mt-0.5">{value}</p>
-         </div>
-      </div>
-   )
+function MetricLine({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: typeof Clock;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="flex items-center gap-1.5 sm:gap-2">
+      <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+      <span className="text-xs uppercase tracking-wide text-muted-foreground">{label}:</span>
+      <span className="font-semibold leading-none">{value}</span>
+    </div>
+  );
+}
+
+function InfoPill({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border bg-muted/30 px-3 py-2">
+      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className="text-sm font-medium">{value}</p>
+    </div>
+  );
 }

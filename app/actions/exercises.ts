@@ -96,10 +96,12 @@ export async function getExerciseHistory(exerciseName: string) {
 
 export async function getExercises({
     pageParam = 0,
-    search = ""
+    search = "",
+    category,
 }: {
     pageParam?: number;
-    search?: string
+    search?: string;
+    category?: string;
 }) {
     const supabase = await createClient();
 
@@ -111,6 +113,9 @@ export async function getExercises({
 
     if (search) {
         query = query.ilike("name", `%${search}%`);
+    }
+    if (category) {
+        query = query.ilike("category", `%${category}%`);
     }
 
     const { data, error, count } = await query;

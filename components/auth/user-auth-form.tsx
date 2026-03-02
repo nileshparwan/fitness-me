@@ -55,6 +55,8 @@ export function UserAuthForm({ className, type, ...props }: UserAuthFormProps) {
           options: {
             data: {
               display_name: data.username,
+              has_password: true,
+              password_configured_at: new Date().toISOString(),
             },
             emailRedirectTo: `${window.location.origin}/api/auth/callback`,
           },

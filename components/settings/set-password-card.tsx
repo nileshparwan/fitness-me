@@ -61,6 +61,9 @@ export function SetPasswordCard({ isSocialOnly }: SetPasswordCardProps) {
             ? "Your account uses social login. Set a password to enable standard email/password sign in."
             : "Update your password for standard sign in."}
         </p>
+        <p className="text-xs text-amber-700">
+          A password is important for account recovery and protects access if your social provider is unavailable.
+        </p>
       </div>
 
       <form onSubmit={onSubmit} className="grid gap-3">

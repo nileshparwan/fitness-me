@@ -184,6 +184,7 @@ export type Database = {
           distance_km: number | null
           duration_minutes: number
           elevation_gain_m: number | null
+          entry_sequence: number | null
           id: string
           max_heart_rate: number | null
           notes: string | null
@@ -202,6 +203,7 @@ export type Database = {
           distance_km?: number | null
           duration_minutes: number
           elevation_gain_m?: number | null
+          entry_sequence?: number | null
           id?: string
           max_heart_rate?: number | null
           notes?: string | null
@@ -220,6 +222,7 @@ export type Database = {
           distance_km?: number | null
           duration_minutes?: number
           elevation_gain_m?: number | null
+          entry_sequence?: number | null
           id?: string
           max_heart_rate?: number | null
           notes?: string | null
@@ -516,6 +519,7 @@ export type Database = {
           is_dropset: boolean | null
           is_warmup: boolean | null
           notes: string | null
+          entry_sequence: number | null
           reps: number | null
           rest_seconds: number | null
           set_number: number
@@ -535,6 +539,7 @@ export type Database = {
           is_dropset?: boolean | null
           is_warmup?: boolean | null
           notes?: string | null
+          entry_sequence?: number | null
           reps?: number | null
           rest_seconds?: number | null
           set_number: number
@@ -554,6 +559,7 @@ export type Database = {
           is_dropset?: boolean | null
           is_warmup?: boolean | null
           notes?: string | null
+          entry_sequence?: number | null
           reps?: number | null
           rest_seconds?: number | null
           set_number?: number

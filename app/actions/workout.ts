@@ -3,11 +3,18 @@
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { Database } from "@/types/database";
+import { CardioSetMeta, serializeCardioNotes } from "@/utils/cardio-notes";
 
 // 1. DERIVED TYPES FROM DATABASE
 type WorkoutInsert = Database['public']['Tables']['training_sessions']['Insert'];
 type WorkoutLogInsert = Database['public']['Tables']['strength_sets']['Insert'];
 type CardioLogInsert = Database['public']['Tables']['cardio_sessions']['Insert'];
+
+function toNullableNumber(value: number | string | undefined): number | null {
+  if (value === undefined || value === null || value === "") return null;
+  const num = Number(value);
+  return Number.isFinite(num) ? num : null;
+}
 
 // 2. FORM INPUT TYPE
 export type WorkoutActionInput = {
@@ -36,6 +43,15 @@ export type WorkoutActionInput = {
       form_video_url?: string;
     }[];
     // Cardio fields
+    cardio_sets?: {
+      set_number: number;
+      duration: number | string;
+      distance?: number | string;
+      reps?: number | string;
+      calories?: number | string;
+      heartRate?: number | string;
+    }[];
+    reps?: number | string;
     duration?: number | string;
     distance?: number | string;
     calories?: number | string;
@@ -56,26 +72,63 @@ function buildWorkoutLogs(
     return { strengthLogs, cardioLogs };
   }
 
-  for (const ex of exercises) {
+  exercises.forEach((ex, entryIndex) => {
     if (ex.type === "cardio") {
+      const cardioSets: CardioSetMeta[] = (ex.cardio_sets || []).map((set, idx) => ({
+        set_number: idx + 1,
+        duration: Number(set.duration || 0),
+        distance: toNullableNumber(set.distance) ?? undefined,
+        reps: toNullableNumber(set.reps) ?? undefined,
+        calories: toNullableNumber(set.calories) ?? undefined,
+        heartRate: toNullableNumber(set.heartRate) ?? undefined,
+      }));
+      const durationMinutes = cardioSets.length > 0
+        ? cardioSets.reduce((sum, set) => sum + (set.duration || 0), 0)
+        : Number(ex.duration || 0);
+      const distanceKm = cardioSets.length > 0
+        ? cardioSets.reduce((sum, set) => sum + (set.distance || 0), 0)
+        : (toNullableNumber(ex.distance) ?? null);
+      const caloriesBurned = cardioSets.some((set) => set.calories !== undefined)
+        ? cardioSets.reduce((sum, set) => sum + (set.calories || 0), 0)
+        : toNullableNumber(ex.calories);
+      const repsValue = cardioSets.some((set) => set.reps !== undefined)
+        ? cardioSets.reduce((sum, set) => sum + (set.reps || 0), 0)
+        : toNullableNumber(ex.reps);
+      const weightedHeartRateDuration = cardioSets.reduce((sum, set) => {
+        if (set.heartRate === undefined) return sum;
+        return sum + (set.heartRate * (set.duration || 0));
+      }, 0);
+      const weightedHeartRateMinutes = cardioSets.reduce((sum, set) => {
+        if (set.heartRate === undefined) return sum;
+        return sum + (set.duration || 0);
+      }, 0);
+      const averageHeartRate =
+        weightedHeartRateMinutes > 0
+          ? Math.round(weightedHeartRateDuration / weightedHeartRateMinutes)
+          : toNullableNumber(ex.heartRate);
+
       cardioLogs.push({
         workout_id: workoutId,
         user_id: userId,
         date: dateISO,
+        entry_sequence: entryIndex,
         activity_type: ex.name,
-        duration_minutes: Number(ex.duration || 0),
-        distance_km: ex.distance ? Number(ex.distance) : null,
-        calories_burned: ex.calories ? Number(ex.calories) : null,
-        average_heart_rate: ex.heartRate ? Number(ex.heartRate) : null,
+        duration_minutes: durationMinutes,
+        distance_km: distanceKm,
+        calories_burned: caloriesBurned,
+        average_heart_rate: averageHeartRate,
+        reps: repsValue,
+        notes: serializeCardioNotes(ex.notes, cardioSets.length > 0 ? cardioSets : undefined),
       });
-      continue;
+      return;
     }
 
-    if (!ex.sets) continue;
+    if (!ex.sets) return;
 
     ex.sets.forEach((set) => {
       strengthLogs.push({
         workout_id: workoutId,
+        entry_sequence: entryIndex,
         exercise_id: ex.exercise_id || null,
         group_id: ex.group_id || null,
         exercise_name: ex.name,
@@ -90,7 +143,7 @@ function buildWorkoutLogs(
         notes: ex.notes || null,
       });
     });
-  }
+  });
 
   return { strengthLogs, cardioLogs };
 }

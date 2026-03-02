@@ -9,8 +9,10 @@ import { useWorkout } from "@/hooks/use-workout";
 import { groupLogsByExercise } from "@/utils/log";
 import { Button } from "@/components/ui/button";
 import { Database } from "@/types/database";
+import { parseCardioNotes } from "@/utils/cardio-notes";
 
 type WorkoutLog = Database['public']['Tables']['strength_sets']['Row'];
+type CardioLog = Database["public"]["Tables"]["cardio_sessions"]["Row"];
 
 export default function EditWorkoutPage() {
   const { id } = useParams() as { id: string };
@@ -41,6 +43,60 @@ export default function EditWorkoutPage() {
   // --- TRANSFORMATION LOGIC ---
   // Ensure we pass the logs as strictly typed rows
   const groupedExercises = groupLogsByExercise((workout.strength_sets as WorkoutLog[]) || []);
+  const cardioLogs = (workout.cardio_sessions || []) as CardioLog[];
+
+  const orderedEntries = [
+    ...groupedExercises.map((ex) => ({
+      order: ex.entry_sequence ?? Math.min(...ex.sets.map((set) => new Date(set.created_at || workout.date).getTime())),
+      data: {
+        type: "strength" as const,
+        exercise_id: ex.exercise_id ?? undefined,
+        name: ex.name,
+        notes: ex.sets.find((set) => Boolean(set.notes))?.notes || "",
+        sets: ex.sets.map((set: WorkoutLog) => ({
+          id: set.id,
+          set_number: set.set_number,
+          reps: set.reps ?? 0,
+          weight: set.weight ?? 0,
+          rest_seconds: set.rest_seconds ?? undefined,
+          tempo: set.tempo || undefined,
+          is_warmup: set.is_warmup ?? false,
+          is_dropset: set.is_dropset ?? false,
+          is_completed: true
+        })),
+      },
+    })),
+    ...cardioLogs.map((cardio) => {
+      const parsedCardioNotes = parseCardioNotes(cardio.notes);
+      return {
+        order: cardio.entry_sequence ?? new Date(cardio.created_at || workout.date).getTime(),
+        data: {
+          type: "cardio" as const,
+          name: cardio.activity_type || "Cardio",
+          cardio_sets:
+            parsedCardioNotes.cardioSets && parsedCardioNotes.cardioSets.length > 0
+              ? parsedCardioNotes.cardioSets
+              : [
+                  {
+                    set_number: 1,
+                    duration: cardio.duration_minutes || 0,
+                    distance: cardio.distance_km ?? undefined,
+                    reps: cardio.reps ?? undefined,
+                    calories: cardio.calories_burned ?? undefined,
+                    heartRate: cardio.average_heart_rate ?? undefined,
+                  },
+                ],
+          reps: cardio.reps ?? undefined,
+          duration: cardio.duration_minutes || 0,
+          distance: cardio.distance_km ?? undefined,
+          calories: cardio.calories_burned ?? undefined,
+          heartRate: cardio.average_heart_rate ?? undefined,
+          notes: parsedCardioNotes.notes,
+          sets: [],
+        },
+      };
+    }),
+  ].sort((a, b) => a.order - b.order);
 
   const initialData = {
     name: workout.name,
@@ -49,24 +105,7 @@ export default function EditWorkoutPage() {
     overall_rating: workout.overall_rating ?? undefined,
     ai_feedback: workout.ai_feedback || "",
     template_id: workout.template_id || "",
-    exercises: groupedExercises.map((ex) => ({
-      exercise_id: ex.exercise_id ?? undefined,
-      group_id: ex.group_id || undefined,
-      name: ex.name,
-      notes: "",
-      sets: ex.sets.map((set: WorkoutLog) => ({
-        id: set.id,
-        set_number: set.set_number,
-        reps: set.reps ?? 0,
-        weight: set.weight ?? 0,
-        rest_seconds: set.rest_seconds ?? undefined,
-        tempo: set.tempo || undefined,
-        is_warmup: set.is_warmup ?? false,
-        is_dropset: set.is_dropset ?? false,
-        form_video_url: set.form_video_url || "",
-        is_completed: true
-      }))
-    }))
+    exercises: orderedEntries.map((entry) => entry.data),
   };
 
   return (

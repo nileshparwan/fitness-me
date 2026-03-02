@@ -3,18 +3,13 @@
 import React from "react";
 import { format } from "date-fns";
 import { 
-  Dumbbell, 
-  Activity, 
   Calendar, 
-  User, 
-  Timer, 
-  Flame, 
-  Heart, 
-  MapPin 
+  User,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Database } from "@/types/database";
+import { parseCardioNotes } from "@/utils/cardio-notes";
 
 type WorkoutLog = Database["public"]["Tables"]["strength_sets"]["Row"];
 type CardioLog = Database["public"]["Tables"]["cardio_sessions"]["Row"];
@@ -28,10 +23,73 @@ interface PrintViewProps {
 
 export const WorkoutPrintView = React.forwardRef<HTMLDivElement, PrintViewProps>(
   ({ workout, strengthLogs, cardioLogs }, ref) => {
-    
-    // Grouping Logic
-    const strengthGroups = groupBy(strengthLogs, "exercise_name");
-    const cardioGroups = groupBy(cardioLogs, "activity_type");
+    const strengthGroups = groupStrengthByExercise(strengthLogs);
+
+    type TimelineEntry =
+      | {
+          type: "strength";
+          name: string;
+          createdAtMs: number;
+          entrySequence: number | null;
+          notes?: string;
+          sets: WorkoutLog[];
+        }
+      | {
+          type: "cardio";
+          name: string;
+          createdAtMs: number;
+          entrySequence: number | null;
+          notes?: string;
+          sets: {
+            set_number: number;
+            duration: number;
+            distance?: number;
+            reps?: number;
+            calories?: number;
+            heartRate?: number;
+          }[];
+        };
+
+    const timeline: TimelineEntry[] = [
+      ...strengthGroups.map((group) => ({
+        type: "strength" as const,
+        name: group.name,
+        createdAtMs: group.createdAtMs,
+        entrySequence: group.entrySequence,
+        notes: group.notes,
+        sets: group.sets,
+      })),
+      ...cardioLogs.map((log) => {
+        const parsed = parseCardioNotes(log.notes);
+        return {
+          type: "cardio" as const,
+          name: log.activity_type || "Cardio",
+          createdAtMs: log.entry_sequence ?? safeMs(log.created_at),
+          entrySequence: log.entry_sequence,
+          notes: parsed.notes || undefined,
+          sets:
+            parsed.cardioSets && parsed.cardioSets.length > 0
+              ? parsed.cardioSets
+              : [
+                  {
+                    set_number: 1,
+                    duration: log.duration_minutes || 0,
+                    distance: log.distance_km ?? undefined,
+                    reps: log.reps ?? undefined,
+                    calories: log.calories_burned ?? undefined,
+                    heartRate: log.average_heart_rate ?? undefined,
+                  },
+                ],
+        };
+      }),
+    ].sort((a, b) => {
+      if (a.entrySequence !== null && b.entrySequence !== null) {
+        return a.entrySequence - b.entrySequence;
+      }
+      if (a.entrySequence !== null) return -1;
+      if (b.entrySequence !== null) return 1;
+      return a.createdAtMs - b.createdAtMs;
+    });
 
     return (
       <div 
@@ -50,12 +108,7 @@ export const WorkoutPrintView = React.forwardRef<HTMLDivElement, PrintViewProps>
                   <Calendar className="h-4 w-4" /> 
                   {format(new Date(workout.date), "PPP")}
                 </span>
-                {workout.overall_rating ? (
-                  <span className="flex items-center gap-1.5">
-                    <Heart className="h-4 w-4" />
-                    {workout.overall_rating}/10
-                  </span>
-                ) : null}
+                {workout.overall_rating ? <span>{workout.overall_rating}/10</span> : null}
                 {workout.template_id ? (
                   <span className="text-xs uppercase tracking-wide">Template Linked</span>
                 ) : null}
@@ -79,127 +132,86 @@ export const WorkoutPrintView = React.forwardRef<HTMLDivElement, PrintViewProps>
           )}
         </div>
 
-        <Separator className="my-8" />
+        <div className="mb-6 space-y-1">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">General Notes</p>
+          <p className="whitespace-pre-wrap text-sm text-muted-foreground">
+            {workout.ai_feedback?.trim() || "No notes provided."}
+          </p>
+        </div>
 
-        {/* --- STRENGTH SECTION --- */}
-        {strengthLogs.length > 0 && (
-          <div className="mb-12 space-y-8">
-            <div className="flex items-center gap-2 text-xl font-bold uppercase tracking-tight text-primary">
-              <Dumbbell className="h-6 w-6" /> 
-              <h2>Strength Training</h2>
-            </div>
-            
-            <div className="grid gap-8">
-              {Object.entries(strengthGroups).map(([name, sets]) => (
-                <div key={name} className="break-inside-avoid rounded-lg border bg-card shadow-sm overflow-hidden">
-                  <div className="bg-muted/30 px-4 py-3 border-b">
-                    <h3 className="font-bold text-lg">{name}</h3>
+        <Separator className="my-6" />
+
+        <div className="space-y-4">
+          {timeline.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No exercises added yet.</p>
+          ) : (
+            timeline.map((entry, idx) => (
+              <div key={`share-entry-${idx}`} className="space-y-2 border-b pb-4">
+                <div className="flex items-center gap-2">
+                  <span className="rounded-sm bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                    {entry.type}
+                  </span>
+                  <p className="text-sm font-semibold">
+                    {entry.name || (entry.type === "cardio" ? `Cardio ${idx + 1}` : `Exercise ${idx + 1}`)}
+                  </p>
+                </div>
+
+                {entry.type === "strength" ? (
+                  <div className="space-y-2">
+                    {entry.sets.map((set) => {
+                      const advanced = formatStrengthAdvancedDetails(set);
+                      return (
+                        <div key={`share-strength-set-${idx}-${set.set_number}`} className="space-y-1">
+                          <div className="grid grid-cols-3 gap-2 text-xs">
+                            <span>Set {set.set_number}</span>
+                            <span>{set.weight} kg</span>
+                            <span>{set.reps} reps</span>
+                          </div>
+                          {advanced ? <p className="text-[11px] text-muted-foreground">{advanced}</p> : null}
+                        </div>
+                      );
+                    })}
+                    {entry.notes?.trim() ? (
+                      <div className="pt-1">
+                        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Notes</p>
+                        <p className="whitespace-pre-wrap text-xs text-muted-foreground">{entry.notes}</p>
+                      </div>
+                    ) : null}
                   </div>
-                  <table className="w-full text-sm text-left">
-                    <thead>
-                      <tr className="bg-muted/10 text-muted-foreground text-xs uppercase tracking-wider border-b">
-                        <th className="px-4 py-2 w-16">Set</th>
-                        <th className="px-4 py-2">Weight</th>
-                        <th className="px-4 py-2">Reps</th>
-                        <th className="px-4 py-2">Meta</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y">
-                      {sets.map((set, i) => (
-                        <tr key={i} className="hover:bg-muted/5 transition-colors">
-                          <td className="px-4 py-3 font-medium text-muted-foreground">#{set.set_number}</td>
-                          <td className="px-4 py-3 font-bold">
-                            {set.weight} <span className="text-xs font-normal text-muted-foreground">kg</span>
-                          </td>
-                          <td className="px-4 py-3">{set.reps}</td>
-                          <td className="px-4 py-3 text-xs text-muted-foreground">
+                ) : (
+                  <div className="space-y-2">
+                    {entry.sets.map((set) => (
+                      <div key={`share-cardio-set-${idx}-${set.set_number}`} className="space-y-1">
+                        <div className="grid grid-cols-4 gap-2 text-xs">
+                          <span>Set {set.set_number}</span>
+                          <span>{set.duration} min</span>
+                          <span>{set.distance ?? 0} km</span>
+                          <span>{set.reps ?? 0} reps</span>
+                        </div>
+                        {(set.calories !== undefined || set.heartRate !== undefined) ? (
+                          <p className="text-[11px] text-muted-foreground">
                             {[
-                              set.is_warmup ? "Warmup" : null,
-                              set.is_dropset ? "Drop" : null,
-                              set.rest_seconds ? `Rest ${set.rest_seconds}s` : null,
-                              set.tempo ? `Tempo ${set.tempo}` : null,
+                              set.calories !== undefined ? `Calories ${set.calories}` : null,
+                              set.heartRate !== undefined ? `Avg HR ${set.heartRate} bpm` : null,
                             ]
                               .filter(Boolean)
-                              .join(" • ") || "-"}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {workout.ai_feedback ? (
-          <div className="mb-10 rounded-lg border bg-muted/20 p-4">
-            <h3 className="text-sm font-semibold uppercase tracking-wider mb-1">AI Feedback</h3>
-            <p className="text-sm text-muted-foreground">{workout.ai_feedback}</p>
-          </div>
-        ) : null}
-
-        {/* --- CARDIO SECTION --- */}
-        {cardioLogs.length > 0 && (
-          <div className="mb-12 space-y-8 break-inside-avoid">
-             <div className="flex items-center gap-2 text-xl font-bold uppercase tracking-tight text-blue-600 dark:text-blue-400">
-              <Activity className="h-6 w-6" /> 
-              <h2>Cardio Session</h2>
-            </div>
-            
-            <div className="grid gap-8">
-              {Object.entries(cardioGroups).map(([activity, logs]) => (
-                <div key={activity} className="break-inside-avoid rounded-lg border bg-card shadow-sm overflow-hidden">
-                   <div className="bg-blue-50/50 dark:bg-blue-900/10 px-4 py-3 border-b border-blue-100 dark:border-blue-900/50">
-                    <h3 className="font-bold text-lg">{activity}</h3>
+                              .join(" • ")}
+                          </p>
+                        ) : null}
+                      </div>
+                    ))}
+                    {entry.notes?.trim() ? (
+                      <div className="pt-1">
+                        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Notes</p>
+                        <p className="whitespace-pre-wrap text-xs text-muted-foreground">{entry.notes}</p>
+                      </div>
+                    ) : null}
                   </div>
-                  
-                  <table className="w-full text-sm text-left">
-                    <thead>
-                      <tr className="bg-muted/10 text-muted-foreground text-xs uppercase tracking-wider border-b">
-                        <th className="px-4 py-2">Duration</th>
-                        <th className="px-4 py-2">Distance</th>
-                        <th className="px-4 py-2">Calories Burned</th>
-                        <th className="px-4 py-2 text-right">Avg HR</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y">
-                      {logs.map((log, i) => (
-                        <tr key={i} className="hover:bg-muted/5 transition-colors">
-                          <td className="px-4 py-3 font-bold flex items-center gap-2">
-                             <Timer className="h-3 w-3 text-muted-foreground" />
-                             {log.duration_minutes} <span className="text-xs font-normal text-muted-foreground">min</span>
-                          </td>
-                          <td className="px-4 py-3 text-muted-foreground">
-                             {log.distance_km ? (
-                               <span className="flex items-center gap-2 text-foreground">
-                                 <MapPin className="h-3 w-3 text-blue-500" /> {log.distance_km} km
-                               </span>
-                             ) : "-"}
-                          </td>
-                          <td className="px-4 py-3 text-muted-foreground">
-                             {log.calories_burned ? (
-                               <span className="flex items-center gap-2 text-foreground">
-                                 <Flame className="h-3 w-3 text-orange-500" /> {log.calories_burned} kcal
-                               </span>
-                             ) : "-"}
-                          </td>
-                          <td className="px-4 py-3 text-right font-mono text-foreground">
-                             {log.average_heart_rate ? (
-                               <span className="flex items-center justify-end gap-2">
-                                 {log.average_heart_rate} <Heart className="h-3 w-3 text-red-500" />
-                               </span>
-                             ) : "-"}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+                )}
+              </div>
+            ))
+          )}
+        </div>
 
         {/* --- FOOTER --- */}
         <div className="mt-20 pt-8 border-t text-center space-y-2">
@@ -214,11 +226,64 @@ export const WorkoutPrintView = React.forwardRef<HTMLDivElement, PrintViewProps>
 );
 WorkoutPrintView.displayName = "WorkoutPrintView";
 
-function groupBy<T extends Record<string, unknown>>(array: T[], key: keyof T) {
-  return array.reduce<Record<string, T[]>>((result, currentValue) => {
-    const rawKey = currentValue[key];
-    const groupKey = typeof rawKey === "string" && rawKey.length > 0 ? rawKey : "Other";
-    (result[groupKey] = result[groupKey] || []).push(currentValue);
-    return result;
-  }, {});
+function safeMs(value: string | null | undefined) {
+  if (!value) return Number.MAX_SAFE_INTEGER;
+  const ms = new Date(value).getTime();
+  return Number.isFinite(ms) ? ms : Number.MAX_SAFE_INTEGER;
+}
+
+function groupStrengthByExercise(strengthLogs: WorkoutLog[]) {
+  const map = new Map<
+    string,
+    {
+      name: string;
+      notes?: string;
+      createdAtMs: number;
+      entrySequence: number | null;
+      sets: WorkoutLog[];
+    }
+  >();
+
+  strengthLogs.forEach((set) => {
+    const name = set.exercise_name || "Strength";
+    const key = `${set.entry_sequence ?? "na"}:${set.exercise_id || "no-id"}:${name}`;
+    const createdAtMs = safeMs(set.created_at);
+    if (!map.has(key)) {
+      map.set(key, {
+        name,
+        notes: set.notes || undefined,
+        createdAtMs,
+        entrySequence: set.entry_sequence,
+        sets: [set],
+      });
+      return;
+    }
+    const existing = map.get(key)!;
+    existing.sets.push(set);
+    existing.createdAtMs = Math.min(existing.createdAtMs, createdAtMs);
+    if (!existing.notes && set.notes) existing.notes = set.notes;
+  });
+
+  return Array.from(map.values())
+    .map((group) => ({
+      ...group,
+      sets: [...group.sets].sort((a, b) => (a.set_number || 0) - (b.set_number || 0)),
+    }))
+    .sort((a, b) => {
+      if (a.entrySequence !== null && b.entrySequence !== null) return a.entrySequence - b.entrySequence;
+      if (a.entrySequence !== null) return -1;
+      if (b.entrySequence !== null) return 1;
+      return a.createdAtMs - b.createdAtMs;
+    });
+}
+
+function formatStrengthAdvancedDetails(set: WorkoutLog) {
+  return [
+    set.rest_seconds ? `Rest ${set.rest_seconds}s` : null,
+    set.tempo ? `Tempo ${set.tempo}` : null,
+    set.is_warmup ? "Warm-up" : null,
+    set.is_dropset ? "Drop set" : null,
+  ]
+    .filter(Boolean)
+    .join(" • ");
 }

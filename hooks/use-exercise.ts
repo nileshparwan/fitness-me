@@ -10,7 +10,8 @@ import { createClient } from "@/lib/supabase/client";
 const exerciseKeys = {
   all: ["exercises"] as const,
   list: (search?: string) => [...exerciseKeys.all, "list", { search }] as const,
-  infinite: (search?: string) => [...exerciseKeys.all, "infinite", { search }] as const,
+  infinite: (search?: string, category?: string) =>
+    [...exerciseKeys.all, "infinite", { search, category }] as const,
 };
 
 export function useExercises(search?: string) {
@@ -40,11 +41,11 @@ export function useExercises(search?: string) {
   });
 }
 
-export function useInfiniteQueryExercises(search: string) {
+export function useInfiniteQueryExercises(search: string, category?: string) {
   return useInfiniteQuery({
     // UPDATE: specific scope for infinite lists
-    queryKey: exerciseKeys.infinite(search),
-    queryFn: ({ pageParam = 0 }) => getExercises({ pageParam, search }),
+    queryKey: exerciseKeys.infinite(search, category),
+    queryFn: ({ pageParam = 0 }) => getExercises({ pageParam, search, category }),
     getNextPageParam: (lastPage) => lastPage.nextPage,
     initialPageParam: 0,
   });

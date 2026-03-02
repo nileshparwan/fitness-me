@@ -11,18 +11,41 @@ const setSchema = z.object({
   tempo: z.string().max(20).optional(),
   is_warmup: z.boolean().default(false).optional(),
   is_dropset: z.boolean().default(false).optional(),
-  form_video_url: z.string().url().optional().or(z.literal("")),
   is_completed: z.boolean().default(false).optional(),
 });
 
-// Zod Schema for Exercises
-const exerciseSchema = z.object({
+const strengthExerciseSchema = z.object({
+  type: z.literal("strength"),
   exercise_id: z.string().optional(),
   name: z.string().min(1, "Exercise name is required"),
-  group_id: z.string().optional(),
   notes: z.string().optional(),
   sets: z.array(setSchema),
 });
+
+const cardioExerciseSchema = z.object({
+  type: z.literal("cardio"),
+  name: z.string().min(1, "Cardio activity is required"),
+  exercise_id: z.string().optional(),
+  sets: z.array(setSchema).optional(),
+  cardio_sets: z.array(
+    z.object({
+      set_number: z.coerce.number().min(1),
+      duration: z.coerce.number().min(0, "Duration must be 0+"),
+      distance: z.coerce.number().min(0).optional(),
+      reps: z.coerce.number().min(0).optional(),
+      calories: z.coerce.number().min(0).optional(),
+      heartRate: z.coerce.number().min(0).optional(),
+    })
+  ).optional(),
+  reps: z.coerce.number().min(0).optional(),
+  duration: z.coerce.number().min(0, "Duration must be 0+"),
+  distance: z.coerce.number().min(0).optional(),
+  calories: z.coerce.number().min(0).optional(),
+  heartRate: z.coerce.number().min(0).optional(),
+  notes: z.string().optional(),
+});
+
+const exerciseSchema = z.discriminatedUnion("type", [strengthExerciseSchema, cardioExerciseSchema]);
 
 // Main Workout Form Schema
 export const workoutFormSchema = z.object({
