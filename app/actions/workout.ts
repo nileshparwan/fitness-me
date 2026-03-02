@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { runTrackedAction } from "@/lib/events/dispatcher";
 import { revalidatePath } from "next/cache";
 import { Database } from "@/types/database";
 import { CardioSetMeta, serializeCardioNotes } from "@/utils/cardio-notes";
@@ -152,6 +153,10 @@ function buildWorkoutLogs(
 // 2. CREATE WORKOUT
 // ============================================================================
 export async function createWorkoutAction(data: WorkoutActionInput) {
+  return runTrackedAction({
+    eventName: "workout.create",
+    payload: { name: data.name, exercises_count: data.exercises?.length ?? 0 },
+    action: async () => {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   
@@ -189,12 +194,18 @@ export async function createWorkoutAction(data: WorkoutActionInput) {
 
   revalidatePath("/workouts");
   return workout;
+    },
+  });
 }
 
 // ============================================================================
 // 3. UPDATE WORKOUT
 // ============================================================================
 export async function updateWorkoutAction(id: string, data: Partial<WorkoutActionInput>) {
+  return runTrackedAction({
+    eventName: "workout.update",
+    payload: { workout_id: id, exercises_count: data.exercises?.length ?? 0 },
+    action: async () => {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
@@ -243,12 +254,19 @@ export async function updateWorkoutAction(id: string, data: Partial<WorkoutActio
   revalidatePath("/workouts");
   revalidatePath(`/workouts/${id}`);
   revalidatePath("/progress"); 
+  return { success: true };
+    },
+  });
 }
 
 // ============================================================================
 // 4. DELETE WORKOUT
 // ============================================================================
 export async function deleteWorkoutAction(ids: string | string[]) {
+  return runTrackedAction({
+    eventName: "workout.delete",
+    payload: { count: Array.isArray(ids) ? ids.length : 1 },
+    action: async () => {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Unauthorized");
@@ -262,4 +280,7 @@ export async function deleteWorkoutAction(ids: string | string[]) {
   if (error) throw new Error(error.message);
   
   revalidatePath("/workouts");
+  return { success: true };
+    },
+  });
 }

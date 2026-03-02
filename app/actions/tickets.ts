@@ -4,9 +4,11 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { requireAdmin } from "@/lib/admin/auth";
+import { runTrackedAction, trackEvent } from "@/lib/events/dispatcher";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { Database, Json } from "@/types/database";
+import { AppEventName } from "@/types/events";
 
 export type TicketRow = Database["public"]["Tables"]["tickets"]["Row"];
 type TicketInsert = Database["public"]["Tables"]["tickets"]["Insert"];
@@ -134,71 +136,104 @@ async function getViewerUpvotedIds(userId: string, ticketIds: string[]): Promise
 
 export async function createTicketAction(input: z.input<typeof createTicketSchema>) {
   const payload = createTicketSchema.parse(input);
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  let actorUserId: string | null = null;
 
-  if (!user) throw new Error("Unauthorized");
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
-  const computedPublic = payload.category === "bug_report" ? false : (payload.is_public ?? true);
+    if (!user) throw new Error("Unauthorized");
+    actorUserId = user.id;
 
-  const insert: TicketInsert = {
-    user_id: user.id,
-    title: payload.title.trim(),
-    description: payload.description.trim(),
-    category: payload.category,
-    status: "open",
-    is_public: computedPublic,
-    upvotes: 0,
-    metadata: (payload.metadata || {}) as Json,
-  };
+    const computedPublic = payload.category === "bug_report" ? false : (payload.is_public ?? true);
 
-  // Use admin client for insert after authenticating caller.
-  // This avoids RLS/session edge cases inside server actions while keeping ownership explicit.
-  const admin = createAdminClient();
-  const { data, error } = await admin
-    .from("tickets")
-    .insert(insert)
-    .select("*")
-    .single();
+    const insert: TicketInsert = {
+      user_id: user.id,
+      title: payload.title.trim(),
+      description: payload.description.trim(),
+      category: payload.category,
+      status: "open",
+      is_public: computedPublic,
+      upvotes: 0,
+      metadata: (payload.metadata || {}) as Json,
+    };
 
-  if (error) {
-    if (error.code === "42P01") {
-      throw new Error("Tickets table is missing. Run the latest Supabase migrations.");
+    // Use admin client for insert after authenticating caller.
+    // This avoids RLS/session edge cases inside server actions while keeping ownership explicit.
+    const admin = createAdminClient();
+    const { data, error } = await admin
+      .from("tickets")
+      .insert(insert)
+      .select("*")
+      .single();
+
+    if (error) {
+      if (error.code === "42P01") {
+        throw new Error("Tickets table is missing. Run the latest Supabase migrations.");
+      }
+      if (error.code === "22P02" || error.code === "42804") {
+        throw new Error("Tickets schema is out of date. Apply the latest migrations.");
+      }
+      throw new Error(error.message);
     }
-    if (error.code === "22P02" || error.code === "42804") {
-      throw new Error("Tickets schema is out of date. Apply the latest migrations.");
+
+    const createdTicket = data as TicketRow;
+
+    // Seed creator upvote so every new ticket starts with one supporter.
+    const { error: upvoteInsertError } = await admin.from("ticket_upvotes").insert({
+      ticket_id: createdTicket.id,
+      user_id: user.id,
+    });
+    if (upvoteInsertError && upvoteInsertError.code !== "23505") {
+      if (isMissingTicketUpvotesTableError(upvoteInsertError)) {
+        const { error: legacyUpdateError } = await admin
+          .from("tickets")
+          .update({ upvotes: 1 })
+          .eq("id", createdTicket.id);
+        if (legacyUpdateError) throw new Error(legacyUpdateError.message);
+      } else {
+        throw new Error(upvoteInsertError.message);
+      }
     }
-    throw new Error(error.message);
+
+    revalidateSupportPaths(createdTicket.id);
+    revalidatePath("/admin/tickets");
+
+    trackEvent(
+      AppEventName.SUPPORT_TICKET_CREATED,
+      {
+        user_id: user.id,
+        ticket_id: createdTicket.id,
+        category: createdTicket.category,
+        is_public: createdTicket.is_public,
+      },
+      "success"
+    );
+
+    return createdTicket;
+  } catch (error) {
+    trackEvent(
+      AppEventName.SUPPORT_TICKET_CREATED,
+      {
+        user_id: actorUserId,
+        category: payload.category,
+        is_public: payload.is_public ?? null,
+        error_message: error instanceof Error ? error.message : "unknown_error",
+      },
+      "error"
+    );
+    throw error;
   }
-
-  const createdTicket = data as TicketRow;
-
-  // Seed creator upvote so every new ticket starts with one supporter.
-  const { error: upvoteInsertError } = await admin.from("ticket_upvotes").insert({
-    ticket_id: createdTicket.id,
-    user_id: user.id,
-  });
-  if (upvoteInsertError && upvoteInsertError.code !== "23505") {
-    if (isMissingTicketUpvotesTableError(upvoteInsertError)) {
-      const { error: legacyUpdateError } = await admin
-        .from("tickets")
-        .update({ upvotes: 1 })
-        .eq("id", createdTicket.id);
-      if (legacyUpdateError) throw new Error(legacyUpdateError.message);
-    } else {
-    throw new Error(upvoteInsertError.message);
-    }
-  }
-
-  revalidateSupportPaths(createdTicket.id);
-  revalidatePath("/admin/tickets");
-  return createdTicket;
 }
 
 export async function listPublicTicketsAction(input: z.input<typeof listSchema>): Promise<TicketListResult> {
   const params = listSchema.parse(input);
+  return runTrackedAction({
+    eventName: "support.tickets.list.public",
+    payload: { page: params.page, page_size: params.page_size },
+    action: async () => {
   const supabase = await createClient();
   const {
     data: { user },
@@ -248,10 +283,16 @@ export async function listPublicTicketsAction(input: z.input<typeof listSchema>)
     has_more: from + rows.length < total,
     total,
   };
+    },
+  });
 }
 
 export async function listMyTicketsAction(input: z.input<typeof listSchema>): Promise<TicketListResult> {
   const params = listSchema.parse(input);
+  return runTrackedAction({
+    eventName: "support.tickets.list.mine",
+    payload: { page: params.page, page_size: params.page_size },
+    action: async () => {
   const supabase = await createClient();
   const {
     data: { user },
@@ -302,10 +343,16 @@ export async function listMyTicketsAction(input: z.input<typeof listSchema>): Pr
     has_more: from + rows.length < total,
     total,
   };
+    },
+  });
 }
 
 export async function toggleUpvoteTicketAction(ticketId: string) {
   const safeTicketId = ticketIdSchema.parse(ticketId);
+  return runTrackedAction({
+    eventName: "support.ticket.upvote.toggle",
+    payload: { ticket_id: safeTicketId },
+    action: async () => {
   const supabase = await createClient();
   const {
     data: { user },
@@ -366,12 +413,18 @@ export async function toggleUpvoteTicketAction(ticketId: string) {
   revalidateSupportPaths(safeTicketId);
   revalidatePath("/admin/tickets");
   return { success: true, upvoted, upvotes: refreshed.upvotes ?? 0 };
+    },
+  });
 }
 
 export const upvoteTicketAction = toggleUpvoteTicketAction;
 
 export async function getTicketDetailAction(ticketId: string): Promise<TicketDetail> {
   const safeTicketId = ticketIdSchema.parse(ticketId);
+  return runTrackedAction({
+    eventName: "support.ticket.detail.read",
+    payload: { ticket_id: safeTicketId },
+    action: async () => {
   const supabase = await createClient();
   const {
     data: { user },
@@ -402,10 +455,16 @@ export async function getTicketDetailAction(ticketId: string): Promise<TicketDet
     viewer_user_id: user.id,
     viewer_is_admin: appRole === "admin" || userRole === "admin",
   };
+    },
+  });
 }
 
 export async function updateTicketContentAction(input: z.input<typeof updateTicketContentSchema>) {
   const payload = updateTicketContentSchema.parse(input);
+  return runTrackedAction({
+    eventName: "support.ticket.update",
+    payload: { ticket_id: payload.ticket_id },
+    action: async () => {
   const supabase = await createClient();
   const {
     data: { user },
@@ -436,10 +495,16 @@ export async function updateTicketContentAction(input: z.input<typeof updateTick
   revalidateSupportPaths(payload.ticket_id);
   revalidatePath("/admin/tickets");
   return data as TicketRow;
+    },
+  });
 }
 
 export async function listTicketCommentsAction(ticketId: string): Promise<TicketCommentDetail[]> {
   const safeTicketId = ticketIdSchema.parse(ticketId);
+  return runTrackedAction({
+    eventName: "support.ticket.comments.read",
+    payload: { ticket_id: safeTicketId },
+    action: async () => {
   const supabase = await createClient();
   const {
     data: { user },
@@ -470,10 +535,16 @@ export async function listTicketCommentsAction(ticketId: string): Promise<Ticket
     ...comment,
     author: authorMap.get(comment.user_id) || { id: comment.user_id, name: "User", avatar_url: null },
   }));
+    },
+  });
 }
 
 export async function createTicketCommentAction(input: z.input<typeof createCommentSchema>) {
   const payload = createCommentSchema.parse(input);
+  return runTrackedAction({
+    eventName: "support.ticket.comment.create",
+    payload: { ticket_id: payload.ticket_id },
+    action: async () => {
   const supabase = await createClient();
   const {
     data: { user },
@@ -498,11 +569,17 @@ export async function createTicketCommentAction(input: z.input<typeof createComm
 
   revalidateSupportPaths(payload.ticket_id);
   return { success: true };
+    },
+  });
 }
 
 export async function listAdminTicketsAction(input: z.input<typeof listSchema>): Promise<TicketListResult> {
-  await requireAdmin();
   const params = listSchema.parse(input);
+  return runTrackedAction({
+    eventName: "admin.tickets.list.legacy",
+    payload: { page: params.page, page_size: params.page_size },
+    action: async () => {
+  await requireAdmin();
   const supabase = createAdminClient();
 
   let query = supabase.from("tickets").select("*", { count: "exact" });
@@ -538,11 +615,17 @@ export async function listAdminTicketsAction(input: z.input<typeof listSchema>):
     has_more: from + rows.length < total,
     total,
   };
+    },
+  });
 }
 
 export async function adminUpdateTicketAction(input: z.input<typeof adminUpdateSchema>) {
-  await requireAdmin();
   const params = adminUpdateSchema.parse(input);
+  return runTrackedAction({
+    eventName: "admin.ticket.update.legacy",
+    payload: { ticket_id: params.id, status: params.status },
+    action: async () => {
+  await requireAdmin();
   const supabase = createAdminClient();
 
   const { data: existing, error: fetchError } = await supabase
@@ -569,6 +652,8 @@ export async function adminUpdateTicketAction(input: z.input<typeof adminUpdateS
   revalidateSupportPaths(params.id);
   revalidatePath("/admin/tickets");
   return { success: true };
+    },
+  });
 }
 
 export const getTicketByIdAction = getTicketDetailAction;
@@ -580,8 +665,14 @@ const getTicketsSchema = listSchema.extend({
 
 export async function getTicketsAction(input: z.input<typeof getTicketsSchema>) {
   const payload = getTicketsSchema.parse(input);
-  if (payload.scope === "mine") {
-    return listMyTicketsAction(payload);
-  }
-  return listPublicTicketsAction(payload);
+  return runTrackedAction({
+    eventName: "support.tickets.read",
+    payload: { scope: payload.scope, page: payload.page, page_size: payload.page_size },
+    action: async () => {
+      if (payload.scope === "mine") {
+        return listMyTicketsAction(payload);
+      }
+      return listPublicTicketsAction(payload);
+    },
+  });
 }

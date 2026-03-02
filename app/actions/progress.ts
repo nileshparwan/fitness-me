@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { runTrackedAction } from "@/lib/events/dispatcher";
 import { Database } from "@/types/database";
 import { subMonths, subYears } from "date-fns";
 import { calculatePaceMinutesPerKm, estimateOneRepMax } from "@/utils/fitness-logic";
@@ -47,6 +48,9 @@ const rangeSchema = z.enum(["1M", "6M", "1Y", "ALL"]);
 const exerciseSchema = z.string().trim().min(1).max(120);
 
 export async function getAvailableExercises() {
+  return runTrackedAction({
+    eventName: "progress.exercises.available.read",
+    action: async () => {
     const supabase = await createClient();
     const {
       data: { user },
@@ -78,9 +82,14 @@ export async function getAvailableExercises() {
     ]);
 
     return Array.from(names).sort();
+    },
+  });
 }
 
 export async function getMuscleBalance() {
+  return runTrackedAction({
+    eventName: "progress.muscle_balance.read",
+    action: async () => {
     const supabase = await createClient();
     const {
       data: { user },
@@ -160,9 +169,14 @@ export async function getMuscleBalance() {
         { muscle: "Legs", score: Math.round((scores.Legs / total) * 100) },
         { muscle: "Core", score: Math.round((scores.Core / total) * 100) },
     ];
+    },
+  });
 }
 
 export async function getUserProfile() {
+  return runTrackedAction({
+    eventName: "progress.user_profile.read",
+    action: async () => {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     
@@ -171,10 +185,16 @@ export async function getUserProfile() {
     return {
       birth_date: user.user_metadata.birth_date
     };
-  }
+    },
+  });
+}
 
 
 export async function getExerciseDetails(exerciseName: string) {
+  return runTrackedAction({
+    eventName: "progress.exercise_details.read",
+    payload: { exercise_name: exerciseName },
+    action: async () => {
     const supabase = await createClient();
     const safeExerciseName = exerciseSchema.parse(exerciseName);
 
@@ -186,9 +206,15 @@ export async function getExerciseDetails(exerciseName: string) {
         .single();
 
     return data;
+    },
+  });
 }
 
 export async function getExerciseMetrics(exerciseName: string, range: string): Promise<ExerciseMetricsResult> {
+  return runTrackedAction({
+    eventName: "progress.exercise_metrics.read",
+    payload: { exercise_name: exerciseName, range },
+    action: async () => {
     const supabase = await createClient();
     const safeExerciseName = exerciseSchema.parse(exerciseName);
     const safeRange = rangeSchema.parse(range);
@@ -310,4 +336,6 @@ export async function getExerciseMetrics(exerciseName: string, range: string): P
         logs: (strengthLogs ? [...strengthLogs] : []).sort((a, b) => new Date(b.created_at!).getTime() - new Date(a.created_at!).getTime()),
         chartData: Array.from(aggregatedMap.values())
     };
+    },
+  });
 }

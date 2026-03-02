@@ -3,6 +3,14 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
+import {
+  buildIsoDateRange,
+  fillDailySeries,
+  incrementMapValue,
+  isoDateToWeekday,
+  weekdayOrder,
+} from "@/lib/admin/chart-utils";
+import { runTrackedAction } from "@/lib/events/dispatcher";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { Database } from "@/types/database";
@@ -38,6 +46,11 @@ type ListUsersResponse = Awaited<
   ReturnType<ReturnType<typeof createAdminClient>["auth"]["admin"]["listUsers"]>
 >;
 type AuthAdminUser = NonNullable<ListUsersResponse["data"]>["users"][number];
+type TrainingSessionRow = Database["public"]["Tables"]["training_sessions"]["Row"];
+type StrengthSetRow = Database["public"]["Tables"]["strength_sets"]["Row"];
+type MealPlanRow = Database["public"]["Tables"]["meal_plans"]["Row"];
+type MealPlanMealRow = Database["public"]["Tables"]["meal_plan_meals"]["Row"];
+type TicketRow = Database["public"]["Tables"]["tickets"]["Row"];
 
 async function requireAdminUser() {
   const supabase = await createClient();
@@ -110,33 +123,90 @@ function resolveUserRole(user: AuthAdminUser): "admin" | "user" {
   return role;
 }
 
+function toIsoDay(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toISOString().slice(0, 10);
+}
+
 export async function getAdminDashboardStats() {
-  await requireAdminUser();
+  return runTrackedAction({
+    eventName: "admin.dashboard.stats.read",
+    action: async () => {
+      await requireAdminUser();
+      const admin = createAdminClient();
 
-  const [users, totalSessions, totalSets, totalMealPlans, recentEvents] = await Promise.all([
-    listAllAuthUsers(),
-    safeCount("workout_logs"),
-    safeCount("exercise_sets"),
-    safeCount("meal_plans"),
-    safeCount("audit_events", (q) => q.gte("created_at", new Date(Date.now() - 7 * 86400000).toISOString())),
-  ]);
-  const currentlyLoggedInUsers = users.filter((user) => isUserCurrentlyLoggedIn(user.last_sign_in_at)).length;
-  const currentlyLoggedInAdmins = users.filter(
-    (user) => isUserCurrentlyLoggedIn(user.last_sign_in_at) && resolveUserRole(user) === "admin"
-  ).length;
+      const throughputDates = buildIsoDateRange(30);
+      const throughputStart = `${throughputDates[0]}T00:00:00.000Z`;
 
-  return {
-    total_users: users.length,
-    currently_logged_in_users: currentlyLoggedInUsers,
-    currently_logged_in_admins: currentlyLoggedInAdmins,
-    total_sessions: totalSessions,
-    total_strength_sets: totalSets,
-    total_meal_plans: totalMealPlans,
-    recent_events: recentEvents,
-  };
+      const [users, sessionsRes, setsRes, mealPlansRes, ticketsRes, recentEvents, totalSessions, totalMealPlans] = await Promise.all([
+        listAllAuthUsers(),
+        admin
+          .from("training_sessions")
+          .select("created_at", { count: "exact" })
+          .gte("created_at", throughputStart),
+        admin.from("strength_sets").select("id", { count: "exact", head: true }),
+        admin.from("meal_plans").select("created_at", { count: "exact" }).gte("created_at", throughputStart),
+        admin.from("tickets").select("created_at", { count: "exact" }).gte("created_at", throughputStart),
+        safeCount("analytics_events", (q) =>
+          q.gte("created_at", new Date(Date.now() - 7 * 86400000).toISOString())
+        ),
+        safeCount("training_sessions"),
+        safeCount("meal_plans"),
+      ]);
+
+      if (sessionsRes.error) throw new Error(sessionsRes.error.message);
+      if (mealPlansRes.error) throw new Error(mealPlansRes.error.message);
+      if (ticketsRes.error) throw new Error(ticketsRes.error.message);
+
+      const currentlyLoggedInUsers = users.filter((user) => isUserCurrentlyLoggedIn(user.last_sign_in_at)).length;
+      const currentlyLoggedInAdmins = users.filter(
+        (user) => isUserCurrentlyLoggedIn(user.last_sign_in_at) && resolveUserRole(user) === "admin"
+      ).length;
+
+      const actionMap = new Map<string, number>();
+      for (const row of (sessionsRes.data || []) as Pick<TrainingSessionRow, "created_at">[]) {
+        const key = toIsoDay(row.created_at);
+        if (key && throughputDates.includes(key)) incrementMapValue(actionMap, key);
+      }
+      for (const row of (mealPlansRes.data || []) as Pick<MealPlanRow, "created_at">[]) {
+        const key = toIsoDay(row.created_at);
+        if (key && throughputDates.includes(key)) incrementMapValue(actionMap, key);
+      }
+      for (const row of (ticketsRes.data || []) as Pick<TicketRow, "created_at">[]) {
+        const key = toIsoDay(row.created_at);
+        if (key && throughputDates.includes(key)) incrementMapValue(actionMap, key);
+      }
+
+      const platformThroughput30d = fillDailySeries<{ actions: number }>(
+        throughputDates,
+        actionMap,
+        "actions"
+      ).map((row) => ({
+        date: row.date,
+        actions: row.actions,
+      }));
+
+      return {
+        total_users: users.length,
+        currently_logged_in_users: currentlyLoggedInUsers,
+        currently_logged_in_admins: currentlyLoggedInAdmins,
+        total_sessions: totalSessions,
+        total_strength_sets: setsRes.count ?? 0,
+        total_meal_plans: totalMealPlans,
+        recent_events: recentEvents,
+        platform_throughput_30d: platformThroughput30d,
+      };
+    },
+  });
 }
 
 export async function getAdminUsers(search = "", page = 1, pageSize = 100): Promise<AdminUsersPage> {
+  return runTrackedAction({
+    eventName: "admin.users.list",
+    payload: { search: search || null, page, page_size: pageSize },
+    action: async () => {
   await requireAdminUser();
   const admin = createAdminClient();
 
@@ -175,125 +245,389 @@ export async function getAdminUsers(search = "", page = 1, pageSize = 100): Prom
     page,
     has_more: Boolean(data?.nextPage && data.nextPage > page),
   };
+    },
+  });
 }
 
 export async function getAdminUserStats(days = 90) {
-  await requireAdminUser();
-  const users = await listAllAuthUsers();
-  const now = Date.now();
-  const daysMs = days * 86400000;
-  const thirtyMs = 30 * 86400000;
-  const ninetyMs = 90 * 86400000;
+  return runTrackedAction({
+    eventName: "admin.users.stats.read",
+    payload: { days },
+    action: async () => {
+      await requireAdminUser();
+      const users = await listAllAuthUsers();
+      const now = Date.now();
+      const daysMs = days * 86400000;
+      const thirtyMs = 30 * 86400000;
+      const ninetyMs = 90 * 86400000;
+      const atRiskDays = 14;
 
-  const totalUsers = users.length;
-  const totalAdmins = users.filter((u) => (u.app_metadata?.role || u.user_metadata?.role) === "admin").length;
-  const activeLast30 = users.filter((u) => u.last_sign_in_at && now - new Date(u.last_sign_in_at).getTime() <= thirtyMs).length;
-  const likelyLeaving = users.filter((u) => !u.last_sign_in_at || now - new Date(u.last_sign_in_at).getTime() > thirtyMs).length;
-  const likelyLeft = users.filter((u) => !u.last_sign_in_at || now - new Date(u.last_sign_in_at).getTime() > ninetyMs).length;
-  const joinedInWindow = users.filter((u) => now - new Date(u.created_at).getTime() <= daysMs).length;
+      const totalUsers = users.length;
+      const totalAdmins = users.filter((u) => (u.app_metadata?.role || u.user_metadata?.role) === "admin").length;
+      const activeLast30 = users.filter(
+        (u) => u.last_sign_in_at && now - new Date(u.last_sign_in_at).getTime() <= thirtyMs
+      ).length;
+      const likelyLeaving = users.filter(
+        (u) => !u.last_sign_in_at || now - new Date(u.last_sign_in_at).getTime() > thirtyMs
+      ).length;
+      const likelyLeft = users.filter(
+        (u) => !u.last_sign_in_at || now - new Date(u.last_sign_in_at).getTime() > ninetyMs
+      ).length;
+      const joinedInWindow = users.filter((u) => now - new Date(u.created_at).getTime() <= daysMs).length;
 
-  return {
-    total_users: totalUsers,
-    total_admins: totalAdmins,
-    active_last_30_days: activeLast30,
-    likely_leaving_30_days: likelyLeaving,
-    likely_left_90_days: likelyLeft,
-    joined_in_window: joinedInWindow,
-    join_trend: [] as Array<{ date: string; count: number }>,
-    leave_risk_trend: [] as Array<{ date: string; count: number }>,
-  };
+      const rangeDays = Math.max(30, days);
+      const isoRange = buildIsoDateRange(rangeDays);
+      const isoRangeSet = new Set(isoRange);
+      const joinMap = new Map<string, number>();
+      const riskMap = new Map<string, number>();
+
+      for (const user of users) {
+        const joinedIso = toIsoDay(user.created_at);
+        if (joinedIso && isoRangeSet.has(joinedIso)) {
+          incrementMapValue(joinMap, joinedIso);
+        }
+      }
+
+      for (const isoDate of isoRange) {
+        const snapshotTime = new Date(`${isoDate}T23:59:59.999Z`).getTime();
+        const riskCutoff = snapshotTime - atRiskDays * 86400000;
+
+        const atRiskCount = users.reduce((count, user) => {
+          const createdAt = new Date(user.created_at).getTime();
+          if (Number.isNaN(createdAt) || createdAt > snapshotTime) return count;
+
+          if (!user.last_sign_in_at) return count + 1;
+          const lastSignIn = new Date(user.last_sign_in_at).getTime();
+          if (Number.isNaN(lastSignIn)) return count + 1;
+          return lastSignIn <= riskCutoff ? count + 1 : count;
+        }, 0);
+
+        riskMap.set(isoDate, atRiskCount);
+      }
+
+      const joinedSeries = fillDailySeries<{ joined: number }>(isoRange, joinMap, "joined");
+      const riskSeries = fillDailySeries<{ risk: number }>(isoRange, riskMap, "risk");
+      const joinVsRiskTrend = joinedSeries.map((row, index) => ({
+        date: row.date,
+        joined: row.joined,
+        risk: riskSeries[index]?.risk ?? 0,
+      }));
+
+      return {
+        total_users: totalUsers,
+        total_admins: totalAdmins,
+        active_last_30_days: activeLast30,
+        likely_leaving_30_days: likelyLeaving,
+        likely_left_90_days: likelyLeft,
+        joined_in_window: joinedInWindow,
+        join_vs_risk_trend: joinVsRiskTrend,
+        join_trend: joinVsRiskTrend.map((item) => ({ date: item.date, count: item.joined })),
+        leave_risk_trend: joinVsRiskTrend.map((item) => ({ date: item.date, count: item.risk })),
+      };
+    },
+  });
 }
 
 export async function getAdminUserDetail(userId: string) {
-  await requireAdminUser();
-  const admin = createAdminClient();
+  return runTrackedAction({
+    eventName: "admin.user.detail.read",
+    payload: { user_id: userId },
+    action: async () => {
+      await requireAdminUser();
+      const admin = createAdminClient();
 
-  const [sessionsRes, mealPlansRes, setsRes] = await Promise.all([
-    admin
-      .from("workout_logs" as any)
-      .select("*")
-      .eq("user_id", userId)
-      .order("created_at", { ascending: false })
-      .limit(50),
-    admin
-      .from("meal_plans")
-      .select("*")
-      .eq("user_id", userId)
-      .order("created_at", { ascending: false })
-      .limit(50),
-    admin
-      .from("exercise_sets" as any)
-      .select("id", { count: "exact", head: true })
-      .eq("user_id", userId),
-  ]);
+      const [sessionsRes, mealPlansRes, userWorkoutIdsRes] = await Promise.all([
+        admin
+          .from("training_sessions")
+          .select("id, name, date, status, duration_minutes, created_at")
+          .eq("user_id", userId)
+          .order("created_at", { ascending: false })
+          .limit(50),
+        admin
+          .from("meal_plans")
+          .select("*")
+          .eq("user_id", userId)
+          .order("created_at", { ascending: false })
+          .limit(50),
+        admin.from("training_sessions").select("id").eq("user_id", userId),
+      ]);
 
-  const sessions = (((sessionsRes.data || []) as unknown) as Array<Record<string, unknown>>).map((row) => ({
-    id: String(row.id || ""),
-    name: typeof row.name === "string" ? row.name : null,
-    date: typeof row.date === "string" ? row.date : (typeof row.created_at === "string" ? row.created_at : null),
-    status: typeof row.status === "string" ? row.status : null,
-    duration_minutes: typeof row.duration_minutes === "number" ? row.duration_minutes : null,
-  }));
+      if (sessionsRes.error) throw new Error(sessionsRes.error.message);
+      if (mealPlansRes.error) throw new Error(mealPlansRes.error.message);
+      if (userWorkoutIdsRes.error) throw new Error(userWorkoutIdsRes.error.message);
 
-  const mealPlans = (((mealPlansRes.data || []) as unknown) as Array<Record<string, unknown>>).map((row) => ({
-    id: String(row.id || ""),
-    name: typeof row.name === "string" ? row.name : null,
-    status: typeof row.status === "string" ? row.status : null,
-    start_date: typeof row.start_date === "string" ? row.start_date : null,
-    end_date: typeof row.end_date === "string" ? row.end_date : null,
-  }));
+      const workoutIds = ((userWorkoutIdsRes.data || []) as Pick<TrainingSessionRow, "id">[]).map((row) => row.id);
+      let strengthSetsCount = 0;
+      if (workoutIds.length > 0) {
+        const setsRes = await admin
+          .from("strength_sets")
+          .select("id", { count: "exact", head: true })
+          .in("workout_id", workoutIds);
+        if (setsRes.error) throw new Error(setsRes.error.message);
+        strengthSetsCount = setsRes.count ?? 0;
+      }
 
-  return {
-    sessions,
-    meal_plans: mealPlans,
-    strength_sets_count: setsRes.count ?? 0,
-  };
+      const sessions = ((sessionsRes.data || []) as Pick<
+        TrainingSessionRow,
+        "id" | "name" | "date" | "status" | "duration_minutes" | "created_at"
+      >[]).map((row) => ({
+        id: row.id,
+        name: row.name,
+        date: row.date ?? row.created_at,
+        status: row.status,
+        duration_minutes: row.duration_minutes,
+      }));
+
+      const mealPlans = ((mealPlansRes.data || []) as MealPlanRow[]).map((row) => ({
+        id: row.id,
+        name: row.name,
+        status: row.status,
+        start_date: row.start_date,
+        end_date: row.end_date,
+      }));
+
+      return {
+        sessions,
+        meal_plans: mealPlans,
+        strength_sets_count: strengthSetsCount,
+      };
+    },
+  });
 }
 
 export async function getAdminTrainingStats(_days = 30) {
-  await requireAdminUser();
-  const [totalSessions, totalSets] = await Promise.all([
-    safeCount("workout_logs"),
-    safeCount("exercise_sets"),
-  ]);
+  return runTrackedAction({
+    eventName: "admin.training.stats.read",
+    payload: { days: _days },
+    action: async () => {
+      await requireAdminUser();
+      const admin = createAdminClient();
+      const days = Math.max(7, _days);
+      const isoRange = buildIsoDateRange(days);
+      const isoRangeSet = new Set(isoRange);
+      const startDate = `${isoRange[0]}T00:00:00.000Z`;
 
-  return {
-    total_sessions: totalSessions,
-    total_strength_sets: totalSets,
-    total_cardio_sessions: 0,
-    unique_athletes: 0,
-    avg_session_duration_minutes: 0,
-    avg_sets_per_session: 0,
-    avg_reps_per_set: 0,
-    total_volume_kg: 0,
-    daily_sessions: [] as Array<{ date: string; count: number }>,
-    status_breakdown: [] as Array<{ label: string; count: number }>,
-    sessions_by_weekday: [] as Array<{ date: string; count: number }>,
-    top_exercises: [] as Array<{ exercise_name: string; sets: number; total_volume_kg: number }>,
-  };
+      const [sessionsRes, setsRes, cardioRes] = await Promise.all([
+        admin
+          .from("training_sessions")
+          .select("id, user_id, date, status, duration_minutes, created_at")
+          .gte("created_at", startDate),
+        admin
+          .from("strength_sets")
+          .select("exercise_name, reps, weight, workout_id, created_at")
+          .gte("created_at", startDate),
+        admin.from("cardio_sessions").select("id", { count: "exact", head: true }).gte("created_at", startDate),
+      ]);
+
+      if (sessionsRes.error) throw new Error(sessionsRes.error.message);
+      if (setsRes.error) throw new Error(setsRes.error.message);
+      if (cardioRes.error) throw new Error(cardioRes.error.message);
+
+      const sessions = (sessionsRes.data || []) as Pick<
+        TrainingSessionRow,
+        "id" | "user_id" | "date" | "status" | "duration_minutes" | "created_at"
+      >[];
+      const sets = (setsRes.data || []) as Pick<
+        StrengthSetRow,
+        "exercise_name" | "reps" | "weight" | "workout_id" | "created_at"
+      >[];
+
+      const sessionsPerDay = new Map<string, number>();
+      const weekdayMap = new Map<string, number>();
+      const statusMap = new Map<string, number>();
+      const durationValues: number[] = [];
+      const athleteIds = new Set<string>();
+      const exerciseAgg = new Map<string, { sets: number; total_volume_kg: number }>();
+
+      for (const label of weekdayOrder()) {
+        weekdayMap.set(label, 0);
+      }
+
+      for (const session of sessions) {
+        const isoDate = toIsoDay(session.date || session.created_at);
+        if (!isoDate || !isoRangeSet.has(isoDate)) continue;
+
+        incrementMapValue(sessionsPerDay, isoDate);
+        const weekday = isoDateToWeekday(isoDate);
+        incrementMapValue(weekdayMap, weekday);
+
+        if (session.status) {
+          incrementMapValue(statusMap, session.status.toLowerCase());
+        } else {
+          incrementMapValue(statusMap, "unknown");
+        }
+        if (typeof session.duration_minutes === "number") {
+          durationValues.push(session.duration_minutes);
+        }
+        athleteIds.add(session.user_id);
+      }
+
+      for (const set of sets) {
+        const exerciseName = set.exercise_name || "Unknown";
+        const reps = set.reps ?? 0;
+        const weight = set.weight ?? 0;
+        const volume = reps * weight;
+
+        const current = exerciseAgg.get(exerciseName) ?? { sets: 0, total_volume_kg: 0 };
+        current.sets += 1;
+        current.total_volume_kg += volume;
+        exerciseAgg.set(exerciseName, current);
+      }
+
+      const totalSessions = sessions.length;
+      const totalSets = sets.length;
+      const totalVolume = sets.reduce((sum, set) => sum + (set.reps ?? 0) * (set.weight ?? 0), 0);
+      const totalReps = sets.reduce((sum, set) => sum + (set.reps ?? 0), 0);
+
+      const dailySessions = fillDailySeries<{ sessions: number }>(isoRange, sessionsPerDay, "sessions").map(
+        (row) => ({
+          date: row.date,
+          sessions: row.sessions,
+        })
+      );
+
+      const sessionsByWeekday = weekdayOrder().map((day) => ({
+        day,
+        sessions: weekdayMap.get(day) ?? 0,
+      }));
+
+      const statusBreakdown = Array.from(statusMap.entries())
+        .map(([label, count]) => ({ label, count }))
+        .sort((a, b) => b.count - a.count);
+
+      const topExercises = Array.from(exerciseAgg.entries())
+        .map(([exercise_name, value]) => ({
+          exercise_name,
+          sets: value.sets,
+          total_volume_kg: Number(value.total_volume_kg.toFixed(1)),
+        }))
+        .sort((a, b) => b.sets - a.sets)
+        .slice(0, 10);
+
+      return {
+        total_sessions: totalSessions,
+        total_strength_sets: totalSets,
+        total_cardio_sessions: cardioRes.count ?? 0,
+        unique_athletes: athleteIds.size,
+        avg_session_duration_minutes:
+          durationValues.length > 0
+            ? Number((durationValues.reduce((sum, value) => sum + value, 0) / durationValues.length).toFixed(1))
+            : 0,
+        avg_sets_per_session: totalSessions > 0 ? Number((totalSets / totalSessions).toFixed(2)) : 0,
+        avg_reps_per_set: totalSets > 0 ? Number((totalReps / totalSets).toFixed(2)) : 0,
+        total_volume_kg: Number(totalVolume.toFixed(1)),
+        daily_sessions: dailySessions,
+        status_breakdown: statusBreakdown,
+        sessions_by_weekday: sessionsByWeekday,
+        top_exercises: topExercises,
+      };
+    },
+  });
 }
 
 export async function getAdminNutritionStats(_days = 30) {
-  await requireAdminUser();
-  const [totalPlans, totalMeals] = await Promise.all([
-    safeCount("meal_plans"),
-    safeCount("meals"),
-  ]);
+  return runTrackedAction({
+    eventName: "admin.nutrition.stats.read",
+    payload: { days: _days },
+    action: async () => {
+      await requireAdminUser();
+      const admin = createAdminClient();
+      const days = Math.max(7, _days);
+      const isoRange = buildIsoDateRange(days);
+      const isoRangeSet = new Set(isoRange);
+      const startDate = `${isoRange[0]}T00:00:00.000Z`;
 
-  return {
-    total_meal_plans: totalPlans,
-    active_meal_plans: 0,
-    total_meals: totalMeals,
-    unique_athletes: 0,
-    avg_calories_per_meal: 0,
-    avg_protein_g_per_meal: 0,
-    daily_plans: [] as Array<{ date: string; count: number }>,
-    meal_type_breakdown: [] as Array<{ meal_type: string; count: number }>,
-    status_breakdown: [] as Array<{ label: string; count: number }>,
-  };
+      const [plansRes, mealsRes] = await Promise.all([
+        admin
+          .from("meal_plans")
+          .select("id, user_id, status, created_at")
+          .gte("created_at", startDate),
+        admin.from("meal_plan_meals").select("meal_type, calories, protein_g"),
+      ]);
+
+      if (plansRes.error) throw new Error(plansRes.error.message);
+      if (mealsRes.error) throw new Error(mealsRes.error.message);
+
+      const plans = (plansRes.data || []) as Pick<MealPlanRow, "id" | "user_id" | "status" | "created_at">[];
+      const meals = (mealsRes.data || []) as Pick<MealPlanMealRow, "meal_type" | "calories" | "protein_g">[];
+
+      const planMap = new Map<string, number>();
+      const statusMap = new Map<string, number>();
+      const uniqueAthletes = new Set<string>();
+      for (const plan of plans) {
+        const isoDate = toIsoDay(plan.created_at);
+        if (!isoDate || !isoRangeSet.has(isoDate)) continue;
+        incrementMapValue(planMap, isoDate);
+        incrementMapValue(statusMap, (plan.status || "unknown").toLowerCase());
+        uniqueAthletes.add(plan.user_id);
+      }
+
+      const mealTypeMap = new Map<string, number>();
+      let caloriesSum = 0;
+      let proteinSum = 0;
+      let caloriesCount = 0;
+      let proteinCount = 0;
+      for (const meal of meals) {
+        const type = (meal.meal_type || "other").toLowerCase();
+        incrementMapValue(mealTypeMap, type);
+        if (typeof meal.calories === "number") {
+          caloriesSum += meal.calories;
+          caloriesCount += 1;
+        }
+        if (typeof meal.protein_g === "number") {
+          proteinSum += meal.protein_g;
+          proteinCount += 1;
+        }
+      }
+
+      const mealTypePalette: Record<string, string> = {
+        breakfast: "var(--chart-1)",
+        lunch: "var(--chart-2)",
+        dinner: "var(--chart-3)",
+        snack: "var(--chart-4)",
+        pre_workout: "var(--chart-5)",
+        post_workout: "var(--chart-1)",
+      };
+
+      const dailyPlans = fillDailySeries<{ plans: number }>(isoRange, planMap, "plans").map((row) => ({
+        date: row.date,
+        plans: row.plans,
+      }));
+
+      const mealTypeBreakdown = Array.from(mealTypeMap.entries())
+        .map(([meal_type, count]) => ({ meal_type, count }))
+        .sort((a, b) => b.count - a.count);
+
+      const mealTypeMix = mealTypeBreakdown.map((row) => ({
+        name: row.meal_type.replaceAll("_", " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+        value: row.count,
+        fill: mealTypePalette[row.meal_type] ?? "var(--chart-5)",
+      }));
+
+      const statusBreakdown = Array.from(statusMap.entries())
+        .map(([label, count]) => ({ label, count }))
+        .sort((a, b) => b.count - a.count);
+
+      return {
+        total_meal_plans: plans.length,
+        active_meal_plans: plans.filter((plan) => plan.status?.toLowerCase() === "active").length,
+        total_meals: meals.length,
+        unique_athletes: uniqueAthletes.size,
+        avg_calories_per_meal: caloriesCount > 0 ? Number((caloriesSum / caloriesCount).toFixed(1)) : 0,
+        avg_protein_g_per_meal: proteinCount > 0 ? Number((proteinSum / proteinCount).toFixed(1)) : 0,
+        daily_plans: dailyPlans,
+        meal_type_breakdown: mealTypeBreakdown,
+        meal_type_mix: mealTypeMix,
+        status_breakdown: statusBreakdown,
+      };
+    },
+  });
 }
 
 export async function getAdminSettingsSnapshot() {
+  return runTrackedAction({
+    eventName: "admin.settings.snapshot.read",
+    action: async () => {
   await requireAdminUser();
   const users = await listAllAuthUsers();
 
@@ -305,8 +639,8 @@ export async function getAdminSettingsSnapshot() {
     },
     health: {
       total_users: users.length,
-      total_sessions: await safeCount("workout_logs"),
-      total_events: await safeCount("audit_events"),
+      total_sessions: await safeCount("training_sessions"),
+      total_events: await safeCount("analytics_events"),
       last_training_entry_at: null as string | null,
       last_nutrition_entry_at: null as string | null,
       last_analytics_event_at: null as string | null,
@@ -316,26 +650,40 @@ export async function getAdminSettingsSnapshot() {
       security_controls: [] as Array<{ key: string; value: string; description: string }>,
     },
   };
+    },
+  });
 }
 
 export async function updateAdminUserRole(userId: string, role: "admin" | "user") {
-  await requireAdminUser();
-  const admin = createAdminClient();
-  const { error } = await admin.auth.admin.updateUserById(userId, {
-    app_metadata: { role },
+  return runTrackedAction({
+    eventName: "admin.user.role.update",
+    payload: { user_id: userId, role },
+    action: async () => {
+      await requireAdminUser();
+      const admin = createAdminClient();
+      const { error } = await admin.auth.admin.updateUserById(userId, {
+        app_metadata: { role },
+      });
+      if (error) throw new Error(error.message);
+      return { success: true, message: `Role updated to ${role}.` };
+    },
   });
-  if (error) throw new Error(error.message);
-  return { success: true, message: `Role updated to ${role}.` };
 }
 
 export async function setAdminUserBlocked(userId: string, blocked: boolean) {
-  await requireAdminUser();
-  const admin = createAdminClient();
-  const { error } = await admin.auth.admin.updateUserById(userId, {
-    ban_duration: blocked ? "876000h" : "none",
+  return runTrackedAction({
+    eventName: "admin.user.block.update",
+    payload: { user_id: userId, blocked },
+    action: async () => {
+      await requireAdminUser();
+      const admin = createAdminClient();
+      const { error } = await admin.auth.admin.updateUserById(userId, {
+        ban_duration: blocked ? "876000h" : "none",
+      });
+      if (error) throw new Error(error.message);
+      return { success: true, message: blocked ? "User blocked." : "User unblocked." };
+    },
   });
-  if (error) throw new Error(error.message);
-  return { success: true, message: blocked ? "User blocked." : "User unblocked." };
 }
 
 export async function updateTicketStatus(
@@ -346,34 +694,44 @@ export async function updateTicketStatus(
     ticket_id: ticketId,
     new_status: newStatus,
   });
+  return runTrackedAction({
+    eventName: "admin.ticket.status.update",
+    payload: { ticket_id: payload.ticket_id, status: payload.new_status },
+    action: async () => {
+      await requireAdminUser();
+      const admin = createAdminClient();
 
-  await requireAdminUser();
-  const admin = createAdminClient();
+      const { error } = await admin
+        .from("tickets")
+        .update({ status: payload.new_status })
+        .eq("id", payload.ticket_id);
 
-  const { error } = await admin
-    .from("tickets")
-    .update({ status: payload.new_status })
-    .eq("id", payload.ticket_id);
+      if (error) throw new Error(error.message);
 
-  if (error) throw new Error(error.message);
-
-  revalidatePath("/support");
-  revalidatePath("/admin/tickets");
-  revalidatePath(`/support/${payload.ticket_id}`);
-  return { success: true };
+      revalidatePath("/support");
+      revalidatePath("/admin/tickets");
+      revalidatePath(`/support/${payload.ticket_id}`);
+      return { success: true };
+    },
+  });
 }
 
 export async function deleteTicket(ticketId: string) {
   const payload = deleteTicketSchema.parse({ ticket_id: ticketId });
+  return runTrackedAction({
+    eventName: "admin.ticket.delete",
+    payload: { ticket_id: payload.ticket_id },
+    action: async () => {
+      await requireAdminUser();
+      const admin = createAdminClient();
 
-  await requireAdminUser();
-  const admin = createAdminClient();
+      const { error } = await admin.from("tickets").delete().eq("id", payload.ticket_id);
+      if (error) throw new Error(error.message);
 
-  const { error } = await admin.from("tickets").delete().eq("id", payload.ticket_id);
-  if (error) throw new Error(error.message);
-
-  revalidatePath("/support");
-  revalidatePath("/admin/tickets");
-  revalidatePath(`/support/${payload.ticket_id}`);
-  return { success: true };
+      revalidatePath("/support");
+      revalidatePath("/admin/tickets");
+      revalidatePath(`/support/${payload.ticket_id}`);
+      return { success: true };
+    },
+  });
 }

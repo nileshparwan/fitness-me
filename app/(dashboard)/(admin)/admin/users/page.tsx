@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { formatDistanceToNow } from "date-fns";
 import { Search } from "lucide-react";
 import {
@@ -45,19 +45,8 @@ export default function AdminUsersPage() {
   const { mutate: mutateRole, isPending } = useUpdateAdminUserRole();
   const { mutate: mutateBlocked, isPending: blockingPending } = useSetAdminUserBlocked();
 
-  const data = useMemo(() => usersPages?.pages.flatMap((page) => page.rows) || [], [usersPages]);
-
-  const trendData = useMemo(() => {
-    const joinedMap = new Map((userStats?.join_trend || []).map((item) => [item.date, item.count]));
-    const riskMap = new Map((userStats?.leave_risk_trend || []).map((item) => [item.date, item.count]));
-    const dates = Array.from(new Set([...joinedMap.keys(), ...riskMap.keys()])).sort((a, b) => a.localeCompare(b));
-
-    return dates.slice(-30).map((date) => ({
-      date: date.slice(5),
-      joined: joinedMap.get(date) || 0,
-      risk: riskMap.get(date) || 0,
-    }));
-  }, [userStats?.join_trend, userStats?.leave_risk_trend]);
+  const data = usersPages?.pages.flatMap((page) => page.rows) || [];
+  const trendData = userStats?.join_vs_risk_trend || [];
 
   return (
     <div className="section-gap">
@@ -90,9 +79,9 @@ export default function AdminUsersPage() {
         <CardHeader className="pb-2">
           <CardTitle className="text-base">Join vs Leave-Risk Trend (90 days)</CardTitle>
         </CardHeader>
-        <CardContent className="h-[240px]">
+        <CardContent className="h-[300px]">
           {loadingStats ? (
-            <Skeleton className="h-full w-full rounded-xl" />
+            <Skeleton className="h-[300px] w-full rounded-xl" />
           ) : (
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={trendData}>

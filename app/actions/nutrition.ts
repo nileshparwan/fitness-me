@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { runTrackedAction } from "@/lib/events/dispatcher";
 import { revalidatePath } from "next/cache";
 import { NutritionProgram, NutritionMeal, ProgramSummary } from "@/types/nutrition";
 
@@ -15,12 +16,17 @@ export type NutritionProgramsPage = {
 // --- PROGRAMS ---
 
 export async function getPrograms(): Promise<NutritionProgram[]> {
-    const supabase = await createClient();
-    const { data } = await supabase
-        .from("meal_plans")
-        .select("*")
-        .order("start_date", { ascending: false });
-    return data || [];
+    return runTrackedAction({
+        eventName: "nutrition.programs.read",
+        action: async () => {
+            const supabase = await createClient();
+            const { data } = await supabase
+                .from("meal_plans")
+                .select("*")
+                .order("start_date", { ascending: false });
+            return data || [];
+        },
+    });
 }
 
 export async function getProgramsPage({
@@ -30,6 +36,10 @@ export async function getProgramsPage({
     pageParam?: number;
     search?: string;
 }): Promise<NutritionProgramsPage> {
+    return runTrackedAction({
+        eventName: "nutrition.programs.page.read",
+        payload: { page: pageParam, search: search || null },
+        action: async () => {
     const supabase = await createClient();
 
     const from = pageParam * PROGRAMS_PAGE_SIZE;
@@ -55,19 +65,30 @@ export async function getProgramsPage({
         nextPage: rows.length === PROGRAMS_PAGE_SIZE ? pageParam + 1 : undefined,
         total: count || 0,
     };
+        },
+    });
 }
 
 // PERFORMANCE FIX: Lean query for dropdowns
 export async function getProgramOptions(): Promise<ProgramSummary[]> {
-    const supabase = await createClient();
-    const { data } = await supabase
-        .from("meal_plans")
-        .select("id, name")
-        .order("start_date", { ascending: false });
-    return data || [];
+    return runTrackedAction({
+        eventName: "nutrition.program.options.read",
+        action: async () => {
+            const supabase = await createClient();
+            const { data } = await supabase
+                .from("meal_plans")
+                .select("id, name")
+                .order("start_date", { ascending: false });
+            return data || [];
+        },
+    });
 }
 
 export async function createNutritionProgram(formData: FormData) {
+    return runTrackedAction({
+        eventName: "nutrition.program.create",
+        payload: { name: formData.get("name") as string },
+        action: async () => {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
 
@@ -88,9 +109,15 @@ export async function createNutritionProgram(formData: FormData) {
     if (error) throw new Error(error.message);
 
     revalidatePath("/nutrition");
+        },
+    });
 }
 
 export async function updateNutritionProgram(formData: FormData, programId: string) {
+    return runTrackedAction({
+        eventName: "nutrition.program.update",
+        payload: { program_id: programId },
+        action: async () => {
     const supabase = await createClient();
 
     const updates = {
@@ -111,28 +138,52 @@ export async function updateNutritionProgram(formData: FormData, programId: stri
     
     revalidatePath("/nutrition");
     revalidatePath(`/nutrition/program/${programId}`);
+        },
+    });
 }
 
 export async function deleteProgram(id: string) {
-    const supabase = await createClient();
-    await supabase.from("meal_plans").delete().eq("id", id);
-    revalidatePath("/nutrition");
+    return runTrackedAction({
+        eventName: "nutrition.program.delete",
+        payload: { program_id: id },
+        action: async () => {
+            const supabase = await createClient();
+            await supabase.from("meal_plans").delete().eq("id", id);
+            revalidatePath("/nutrition");
+        },
+    });
 }
 
 export async function updateProgramStatus(programId: string, status: string) {
-    const supabase = await createClient();
-    await supabase.from("meal_plans").update({ status }).eq("id", programId);
-    revalidatePath("/nutrition");
-    revalidatePath(`/nutrition/program/${programId}`);
+    return runTrackedAction({
+        eventName: "nutrition.program.status.update",
+        payload: { program_id: programId, status },
+        action: async () => {
+            const supabase = await createClient();
+            await supabase.from("meal_plans").update({ status }).eq("id", programId);
+            revalidatePath("/nutrition");
+            revalidatePath(`/nutrition/program/${programId}`);
+        },
+    });
 }
 
 export async function updateProgramNotes(programId: string, notes: string) {
-    const supabase = await createClient();
-    await supabase.from("meal_plans").update({ notes }).eq("id", programId);
-    revalidatePath(`/nutrition/program/${programId}`);
+    return runTrackedAction({
+        eventName: "nutrition.program.notes.update",
+        payload: { program_id: programId },
+        action: async () => {
+            const supabase = await createClient();
+            await supabase.from("meal_plans").update({ notes }).eq("id", programId);
+            revalidatePath(`/nutrition/program/${programId}`);
+        },
+    });
 }
 
 export async function duplicateProgram(programId: string) {
+    return runTrackedAction({
+        eventName: "nutrition.program.duplicate",
+        payload: { program_id: programId },
+        action: async () => {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error("Unauthorized");
@@ -190,21 +241,33 @@ export async function duplicateProgram(programId: string) {
     }
 
     revalidatePath("/nutrition");
+        },
+    });
 }
 
 // --- MEALS ---
 
 export async function getProgramMeals(programId: string): Promise<NutritionMeal[]> {
-    const supabase = await createClient();
-    const { data } = await supabase
-        .from("meal_plan_meals")
-        .select("*")
-        .eq("program_id", programId)
-        .order("position", { ascending: true }); 
-    return data || [];
+    return runTrackedAction({
+        eventName: "nutrition.meals.read",
+        payload: { program_id: programId },
+        action: async () => {
+            const supabase = await createClient();
+            const { data } = await supabase
+                .from("meal_plan_meals")
+                .select("*")
+                .eq("program_id", programId)
+                .order("position", { ascending: true }); 
+            return data || [];
+        },
+    });
 }
 
 export async function addMeal(formData: FormData, programId: string) {
+    return runTrackedAction({
+        eventName: "nutrition.meal.create",
+        payload: { program_id: programId, meal_type: formData.get("meal_type") as string },
+        action: async () => {
     const supabase = await createClient();
     
     // Get max position (Optimized: select only position)
@@ -235,9 +298,15 @@ export async function addMeal(formData: FormData, programId: string) {
     if (error) throw new Error(error.message);
   
     revalidatePath(`/nutrition/program/${programId}`);
+        },
+    });
 }
 
 export async function updateMeal(formData: FormData, mealId: string, programId: string) {
+    return runTrackedAction({
+        eventName: "nutrition.meal.update",
+        payload: { meal_id: mealId, program_id: programId },
+        action: async () => {
     const supabase = await createClient();
     
     const updates = {
@@ -256,15 +325,27 @@ export async function updateMeal(formData: FormData, mealId: string, programId: 
     if (error) throw new Error(error.message);
     
     revalidatePath(`/nutrition/program/${programId}`);
+        },
+    });
 }
 
 export async function deleteMeal(mealId: string) {
-    const supabase = await createClient();
-    await supabase.from("meal_plan_meals").delete().eq("id", mealId);
-    revalidatePath("/nutrition");
+    return runTrackedAction({
+        eventName: "nutrition.meal.delete",
+        payload: { meal_id: mealId },
+        action: async () => {
+            const supabase = await createClient();
+            await supabase.from("meal_plan_meals").delete().eq("id", mealId);
+            revalidatePath("/nutrition");
+        },
+    });
 }
 
 export async function copyMeal(originalMealId: string, targetProgramId: string) {
+    return runTrackedAction({
+        eventName: "nutrition.meal.copy",
+        payload: { meal_id: originalMealId, target_program_id: targetProgramId },
+        action: async () => {
     const supabase = await createClient();
   
     const { data: original } = await supabase.from("meal_plan_meals").select("*").eq("id", originalMealId).single();
@@ -282,9 +363,15 @@ export async function copyMeal(originalMealId: string, targetProgramId: string) 
     });
   
     revalidatePath(`/nutrition/program/${targetProgramId}`);
+        },
+    });
 }
 
 export async function moveMeal(mealId: string, targetProgramId: string) {
+    return runTrackedAction({
+        eventName: "nutrition.meal.move",
+        payload: { meal_id: mealId, target_program_id: targetProgramId },
+        action: async () => {
     const supabase = await createClient();
 
     const { data: maxPos } = await supabase.from("meal_plan_meals").select("position").eq("program_id", targetProgramId).order("position", { ascending: false }).limit(1).single();
@@ -297,12 +384,18 @@ export async function moveMeal(mealId: string, targetProgramId: string) {
     if (error) throw new Error(error.message);
 
     revalidatePath("/nutrition");
+        },
+    });
 }
 
 // PERFORMANCE NOTE: 
 // For production apps with large lists, consider a Postgres Function (RPC) for this.
 // For < 50 items, Promise.all is acceptable.
 export async function updateMealPositions(updates: { id: string; position: number }[], programId: string) {
+    return runTrackedAction({
+        eventName: "nutrition.meal.positions.update",
+        payload: { program_id: programId, count: updates.length },
+        action: async () => {
     const supabase = await createClient();
 
     await Promise.all(
@@ -312,10 +405,16 @@ export async function updateMealPositions(updates: { id: string; position: numbe
     );
 
     revalidatePath(`/nutrition/program/${programId}`);
+        },
+    });
 }
 
 
 export async function updateMealStatus(mealId: string, status: 'active' | 'draft') {
+    return runTrackedAction({
+        eventName: "nutrition.meal.status.update",
+        payload: { meal_id: mealId, status },
+        action: async () => {
     const supabase = await createClient();
     
     const { error } = await supabase
@@ -326,4 +425,6 @@ export async function updateMealStatus(mealId: string, status: 'active' | 'draft
     if (error) throw new Error(error.message);
     
     revalidatePath("/nutrition");
-  }
+        },
+    });
+}

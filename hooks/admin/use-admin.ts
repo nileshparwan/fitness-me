@@ -18,6 +18,7 @@ export function useAdminDashboardStats() {
   return useQuery({
     queryKey: ["admin", "dashboard-stats"],
     queryFn: getAdminDashboardStats,
+    staleTime: 60_000,
   });
 }
 
@@ -34,6 +35,8 @@ export function useAdminUserStats(days = 90) {
   return useQuery({
     queryKey: ["admin", "user-stats", days],
     queryFn: () => getAdminUserStats(days),
+    staleTime: 60_000,
+    placeholderData: (prev) => prev,
   });
 }
 
@@ -49,6 +52,8 @@ export function useAdminTrainingStats(days = 30) {
   return useQuery({
     queryKey: ["admin", "training-stats", days],
     queryFn: () => getAdminTrainingStats(days),
+    staleTime: 60_000,
+    placeholderData: (prev) => prev,
   });
 }
 
@@ -56,6 +61,8 @@ export function useAdminNutritionStats(days = 30) {
   return useQuery({
     queryKey: ["admin", "nutrition-stats", days],
     queryFn: () => getAdminNutritionStats(days),
+    staleTime: 60_000,
+    placeholderData: (prev) => prev,
   });
 }
 

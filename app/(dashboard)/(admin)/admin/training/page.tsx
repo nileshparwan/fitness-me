@@ -65,17 +65,17 @@ export default function AdminTrainingPage() {
           <CardHeader className="pb-2">
             <CardTitle className="text-base">Session Velocity Trend</CardTitle>
           </CardHeader>
-          <CardContent className="h-[250px]">
+          <CardContent className="h-[300px]">
             {isLoading ? (
-              <Skeleton className="h-full w-full rounded-xl" />
+              <Skeleton className="h-[300px] w-full rounded-xl" />
             ) : (
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={(data?.daily_sessions || []).slice(-30).map((row) => ({ ...row, date: row.date.slice(5) }))}>
+                <LineChart data={data?.daily_sessions || []}>
                   <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
                   <XAxis dataKey="date" />
                   <YAxis />
                   <Tooltip />
-                  <Line type="monotone" dataKey="count" stroke="#0f766e" strokeWidth={2} dot={false} />
+                  <Line type="monotone" dataKey="sessions" stroke="#0f766e" strokeWidth={2} dot={false} />
                 </LineChart>
               </ResponsiveContainer>
             )}
@@ -86,17 +86,17 @@ export default function AdminTrainingPage() {
           <CardHeader className="pb-2">
             <CardTitle className="text-base">Sessions by Weekday</CardTitle>
           </CardHeader>
-          <CardContent className="h-[250px]">
+          <CardContent className="h-[300px]">
             {isLoading ? (
-              <Skeleton className="h-full w-full rounded-xl" />
+              <Skeleton className="h-[300px] w-full rounded-xl" />
             ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={data?.sessions_by_weekday || []}>
                   <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
-                  <XAxis dataKey="date" />
+                  <XAxis dataKey="day" />
                   <YAxis />
                   <Tooltip />
-                  <Bar dataKey="count" fill="#2563eb" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="sessions" fill="#2563eb" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             )}

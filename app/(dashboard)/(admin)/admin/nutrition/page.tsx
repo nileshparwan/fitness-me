@@ -7,8 +7,9 @@ import {
   Tooltip,
   XAxis,
   YAxis,
-  BarChart,
-  Bar,
+  PieChart,
+  Pie,
+  Cell,
   LineChart,
   Line,
 } from "recharts";
@@ -24,13 +25,11 @@ const dayOptions = ["7", "14", "30", "60", "90"] as const;
 export default function AdminNutritionPage() {
   const [days, setDays] = useState<(typeof dayOptions)[number]>("30");
   const { data, isLoading } = useAdminNutritionStats(Number(days));
-  const dailyPlans: Array<{ date: string; count: number }> = data?.daily_plans || [];
+  const dailyPlans: Array<{ date: string; plans: number }> = data?.daily_plans || [];
   const mealTypeBreakdown: Array<{ meal_type: string; count: number }> = data?.meal_type_breakdown || [];
+  const mealTypeMix: Array<{ name: string; value: number; fill: string }> = data?.meal_type_mix || [];
   const statusBreakdown: Array<{ label: string; count: number }> = data?.status_breakdown || [];
-  const velocityData = dailyPlans.slice(-30).map((row) => ({ date: row.date.slice(5), count: row.count }));
-  const mealTypeChartData = mealTypeBreakdown
-    .slice(0, 6)
-    .map((row) => ({ ...row, label: row.meal_type.replaceAll("_", " ").slice(0, 12) }));
+  const velocityData = dailyPlans;
 
   return (
     <div className="section-gap">
@@ -70,9 +69,9 @@ export default function AdminNutritionPage() {
           <CardHeader className="pb-2">
             <CardTitle className="text-base">Plan Creation Velocity</CardTitle>
           </CardHeader>
-          <CardContent className="h-[250px]">
+          <CardContent className="h-[300px]">
             {isLoading ? (
-              <Skeleton className="h-full w-full rounded-xl" />
+              <Skeleton className="h-[300px] w-full rounded-xl" />
             ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={velocityData}>
@@ -80,7 +79,7 @@ export default function AdminNutritionPage() {
                   <XAxis dataKey="date" />
                   <YAxis />
                   <Tooltip />
-                  <Line type="monotone" dataKey="count" stroke="#0891b2" strokeWidth={2} dot={false} />
+                  <Line type="monotone" dataKey="plans" stroke="#0891b2" strokeWidth={2} dot={false} />
                 </LineChart>
               </ResponsiveContainer>
             )}
@@ -91,18 +90,19 @@ export default function AdminNutritionPage() {
           <CardHeader className="pb-2">
             <CardTitle className="text-base">Meal Type Mix</CardTitle>
           </CardHeader>
-          <CardContent className="h-[250px]">
+          <CardContent className="h-[300px]">
             {isLoading ? (
-              <Skeleton className="h-full w-full rounded-xl" />
+              <Skeleton className="h-[300px] w-full rounded-xl" />
             ) : (
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={mealTypeChartData}>
-                  <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
-                  <XAxis dataKey="label" />
-                  <YAxis />
+                <PieChart>
                   <Tooltip />
-                  <Bar dataKey="count" fill="#7c3aed" radius={[4, 4, 0, 0]} />
-                </BarChart>
+                  <Pie data={mealTypeMix} dataKey="value" nameKey="name" innerRadius={55} outerRadius={95} paddingAngle={3}>
+                    {mealTypeMix.map((entry) => (
+                      <Cell key={entry.name} fill={entry.fill} />
+                    ))}
+                  </Pie>
+                </PieChart>
               </ResponsiveContainer>
             )}
           </CardContent>

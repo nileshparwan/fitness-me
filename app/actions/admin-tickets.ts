@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
+import { runTrackedAction } from "@/lib/events/dispatcher";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { Database } from "@/types/database";
@@ -102,8 +103,12 @@ async function resolveReporter(userId: string): Promise<AdminTicketRow["reporter
 export async function listAdminTicketsAction(
   input: z.input<typeof adminListSchema>
 ): Promise<AdminTicketListResult> {
-  await requireAdminUser();
   const params = adminListSchema.parse(input);
+  return runTrackedAction({
+    eventName: "admin.tickets.list",
+    payload: { page: params.page, page_size: params.page_size },
+    action: async () => {
+  await requireAdminUser();
   const admin = createAdminClient();
 
   let query = admin.from("tickets").select("*", { count: "exact" });
@@ -161,13 +166,19 @@ export async function listAdminTicketsAction(
     total,
     has_more: from + rows.length < total,
   };
+    },
+  });
 }
 
 export async function updateTicketStatusAction(
   input: z.input<typeof updateStatusSchema>
 ) {
-  await requireAdminUser();
   const payload = updateStatusSchema.parse(input);
+  return runTrackedAction({
+    eventName: "admin.tickets.status.update",
+    payload: { ticket_id: payload.id, status: payload.status },
+    action: async () => {
+  await requireAdminUser();
   const admin = createAdminClient();
 
   const { error } = await admin
@@ -181,11 +192,17 @@ export async function updateTicketStatusAction(
   revalidatePath("/support");
   revalidatePath(`/support/${payload.id}`);
   return { success: true };
+    },
+  });
 }
 
 export async function deleteTicketAction(input: z.input<typeof deleteSchema>) {
-  await requireAdminUser();
   const payload = deleteSchema.parse(input);
+  return runTrackedAction({
+    eventName: "admin.tickets.delete",
+    payload: { ticket_id: payload.id },
+    action: async () => {
+  await requireAdminUser();
   const admin = createAdminClient();
 
   const { error } = await admin.from("tickets").delete().eq("id", payload.id);
@@ -195,4 +212,6 @@ export async function deleteTicketAction(input: z.input<typeof deleteSchema>) {
   revalidatePath("/support");
   revalidatePath(`/support/${payload.id}`);
   return { success: true };
+    },
+  });
 }

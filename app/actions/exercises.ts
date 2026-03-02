@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { runTrackedAction } from "@/lib/events/dispatcher";
 import { ExerciseFormValues } from "@/lib/validations/exercise";
 import { revalidatePath } from "next/cache";
 import { Database } from "@/types/database";
@@ -22,6 +23,10 @@ type CardioLogRow = Database["public"]["Tables"]["cardio_sessions"]["Row"];
 type WorkoutRow = Database["public"]["Tables"]["training_sessions"]["Row"];
 
 export async function getExerciseHistory(exerciseName: string) {
+  return runTrackedAction({
+    eventName: "exercise.history.read",
+    payload: { exercise_name: exerciseName },
+    action: async () => {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
   
@@ -92,7 +97,9 @@ export async function getExerciseHistory(exerciseName: string) {
     return [...strengthEntries, ...cardioEntries].sort(
       (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
     );
-  }
+    },
+  });
+}
 
 export async function getExercises({
     pageParam = 0,
@@ -103,6 +110,10 @@ export async function getExercises({
     search?: string;
     category?: string;
 }) {
+    return runTrackedAction({
+        eventName: "exercise.list.read",
+        payload: { page: pageParam, search: search || null, category: category || null },
+        action: async () => {
     const supabase = await createClient();
 
     let query = supabase
@@ -129,9 +140,15 @@ export async function getExercises({
         nextPage: data.length === PAGE_SIZE ? pageParam + 1 : undefined,
         total: count,
     };
+        },
+    });
 }
 
 export async function createExercise(values: ExerciseFormValues) {
+    return runTrackedAction({
+        eventName: "exercise.create",
+        payload: { name: values.name, category: values.category },
+        action: async () => {
     const supabase = await createClient();
 
     const { error } = await supabase.from("exercise_catalog").insert({
@@ -147,9 +164,15 @@ export async function createExercise(values: ExerciseFormValues) {
     if (error) throw new Error(error.message);
     revalidatePath("/exercises");
     return { success: true };
+        },
+    });
 }
 
 export async function deleteExercise(id: string) {
+    return runTrackedAction({
+        eventName: "exercise.delete",
+        payload: { exercise_id: id },
+        action: async () => {
     const supabase = await createClient();
 
     // FIX: Add select() or count explicitly to verify execution
@@ -169,9 +192,15 @@ export async function deleteExercise(id: string) {
 
     revalidatePath("/exercises");
     return { success: true };
+        },
+    });
 }
 
 export async function updateExercise(id: string, values: ExerciseFormValues) {
+    return runTrackedAction({
+        eventName: "exercise.update",
+        payload: { exercise_id: id, name: values.name, category: values.category },
+        action: async () => {
     const supabase = await createClient();
 
     const { error, count } = await supabase
@@ -195,4 +224,6 @@ export async function updateExercise(id: string, values: ExerciseFormValues) {
 
     revalidatePath("/exercises");
     return { success: true };
+        },
+    });
 }

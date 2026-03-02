@@ -4,7 +4,9 @@ import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createPublicAuthClient } from "@/lib/supabase/public-auth";
+import { trackEvent } from "@/lib/events/dispatcher";
 import { Database } from "@/types/database";
+import { AppEventName } from "@/types/events";
 
 type DeletionInsert = Database["public"]["Tables"]["account_deletion_requests"]["Insert"];
 
@@ -128,246 +130,344 @@ async function findUserByEmail(email: string) {
 
 export async function createDeleteAccountChallenge() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  let actorUserId: string | null = null;
 
-  if (!user) {
-    throw new Error("Unauthorized");
+  try {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      throw new Error("Unauthorized");
+    }
+    actorUserId = user.id;
+
+    const left = Math.floor(Math.random() * 9) + 1;
+    const right = Math.floor(Math.random() * 9) + 1;
+    const answer = String(left + right);
+    const exp = Math.floor(Date.now() / 1000) + CHALLENGE_TTL_SECONDS;
+
+    const payload: DeletionChallengePayload = {
+      uid: user.id,
+      answer,
+      exp,
+      nonce: randomBytes(16).toString("hex"),
+    };
+
+    trackEvent(
+      "account.deletion.challenge.create",
+      {
+        user_id: user.id,
+        page_path: "/settings/account",
+      },
+      "success"
+    );
+
+    return {
+      prompt: `Type the result of ${left} + ${right}`,
+      token: toChallengeToken(payload),
+      expires_at: new Date(exp * 1000).toISOString(),
+    };
+  } catch (error) {
+    trackEvent(
+      "account.deletion.challenge.create",
+      {
+        user_id: actorUserId,
+        page_path: "/settings/account",
+        error_message: error instanceof Error ? error.message : "unknown_error",
+      },
+      "error"
+    );
+    throw error;
   }
-
-  const left = Math.floor(Math.random() * 9) + 1;
-  const right = Math.floor(Math.random() * 9) + 1;
-  const answer = String(left + right);
-  const exp = Math.floor(Date.now() / 1000) + CHALLENGE_TTL_SECONDS;
-
-  const payload: DeletionChallengePayload = {
-    uid: user.id,
-    answer,
-    exp,
-    nonce: randomBytes(16).toString("hex"),
-  };
-
-  return {
-    prompt: `Type the result of ${left} + ${right}`,
-    token: toChallengeToken(payload),
-    expires_at: new Date(exp * 1000).toISOString(),
-  };
 }
 
 export async function requestPasswordReset(email: string) {
   const client = createPublicAuthClient();
   const normalizedEmail = email.trim().toLowerCase();
 
-  if (!normalizedEmail) {
-    throw new Error("Email is required");
-  }
+  try {
+    if (!normalizedEmail) {
+      throw new Error("Email is required");
+    }
 
-  const matchingUser = await findUserByEmail(normalizedEmail);
-  if (matchingUser && !hasPasswordAuthEnabled(matchingUser.app_metadata, matchingUser.user_metadata)) {
-    throw new Error(
-      "This account does not have password login enabled. Continue with your social provider, then set a password in Account Settings."
+    const matchingUser = await findUserByEmail(normalizedEmail);
+    if (matchingUser && !hasPasswordAuthEnabled(matchingUser.app_metadata, matchingUser.user_metadata)) {
+      throw new Error(
+        "This account does not have password login enabled. Continue with your social provider, then set a password in Account Settings."
+      );
+    }
+
+    const { error } = await client.auth.resetPasswordForEmail(normalizedEmail, {
+      redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/reset-password`,
+    });
+
+    if (error) {
+      console.error(error)
+      throw new Error("Unable to send reset email right now");
+    }
+
+    trackEvent(
+      AppEventName.PASSWORD_RESET_REQUESTED,
+      {
+        page_path: "/forgot-password",
+        email: normalizedEmail,
+      },
+      "success"
     );
+
+    return { success: true };
+  } catch (error) {
+    trackEvent(
+      AppEventName.PASSWORD_RESET_REQUESTED,
+      {
+        page_path: "/forgot-password",
+        email: normalizedEmail || null,
+        error_message: error instanceof Error ? error.message : "unknown_error",
+      },
+      "error"
+    );
+    throw error;
   }
-
-  const { error } = await client.auth.resetPasswordForEmail(normalizedEmail, {
-    redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/reset-password`,
-  });
-
-  if (error) {
-    console.error(error)
-    throw new Error("Unable to send reset email right now");
-  }
-
-  const serverClient = await createClient();
-  await serverClient.from("analytics_events").insert({
-    event_name: "password_reset_requested",
-    page_path: "/forgot-password",
-    metadata: { email: normalizedEmail },
-  });
-
-  return { success: true };
 }
 
 export async function requestSoftDeleteAccount(challengeToken: string, challengeResponse: string, reason?: string) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  let actorUserId: string | null = null;
 
-  if (!user || !user.email) {
-    throw new Error("Unauthorized");
-  }
+  try {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
-  const normalizedChallengeResponse = challengeResponse.trim();
-  if (!challengeToken || !normalizedChallengeResponse) {
-    throw new Error("Challenge verification is required");
-  }
+    if (!user || !user.email) {
+      throw new Error("Unauthorized");
+    }
+    actorUserId = user.id;
 
-  const role =
-    typeof user.user_metadata?.role === "string"
-      ? String(user.user_metadata.role).toLowerCase()
-      : "user";
-  if (role === "admin") {
-    throw new Error("Admin accounts cannot self-deactivate.");
-  }
+    const normalizedChallengeResponse = challengeResponse.trim();
+    if (!challengeToken || !normalizedChallengeResponse) {
+      throw new Error("Challenge verification is required");
+    }
 
-  const challenge = verifyChallengeToken(challengeToken);
+    const role =
+      typeof user.user_metadata?.role === "string"
+        ? String(user.user_metadata.role).toLowerCase()
+        : "user";
+    if (role === "admin") {
+      throw new Error("Admin accounts cannot self-deactivate.");
+    }
 
-  if (challenge.uid !== user.id) {
-    throw new Error("Challenge is not valid for this account");
-  }
-  if (challenge.exp < Math.floor(Date.now() / 1000)) {
-    throw new Error("Challenge expired. Please try again.");
-  }
-  if (normalizedChallengeResponse !== challenge.answer) {
-    throw new Error("Challenge verification failed");
-  }
+    const challenge = verifyChallengeToken(challengeToken);
 
-  const admin = createAdminClient();
-  const now = new Date();
-  const recoverableUntil = new Date(now.getTime() + RECOVERY_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+    if (challenge.uid !== user.id) {
+      throw new Error("Challenge is not valid for this account");
+    }
+    if (challenge.exp < Math.floor(Date.now() / 1000)) {
+      throw new Error("Challenge expired. Please try again.");
+    }
+    if (normalizedChallengeResponse !== challenge.answer) {
+      throw new Error("Challenge verification failed");
+    }
 
-  const metadata = {
-    ...(user.user_metadata || {}),
-    is_deleted: true,
-    deleted_at: toDateIso(now),
-    recoverable_until: toDateIso(recoverableUntil),
-    deletion_reason: reason || null,
-  };
+    const admin = createAdminClient();
+    const now = new Date();
+    const recoverableUntil = new Date(now.getTime() + RECOVERY_WINDOW_DAYS * 24 * 60 * 60 * 1000);
 
-  const updateResult = await admin.auth.admin.updateUserById(user.id, {
-    user_metadata: metadata,
-  });
-  if (updateResult.error) throw updateResult.error;
-
-  const payload: DeletionInsert = {
-    user_id: user.id,
-    reason: reason || null,
-    requested_at: toDateIso(now),
-    deleted_at: toDateIso(now),
-    recoverable_until: toDateIso(recoverableUntil),
-    metadata: { email: user.email },
-    updated_at: toDateIso(now),
-  };
-
-  const { error: deletionError } = await admin
-    .from("account_deletion_requests")
-    .upsert(payload, { onConflict: "user_id" });
-  if (deletionError) throw deletionError;
-
-  await admin.from("analytics_events").insert({
-    user_id: user.id,
-    event_name: "account_deletion_requested",
-    page_path: "/settings/account",
-    metadata: {
+    const metadata = {
+      ...(user.user_metadata || {}),
+      is_deleted: true,
+      deleted_at: toDateIso(now),
       recoverable_until: toDateIso(recoverableUntil),
+      deletion_reason: reason || null,
+    };
+
+    const updateResult = await admin.auth.admin.updateUserById(user.id, {
+      user_metadata: metadata,
+    });
+    if (updateResult.error) throw updateResult.error;
+
+    const payload: DeletionInsert = {
+      user_id: user.id,
       reason: reason || null,
-    },
-  });
+      requested_at: toDateIso(now),
+      deleted_at: toDateIso(now),
+      recoverable_until: toDateIso(recoverableUntil),
+      metadata: { email: user.email },
+      updated_at: toDateIso(now),
+    };
 
-  await supabase.auth.signOut();
+    const { error: deletionError } = await admin
+      .from("account_deletion_requests")
+      .upsert(payload, { onConflict: "user_id" });
+    if (deletionError) throw deletionError;
 
-  return { success: true, recoverableUntil: toDateIso(recoverableUntil) };
+    trackEvent(
+      AppEventName.ACCOUNT_DELETION_REQUESTED,
+      {
+        user_id: user.id,
+        page_path: "/settings/account",
+        recoverable_until: toDateIso(recoverableUntil),
+        reason: reason || null,
+      },
+      "success"
+    );
+
+    await supabase.auth.signOut();
+
+    return { success: true, recoverableUntil: toDateIso(recoverableUntil) };
+  } catch (error) {
+    trackEvent(
+      AppEventName.ACCOUNT_DELETION_REQUESTED,
+      {
+        user_id: actorUserId,
+        page_path: "/settings/account",
+        reason: reason || null,
+        error_message: error instanceof Error ? error.message : "unknown_error",
+      },
+      "error"
+    );
+    throw error;
+  }
 }
 
 export async function restoreSoftDeletedAccount(email: string, password: string) {
   const client = createPublicAuthClient();
   const normalizedEmail = email.trim().toLowerCase();
+  let actorUserId: string | null = null;
 
-  const signInResult = await client.auth.signInWithPassword({
-    email: normalizedEmail,
-    password,
-  });
-  if (signInResult.error || !signInResult.data.user) {
-    throw new Error("Invalid credentials");
-  }
+  try {
+    const signInResult = await client.auth.signInWithPassword({
+      email: normalizedEmail,
+      password,
+    });
+    if (signInResult.error || !signInResult.data.user) {
+      throw new Error("Invalid credentials");
+    }
 
-  const user = signInResult.data.user;
-  const recoverableUntilRaw = user.user_metadata?.recoverable_until;
-  const recoverableUntil = recoverableUntilRaw ? new Date(String(recoverableUntilRaw)) : null;
+    const user = signInResult.data.user;
+    actorUserId = user.id;
+    const recoverableUntilRaw = user.user_metadata?.recoverable_until;
+    const recoverableUntil = recoverableUntilRaw ? new Date(String(recoverableUntilRaw)) : null;
 
-  if (!recoverableUntil || Number.isNaN(recoverableUntil.getTime()) || recoverableUntil.getTime() < Date.now()) {
-    throw new Error("Recovery window expired");
-  }
+    if (!recoverableUntil || Number.isNaN(recoverableUntil.getTime()) || recoverableUntil.getTime() < Date.now()) {
+      throw new Error("Recovery window expired");
+    }
 
-  const admin = createAdminClient();
-  const nowIso = toDateIso(new Date());
-  const updatedMetadata = {
-    ...(user.user_metadata || {}),
-    is_deleted: false,
-    restored_at: nowIso,
-    deletion_reason: null,
-  };
-
-  const restoreResult = await admin.auth.admin.updateUserById(user.id, {
-    user_metadata: updatedMetadata,
-  });
-  if (restoreResult.error) throw restoreResult.error;
-
-  await admin
-    .from("account_deletion_requests")
-    .update({
+    const admin = createAdminClient();
+    const nowIso = toDateIso(new Date());
+    const updatedMetadata = {
+      ...(user.user_metadata || {}),
+      is_deleted: false,
       restored_at: nowIso,
-      updated_at: nowIso,
-    })
-    .eq("user_id", user.id);
+      deletion_reason: null,
+    };
 
-  await admin.from("analytics_events").insert({
-    user_id: user.id,
-    event_name: "account_deletion_restored",
-    page_path: "/restore-account",
-    metadata: { restored_at: nowIso },
-  });
+    const restoreResult = await admin.auth.admin.updateUserById(user.id, {
+      user_metadata: updatedMetadata,
+    });
+    if (restoreResult.error) throw restoreResult.error;
 
-  return { success: true };
+    await admin
+      .from("account_deletion_requests")
+      .update({
+        restored_at: nowIso,
+        updated_at: nowIso,
+      })
+      .eq("user_id", user.id);
+
+    trackEvent(
+      AppEventName.ACCOUNT_DELETION_RESTORED,
+      {
+        user_id: user.id,
+        page_path: "/restore-account",
+        restored_at: nowIso,
+      },
+      "success"
+    );
+
+    return { success: true };
+  } catch (error) {
+    trackEvent(
+      AppEventName.ACCOUNT_DELETION_RESTORED,
+      {
+        user_id: actorUserId,
+        page_path: "/restore-account",
+        email: normalizedEmail || null,
+        error_message: error instanceof Error ? error.message : "unknown_error",
+      },
+      "error"
+    );
+    throw error;
+  }
 }
 
 export async function restoreCurrentSoftDeletedAccount() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  let actorUserId: string | null = null;
 
-  if (!user) {
-    throw new Error("Unauthorized");
-  }
+  try {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
-  const recoverableUntilRaw = user.user_metadata?.recoverable_until;
-  const recoverableUntil = recoverableUntilRaw ? new Date(String(recoverableUntilRaw)) : null;
+    if (!user) {
+      throw new Error("Unauthorized");
+    }
+    actorUserId = user.id;
 
-  if (!recoverableUntil || Number.isNaN(recoverableUntil.getTime()) || recoverableUntil.getTime() < Date.now()) {
-    throw new Error("Recovery window expired");
-  }
+    const recoverableUntilRaw = user.user_metadata?.recoverable_until;
+    const recoverableUntil = recoverableUntilRaw ? new Date(String(recoverableUntilRaw)) : null;
 
-  const admin = createAdminClient();
-  const nowIso = toDateIso(new Date());
-  const updatedMetadata = {
-    ...(user.user_metadata || {}),
-    is_deleted: false,
-    restored_at: nowIso,
-    deletion_reason: null,
-  };
+    if (!recoverableUntil || Number.isNaN(recoverableUntil.getTime()) || recoverableUntil.getTime() < Date.now()) {
+      throw new Error("Recovery window expired");
+    }
 
-  const restoreResult = await admin.auth.admin.updateUserById(user.id, {
-    user_metadata: updatedMetadata,
-  });
-  if (restoreResult.error) throw restoreResult.error;
-
-  await admin
-    .from("account_deletion_requests")
-    .update({
+    const admin = createAdminClient();
+    const nowIso = toDateIso(new Date());
+    const updatedMetadata = {
+      ...(user.user_metadata || {}),
+      is_deleted: false,
       restored_at: nowIso,
-      updated_at: nowIso,
-    })
-    .eq("user_id", user.id);
+      deletion_reason: null,
+    };
 
-  await admin.from("analytics_events").insert({
-    user_id: user.id,
-    event_name: "account_deletion_restored",
-    page_path: "/restore-account",
-    metadata: { restored_at: nowIso, method: "authenticated-session" },
-  });
+    const restoreResult = await admin.auth.admin.updateUserById(user.id, {
+      user_metadata: updatedMetadata,
+    });
+    if (restoreResult.error) throw restoreResult.error;
 
-  return { success: true };
+    await admin
+      .from("account_deletion_requests")
+      .update({
+        restored_at: nowIso,
+        updated_at: nowIso,
+      })
+      .eq("user_id", user.id);
+
+    trackEvent(
+      AppEventName.ACCOUNT_DELETION_RESTORED,
+      {
+        user_id: user.id,
+        page_path: "/restore-account",
+        restored_at: nowIso,
+        method: "authenticated-session",
+      },
+      "success"
+    );
+
+    return { success: true };
+  } catch (error) {
+    trackEvent(
+      AppEventName.ACCOUNT_DELETION_RESTORED,
+      {
+        user_id: actorUserId,
+        page_path: "/restore-account",
+        method: "authenticated-session",
+        error_message: error instanceof Error ? error.message : "unknown_error",
+      },
+      "error"
+    );
+    throw error;
+  }
 }

@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo } from "react";
 import {
   ResponsiveContainer,
   CartesianGrid,
@@ -16,30 +15,15 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CompactMetricCard } from "@/components/admin/compact-metric-card";
-import { useAdminDashboardStats, useAdminNutritionStats, useAdminTrainingStats, useAdminUserStats } from "@/hooks/admin/use-admin";
+import { useAdminDashboardStats, useAdminUserStats } from "@/hooks/admin/use-admin";
 
 export default function AdminDashboardPage() {
   const { data: dashboard, isLoading: loadingDashboard } = useAdminDashboardStats();
-  const { data: training, isLoading: loadingTraining } = useAdminTrainingStats(30);
-  const { data: nutrition, isLoading: loadingNutrition } = useAdminNutritionStats(30);
   const { data: users, isLoading: loadingUsers } = useAdminUserStats(90);
 
-  const loading = loadingDashboard || loadingTraining || loadingNutrition || loadingUsers;
-  const joinTrend: Array<{ date: string; count: number }> = users?.join_trend || [];
-
-  const combinedTrend = useMemo(() => {
-    const dailySessions: Array<{ date: string; count: number }> = training?.daily_sessions || [];
-    const dailyPlans: Array<{ date: string; count: number }> = nutrition?.daily_plans || [];
-    const sessionMap = new Map(dailySessions.map((item) => [item.date, item.count]));
-    const planMap = new Map(dailyPlans.map((item) => [item.date, item.count]));
-
-    const dateKeys = Array.from(new Set([...sessionMap.keys(), ...planMap.keys()])).sort((a, b) => a.localeCompare(b));
-    return dateKeys.map((date) => ({
-      date: date.slice(5),
-      sessions: sessionMap.get(date) || 0,
-      plans: planMap.get(date) || 0,
-    }));
-  }, [training?.daily_sessions, nutrition?.daily_plans]);
+  const loading = loadingDashboard || loadingUsers;
+  const throughputData: Array<{ date: string; actions: number }> = dashboard?.platform_throughput_30d || [];
+  const joinRiskData: Array<{ date: string; joined: number; risk: number }> = users?.join_vs_risk_trend || [];
 
   return (
     <div className="section-gap">
@@ -67,18 +51,17 @@ export default function AdminDashboardPage() {
           <CardHeader className="pb-2">
             <CardTitle className="text-base">30-Day Platform Throughput</CardTitle>
           </CardHeader>
-          <CardContent className="h-[260px]">
+          <CardContent className="h-[300px]">
             {loading ? (
-              <Skeleton className="h-full w-full rounded-xl" />
+              <Skeleton className="h-[300px] w-full rounded-xl" />
             ) : (
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={combinedTrend}>
+                <LineChart data={throughputData}>
                   <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
                   <XAxis dataKey="date" />
                   <YAxis />
                   <Tooltip />
-                  <Line type="monotone" dataKey="sessions" stroke="#0f766e" strokeWidth={2} dot={false} />
-                  <Line type="monotone" dataKey="plans" stroke="#2563eb" strokeWidth={2} dot={false} />
+                  <Line type="monotone" dataKey="actions" stroke="#0f766e" strokeWidth={2} dot={false} />
                 </LineChart>
               </ResponsiveContainer>
             )}
@@ -89,17 +72,18 @@ export default function AdminDashboardPage() {
           <CardHeader className="pb-2">
             <CardTitle className="text-base">User Join vs Risk Trend</CardTitle>
           </CardHeader>
-          <CardContent className="h-[260px]">
+          <CardContent className="h-[300px]">
             {loadingUsers ? (
-              <Skeleton className="h-full w-full rounded-xl" />
+              <Skeleton className="h-[300px] w-full rounded-xl" />
             ) : (
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={joinTrend.slice(-14)}>
+                <BarChart data={joinRiskData.slice(-30)}>
                   <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
-                  <XAxis dataKey="date" tickFormatter={(value) => String(value).slice(5)} />
+                  <XAxis dataKey="date" />
                   <YAxis />
                   <Tooltip />
-                  <Bar dataKey="count" fill="#2563eb" name="Joined" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="joined" fill="#2563eb" name="Joined" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="risk" fill="#dc2626" name="At Risk" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             )}

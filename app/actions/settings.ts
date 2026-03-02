@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { runTrackedAction } from "@/lib/events/dispatcher";
 import { revalidatePath } from "next/cache";
 import { profileSchema, goalsSchema, ProfileFormValues, GoalsFormValues } from "@/lib/validations/settings";
 import { Database } from "@/types/database";
@@ -14,77 +15,82 @@ const inferGoalType = (currentWeight: number, targetWeight: number) => {
 };
 
 export async function updateProfile(data: ProfileFormValues) {
-  const supabase = await createClient();
-  
-  // 1. Check Auth
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error("Unauthorized");
-
-  // 2. Validate Data (Crucial now that DB constraints are gone)
-  const parsed = profileSchema.parse(data);
-
-  // 3. Update User Metadata
-  const { error } = await supabase.auth.updateUser({
-    data: {
-      full_name: parsed.full_name,
-      username: parsed.username,
-      bio: parsed.bio,
-      website: parsed.website,
-      avatar_url: parsed.avatar_url,
+  return runTrackedAction({
+    eventName: "settings.profile.update",
+    action: async () => {
+      const supabase = await createClient();
       
-      // Fitness Data
-      height: parsed.height,
-      birth_date: parsed.birth_date,
-      gender: parsed.gender,
-      activity_level: parsed.activity_level,
-      preferred_units: parsed.preferred_units,
-      timezone: parsed.timezone,
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Unauthorized");
+
+      const parsed = profileSchema.parse(data);
+
+      const { error } = await supabase.auth.updateUser({
+        data: {
+          full_name: parsed.full_name,
+          username: parsed.username,
+          bio: parsed.bio,
+          website: parsed.website,
+          avatar_url: parsed.avatar_url,
+          height: parsed.height,
+          birth_date: parsed.birth_date,
+          gender: parsed.gender,
+          activity_level: parsed.activity_level,
+          preferred_units: parsed.preferred_units,
+          timezone: parsed.timezone,
+          updatedAt: new Date().toISOString(),
+        }
+      });
+
+      if (error) throw error;
       
-      updatedAt: new Date().toISOString(),
-    }
+      revalidatePath("/settings/profile");
+      return { success: true };
+    },
   });
-
-  if (error) throw error;
-  
-  revalidatePath("/settings/profile");
-  return { success: true };
 }
 export async function updateGoals(data: GoalsFormValues) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  return runTrackedAction({
+    eventName: "settings.goals.update",
+    action: async () => {
+      const supabase = await createClient();
+      const { data: { user } } = await supabase.auth.getUser();
 
-  if (!user) throw new Error("Unauthorized");
+      if (!user) throw new Error("Unauthorized");
 
-  const parsed = goalsSchema.parse(data);
-  const { data: existingGoal } = await supabase
-    .from("fitness_goals")
-    .select("goal_type")
-    .eq("user_id", user.id)
-    .maybeSingle();
+      const parsed = goalsSchema.parse(data);
+      const { data: existingGoal } = await supabase
+        .from("fitness_goals")
+        .select("goal_type")
+        .eq("user_id", user.id)
+        .maybeSingle();
 
-  const goal_type = existingGoal?.goal_type || inferGoalType(parsed.current_weight, parsed.target_weight);
+      const goal_type = existingGoal?.goal_type || inferGoalType(parsed.current_weight, parsed.target_weight);
 
-  const payload: GoalsInsert = {
-    user_id: user.id,
-    goal_type,
-    target_weight: parsed.target_weight,
-    current_weight: parsed.current_weight,
-    target_body_fat_percent: parsed.target_body_fat_percent ?? null,
-    target_date: parsed.target_date ?? null,
-    custom_description: parsed.custom_description ?? null,
-    status: parsed.status ?? "active",
-    weekly_workouts: parsed.weekly_workouts,
-    daily_calories: parsed.daily_calories,
-    protein_target: parsed.protein_target,
-    carbs_target: parsed.carbs_target,
-    fat_target: parsed.fat_target,
-    updated_at: new Date().toISOString(),
-  };
+      const payload: GoalsInsert = {
+        user_id: user.id,
+        goal_type,
+        target_weight: parsed.target_weight,
+        current_weight: parsed.current_weight,
+        target_body_fat_percent: parsed.target_body_fat_percent ?? null,
+        target_date: parsed.target_date ?? null,
+        custom_description: parsed.custom_description ?? null,
+        status: parsed.status ?? "active",
+        weekly_workouts: parsed.weekly_workouts,
+        daily_calories: parsed.daily_calories,
+        protein_target: parsed.protein_target,
+        carbs_target: parsed.carbs_target,
+        fat_target: parsed.fat_target,
+        updated_at: new Date().toISOString(),
+      };
 
-  const { error } = await supabase
-    .from("fitness_goals")
-    .upsert(payload, { onConflict: 'user_id' });
+      const { error } = await supabase
+        .from("fitness_goals")
+        .upsert(payload, { onConflict: 'user_id' });
 
-  if (error) throw error;
-  revalidatePath("/settings/goals");
+      if (error) throw error;
+      revalidatePath("/settings/goals");
+      return { success: true };
+    },
+  });
 }
