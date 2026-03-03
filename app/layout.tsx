@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Providers from "./providers";
 import { Toaster } from "sonner";
+import { THEME_CLASS_MAP, THEME_STORAGE_KEY } from "@/lib/theme-config";
 
 import "@/utils/env"
 
@@ -16,14 +17,36 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const themeInitScript = `
+    (function() {
+      try {
+        var key = ${JSON.stringify(THEME_STORAGE_KEY)};
+        var raw = window.localStorage.getItem(key);
+        var parsed = raw ? JSON.parse(raw) : null;
+        var theme = parsed && parsed.state && typeof parsed.state.theme === "string"
+          ? parsed.state.theme
+          : "default";
+        var classMap = ${JSON.stringify(THEME_CLASS_MAP)};
+        var className = classMap[theme] || classMap.default;
+        var root = document.documentElement;
+        root.classList.remove(classMap.default, classMap.blue, classMap.rose, classMap.green);
+        root.classList.add(className);
+        root.setAttribute("data-color-theme", theme);
+      } catch (e) {}
+    })();
+  `;
+
   return (
-    <Providers>
     <html lang="en" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+      </head>
       <body className="antialiased">
-        {children}
-        <Toaster />
+        <Providers>
+          {children}
+          <Toaster />
+        </Providers>
       </body>
     </html>
-    </Providers>
   );
 }

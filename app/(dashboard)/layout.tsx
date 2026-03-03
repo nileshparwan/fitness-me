@@ -1,5 +1,6 @@
 import { SiteFooter } from "@/components/layout/app-footer"
 import { AppSidebar } from "@/components/layout/app-sidebar"
+import { ThemeSwitcher } from "@/components/theme-switcher"
 import { Separator } from "@/components/ui/separator"
 import {
   SidebarInset,
@@ -24,6 +25,9 @@ export default function DashboardLayout({
             <div className="flex flex-col">
               <span className="text-sm font-semibold leading-none tracking-tight">FitTrack</span>
               <span className="text-[11px] text-muted-foreground leading-none mt-1">Performance Workspace</span>
+            </div>
+            <div className="ml-auto">
+              <ThemeSwitcher />
             </div>
           </div>
         </header>

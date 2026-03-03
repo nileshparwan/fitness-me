@@ -225,35 +225,51 @@ export function AnalyticsView({ initialEvents, totalHistoricalEvents, activeUser
             <CardTitle>Distribution</CardTitle>
             <CardDescription>Events by type.</CardDescription>
           </CardHeader>
-          <CardContent className="h-[300px]">
-             <ResponsiveContainer width="100%" height="100%">
-               <PieChart>
-                 <Pie
-                    data={stats.typeData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={60}
-                    outerRadius={80}
-                    paddingAngle={5}
-                    dataKey="value"
-                 >
-                   {stats.typeData.map((entry, index) => (
-                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                   ))}
-                 </Pie>
-                 <Tooltip contentStyle={{ borderRadius: '8px' }} />
-               </PieChart>
-             </ResponsiveContainer>
-             
-             {/* Legend */}
-             <div className="flex flex-wrap gap-2 justify-center mt-4">
-                {stats.typeData.slice(0, 4).map((entry, index) => (
-                  <div key={entry.name} className="flex items-center gap-1.5 text-xs">
-                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS[index % COLORS.length] }} />
-                    <span className="text-muted-foreground">{entry.name}</span>
+          <CardContent className="h-[340px] p-4">
+            <div className="flex h-full min-h-0 flex-col">
+              <div className="min-h-0 flex-1">
+                {stats.typeData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={stats.typeData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={60}
+                        outerRadius={80}
+                        paddingAngle={5}
+                        dataKey="value"
+                      >
+                        {stats.typeData.map((entry, index) => (
+                          <Cell key={`cell-${entry.name}`} fill={COLORS[index % COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip contentStyle={{ borderRadius: "8px" }} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                    No distribution data
                   </div>
-                ))}
-             </div>
+                )}
+              </div>
+
+              <div className="mt-3 max-h-16 overflow-y-auto">
+                <div className="flex flex-wrap justify-center gap-x-3 gap-y-1.5">
+                  {stats.typeData.slice(0, 8).map((entry, index) => (
+                    <div key={entry.name} className="flex min-w-0 items-center gap-1.5 text-xs">
+                      <div
+                        className="h-2 w-2 shrink-0 rounded-full"
+                        style={{ backgroundColor: COLORS[index % COLORS.length] }}
+                      />
+                      <span className="max-w-[130px] truncate text-muted-foreground" title={entry.name}>
+                        {entry.name}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
           </CardContent>
         </Card>
       </div>
