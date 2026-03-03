@@ -17,9 +17,9 @@ import { useThemeStore } from "@/store/use-theme-store";
 
 const THEME_META: Record<ColorTheme, { label: string; swatchClass: string }> = {
   default: { label: "Default", swatchClass: "bg-neutral-700" },
-  blue: { label: "Blue", swatchClass: "bg-blue-600" },
-  rose: { label: "Rose", swatchClass: "bg-rose-600" },
-  green: { label: "Green", swatchClass: "bg-emerald-600" },
+  blue: { label: "Cardio Blue", swatchClass: "bg-blue-600" },
+  rose: { label: "Hypertrophy Red", swatchClass: "bg-rose-600" },
+  green: { label: "Yoga Green", swatchClass: "bg-emerald-600" },
 };
 
 export function ThemeSwitcher() {

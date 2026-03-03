@@ -33,9 +33,9 @@ const quickActions = [
 export default function DashboardPage() {
   return (
     <div className="page-shell section-gap">
-      <Card className="native-surface md:desktop-surface overflow-hidden">
+      <Card className="color-card native-surface md:desktop-surface overflow-hidden">
         <CardHeader className="space-y-2">
-          <CardTitle className="text-2xl md:text-3xl tracking-tight">Welcome Back</CardTitle>
+          <CardTitle className="page-title-gradient text-2xl md:text-3xl tracking-tight">Welcome Back</CardTitle>
           <CardDescription className="text-sm md:text-base">
             Train with intent, recover intelligently, and build long-term consistency.
           </CardDescription>
@@ -53,15 +53,15 @@ export default function DashboardPage() {
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {quickActions.map((action) => (
           <Link key={action.title} href={action.href}>
-            <Card className="h-full transition-all duration-200 hover:shadow-md hover:-translate-y-0.5">
+            <Card className="color-card h-full transition-all duration-200 hover:-translate-y-0.5 hover:bg-primary/[0.04]">
               <CardContent className="surface-pad">
                 <div className="flex items-start justify-between gap-2">
                   <div>
                     <p className="text-sm font-semibold">{action.title}</p>
                     <p className="mt-1 text-xs text-muted-foreground">{action.description}</p>
                   </div>
-                  <div className="rounded-xl bg-primary/10 p-2">
-                    <action.icon className="h-4 w-4 text-primary" />
+                  <div className="rounded-xl bg-primary/15 p-2 ring-1 ring-primary/25">
+                    <action.icon className="icon-accent h-4 w-4" />
                   </div>
                 </div>
                 <div className="mt-4 flex items-center text-xs font-medium text-primary">

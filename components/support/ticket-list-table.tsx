@@ -9,11 +9,18 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
-function getStatusVariant(status: TicketStatus) {
-  if (status === "resolved") return "default";
-  if (status === "closed") return "secondary";
-  if (status === "in_progress") return "outline";
-  return "secondary";
+function getStatusClass(status: TicketStatus) {
+  if (status === "resolved") return "border-emerald-500/30 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300";
+  if (status === "closed") return "border-border bg-muted text-muted-foreground";
+  if (status === "in_progress") return "border-secondary/40 bg-secondary/20 text-secondary-foreground";
+  return "border-primary/30 bg-primary/15 text-primary";
+}
+
+function getCategoryClass(category: TicketCategory) {
+  if (category === "bug_report") return "border-rose-500/30 bg-rose-500/15 text-rose-700 dark:text-rose-300";
+  if (category === "feature_request") return "border-blue-500/30 bg-blue-500/15 text-blue-700 dark:text-blue-300";
+  if (category === "exercise_request") return "border-emerald-500/30 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300";
+  return "border-amber-500/30 bg-amber-500/15 text-amber-700 dark:text-amber-300";
 }
 
 function humanizeCategory(category: TicketCategory) {
@@ -57,7 +64,7 @@ export function TicketListTable({
           <p className="text-sm text-muted-foreground">{emptyText}</p>
         ) : null}
         {safeRows.map((ticket) => (
-          <div key={ticket.id} className="rounded-lg border p-3">
+          <div key={ticket.id} className="rounded-lg border bg-card/90 p-3 transition-colors hover:bg-primary/5">
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
                 <Link href={`/support/${ticket.id}`} className="truncate text-sm font-medium hover:underline">
@@ -65,12 +72,14 @@ export function TicketListTable({
                 </Link>
                 <p className="line-clamp-2 text-xs text-muted-foreground">{ticket.description}</p>
               </div>
-              <Badge variant={getStatusVariant(ticket.status)} className="shrink-0 text-[10px]">
+              <Badge className={`shrink-0 text-[10px] ${getStatusClass(ticket.status)}`}>
                 {ticket.status.replaceAll("_", " ")}
               </Badge>
             </div>
             <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-              <span className="capitalize">{humanizeCategory(ticket.category)}</span>
+              <Badge variant="outline" className={`capitalize ${getCategoryClass(ticket.category)}`}>
+                {humanizeCategory(ticket.category)}
+              </Badge>
               <span>{ticket.is_public ? "Public" : "Private"}</span>
               <span>{ticket.upvotes} upvotes</span>
               <span>{formatDistanceToNow(new Date(ticket.updated_at), { addSuffix: true })}</span>
@@ -105,16 +114,20 @@ export function TicketListTable({
           </TableHeader>
           <TableBody>
             {safeRows.map((ticket) => (
-              <TableRow key={ticket.id}>
+              <TableRow key={ticket.id} className="color-hover-row">
                 <TableCell className="py-2">
                   <Link href={`/support/${ticket.id}`} className="text-sm font-medium hover:underline">
                     {ticket.title}
                   </Link>
                   <p className="line-clamp-1 text-xs text-muted-foreground">{ticket.description}</p>
                 </TableCell>
-                <TableCell className="hidden py-2 capitalize text-xs lg:table-cell">{humanizeCategory(ticket.category)}</TableCell>
+                <TableCell className="hidden py-2 capitalize text-xs lg:table-cell">
+                  <Badge variant="outline" className={getCategoryClass(ticket.category)}>
+                    {humanizeCategory(ticket.category)}
+                  </Badge>
+                </TableCell>
                 <TableCell className="py-2">
-                  <Badge variant={getStatusVariant(ticket.status)} className="text-[10px]">
+                  <Badge className={`text-[10px] ${getStatusClass(ticket.status)}`}>
                     {ticket.status.replaceAll("_", " ")}
                   </Badge>
                 </TableCell>

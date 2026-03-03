@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2, Plus, Search } from "lucide-react";
+import { Loader2, MessageSquare, Plus, Search } from "lucide-react";
 import { toast } from "sonner";
 
 import { type TicketCategory, type TicketStatus } from "@/app/actions/tickets";
@@ -117,9 +117,12 @@ export default function SupportDashboardPage() {
 
   return (
     <div className="mx-auto w-full max-w-7xl space-y-6 px-4 py-6 md:px-8 md:py-10">
-      <section className="native-surface surface-pad flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+      <section className="color-card native-surface surface-pad flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div className="space-y-1">
-          <h1 className="text-xl font-semibold">Support & Requests</h1>
+          <h1 className="page-title-gradient flex items-center gap-2 text-xl font-semibold">
+            <MessageSquare className="icon-accent h-5 w-5" />
+            Support & Requests
+          </h1>
           <p className="text-sm text-muted-foreground">
             Track community demand, monitor your submissions, and upvote existing requests before creating duplicates.
           </p>
@@ -145,7 +148,7 @@ export default function SupportDashboardPage() {
         </div>
 
         <TabsContent value="community" className="space-y-4">
-          <section className="native-surface surface-pad flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <section className="color-card native-surface surface-pad flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div className="relative w-full md:max-w-sm">
               <Search className="pointer-events-none absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
@@ -221,7 +224,7 @@ export default function SupportDashboardPage() {
             </div>
           </section>
 
-          <section className="native-surface surface-pad space-y-3">
+          <section className="color-card native-surface surface-pad space-y-3">
             {publicQuery.isLoading && !publicQuery.data ? (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -292,7 +295,7 @@ export default function SupportDashboardPage() {
         </TabsContent>
 
         <TabsContent value="mine" className="space-y-4">
-          <section className="native-surface surface-pad flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <section className="color-card native-surface surface-pad flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div className="relative w-full md:max-w-sm">
               <Search className="pointer-events-none absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
@@ -344,7 +347,7 @@ export default function SupportDashboardPage() {
             </div>
           </section>
 
-          <section className="native-surface surface-pad space-y-3">
+          <section className="color-card native-surface surface-pad space-y-3">
             {myQuery.isLoading && !myQuery.data ? (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />

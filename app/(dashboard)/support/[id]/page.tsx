@@ -60,11 +60,18 @@ const CommentComposer = dynamic(
   }
 );
 
-function getStatusVariant(status: TicketStatus) {
-  if (status === "resolved") return "default";
-  if (status === "closed") return "secondary";
-  if (status === "in_progress") return "outline";
-  return "secondary";
+function getStatusClass(status: TicketStatus) {
+  if (status === "resolved") return "border-emerald-500/30 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300";
+  if (status === "closed") return "border-border bg-muted text-muted-foreground";
+  if (status === "in_progress") return "border-secondary/40 bg-secondary/20 text-secondary-foreground";
+  return "border-primary/30 bg-primary/15 text-primary";
+}
+
+function getCategoryClass(category: TicketCategory) {
+  if (category === "bug_report") return "border-rose-500/30 bg-rose-500/15 text-rose-700 dark:text-rose-300";
+  if (category === "feature_request") return "border-blue-500/30 bg-blue-500/15 text-blue-700 dark:text-blue-300";
+  if (category === "exercise_request") return "border-emerald-500/30 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300";
+  return "border-amber-500/30 bg-amber-500/15 text-amber-700 dark:text-amber-300";
 }
 
 function humanizeCategory(category: TicketCategory) {
@@ -227,13 +234,13 @@ export default function SupportTicketDetailPage() {
         <>
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_20rem]">
             <div className="space-y-6">
-              <section className="native-surface surface-pad space-y-4">
+              <section className="color-card native-surface surface-pad space-y-4">
                 <div className="space-y-2">
                   <div className="flex flex-wrap items-center gap-2">
-                    <h1 className="text-xl font-semibold">{ticket.title}</h1>
+                    <h1 className="page-title-gradient text-xl font-semibold">{ticket.title}</h1>
                     {canEditTicket ? (
                       <Button variant="outline" size="sm" onClick={onStartEdit}>
-                        <Pencil className="mr-2 h-4 w-4" />
+                        <Pencil className="icon-accent mr-2 h-4 w-4" />
                         Edit Ticket
                       </Button>
                     ) : null}
@@ -252,9 +259,9 @@ export default function SupportTicketDetailPage() {
                 </div>
               </section>
 
-              <section className="native-surface surface-pad space-y-4">
+              <section className="color-card native-surface surface-pad space-y-4">
                 <div className="flex items-center gap-2">
-                  <MessageSquare className="h-4 w-4" />
+                  <MessageSquare className="icon-accent h-4 w-4" />
                   <h2 className="text-base font-semibold">Comments</h2>
                 </div>
 
@@ -280,7 +287,7 @@ export default function SupportTicketDetailPage() {
                       const canManageComment = ticket.viewer_user_id === comment.user_id && !isClosed;
                       const isEditing = editingCommentId === comment.id;
                       return (
-                        <div key={comment.id} className="rounded-md border p-3">
+                        <div key={comment.id} className="rounded-md border bg-card/80 p-3 transition-colors hover:bg-primary/5">
                           <div className="mb-2 flex items-center justify-between gap-2 text-xs text-muted-foreground">
                             <div className="flex items-center gap-2">
                               <Avatar size="sm">
@@ -374,13 +381,13 @@ export default function SupportTicketDetailPage() {
               </section>
             </div>
 
-            <aside className="native-surface surface-pad h-fit space-y-3 lg:sticky lg:top-6">
+            <aside className="color-card native-surface surface-pad h-fit space-y-3 lg:sticky lg:top-6">
               <h2 className="text-sm font-semibold">Ticket Info</h2>
               <div className="flex flex-wrap items-center gap-2">
-                <Badge variant="outline" className="capitalize">
+                <Badge variant="outline" className={`capitalize ${getCategoryClass(ticket.category)}`}>
                   {humanizeCategory(ticket.category)}
                 </Badge>
-                <Badge variant={getStatusVariant(ticket.status)} className="capitalize">
+                <Badge className={`capitalize ${getStatusClass(ticket.status)}`}>
                   {ticket.status.replaceAll("_", " ")}
                 </Badge>
               </div>

@@ -6,7 +6,7 @@ import { useTransition } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ArrowLeft, Loader2 } from "lucide-react";
+import { ArrowLeft, Loader2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 
 import { type TicketCategory } from "@/app/actions/tickets";
@@ -72,9 +72,12 @@ export default function SupportNewTicketPage() {
         </Button>
       </div>
 
-      <section className="native-surface surface-pad space-y-4">
+      <section className="color-card native-surface surface-pad space-y-4">
         <div className="space-y-1">
-          <h1 className="text-xl font-semibold">Submit a Ticket</h1>
+          <h1 className="page-title-gradient flex items-center gap-2 text-xl font-semibold">
+            <Sparkles className="icon-accent h-5 w-5" />
+            Submit a Ticket
+          </h1>
           <p className="text-sm text-muted-foreground">
             Send an exercise request, feature suggestion, or bug report.
           </p>
