@@ -3,7 +3,6 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
-import { requireAdmin } from "@/lib/admin/auth";
 import { runTrackedAction, trackEvent } from "@/lib/events/dispatcher";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -12,7 +11,6 @@ import { AppEventName } from "@/types/events";
 
 export type TicketRow = Database["public"]["Tables"]["tickets"]["Row"];
 type TicketInsert = Database["public"]["Tables"]["tickets"]["Insert"];
-type TicketUpdate = Database["public"]["Tables"]["tickets"]["Update"];
 export type TicketCommentRow = Database["public"]["Tables"]["ticket_comments"]["Row"];
 type TicketUpvoteRow = Database["public"]["Tables"]["ticket_upvotes"]["Row"];
 export type TicketStatus = Database["public"]["Enums"]["ticket_status"];
@@ -35,13 +33,6 @@ const listSchema = z.object({
   status: z.enum(["open", "in_progress", "resolved", "closed"]).optional(),
   sort_by: z.enum(["upvotes", "created_at", "updated_at"]).optional(),
   sort_order: z.enum(["asc", "desc"]).optional(),
-});
-
-const adminUpdateSchema = z.object({
-  id: z.string().uuid(),
-  status: z.enum(["open", "in_progress", "resolved", "closed"]),
-  admin_notes: z.string().max(5000).optional().nullable(),
-  metadata_patch: z.record(z.string(), z.unknown()).optional(),
 });
 
 const ticketIdSchema = z.string().uuid();
@@ -79,11 +70,6 @@ export type TicketDetail = TicketListRow & {
 export type TicketCommentDetail = TicketCommentRow & {
   author: TicketAuthor;
 };
-
-function asJsonObject(value: Json | null | undefined): Record<string, unknown> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
-  return value as Record<string, unknown>;
-}
 
 function isMissingTicketUpvotesTableError(error: { code?: string; message?: string } | null | undefined) {
   if (!error) return false;
@@ -228,7 +214,7 @@ export async function createTicketAction(input: z.input<typeof createTicketSchem
   }
 }
 
-export async function listPublicTicketsAction(input: z.input<typeof listSchema>): Promise<TicketListResult> {
+async function listPublicTicketsAction(input: z.input<typeof listSchema>): Promise<TicketListResult> {
   const params = listSchema.parse(input);
   return runTrackedAction({
     eventName: "support.tickets.list.public",
@@ -291,7 +277,7 @@ export async function listPublicTicketsAction(input: z.input<typeof listSchema>)
   });
 }
 
-export async function listMyTicketsAction(input: z.input<typeof listSchema>): Promise<TicketListResult> {
+async function listMyTicketsAction(input: z.input<typeof listSchema>): Promise<TicketListResult> {
   const params = listSchema.parse(input);
   return runTrackedAction({
     eventName: "support.tickets.list.mine",
@@ -420,8 +406,6 @@ export async function toggleUpvoteTicketAction(ticketId: string) {
     },
   });
 }
-
-export const upvoteTicketAction = toggleUpvoteTicketAction;
 
 export async function getTicketDetailAction(ticketId: string): Promise<TicketDetail> {
   const safeTicketId = ticketIdSchema.parse(ticketId);
@@ -611,91 +595,6 @@ export async function createTicketCommentAction(input: z.input<typeof createComm
   });
 }
 
-export async function listAdminTicketsAction(input: z.input<typeof listSchema>): Promise<TicketListResult> {
-  const params = listSchema.parse(input);
-  return runTrackedAction({
-    eventName: "admin.tickets.list.legacy",
-    payload: { page: params.page, page_size: params.page_size },
-    action: async () => {
-  await requireAdmin();
-  const supabase = createAdminClient();
-
-  let query = supabase.from("tickets").select("*", { count: "exact" });
-  if (params.search) {
-    query = query.or(`title.ilike.%${params.search}%,description.ilike.%${params.search}%`);
-  }
-  if (params.category) query = query.eq("category", params.category);
-  if (params.status) query = query.eq("status", params.status);
-
-  const from = params.page * params.page_size;
-  const to = from + params.page_size - 1;
-  const sortBy = params.sort_by ?? "upvotes";
-  const ascending = (params.sort_order ?? "desc") === "asc";
-
-  let sortedQuery = query.order(sortBy, { ascending });
-  if (sortBy !== "created_at") {
-    sortedQuery = sortedQuery.order("created_at", { ascending: false });
-  }
-
-  const { data, error, count } = await sortedQuery.range(from, to);
-
-  if (error) throw new Error(error.message);
-
-  const total = count ?? 0;
-  const rows = ((data || []) as TicketRow[]).map((row) => ({
-    ...row,
-    viewer_has_upvoted: false,
-  }));
-  return {
-    rows,
-    page: params.page,
-    page_size: params.page_size,
-    has_more: from + rows.length < total,
-    total,
-  };
-    },
-  });
-}
-
-export async function adminUpdateTicketAction(input: z.input<typeof adminUpdateSchema>) {
-  const params = adminUpdateSchema.parse(input);
-  return runTrackedAction({
-    eventName: "admin.ticket.update.legacy",
-    payload: { ticket_id: params.id, status: params.status },
-    action: async () => {
-  await requireAdmin();
-  const supabase = createAdminClient();
-
-  const { data: existing, error: fetchError } = await supabase
-    .from("tickets")
-    .select("metadata")
-    .eq("id", params.id)
-    .single();
-  if (fetchError) throw new Error(fetchError.message);
-
-  const mergedMetadata = {
-    ...asJsonObject(existing?.metadata),
-    ...(params.metadata_patch || {}),
-  } as Json;
-
-  const updatePayload: TicketUpdate = {
-    status: params.status as TicketStatus,
-    admin_notes: params.admin_notes?.trim() || null,
-    metadata: mergedMetadata,
-  };
-
-  const { error } = await supabase.from("tickets").update(updatePayload).eq("id", params.id);
-  if (error) throw new Error(error.message);
-
-  revalidateSupportPaths(params.id);
-  revalidatePath("/admin/tickets");
-  return { success: true };
-    },
-  });
-}
-
-export const getTicketByIdAction = getTicketDetailAction;
-export const getTicketCommentsAction = listTicketCommentsAction;
 
 const getTicketsSchema = listSchema.extend({
   scope: z.enum(["public", "mine"]).default("public"),

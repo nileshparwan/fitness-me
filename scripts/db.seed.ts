@@ -1,14 +1,14 @@
-import { createClient } from '@supabase/supabase-js';
-import dotenv from 'dotenv';
-// ADJUST PATH IF NEEDED
+import bcrypt from "bcryptjs";
+import dotenv from "dotenv";
+import { createClient } from "@supabase/supabase-js";
 
-dotenv.config({ path: '.env.local' });
+dotenv.config({ path: ".env.local" });
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 if (!supabaseUrl || !serviceRoleKey) {
-  console.error('❌ Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY');
+  console.error("Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY");
   process.exit(1);
 }
 
@@ -16,283 +16,1867 @@ const supabase = createClient(supabaseUrl, serviceRoleKey, {
   auth: { autoRefreshToken: false, persistSession: false },
 });
 
-const ADMIN_EMAIL = 'admin@example.com';
-const ADMIN_PASSWORD = 'password123';
-
-const main = async () => {
-  console.log('🚨 STARTING SEED (Fixed Integer Constraints) 🚨');
-
-  // ===========================================================================
-  // 1. CLEANUP
-  // ===========================================================================
-  console.log('🧹 Cleaning up database...');
-  const tables = [
-    'training_plan_items', 'meal_plan_meals', 'meal_plans', 
-    'strength_sets', 'cardio_sessions', 'training_sessions', 
-    'ai_processing_queue', 'ai_insights', 'body_measurements', 
-    'fitness_goals', 'training_plans', 'profiles', 'exercise_catalog'
-  ] as const;
-
-  for (const table of tables) {
-    // @ts-ignore
-    await supabase.from(table).delete().neq('id', '00000000-0000-0000-0000-000000000000');
-  }
-  
-  const { data: users } = await supabase.auth.admin.listUsers();
-  const admin = users.users.find(u => u.email === ADMIN_EMAIL);
-  if (admin) await supabase.auth.admin.deleteUser(admin.id);
-
-  // ===========================================================================
-  // 2. EXERCISE LIBRARY
-  // ===========================================================================
-  console.log('💪 Seeding Exercise Library...');
-  const exercises = [
-    // PUSH
-    { name: 'Bench Press', category: 'chest', muscle_groups: ['pectorals', 'triceps'], equipment: 'barbell' },
-    { name: 'Overhead Press', category: 'shoulders', muscle_groups: ['deltoids'], equipment: 'barbell' },
-    { name: 'Incline Dumbbell Press', category: 'chest', muscle_groups: ['upper chest'], equipment: 'dumbbell' },
-    { name: 'Tricep Pushdown', category: 'arms', muscle_groups: ['triceps'], equipment: 'cable' },
-    { name: 'Lateral Raise', category: 'shoulders', muscle_groups: ['side delts'], equipment: 'dumbbell' },
-    { name: 'Push Ups', category: 'chest', muscle_groups: ['pectorals'], equipment: 'bodyweight' },
-    { name: 'Dips', category: 'chest', muscle_groups: ['pectorals', 'triceps'], equipment: 'bodyweight' },
-    
-    // PULL
-    { name: 'Deadlift', category: 'back', muscle_groups: ['hamstrings', 'lower back'], equipment: 'barbell' },
-    { name: 'Pull Up', category: 'back', muscle_groups: ['lats', 'biceps'], equipment: 'bodyweight' },
-    { name: 'Barbell Row', category: 'back', muscle_groups: ['lats', 'rhomboids'], equipment: 'barbell' },
-    { name: 'Face Pulls', category: 'shoulders', muscle_groups: ['rear deltoids'], equipment: 'cable' },
-    { name: 'Dumbbell Curl', category: 'arms', muscle_groups: ['biceps'], equipment: 'dumbbell' },
-    { name: 'Lat Pulldown', category: 'back', muscle_groups: ['lats'], equipment: 'cable' },
-    { name: 'Hammer Curls', category: 'arms', muscle_groups: ['forearms', 'biceps'], equipment: 'dumbbell' },
-
-    // LEGS
-    { name: 'Barbell Squat', category: 'legs', muscle_groups: ['quadriceps', 'glutes'], equipment: 'barbell' },
-    { name: 'Leg Press', category: 'legs', muscle_groups: ['quadriceps'], equipment: 'machine' },
-    { name: 'Romanian Deadlift', category: 'legs', muscle_groups: ['hamstrings'], equipment: 'barbell' },
-    { name: 'Walking Lunges', category: 'legs', muscle_groups: ['glutes', 'quads'], equipment: 'dumbbell' },
-    { name: 'Leg Extension', category: 'legs', muscle_groups: ['quadriceps'], equipment: 'machine' },
-    { name: 'Calf Raise', category: 'legs', muscle_groups: ['calves'], equipment: 'machine' },
-
-    // CARDIO
-    { name: 'Running', category: 'cardio', muscle_groups: ['legs', 'heart'], equipment: 'bodyweight' },
-    { name: 'Cycling', category: 'cardio', muscle_groups: ['legs', 'heart'], equipment: 'machine' },
-    { name: 'Rowing', category: 'cardio', muscle_groups: ['full body'], equipment: 'machine' },
-    { name: 'Jump Rope', category: 'cardio', muscle_groups: ['legs', 'heart'], equipment: 'rope' },
-  ];
-
-  const { data: exData, error: exError } = await supabase.from('exercise_catalog').insert(exercises).select();
-  if (exError) throw new Error(`Exercise insert failed: ${exError.message}`);
-
-  const strengthExercises = exData?.filter(e => e.category !== 'cardio') || [];
-  const cardioExercises = exData?.filter(e => e.category === 'cardio') || [];
-
-  // ===========================================================================
-  // 3. USER PROFILE
-  // ===========================================================================
-  console.log('👤 Creating User...');
-  const { data: auth, error: authError } = await supabase.auth.admin.createUser({
-    email: ADMIN_EMAIL,
-    password: ADMIN_PASSWORD,
-    email_confirm: true,
-    user_metadata: { full_name: 'Admin User' }
-  });
-  if (authError || !auth.user) throw new Error(`Auth failed: ${authError?.message}`);
-  const userId = auth.user.id;
-  const now = new Date().toISOString();
-
-  await supabase.from('profiles').insert({
-    id: userId,
-    display_name: 'Admin User',
-    height: 180,
-    birth_date: '1995-01-01',
-    gender: 'male',
-    activity_level: 'active',
-    preferred_units: 'metric',
-    created_at: now,
-    updated_at: now
-  });
-
-  // ===========================================================================
-  // 4. CREATE PROGRAM
-  // ===========================================================================
-  console.log('📁 Creating Program...');
-  const { data: program } = await supabase.from('training_plans').insert({
-    user_id: userId,
-    name: 'High Volume Block',
-    description: '10 Unique Workouts, High Volume Intensity',
-    is_active: true,
-    created_at: now
-  }).select().single();
-
-  if (!program) throw new Error("Failed to create program");
-
-  // ===========================================================================
-  // 5. DEFINE 10 TEMPLATE WORKOUTS
-  // ===========================================================================
-  console.log('📋 Defining 10 Program Workouts...');
-  
-  const referenceWorkouts = [];
-  for (let i = 1; i <= 10; i++) {
-    const { data: w, error: wError } = await supabase.from('training_sessions').insert({
-      user_id: userId,
-      name: `Block Day ${i}`,
-      status: 'draft',
-      date: now,
-      overall_rating: null // Corrected: null for draft
-    }).select().single();
-    
-    if (w) referenceWorkouts.push(w);
-  }
-
-  if (referenceWorkouts.length === 0) throw new Error("ABORTING: No reference workouts created.");
-
-  // Link to program
-  const programItems = referenceWorkouts.map((w, i) => ({
-    program_id: program.id,
-    workout_id: w.id,
-    day_label: `Day ${i + 1}`,
-    order_index: i + 1,
-    item_type: 'workout',
-    created_at: now
-  }));
-  await supabase.from('training_plan_items').insert(programItems);
-
-  // ===========================================================================
-  // 6. GENERATE 30 DAYS OF HISTORY
-  // ===========================================================================
-  console.log('History: Simulating 30 Days of Logs...');
-
-  const historyLogs: any[] = [];
-  const historyCardio: any[] = [];
-
-  for (let d = 0; d < 30; d++) {
-    const daysAgo = 30 - d;
-    const dateObj = new Date();
-    dateObj.setDate(dateObj.getDate() - daysAgo);
-    const dateISO = dateObj.toISOString();
-
-    const workoutIndex = d % referenceWorkouts.length;
-    const refWorkout = referenceWorkouts[workoutIndex];
-    
-    if (!refWorkout) continue;
-
-    // Create Completed Workout (History)
-    const { data: doneWorkout } = await supabase.from('training_sessions').insert({
-      user_id: userId,
-      name: `${refWorkout.name} (Completed)`,
-      date: dateISO,
-      created_at: dateISO, 
-      updated_at: dateISO,
-      status: 'completed',
-      duration_minutes: 75,
-      overall_rating: 8,
-      notes: `Session ${d+1} of 30`
-    }).select().single();
-
-    if (!doneWorkout) continue;
-
-    // Pick Exercises
-    const offset = workoutIndex * 2; 
-    
-    const dailyStrength = [
-      ...strengthExercises.slice(offset % strengthExercises.length),
-      ...strengthExercises
-    ].slice(0, 8); 
-
-    const dailyCardio = [
-      cardioExercises[workoutIndex % cardioExercises.length],
-      cardioExercises[(workoutIndex + 1) % cardioExercises.length]
-    ].filter(Boolean);
-
-    // Strength Logs
-    dailyStrength.forEach(ex => {
-      const cycleNum = Math.floor(d / 10);
-      const baseWeight = 40 + (cycleNum * 2.5);
-
-      for (let s = 1; s <= 3; s++) {
-        historyLogs.push({
-          workout_id: doneWorkout.id,
-          exercise_id: ex.id,
-          exercise_name: ex.name,
-          set_number: s,
-          reps: 8 + (s % 2),
-          weight: baseWeight + (s * 2),
-          calculated_1rm: Math.round((baseWeight + (s*2)) * 1.2),
-          created_at: dateISO,
-          updated_at: dateISO
-        });
-      }
-    });
-
-    // Cardio Logs
-    dailyCardio.forEach(ex => {
-      let dur = 20;
-      let dist = 3;
-      if (ex.name === 'Cycling') { dur = 30; dist = 10; }
-      
-      // FIX: Round Duration to integer
-      const finalDur = Math.round(dur - (d * 0.1));
-
-      historyCardio.push({
-        user_id: userId,
-        workout_id: doneWorkout.id,
-        date: dateISO,
-        created_at: dateISO,
-        updated_at: dateISO,
-        activity_type: ex.name,
-        duration_minutes: finalDur, // Integer
-        distance_km: dist,
-        calories_burned: 200,
-        average_heart_rate: 150
-      });
-    });
-  }
-
-  // INSERT BULK
-  console.log(`📝 Inserting ${historyLogs.length} Strength Logs...`);
-  const chunkSize = 200;
-  for (let i = 0; i < historyLogs.length; i += chunkSize) {
-    const { error } = await supabase.from('strength_sets').insert(historyLogs.slice(i, i + chunkSize));
-    if (error) console.error("Error inserting logs:", error.message);
-  }
-
-  console.log(`🏃 Inserting ${historyCardio.length} Cardio Logs...`);
-  const { error: cardioError } = await supabase.from('cardio_sessions').insert(historyCardio);
-  if (cardioError) console.error("Error inserting cardio:", cardioError.message);
-
-  // ===========================================================================
-  // 7. NUTRITION
-  // ===========================================================================
-  console.log('🍎 Adding Nutrition Data...');
-  const { data: nutProgram } = await supabase.from('meal_plans').insert({
-    user_id: userId,
-    name: 'Volume Phase Diet',
-    start_date: now,
-    end_date: now,
-    status: 'active'
-  }).select().single();
-
-  if (nutProgram) {
-    const meals = [];
-    for (let i = 0; i < 4; i++) {
-        meals.push({
-            program_id: nutProgram.id,
-            meal_type: ['breakfast', 'lunch', 'dinner', 'snack'][i],
-            food_name: `Meal Option ${i+1}`,
-            calories: 600,
-            protein_g: 40,
-            carbs_g: 50,
-            fats_g: 20
-        });
-    }
-    await supabase.from('meal_plan_meals').insert(meals);
-  }
-
-  console.log('✅ SEED COMPLETE!');
-  console.log(`👉 Login: ${ADMIN_EMAIL} / ${ADMIN_PASSWORD}`);
+const PRIMARY_USER = {
+  id: "bdf0b621-076f-4e24-bc6d-7ddfc23b7e47",
+  email: "koshal.parwan@gmail.com",
+  password: "Password@1234",
+  full_name: "Koshal Parwan",
 };
 
-main().catch((e) => {
-  console.error(e);
+const MEMBER_USER = {
+  id: "0da99c24-4b0d-42a7-a5a2-3d048df57d06",
+  email: "seed.member+fitness@gmail.com",
+  password: "Password@1234",
+  full_name: "Seed Member",
+};
+
+const IDS = {
+  accountDeletion: "e05ccf98-0408-438f-9f7f-7e725fd2c58f",
+  analyticsA: "219f6527-fe01-459f-a4db-3ccfbf5f6640",
+  analyticsB: "8c5b28af-3518-4ec2-a873-c76b2b387c7d",
+  aiInsightA: "f6f2fd5a-4534-4f80-8785-404f068ccf29",
+  aiInsightB: "8ba1ef3c-86f6-4905-80ca-bd8305ca2007",
+  bodyA: "35f430dc-ec45-45d7-bcab-f1021923c45a",
+  bodyB: "b9e9f5b8-409c-4b95-b4a5-c3ea7244e3aa",
+  bodyC: "f2f06f78-9773-4eb9-a8dc-06f156073b14",
+  goalA: "2b397f5e-0f4b-4116-93eb-6f07c5134f03",
+  goalB: "12f39bbe-42cc-4e66-8cbf-bf22b75d67a4",
+  exA: "bb9f6f31-f863-4f04-b9b8-6fbd2f4c2e45",
+  exB: "cb31b3fe-5504-4883-a58a-2e31ca3bb5f9",
+  exC: "f07cf5ef-6c9d-4024-8499-1e0b8996076a",
+  planA: "a3838a11-64b3-4ce9-9d00-9114ce5e7466",
+  planB: "070f6ff3-4d09-45ce-b476-2fbceb49871b",
+  planItemA: "7d7db4a3-556d-4208-a429-4c8b2cb8621f",
+  planItemB: "52cc31c8-e6e4-495d-915f-a032fca1c70d",
+  workoutUserA: "7d1eef34-6f16-4536-8cf3-22f4d67cc1e0",
+  workoutUserB: "b2e53fd4-ed53-4fe5-b107-3ed14dc07f1f",
+  workoutClientA: "6fcd2a5c-f5ce-44f5-a4fd-18f4ec31e4e6",
+  strengthA: "95f0cf80-7149-4001-997e-1215d59dd71f",
+  strengthB: "e046a58d-f783-4334-8c4b-d7f4ddaee744",
+  strengthC: "7f843f73-a287-4fdc-adf7-550a13e1d8c5",
+  strengthD: "17fca0d4-5ad5-4eb1-aab4-07f06a145170",
+  cardioA: "4bb6eec8-f850-4a8e-bf20-a4651308664d",
+  cardioB: "04ec7efe-1e3e-44f4-bb35-dcca5cdb7541",
+  mealPlanUserA: "03c3f4b9-54f4-4c4f-a8d4-38a5ce84d5fd",
+  mealPlanUserB: "223fca5f-4de3-42f8-a44f-b49a9eba4e6d",
+  mealPlanClientA: "fcdabf67-3709-4d64-bc80-a7bdcaecf4e0",
+  mealPlanMealA: "188d7cca-7bca-43f5-bf70-4ccf01938a17",
+  mealPlanMealB: "8f1e37cc-72cb-4f17-a18b-f9559f540f56",
+  mealPlanMealC: "0affde03-40cc-45df-8d50-a969fb57df93",
+  mealPlanMealD: "9472dfd9-c98e-4dc6-8f8f-c4ce7a4b9024",
+  mealAssignUserA: "ef9705a6-3f56-4c3e-b1ba-a926af31d46c",
+  mealAssignClientA: "e3a1f47c-baf2-4642-9701-31cf95c7f1e8",
+  mealAssignMealA: "e7be9973-212c-476b-bf95-f7e9d13b24a6",
+  mealAssignMealB: "3e2f9479-fb5f-4704-ac7f-679dd47d78fb",
+  mealLogA: "c4f4d3d2-84cf-44dd-b3a5-a9e255f7301d",
+  mealLogB: "a8cd8ec8-5036-4ca5-9a67-05a6014e1fb8",
+  mealLogC: "76067dff-7adb-4ddd-a6e1-a542afce5a99",
+  mealLogItemA: "81f983fd-1182-45cf-8425-72e240e30b5c",
+  mealLogItemB: "6a84ad1c-1198-4ec2-a52f-80ea6aa88ce6",
+  mealLogItemC: "3f57db2d-7c11-4fca-9f59-f84824b89f13",
+  mealLogItemD: "6b58df98-4451-4f9e-ae8f-c5fffd9bec2d",
+  mealLogItemE: "42f79084-9bc5-4cc9-8f19-7f3cc95e5b69",
+  mealFavA: "f57980fc-595f-4a14-a39d-21bf73c0c17d",
+  mealFavB: "f5a19412-516f-40f8-b4af-52a25f4db8b5",
+  clientA: "f260c59e-7272-49b3-9d88-0e55b374f727",
+  clientB: "dad4a098-7587-4ccf-af53-923deebf2ea0",
+  coachAssignA: "e48fd9f2-738f-4f38-b35f-26d58f2d7a78",
+  coachAssignB: "00ea8ad6-4ff7-4250-a6ee-2b97afff353f",
+  coachTemplateA: "970e210a-380f-45c5-8952-a1652659ca95",
+  coachTemplateSessionA: "7d5ab4f3-02a7-4dfa-b93c-8f1fa2bd4ff4",
+  coachTemplateSessionB: "05f58eb5-0313-4d48-98af-89fd76ef4471",
+  clientPlanAssignA: "4348fc1a-d2a4-4d24-ab8f-e31cd56140a7",
+  clientPlanAssignB: "4da8e588-4428-4fb2-b6a3-2377b11f1038",
+  clientPlanSessionA: "941b981d-d24f-49f2-af07-d3f97cc96dbf",
+  clientPlanSessionB: "6b26df2f-9895-4722-a153-d65f0e0cefd1",
+  coachNoteA: "839e8cb9-bbec-432d-a16c-486d3359a7aa",
+  coachNoteB: "f97e26de-b050-4448-8f8b-d08978de6779",
+  clientPaymentA: "6bc7feca-f5f4-4e44-8069-f8f7be29ecfa",
+  clientPaymentB: "3a9d5388-66a4-4c3b-9b89-ba93d8ca6c1f",
+  clientSessionA: "75e0f71f-a653-4282-abd7-cb33d8dc31d8",
+  clientTaskA: "8eb5c919-2f6c-4b1c-8e8f-a3118a32ec5d",
+  clientTaskB: "9f631a2d-f15a-4fd6-a7c1-beae340ea074",
+  clientTaskC: "7439a7f8-adf8-4d85-92d9-cfac96d272f2",
+  clientStepsA: "1b6b2bc2-e0f8-4cc3-950d-53244b49542d",
+  clientStepsB: "eb5c2d55-3ba8-49b6-9e66-b496f8f3b55e",
+  clientStepsC: "0cb0abc2-8d6e-4ad3-b606-7872a84dd5ac",
+  clientMealFavA: "9aa662f2-f68f-4145-9589-8650d9f66085",
+  clientMealFavB: "08f60789-fdc0-4b53-b2b6-2fb872f637aa",
+  clientCheckinA: "0fdc0ad0-17b9-4de9-a105-804f5611f260",
+  clientCheckinB: "44763425-f2f8-4984-8d2d-51f64041817f",
+  ticketA: "fb0d2a6d-a6e6-44f9-9c0a-754f3207bc1e",
+  ticketB: "00d0ce55-7fdc-4f8d-aee5-bd8d037563b6",
+  ticketC: "6d3f8b71-67a4-4712-ae72-5f0282cd8af9",
+  ticketCommentA: "6e0bc0fe-8a95-4a5f-b70b-16dc5f5cb902",
+  ticketCommentB: "0ece7c66-5364-4465-a9e8-1a03b3f2976c",
+  ticketCommentC: "6ba4f8ef-4e2e-4d22-a3f6-84eef57054e5",
+  mealGroupTemplateA: "82ef8c2c-fcef-44f2-bf2b-15bc31ca21a4",
+  mealGroupSnapshotA: "1bb35bfd-f5fa-42d8-b29b-e2bb90dc6d5a",
+  mealGroupAssignUserA: "c86b5340-aec4-4918-bbbd-f2258e9e4f95",
+  mealGroupAssignClientA: "b9b82616-d3bc-4149-95a6-f011d534e4be",
+  mealGroupItemA: "4e6b2f55-20ea-4f7d-8ecf-f5a8fd3598e8",
+  mealGroupItemB: "df6c82a5-57fe-46ab-b42f-0ea4be4d4f38",
+  mealGroupItemC: "259bac57-fb5a-4f27-afce-a59f8ff3a3bb",
+  mealGroupItemD: "0ec99c1b-95b8-4db8-b1a8-b174fc38e6f0",
+  mealGroupItemE: "8e4ee508-75f5-49bf-a0e2-c32c4c45fd86",
+} as const;
+
+const DAY_ORDER = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
+const DAY_LABELS: Record<(typeof DAY_ORDER)[number], string> = {
+  mon: "Monday",
+  tue: "Tuesday",
+  wed: "Wednesday",
+  thu: "Thursday",
+  fri: "Friday",
+  sat: "Saturday",
+  sun: "Sunday",
+};
+
+const MODULE_KEYS = [
+  "workouts",
+  "training_plan",
+  "meal_plan",
+  "meal_logging",
+  "steps_tracking",
+  "goals",
+  "check_ins",
+  "coach_notes",
+  "tasks",
+] as const;
+
+const now = new Date();
+const nowIso = now.toISOString();
+const tz = "Indian/Mauritius";
+
+function dateOffset(days: number) {
+  const d = new Date(now);
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+function ensure<T>(value: T | null | undefined, message: string): T {
+  if (value == null) throw new Error(message);
+  return value;
+}
+
+async function ensureAuthUser(user: { id: string; email: string; password: string; full_name: string }) {
+  const existing = await supabase.auth.admin.getUserById(user.id);
+  if (existing.data.user) {
+    const update = await supabase.auth.admin.updateUserById(user.id, {
+      email: user.email,
+      password: user.password,
+      email_confirm: true,
+      user_metadata: { full_name: user.full_name },
+    });
+    if (update.error) throw new Error(`Failed to update auth user ${user.email}: ${update.error.message}`);
+    return;
+  }
+
+  const created = await supabase.auth.admin.createUser({
+    id: user.id,
+    email: user.email,
+    password: user.password,
+    email_confirm: true,
+    user_metadata: { full_name: user.full_name },
+  });
+  if (created.error) throw new Error(`Failed to create auth user ${user.email}: ${created.error.message}`);
+}
+
+async function upsertOne(table: string, row: Record<string, unknown>, onConflict = "id") {
+  const { error } = await supabase.from(table).upsert(row, { onConflict });
+  if (error) throw new Error(`[${table}] ${error.message}`);
+}
+
+async function upsertMany(table: string, rows: Record<string, unknown>[], onConflict = "id") {
+  if (rows.length === 0) return;
+  const { error } = await supabase.from(table).upsert(rows, { onConflict });
+  if (error) throw new Error(`[${table}] ${error.message}`);
+}
+
+async function run() {
+  console.log("Seeding dummy data...");
+
+  await ensureAuthUser(PRIMARY_USER);
+  await ensureAuthUser(MEMBER_USER);
+
+  // Base user data
+  await upsertMany(
+    "profiles",
+    [
+      {
+        id: PRIMARY_USER.id,
+        full_name: PRIMARY_USER.full_name,
+        bio: "Primary seeded profile for full app flows",
+        preferred_units: "metric",
+        role: "user",
+        onboarding_completed: true,
+        is_active: true,
+        sport_focus: ["strength", "hypertrophy", "conditioning"],
+        height_cm: 178,
+        gender: "male",
+        date_of_birth: "1995-01-23",
+        created_at: nowIso,
+        updated_at: nowIso,
+      },
+      {
+        id: MEMBER_USER.id,
+        full_name: MEMBER_USER.full_name,
+        bio: "Secondary seeded member profile",
+        preferred_units: "metric",
+        role: "user",
+        onboarding_completed: true,
+        is_active: true,
+        sport_focus: ["running", "general_fitness"],
+        height_cm: 171,
+        gender: "female",
+        date_of_birth: "1998-04-18",
+        created_at: nowIso,
+        updated_at: nowIso,
+      },
+    ],
+    "id"
+  );
+
+  await upsertMany(
+    "exercise_catalog",
+    [
+      {
+        id: IDS.exA,
+        name: "Seed Barbell Row",
+        category: "back",
+        muscle_groups: ["lats", "rhomboids", "biceps"],
+        equipment: "barbell",
+        difficulty_level: "intermediate",
+        is_custom: true,
+        is_approved: true,
+        created_by: PRIMARY_USER.id,
+        description: "Heavy horizontal pull",
+        created_at: nowIso,
+      },
+      {
+        id: IDS.exB,
+        name: "Seed Flat Dumbbell Press",
+        category: "chest",
+        muscle_groups: ["chest", "triceps", "front_delts"],
+        equipment: "dumbbell",
+        difficulty_level: "beginner",
+        is_custom: true,
+        is_approved: true,
+        created_by: PRIMARY_USER.id,
+        description: "Chest pressing pattern",
+        created_at: nowIso,
+      },
+      {
+        id: IDS.exC,
+        name: "Seed Goblet Squat",
+        category: "legs",
+        muscle_groups: ["quads", "glutes", "core"],
+        equipment: "dumbbell",
+        difficulty_level: "beginner",
+        is_custom: true,
+        is_approved: true,
+        created_by: PRIMARY_USER.id,
+        description: "Squat pattern with controlled tempo",
+        created_at: nowIso,
+      },
+    ],
+    "id"
+  );
+
+  await upsertMany(
+    "training_plans",
+    [
+      {
+        id: IDS.planA,
+        user_id: PRIMARY_USER.id,
+        name: "Upper / Lower Split",
+        description: "4-day split with progressive overload",
+        is_active: true,
+        created_at: nowIso,
+        updated_at: nowIso,
+      },
+      {
+        id: IDS.planB,
+        user_id: PRIMARY_USER.id,
+        name: "Conditioning Block",
+        description: "Cardio-centric 3-day block",
+        is_active: false,
+        created_at: nowIso,
+        updated_at: nowIso,
+      },
+    ],
+    "id"
+  );
+
+  await upsertMany(
+    "clients",
+    [
+      {
+        id: IDS.clientA,
+        primary_coach_id: PRIMARY_USER.id,
+        created_by_user_id: PRIMARY_USER.id,
+        first_name: "Demo",
+        last_name: "Client",
+        display_name: "Demo Client",
+        linked_user_id: MEMBER_USER.id,
+        email: "demo.client+seed@gmail.com",
+        phone: "+2300000000",
+        timezone: tz,
+        status: "active",
+        goals: "Improve strength and body composition",
+        medical_flags: "None",
+        notes: "Linked client account",
+        height_cm: 174,
+        weight_kg: 77.5,
+        date_of_birth: "1997-04-15",
+        sex: "male",
+        created_at: nowIso,
+        updated_at: nowIso,
+      },
+      {
+        id: IDS.clientB,
+        primary_coach_id: PRIMARY_USER.id,
+        created_by_user_id: PRIMARY_USER.id,
+        first_name: "Offline",
+        last_name: "Athlete",
+        display_name: "Offline Athlete",
+        linked_user_id: null,
+        email: null,
+        phone: "+2300000001",
+        timezone: tz,
+        status: "paused",
+        goals: "Return to regular training consistency",
+        medical_flags: "Lower-back sensitivity",
+        notes: "No platform account",
+        height_cm: 169,
+        weight_kg: 69.2,
+        date_of_birth: "2001-10-10",
+        sex: "female",
+        created_at: nowIso,
+        updated_at: nowIso,
+      },
+    ],
+    "id"
+  );
+
+  await upsertMany(
+    "coach_client_assignments",
+    [
+      {
+        id: IDS.coachAssignA,
+        client_id: IDS.clientA,
+        coach_id: PRIMARY_USER.id,
+        role: "primary",
+        is_active: true,
+        permissions: ["profile", "goals", "plans", "checkins", "logs", "notes", "payments"],
+        created_by_user_id: PRIMARY_USER.id,
+        created_at: nowIso,
+        updated_at: nowIso,
+      },
+      {
+        id: IDS.coachAssignB,
+        client_id: IDS.clientB,
+        coach_id: PRIMARY_USER.id,
+        role: "assistant",
+        is_active: true,
+        permissions: ["profile", "logs", "notes", "payments"],
+        created_by_user_id: PRIMARY_USER.id,
+        created_at: nowIso,
+        updated_at: nowIso,
+      },
+    ],
+    "id"
+  );
+
+  await upsertOne("coach_plan_templates", {
+    id: IDS.coachTemplateA,
+    coach_id: PRIMARY_USER.id,
+    name: "General Strength Template",
+    description: "Base template used for client assignments",
+    tags: ["strength", "conditioning"],
+    is_archived: false,
+    created_at: nowIso,
+    updated_at: nowIso,
+  });
+
+  const templateSessionsLookup = await supabase
+    .from("coach_plan_template_sessions")
+    .select("id, sequence_no")
+    .eq("template_id", IDS.coachTemplateA)
+    .in("sequence_no", [1, 2]);
+  if (templateSessionsLookup.error) {
+    throw new Error(`[coach_plan_template_sessions lookup] ${templateSessionsLookup.error.message}`);
+  }
+
+  const coachTemplateSessionAId =
+    templateSessionsLookup.data?.find((row) => row.sequence_no === 1)?.id ?? IDS.coachTemplateSessionA;
+  const coachTemplateSessionBId =
+    templateSessionsLookup.data?.find((row) => row.sequence_no === 2)?.id ?? IDS.coachTemplateSessionB;
+
+  await upsertMany(
+    "coach_plan_template_sessions",
+    [
+      {
+        id: coachTemplateSessionAId,
+        template_id: IDS.coachTemplateA,
+        sequence_no: 1,
+        title: "Upper Strength",
+        session_type: "strength",
+        default_slot: "afternoon",
+        estimated_duration_minutes: 65,
+        notes: "Heavy compound emphasis",
+        metadata: { focus: "upper" },
+        created_at: nowIso,
+        updated_at: nowIso,
+      },
+      {
+        id: coachTemplateSessionBId,
+        template_id: IDS.coachTemplateA,
+        sequence_no: 2,
+        title: "Lower + Cardio",
+        session_type: "mixed",
+        default_slot: "morning",
+        estimated_duration_minutes: 70,
+        notes: "Lower-body plus steady-state cardio",
+        metadata: { focus: "lower" },
+        created_at: nowIso,
+        updated_at: nowIso,
+      },
+    ],
+    "id"
+  );
+
+  await upsertMany(
+    "client_plan_assignments",
+    [
+      {
+        id: IDS.clientPlanAssignA,
+        client_id: IDS.clientA,
+        coach_id: PRIMARY_USER.id,
+        template_id: IDS.coachTemplateA,
+        name: "Demo Client Assigned Plan",
+        notes: "Client specific snapshot",
+        status: "active",
+        started_on: dateOffset(-14),
+        created_at: nowIso,
+        updated_at: nowIso,
+      },
+      {
+        id: IDS.clientPlanAssignB,
+        client_id: IDS.clientB,
+        coach_id: PRIMARY_USER.id,
+        template_id: IDS.coachTemplateA,
+        name: "Offline Athlete Rebuild Plan",
+        notes: "Paused due schedule constraints",
+        status: "archived",
+        started_on: dateOffset(-21),
+        ended_on: dateOffset(-3),
+        created_at: nowIso,
+        updated_at: nowIso,
+      },
+    ],
+    "id"
+  );
+
+  const assignmentSessionsLookup = await supabase
+    .from("client_plan_assignment_sessions")
+    .select("id, sequence_no")
+    .eq("assignment_id", IDS.clientPlanAssignA)
+    .in("sequence_no", [1, 2]);
+  if (assignmentSessionsLookup.error) {
+    throw new Error(`[client_plan_assignment_sessions lookup] ${assignmentSessionsLookup.error.message}`);
+  }
+
+  const clientPlanSessionAId =
+    assignmentSessionsLookup.data?.find((row) => row.sequence_no === 1)?.id ?? IDS.clientPlanSessionA;
+  const clientPlanSessionBId =
+    assignmentSessionsLookup.data?.find((row) => row.sequence_no === 2)?.id ?? IDS.clientPlanSessionB;
+
+  await upsertMany(
+    "client_plan_assignment_sessions",
+    [
+      {
+        id: clientPlanSessionAId,
+        assignment_id: IDS.clientPlanAssignA,
+        template_session_id: coachTemplateSessionAId,
+        sequence_no: 1,
+        title: "Client Session 1",
+        session_type: "mixed",
+        default_slot: "afternoon",
+        estimated_duration_minutes: 65,
+        metadata: { seeded: true },
+        is_skipped: false,
+        created_at: nowIso,
+        updated_at: nowIso,
+      },
+      {
+        id: clientPlanSessionBId,
+        assignment_id: IDS.clientPlanAssignA,
+        template_session_id: coachTemplateSessionBId,
+        sequence_no: 2,
+        title: "Client Session 2",
+        session_type: "mixed",
+        default_slot: "morning",
+        estimated_duration_minutes: 70,
+        metadata: { seeded: true },
+        is_skipped: false,
+        created_at: nowIso,
+        updated_at: nowIso,
+      },
+    ],
+    "id"
+  );
+
+  await upsertMany(
+    "training_sessions",
+    [
+      {
+        id: IDS.workoutUserA,
+        user_id: PRIMARY_USER.id,
+        subject_user_id: PRIMARY_USER.id,
+        created_by_user_id: PRIMARY_USER.id,
+        plan_id: IDS.planA,
+        name: "User Session - Upper Pull",
+        status: "completed",
+        performed_on: dateOffset(-1),
+        date: nowIso,
+        session_slot: "morning",
+        session_label: "Primary Lift Session",
+        started_at: new Date(now.getTime() - 90 * 60 * 1000).toISOString(),
+        completed_at: new Date(now.getTime() - 20 * 60 * 1000).toISOString(),
+        duration_minutes: 70,
+        notes: "Strong pulling day",
+        overall_rating: 8,
+        perceived_exertion: 7,
+        location_type: "gym",
+        location_label: "Main Gym",
+        location_address: "Port Louis",
+        location_notes: "Platform lane A",
+        created_at: nowIso,
+        updated_at: nowIso,
+      },
+      {
+        id: IDS.workoutUserB,
+        user_id: PRIMARY_USER.id,
+        subject_user_id: PRIMARY_USER.id,
+        created_by_user_id: PRIMARY_USER.id,
+        plan_id: IDS.planB,
+        name: "User Session - Cardio Builder",
+        status: "completed",
+        performed_on: dateOffset(0),
+        date: nowIso,
+        session_slot: "evening",
+        session_label: "Conditioning Block",
+        started_at: new Date(now.getTime() - 50 * 60 * 1000).toISOString(),
+        completed_at: new Date(now.getTime() - 10 * 60 * 1000).toISOString(),
+        duration_minutes: 40,
+        notes: "Intervals felt controlled",
+        overall_rating: 7,
+        perceived_exertion: 6,
+        location_type: "outdoor",
+        location_label: "Track",
+        location_notes: "Lane 2 intervals",
+        created_at: nowIso,
+        updated_at: nowIso,
+      },
+      {
+        id: IDS.workoutClientA,
+        user_id: PRIMARY_USER.id,
+        subject_client_id: IDS.clientA,
+        created_by_user_id: PRIMARY_USER.id,
+        plan_assignment_id: IDS.clientPlanAssignA,
+        plan_session_id: clientPlanSessionAId,
+        name: "Client Logged Session",
+        status: "completed",
+        performed_on: dateOffset(0),
+        date: nowIso,
+        session_slot: "afternoon",
+        session_label: "Coach-guided session",
+        started_at: new Date(now.getTime() - 120 * 60 * 1000).toISOString(),
+        completed_at: new Date(now.getTime() - 50 * 60 * 1000).toISOString(),
+        duration_minutes: 68,
+        location_type: "home",
+        location_label: "Home Setup",
+        notes: "Session linked to plan progression",
+        created_at: nowIso,
+        updated_at: nowIso,
+      },
+    ],
+    "id"
+  );
+
+  await upsertMany(
+    "strength_sets",
+    [
+      {
+        id: IDS.strengthA,
+        workout_id: IDS.workoutUserA,
+        exercise_id: IDS.exA,
+        exercise_name: "Seed Barbell Row",
+        set_number: 1,
+        reps: 8,
+        weight: 60,
+        rpe: 8,
+        rest_seconds: 120,
+        notes: "Controlled eccentric",
+        entry_sequence: 1,
+        calculated_1rm: 76,
+        created_at: nowIso,
+        updated_at: nowIso,
+      },
+      {
+        id: IDS.strengthB,
+        workout_id: IDS.workoutUserA,
+        exercise_id: IDS.exA,
+        exercise_name: "Seed Barbell Row",
+        set_number: 2,
+        reps: 8,
+        weight: 62.5,
+        rpe: 8,
+        rest_seconds: 120,
+        notes: "Same tempo",
+        entry_sequence: 2,
+        calculated_1rm: 79,
+        created_at: nowIso,
+        updated_at: nowIso,
+      },
+      {
+        id: IDS.strengthC,
+        workout_id: IDS.workoutClientA,
+        exercise_id: IDS.exB,
+        exercise_name: "Seed Flat Dumbbell Press",
+        set_number: 1,
+        reps: 10,
+        weight: 24,
+        rpe: 7,
+        rest_seconds: 90,
+        notes: "Client kept form stable",
+        entry_sequence: 1,
+        calculated_1rm: 32,
+        created_at: nowIso,
+        updated_at: nowIso,
+      },
+      {
+        id: IDS.strengthD,
+        workout_id: IDS.workoutClientA,
+        exercise_id: IDS.exC,
+        exercise_name: "Seed Goblet Squat",
+        set_number: 1,
+        reps: 12,
+        weight: 26,
+        rpe: 7,
+        rest_seconds: 90,
+        notes: "Depth and posture maintained",
+        entry_sequence: 2,
+        calculated_1rm: 36,
+        created_at: nowIso,
+        updated_at: nowIso,
+      },
+    ],
+    "id"
+  );
+
+  await upsertMany(
+    "cardio_sessions",
+    [
+      {
+        id: IDS.cardioA,
+        user_id: PRIMARY_USER.id,
+        workout_id: IDS.workoutUserA,
+        activity_type: "Run",
+        duration_minutes: 24,
+        distance_km: 4.1,
+        calories_burned: 280,
+        average_heart_rate: 148,
+        date: dateOffset(-1),
+        entry_sequence: 3,
+        sport_type: "run",
+        notes: "Steady zone 2",
+        created_at: nowIso,
+        updated_at: nowIso,
+      },
+      {
+        id: IDS.cardioB,
+        user_id: PRIMARY_USER.id,
+        workout_id: IDS.workoutUserB,
+        activity_type: "Bike",
+        duration_minutes: 30,
+        distance_km: 12.4,
+        calories_burned: 260,
+        average_heart_rate: 142,
+        date: dateOffset(0),
+        entry_sequence: 1,
+        sport_type: "bike",
+        notes: "Tempo ride",
+        created_at: nowIso,
+        updated_at: nowIso,
+      },
+    ],
+    "id"
+  );
+
+  await upsertMany(
+    "training_plan_items",
+    [
+      {
+        id: IDS.planItemA,
+        program_id: IDS.planA,
+        item_type: "workout",
+        workout_id: IDS.workoutUserA,
+        day_label: "Day 1",
+        order_index: 1,
+        created_at: nowIso,
+      },
+      {
+        id: IDS.planItemB,
+        program_id: IDS.planB,
+        item_type: "workout",
+        workout_id: IDS.workoutUserB,
+        day_label: "Day 2",
+        order_index: 2,
+        created_at: nowIso,
+      },
+    ],
+    "id"
+  );
+
+  await upsertMany(
+    "body_measurements",
+    [
+      {
+        id: IDS.bodyA,
+        user_id: PRIMARY_USER.id,
+        date: dateOffset(-14),
+        weight: 83.4,
+        body_fat_percent: 18.1,
+        waist_cm: 88.5,
+        chest_cm: 106.8,
+        hips_cm: 98.7,
+        thighs_cm: 58.2,
+        arms_cm: 36.8,
+        notes: "Start of block",
+        created_at: nowIso,
+        updated_at: nowIso,
+      },
+      {
+        id: IDS.bodyB,
+        user_id: PRIMARY_USER.id,
+        date: dateOffset(-7),
+        weight: 82.9,
+        body_fat_percent: 17.6,
+        waist_cm: 87.8,
+        chest_cm: 106.3,
+        hips_cm: 98.3,
+        thighs_cm: 58,
+        arms_cm: 36.9,
+        notes: "Mid block",
+        created_at: nowIso,
+        updated_at: nowIso,
+      },
+      {
+        id: IDS.bodyC,
+        user_id: PRIMARY_USER.id,
+        date: dateOffset(0),
+        weight: 82.4,
+        body_fat_percent: 17.2,
+        waist_cm: 87,
+        chest_cm: 106,
+        hips_cm: 98,
+        thighs_cm: 58,
+        arms_cm: 37,
+        notes: "Current checkpoint",
+        created_at: nowIso,
+        updated_at: nowIso,
+      },
+    ],
+    "id"
+  );
+
+  await upsertMany(
+    "fitness_goals",
+    [
+      {
+        id: IDS.goalA,
+        user_id: PRIMARY_USER.id,
+        goal_type: "weight_loss",
+        status: "active",
+        priority: 1,
+        target_weight: 79,
+        current_weight: 82.4,
+        protein_target: 175,
+        carbs_target: 280,
+        fat_target: 70,
+        daily_calories: 2700,
+        weekly_workouts: 5,
+        target_date: "2026-08-01",
+        created_at: nowIso,
+        updated_at: nowIso,
+      },
+      {
+        id: IDS.goalB,
+        user_id: PRIMARY_USER.id,
+        goal_type: "weight_loss",
+        status: "active",
+        priority: 2,
+        target_weight: 77,
+        current_weight: 82.4,
+        protein_target: 180,
+        carbs_target: 260,
+        fat_target: 68,
+        daily_calories: 2550,
+        weekly_workouts: 4,
+        target_date: "2026-10-01",
+        created_at: nowIso,
+        updated_at: nowIso,
+      },
+    ],
+    "id"
+  );
+
+  await upsertMany(
+    "ai_insights",
+    [
+      {
+        id: IDS.aiInsightA,
+        user_id: PRIMARY_USER.id,
+        title: "Pulling Volume Trend",
+        content: "Your pulling volume has increased 12% over the last 3 sessions.",
+        insight_type: "progress_analysis",
+        priority: "medium",
+        metadata: { metric: "volume", trend: "up" },
+        is_read: false,
+        is_dismissed: false,
+        created_at: nowIso,
+        updated_at: nowIso,
+      },
+      {
+        id: IDS.aiInsightB,
+        user_id: PRIMARY_USER.id,
+        title: "Recovery Advisory",
+        content: "Consider adding one extra low-intensity day this week to support adaptation.",
+        insight_type: "progress_analysis",
+        priority: "high",
+        metadata: { source: "seed" },
+        is_read: false,
+        is_dismissed: false,
+        created_at: nowIso,
+        updated_at: nowIso,
+      },
+    ],
+    "id"
+  );
+
+  await upsertMany(
+    "analytics_events",
+    [
+      {
+        id: IDS.analyticsA,
+        user_id: PRIMARY_USER.id,
+        event_name: "seed_completed",
+        page_path: "/dashboard",
+        metadata: { source: "db.seed.ts" },
+        created_at: nowIso,
+        updated_at: nowIso,
+      },
+      {
+        id: IDS.analyticsB,
+        user_id: PRIMARY_USER.id,
+        event_name: "nutrition_diary_opened",
+        page_path: "/nutrition",
+        metadata: { source: "db.seed.ts" },
+        created_at: nowIso,
+        updated_at: nowIso,
+      },
+    ],
+    "id"
+  );
+
+  // Keep assignment overlap rules safe by archiving pre-existing plans/assignments for seeded subjects.
+  await supabase
+    .from("meal_plans")
+    .update({ status: "archived", archived_at: nowIso })
+    .in("subject_user_id", [PRIMARY_USER.id])
+    .not("id", "in", `(${IDS.mealPlanUserA},${IDS.mealPlanUserB})`);
+  await supabase
+    .from("meal_plans")
+    .update({ status: "archived", archived_at: nowIso })
+    .in("subject_client_id", [IDS.clientA, IDS.clientB])
+    .not("id", "in", `(${IDS.mealPlanClientA})`);
+  await supabase
+    .from("meal_plan_assignments")
+    .update({ status: "archived", archived_at: nowIso })
+    .in("subject_user_id", [PRIMARY_USER.id])
+    .not("id", "in", `(${IDS.mealAssignUserA})`);
+  await supabase
+    .from("meal_plan_assignments")
+    .update({ status: "archived", archived_at: nowIso })
+    .in("subject_client_id", [IDS.clientA, IDS.clientB])
+    .not("id", "in", `(${IDS.mealAssignClientA})`);
+
+  await upsertMany(
+    "meal_plans",
+    [
+      {
+        id: IDS.mealPlanUserA,
+        user_id: PRIMARY_USER.id,
+        subject_user_id: PRIMARY_USER.id,
+        name: "User Nutrition Plan - Performance",
+        description: "Main tracked plan",
+        notes: "Primary active plan",
+        timezone: tz,
+        start_date: dateOffset(-7),
+        end_date: dateOffset(21),
+        status: "active",
+        daily_calorie_target: 2700,
+        daily_protein_target_g: 180,
+        daily_carbs_target_g: 300,
+        daily_fat_target_g: 75,
+        meal_targets_json: { breakfast: { calories: 650 }, lunch: { calories: 850 }, dinner: { calories: 850 }, snacks: { calories: 350 } },
+        is_public: false,
+        created_at: nowIso,
+        updated_at: nowIso,
+      },
+      {
+        id: IDS.mealPlanUserB,
+        user_id: PRIMARY_USER.id,
+        subject_user_id: PRIMARY_USER.id,
+        name: "User Nutrition Plan - Draft Copy",
+        description: "Draft variation of macros",
+        notes: "Alternative setup",
+        timezone: tz,
+        start_date: dateOffset(22),
+        end_date: dateOffset(52),
+        status: "draft",
+        daily_calorie_target: 2550,
+        daily_protein_target_g: 185,
+        daily_carbs_target_g: 255,
+        daily_fat_target_g: 70,
+        meal_targets_json: { breakfast: { calories: 600 } },
+        is_public: false,
+        created_at: nowIso,
+        updated_at: nowIso,
+      },
+      {
+        id: IDS.mealPlanClientA,
+        user_id: PRIMARY_USER.id,
+        subject_client_id: IDS.clientA,
+        name: "Client Nutrition Plan",
+        description: "Assigned intake baseline",
+        notes: "Client-focused targets",
+        timezone: tz,
+        start_date: dateOffset(-5),
+        end_date: dateOffset(30),
+        status: "active",
+        daily_calorie_target: 2300,
+        daily_protein_target_g: 150,
+        daily_carbs_target_g: 240,
+        daily_fat_target_g: 65,
+        meal_targets_json: { lunch: { calories: 700 }, dinner: { calories: 700 } },
+        is_public: false,
+        created_at: nowIso,
+        updated_at: nowIso,
+      },
+    ],
+    "id"
+  );
+
+  await upsertMany(
+    "meal_plan_meals",
+    [
+      {
+        id: IDS.mealPlanMealA,
+        program_id: IDS.mealPlanUserA,
+        meal_type: "breakfast",
+        food_name: "Oats + whey + banana",
+        calories: 620,
+        protein_g: 42,
+        carbs_g: 79,
+        fats_g: 15,
+        position: 1,
+        status: "active",
+        instructions: "Mix and rest 5 minutes before serving.",
+        alternatives: "Rice flakes + greek yogurt",
+        created_at: nowIso,
+        updated_at: nowIso,
+      },
+      {
+        id: IDS.mealPlanMealB,
+        program_id: IDS.mealPlanUserA,
+        meal_type: "lunch",
+        food_name: "Chicken + rice + salad",
+        calories: 760,
+        protein_g: 52,
+        carbs_g: 88,
+        fats_g: 18,
+        position: 2,
+        status: "active",
+        instructions: "Weigh ingredients post-cook.",
+        alternatives: "Turkey + quinoa",
+        created_at: nowIso,
+        updated_at: nowIso,
+      },
+      {
+        id: IDS.mealPlanMealC,
+        program_id: IDS.mealPlanUserA,
+        meal_type: "dinner",
+        food_name: "Salmon + potatoes",
+        calories: 780,
+        protein_g: 50,
+        carbs_g: 74,
+        fats_g: 28,
+        position: 3,
+        status: "active",
+        instructions: "Use minimal oil",
+        alternatives: "Lean beef + sweet potatoes",
+        created_at: nowIso,
+        updated_at: nowIso,
+      },
+      {
+        id: IDS.mealPlanMealD,
+        program_id: IDS.mealPlanClientA,
+        meal_type: "lunch",
+        food_name: "Client lunch bowl",
+        calories: 640,
+        protein_g: 42,
+        carbs_g: 68,
+        fats_g: 18,
+        position: 1,
+        status: "active",
+        instructions: "Keep portions consistent",
+        alternatives: "Chicken wrap",
+        created_at: nowIso,
+        updated_at: nowIso,
+      },
+    ],
+    "id"
+  );
+
+  await upsertMany(
+    "meal_plan_assignments",
+    [
+      {
+        id: IDS.mealAssignUserA,
+        plan_id: IDS.mealPlanUserA,
+        assigned_by_user_id: PRIMARY_USER.id,
+        subject_user_id: PRIMARY_USER.id,
+        name: "User Meal Assignment",
+        notes: "Snapshot for user tracking",
+        timezone: tz,
+        start_date: dateOffset(-3),
+        end_date: dateOffset(21),
+        status: "active",
+        daily_calorie_target: 2700,
+        daily_protein_target_g: 180,
+        daily_carbs_target_g: 300,
+        daily_fat_target_g: 75,
+        meal_targets_json: { breakfast: { calories: 650 } },
+        created_at: nowIso,
+        updated_at: nowIso,
+      },
+      {
+        id: IDS.mealAssignClientA,
+        plan_id: IDS.mealPlanClientA,
+        assigned_by_user_id: PRIMARY_USER.id,
+        subject_client_id: IDS.clientA,
+        name: "Client Meal Assignment",
+        notes: "Client nutrition assignment",
+        timezone: tz,
+        start_date: dateOffset(-2),
+        end_date: dateOffset(28),
+        status: "active",
+        daily_calorie_target: 2300,
+        daily_protein_target_g: 150,
+        daily_carbs_target_g: 240,
+        daily_fat_target_g: 65,
+        meal_targets_json: { lunch: { calories: 700 } },
+        created_at: nowIso,
+        updated_at: nowIso,
+      },
+    ],
+    "id"
+  );
+
+  await upsertMany(
+    "meal_plan_assignment_meals",
+    [
+      {
+        id: IDS.mealAssignMealA,
+        assignment_id: IDS.mealAssignUserA,
+        meal_type: "lunch",
+        item_name: "Chicken + rice + vegetables",
+        quantity: 1,
+        unit: "plate",
+        calories: 780,
+        protein_g: 52,
+        carbs_g: 88,
+        fat_g: 22,
+        fiber_g: 9,
+        notes: "Keep sodium moderate",
+        position: 1,
+        created_at: nowIso,
+        updated_at: nowIso,
+      },
+      {
+        id: IDS.mealAssignMealB,
+        assignment_id: IDS.mealAssignClientA,
+        meal_type: "dinner",
+        item_name: "Lean fish + rice",
+        quantity: 1,
+        unit: "plate",
+        calories: 620,
+        protein_g: 44,
+        carbs_g: 72,
+        fat_g: 15,
+        fiber_g: 6,
+        notes: "Client-friendly dinner option",
+        position: 1,
+        created_at: nowIso,
+        updated_at: nowIso,
+      },
+    ],
+    "id"
+  );
+
+  await upsertMany(
+    "meal_logs",
+    [
+      {
+        id: IDS.mealLogA,
+        subject_user_id: PRIMARY_USER.id,
+        created_by_user_id: PRIMARY_USER.id,
+        performed_on: dateOffset(0),
+        meal_type: "breakfast",
+        timezone: tz,
+        notes: "Pre-workout breakfast",
+        created_at: nowIso,
+        updated_at: nowIso,
+      },
+      {
+        id: IDS.mealLogB,
+        subject_user_id: PRIMARY_USER.id,
+        created_by_user_id: PRIMARY_USER.id,
+        performed_on: dateOffset(0),
+        meal_type: "dinner",
+        timezone: tz,
+        notes: "Evening recovery meal",
+        created_at: nowIso,
+        updated_at: nowIso,
+      },
+      {
+        id: IDS.mealLogC,
+        subject_client_id: IDS.clientA,
+        created_by_user_id: PRIMARY_USER.id,
+        performed_on: dateOffset(0),
+        meal_type: "lunch",
+        timezone: tz,
+        notes: "Coach logged client lunch",
+        created_at: nowIso,
+        updated_at: nowIso,
+      },
+    ],
+    "id"
+  );
+
+  await upsertMany(
+    "meal_log_items",
+    [
+      {
+        id: IDS.mealLogItemA,
+        meal_log_id: IDS.mealLogA,
+        created_by_user_id: PRIMARY_USER.id,
+        item_name: "Greek yogurt bowl",
+        quantity: 1,
+        unit: "bowl",
+        calories: 420,
+        protein_g: 31,
+        carbs_g: 44,
+        fat_g: 12,
+        fiber_g: 5,
+        notes: "Seed item",
+        position: 1,
+        is_quick_add: false,
+        created_at: nowIso,
+        updated_at: nowIso,
+      },
+      {
+        id: IDS.mealLogItemB,
+        meal_log_id: IDS.mealLogA,
+        created_by_user_id: PRIMARY_USER.id,
+        item_name: "Quick Add",
+        calories: 180,
+        protein_g: 5,
+        carbs_g: 25,
+        fat_g: 6,
+        is_quick_add: true,
+        position: 2,
+        created_at: nowIso,
+        updated_at: nowIso,
+      },
+      {
+        id: IDS.mealLogItemC,
+        meal_log_id: IDS.mealLogB,
+        created_by_user_id: PRIMARY_USER.id,
+        item_name: "Lean beef + potatoes",
+        quantity: 1,
+        unit: "serving",
+        calories: 710,
+        protein_g: 58,
+        carbs_g: 62,
+        fat_g: 24,
+        fiber_g: 7,
+        notes: "Post-workout dinner",
+        position: 1,
+        is_quick_add: false,
+        created_at: nowIso,
+        updated_at: nowIso,
+      },
+      {
+        id: IDS.mealLogItemD,
+        meal_log_id: IDS.mealLogC,
+        created_by_user_id: PRIMARY_USER.id,
+        item_name: "Client lunch bowl",
+        quantity: 1,
+        unit: "bowl",
+        calories: 640,
+        protein_g: 42,
+        carbs_g: 68,
+        fat_g: 18,
+        fiber_g: 8,
+        notes: "Client compliance logged",
+        position: 1,
+        is_quick_add: false,
+        created_at: nowIso,
+        updated_at: nowIso,
+      },
+      {
+        id: IDS.mealLogItemE,
+        meal_log_id: IDS.mealLogC,
+        created_by_user_id: PRIMARY_USER.id,
+        item_name: "Apple",
+        quantity: 1,
+        unit: "piece",
+        calories: 95,
+        carbs_g: 25,
+        fiber_g: 4,
+        position: 2,
+        is_quick_add: false,
+        created_at: nowIso,
+        updated_at: nowIso,
+      },
+    ],
+    "id"
+  );
+
+  await upsertMany(
+    "meal_item_favorites",
+    [
+      {
+        id: IDS.mealFavA,
+        subject_user_id: PRIMARY_USER.id,
+        item_name: "Seed chicken bowl",
+        quantity: 1,
+        unit: "bowl",
+        calories: 640,
+        protein_g: 46,
+        carbs_g: 70,
+        fat_g: 19,
+        fiber_g: 8,
+        usage_count: 4,
+        last_used_at: nowIso,
+        notes: "Reliable pre-work meal",
+        created_at: nowIso,
+        updated_at: nowIso,
+      },
+      {
+        id: IDS.mealFavB,
+        subject_user_id: PRIMARY_USER.id,
+        item_name: "Yogurt + berries",
+        quantity: 1,
+        unit: "bowl",
+        calories: 360,
+        protein_g: 28,
+        carbs_g: 36,
+        fat_g: 11,
+        fiber_g: 5,
+        usage_count: 2,
+        last_used_at: nowIso,
+        notes: "High-protein snack",
+        created_at: nowIso,
+        updated_at: nowIso,
+      },
+    ],
+    "id"
+  );
+
+  await upsertMany(
+    "client_auth",
+    [
+      {
+        client_id: IDS.clientA,
+        username: `client-${PRIMARY_USER.id.slice(0, 8)}`,
+        password_hash: await bcrypt.hash("ClientSeed@123", 10),
+        status: "active",
+        is_portal_enabled: true,
+        failed_attempts: 0,
+        created_by_user_id: PRIMARY_USER.id,
+        updated_by_user_id: PRIMARY_USER.id,
+        password_updated_at: nowIso,
+        username_updated_at: nowIso,
+        created_at: nowIso,
+        updated_at: nowIso,
+      },
+      {
+        client_id: IDS.clientB,
+        username: `offline-${PRIMARY_USER.id.slice(0, 8)}`,
+        password_hash: await bcrypt.hash("ClientSeed@123", 10),
+        status: "blocked",
+        is_portal_enabled: false,
+        failed_attempts: 3,
+        created_by_user_id: PRIMARY_USER.id,
+        updated_by_user_id: PRIMARY_USER.id,
+        password_updated_at: nowIso,
+        username_updated_at: nowIso,
+        created_at: nowIso,
+        updated_at: nowIso,
+      },
+    ],
+    "client_id"
+  );
+
+  await upsertOne("client_sessions", {
+    id: IDS.clientSessionA,
+    client_id: IDS.clientA,
+    token_hash: `seed-token-${PRIMARY_USER.id}`,
+    expires_at: new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+    last_seen_at: nowIso,
+    created_ip: "127.0.0.1",
+    user_agent: "seed-script",
+    created_at: nowIso,
+    updated_at: nowIso,
+  });
+
+  await upsertMany(
+    "client_feature_access",
+    [
+      ...MODULE_KEYS.map((module_key) => ({
+        client_id: IDS.clientA,
+        module_key,
+        access_level: "enabled",
+        configured_by_user_id: PRIMARY_USER.id,
+        created_at: nowIso,
+        updated_at: nowIso,
+      })),
+      ...MODULE_KEYS.map((module_key) => ({
+        client_id: IDS.clientB,
+        module_key,
+        access_level: module_key === "meal_plan" || module_key === "coach_notes" ? "read_only" : "disabled",
+        configured_by_user_id: PRIMARY_USER.id,
+        created_at: nowIso,
+        updated_at: nowIso,
+      })),
+    ],
+    "client_id,module_key"
+  );
+
+  await upsertMany(
+    "client_tasks",
+    [
+      {
+        id: IDS.clientTaskA,
+        client_id: IDS.clientA,
+        title: "Complete mobility block",
+        description: "10 minutes thoracic + shoulder mobility",
+        due_date: dateOffset(1),
+        status: "pending",
+        created_by_user_id: PRIMARY_USER.id,
+        created_at: nowIso,
+        updated_at: nowIso,
+      },
+      {
+        id: IDS.clientTaskB,
+        client_id: IDS.clientA,
+        title: "Upload weekly check-in",
+        description: "Fill soreness, sleep, stress fields",
+        due_date: dateOffset(0),
+        status: "completed",
+        completed_at: nowIso,
+        created_by_user_id: PRIMARY_USER.id,
+        created_at: nowIso,
+        updated_at: nowIso,
+      },
+      {
+        id: IDS.clientTaskC,
+        client_id: IDS.clientB,
+        title: "Resume walking routine",
+        description: "Target 6k steps for 3 days",
+        due_date: dateOffset(-1),
+        status: "overdue",
+        created_by_user_id: PRIMARY_USER.id,
+        created_at: nowIso,
+        updated_at: nowIso,
+      },
+    ],
+    "id"
+  );
+
+  await upsertMany(
+    "client_steps_logs",
+    [
+      {
+        id: IDS.clientStepsA,
+        client_id: IDS.clientA,
+        performed_on: dateOffset(-2),
+        steps: 7200,
+        notes: "Seed steps day 1",
+        created_by_user_id: PRIMARY_USER.id,
+        created_at: nowIso,
+        updated_at: nowIso,
+      },
+      {
+        id: IDS.clientStepsB,
+        client_id: IDS.clientA,
+        performed_on: dateOffset(-1),
+        steps: 8100,
+        notes: "Seed steps day 2",
+        created_by_user_id: PRIMARY_USER.id,
+        created_at: nowIso,
+        updated_at: nowIso,
+      },
+      {
+        id: IDS.clientStepsC,
+        client_id: IDS.clientB,
+        performed_on: dateOffset(-1),
+        steps: 4300,
+        notes: "Paused client baseline",
+        created_by_user_id: PRIMARY_USER.id,
+        created_at: nowIso,
+        updated_at: nowIso,
+      },
+    ],
+    "id"
+  );
+
+  await upsertMany(
+    "client_meal_item_favorites",
+    [
+      {
+        id: IDS.clientMealFavA,
+        client_id: IDS.clientA,
+        item_name: "Client seed yogurt bowl",
+        quantity: 1,
+        unit: "bowl",
+        calories: 420,
+        protein_g: 28,
+        carbs_g: 44,
+        fat_g: 14,
+        fiber_g: 6,
+        usage_count: 2,
+        last_used_at: nowIso,
+        notes: "Post-session snack",
+        created_at: nowIso,
+        updated_at: nowIso,
+      },
+      {
+        id: IDS.clientMealFavB,
+        client_id: IDS.clientB,
+        item_name: "Simple oats bowl",
+        quantity: 1,
+        unit: "bowl",
+        calories: 360,
+        protein_g: 14,
+        carbs_g: 52,
+        fat_g: 9,
+        fiber_g: 8,
+        usage_count: 1,
+        last_used_at: nowIso,
+        notes: "Low-prep fallback",
+        created_at: nowIso,
+        updated_at: nowIso,
+      },
+    ],
+    "id"
+  );
+
+  await upsertMany(
+    "client_checkins",
+    [
+      {
+        id: IDS.clientCheckinA,
+        subject_client_id: IDS.clientA,
+        created_by_user_id: PRIMARY_USER.id,
+        submitted_at: nowIso,
+        status: "reviewed",
+        urgent: false,
+        notes: "Client reported stable recovery",
+        checkin_data: { sleep: 7.3, stress: 3, soreness: 2 },
+        reviewed_at: nowIso,
+        created_at: nowIso,
+        updated_at: nowIso,
+      },
+      {
+        id: IDS.clientCheckinB,
+        subject_client_id: IDS.clientB,
+        created_by_user_id: PRIMARY_USER.id,
+        submitted_at: nowIso,
+        status: "pending",
+        urgent: true,
+        notes: "Client reports recurring lower-back discomfort",
+        checkin_data: { sleep: 6.1, stress: 6, soreness: 7 },
+        created_at: nowIso,
+        updated_at: nowIso,
+      },
+    ],
+    "id"
+  );
+
+  await upsertMany(
+    "coach_notes",
+    [
+      {
+        id: IDS.coachNoteA,
+        client_id: IDS.clientA,
+        coach_id: PRIMARY_USER.id,
+        tag: "programming",
+        title: "Technique priority",
+        content: "Prioritize tempo control during pulling movements.",
+        is_shared_with_linked_user: false,
+        visibility: "private",
+        created_at: nowIso,
+        updated_at: nowIso,
+      },
+      {
+        id: IDS.coachNoteB,
+        client_id: IDS.clientA,
+        coach_id: PRIMARY_USER.id,
+        tag: "nutrition",
+        title: "Meal consistency",
+        content: "Keep lunch timing stable on training days.",
+        is_shared_with_linked_user: true,
+        visibility: "visible_to_client",
+        created_at: nowIso,
+        updated_at: nowIso,
+      },
+    ],
+    "id"
+  );
+
+  await upsertMany(
+    "client_payments",
+    [
+      {
+        id: IDS.clientPaymentA,
+        client_id: IDS.clientA,
+        coach_id: PRIMARY_USER.id,
+        amount: 200,
+        currency: "USD",
+        method: "bank_transfer",
+        payment_date: dateOffset(-10),
+        period_start: dateOffset(-10),
+        period_end: dateOffset(20),
+        status: "paid",
+        notes: "Seed payment record",
+        is_archived: false,
+        created_at: nowIso,
+        updated_at: nowIso,
+      },
+      {
+        id: IDS.clientPaymentB,
+        client_id: IDS.clientB,
+        coach_id: PRIMARY_USER.id,
+        amount: 150,
+        currency: "USD",
+        method: "card",
+        payment_date: dateOffset(-2),
+        period_start: dateOffset(-2),
+        period_end: dateOffset(28),
+        status: "pending",
+        notes: "Awaiting settlement",
+        is_archived: false,
+        created_at: nowIso,
+        updated_at: nowIso,
+      },
+    ],
+    "id"
+  );
+
+  await upsertMany(
+    "meal_groups",
+    [
+      {
+        id: IDS.mealGroupTemplateA,
+        name: "Performance Week Template",
+        description: "7-day high-performance meal structure",
+        start_date: dateOffset(-1),
+        end_date: dateOffset(35),
+        status: "active",
+        notes: "Template used for assignments",
+        owner_user_id: PRIMARY_USER.id,
+        is_snapshot: false,
+        source_group_id: null,
+      },
+      {
+        id: IDS.mealGroupSnapshotA,
+        name: "Assigned Snapshot - Demo Client",
+        description: "Snapshot generated from template",
+        start_date: dateOffset(0),
+        end_date: dateOffset(21),
+        status: "active",
+        notes: "Snapshot copy for assignments",
+        owner_user_id: PRIMARY_USER.id,
+        is_snapshot: true,
+        source_group_id: IDS.mealGroupTemplateA,
+      },
+    ],
+    "id"
+  );
+
+  await upsertMany(
+    "meal_group_plans",
+    DAY_ORDER.flatMap((day) => [
+      {
+        meal_group_id: IDS.mealGroupTemplateA,
+        day_of_week: day,
+        label: DAY_LABELS[day],
+        notes: day === "sun" ? "Higher flexibility day" : null,
+        created_by_user_id: PRIMARY_USER.id,
+      },
+      {
+        meal_group_id: IDS.mealGroupSnapshotA,
+        day_of_week: day,
+        label: DAY_LABELS[day],
+        notes: day === "sun" ? "Snapshot: flexible intake" : null,
+        created_by_user_id: PRIMARY_USER.id,
+      },
+    ]),
+    "meal_group_id,day_of_week"
+  );
+
+  const templatePlansRes = await supabase
+    .from("meal_group_plans")
+    .select("id, day_of_week")
+    .eq("meal_group_id", IDS.mealGroupTemplateA);
+  if (templatePlansRes.error) throw new Error(`[meal_group_plans] ${templatePlansRes.error.message}`);
+  const snapshotPlansRes = await supabase
+    .from("meal_group_plans")
+    .select("id, day_of_week")
+    .eq("meal_group_id", IDS.mealGroupSnapshotA);
+  if (snapshotPlansRes.error) throw new Error(`[meal_group_plans] ${snapshotPlansRes.error.message}`);
+
+  const templateByDay = new Map(templatePlansRes.data?.map((p) => [p.day_of_week, p.id]) || []);
+  const snapshotByDay = new Map(snapshotPlansRes.data?.map((p) => [p.day_of_week, p.id]) || []);
+
+  await upsertMany(
+    "meal_group_items",
+    [
+      {
+        id: IDS.mealGroupItemA,
+        meal_plan_id: ensure(templateByDay.get("mon"), "Missing Monday template meal plan"),
+        type: "breakfast",
+        title: "Template Monday Breakfast",
+        calories: 650,
+        protein_g: 38,
+        carbs_g: 82,
+        fat_g: 18,
+        notes: "Higher carbs for training day",
+        position: 1,
+        created_by_user_id: PRIMARY_USER.id,
+      },
+      {
+        id: IDS.mealGroupItemB,
+        meal_plan_id: ensure(templateByDay.get("mon"), "Missing Monday template meal plan"),
+        type: "lunch",
+        title: "Template Monday Lunch",
+        calories: 780,
+        protein_g: 48,
+        carbs_g: 90,
+        fat_g: 22,
+        notes: null,
+        position: 2,
+        created_by_user_id: PRIMARY_USER.id,
+      },
+      {
+        id: IDS.mealGroupItemC,
+        meal_plan_id: ensure(templateByDay.get("tue"), "Missing Tuesday template meal plan"),
+        type: "dinner",
+        title: "Template Tuesday Dinner",
+        calories: 740,
+        protein_g: 46,
+        carbs_g: 76,
+        fat_g: 24,
+        notes: null,
+        position: 1,
+        created_by_user_id: PRIMARY_USER.id,
+      },
+      {
+        id: IDS.mealGroupItemD,
+        meal_plan_id: ensure(snapshotByDay.get("mon"), "Missing Monday snapshot meal plan"),
+        type: "breakfast",
+        title: "Snapshot Monday Breakfast",
+        calories: 620,
+        protein_g: 36,
+        carbs_g: 78,
+        fat_g: 17,
+        notes: "Adjusted from template",
+        position: 1,
+        created_by_user_id: PRIMARY_USER.id,
+      },
+      {
+        id: IDS.mealGroupItemE,
+        meal_plan_id: ensure(snapshotByDay.get("mon"), "Missing Monday snapshot meal plan"),
+        type: "protein_drink",
+        title: "Snapshot Post-Workout Shake",
+        calories: 280,
+        protein_g: 34,
+        carbs_g: 24,
+        fat_g: 6,
+        notes: null,
+        position: 2,
+        created_by_user_id: PRIMARY_USER.id,
+      },
+    ],
+    "id"
+  );
+
+  await upsertMany(
+    "meal_group_assignments",
+    [
+      {
+        id: IDS.mealGroupAssignUserA,
+        template_group_id: IDS.mealGroupTemplateA,
+        meal_group_id: IDS.mealGroupSnapshotA,
+        subject_user_id: PRIMARY_USER.id,
+        assigned_by_user_id: PRIMARY_USER.id,
+        start_date: dateOffset(0),
+        end_date: dateOffset(21),
+        status: "active",
+        notes: "Seed assignment to self",
+      },
+      {
+        id: IDS.mealGroupAssignClientA,
+        template_group_id: IDS.mealGroupTemplateA,
+        meal_group_id: IDS.mealGroupSnapshotA,
+        subject_client_id: IDS.clientA,
+        assigned_by_user_id: PRIMARY_USER.id,
+        start_date: dateOffset(0),
+        end_date: dateOffset(21),
+        status: "paused",
+        notes: "Seed assignment to client",
+      },
+    ],
+    "id"
+  );
+
+  await upsertMany(
+    "tickets",
+    [
+      {
+        id: IDS.ticketA,
+        user_id: PRIMARY_USER.id,
+        title: "Add cable row alternatives",
+        description: "Please add more horizontal pull alternatives for limited-equipment gyms.",
+        category: "exercise_request",
+        status: "open",
+        is_public: true,
+        upvotes: 0,
+        metadata: { seeded: true },
+        admin_notes: null,
+        created_at: nowIso,
+        updated_at: nowIso,
+      },
+      {
+        id: IDS.ticketB,
+        user_id: MEMBER_USER.id,
+        title: "Progress page load optimization",
+        description: "Progress widgets should render faster on low-end mobile devices.",
+        category: "feature_request",
+        status: "in_progress",
+        is_public: true,
+        upvotes: 0,
+        metadata: { seeded: true },
+        admin_notes: null,
+        created_at: nowIso,
+        updated_at: nowIso,
+      },
+      {
+        id: IDS.ticketC,
+        user_id: PRIMARY_USER.id,
+        title: "Meal diary quick-add validation",
+        description: "Quick add should reject negative calorie values consistently.",
+        category: "bug_report",
+        status: "resolved",
+        is_public: false,
+        upvotes: 0,
+        metadata: { seeded: true },
+        admin_notes: "Validation guard added in seed baseline",
+        created_at: nowIso,
+        updated_at: nowIso,
+      },
+    ],
+    "id"
+  );
+
+  await upsertMany(
+    "ticket_comments",
+    [
+      {
+        id: IDS.ticketCommentA,
+        ticket_id: IDS.ticketA,
+        user_id: PRIMARY_USER.id,
+        content: "This would help progression on pull-focused days.",
+        created_at: nowIso,
+      },
+      {
+        id: IDS.ticketCommentB,
+        ticket_id: IDS.ticketA,
+        user_id: MEMBER_USER.id,
+        content: "Agree. Also useful for home-gym substitutions.",
+        created_at: nowIso,
+      },
+      {
+        id: IDS.ticketCommentC,
+        ticket_id: IDS.ticketB,
+        user_id: PRIMARY_USER.id,
+        content: "Loading skeletons plus lighter queries should solve most lag.",
+        created_at: nowIso,
+      },
+    ],
+    "id"
+  );
+
+  await upsertMany(
+    "ticket_upvotes",
+    [
+      { ticket_id: IDS.ticketA, user_id: PRIMARY_USER.id, created_at: nowIso },
+      { ticket_id: IDS.ticketA, user_id: MEMBER_USER.id, created_at: nowIso },
+      { ticket_id: IDS.ticketB, user_id: PRIMARY_USER.id, created_at: nowIso },
+    ],
+    "ticket_id,user_id"
+  );
+
+  await upsertOne(
+    "account_deletion_requests",
+    {
+      id: IDS.accountDeletion,
+      user_id: PRIMARY_USER.id,
+      reason: "seed_test",
+      status: "restored",
+      requested_at: nowIso,
+      deleted_at: nowIso,
+      recoverable_until: new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+      restored_at: nowIso,
+      finalized_at: nowIso,
+      metadata: { seeded: true },
+      updated_at: nowIso,
+    },
+    "user_id"
+  );
+
+  console.log("Seed complete.");
+  console.log(`Primary User: ${PRIMARY_USER.email} / ${PRIMARY_USER.password}`);
+  console.log(`Member User: ${MEMBER_USER.email} / ${MEMBER_USER.password}`);
+}
+
+run().catch((error) => {
+  console.error("Seed failed:", error);
   process.exit(1);
 });

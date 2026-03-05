@@ -3,71 +3,9 @@
 import { createClient } from "@/lib/supabase/server";
 import { runTrackedAction } from "@/lib/events/dispatcher";
 import { revalidatePath } from "next/cache";
-import { NutritionProgram, NutritionMeal, ProgramSummary } from "@/types/nutrition";
-
-const PROGRAMS_PAGE_SIZE = 24;
-
-export type NutritionProgramsPage = {
-    data: NutritionProgram[];
-    nextPage?: number;
-    total: number;
-};
+import { NutritionMeal, ProgramSummary } from "@/types/nutrition";
 
 // --- PROGRAMS ---
-
-export async function getPrograms(): Promise<NutritionProgram[]> {
-    return runTrackedAction({
-        eventName: "nutrition.programs.read",
-        action: async () => {
-            const supabase = await createClient();
-            const { data } = await supabase
-                .from("meal_plans")
-                .select("*")
-                .order("start_date", { ascending: false });
-            return data || [];
-        },
-    });
-}
-
-export async function getProgramsPage({
-    pageParam = 0,
-    search = "",
-}: {
-    pageParam?: number;
-    search?: string;
-}): Promise<NutritionProgramsPage> {
-    return runTrackedAction({
-        eventName: "nutrition.programs.page.read",
-        payload: { page: pageParam, search: search || null },
-        action: async () => {
-    const supabase = await createClient();
-
-    const from = pageParam * PROGRAMS_PAGE_SIZE;
-    const to = from + PROGRAMS_PAGE_SIZE - 1;
-    const normalized = search.trim();
-
-    let query = supabase
-        .from("meal_plans")
-        .select("id, user_id, name, description, notes, start_date, end_date, is_public, status, created_at", { count: "exact" })
-        .order("start_date", { ascending: false })
-        .range(from, to);
-
-    if (normalized) {
-        query = query.or(`name.ilike.%${normalized}%,status.ilike.%${normalized}%`);
-    }
-
-    const { data, error, count } = await query;
-    if (error) throw new Error(error.message);
-
-    const rows = (data || []) as NutritionProgram[];
-    return {
-        data: rows,
-        nextPage: rows.length === PROGRAMS_PAGE_SIZE ? pageParam + 1 : undefined,
-        total: count || 0,
-    };
-        },
-    });
-}
 
 // PERFORMANCE FIX: Lean query for dropdowns
 export async function getProgramOptions(): Promise<ProgramSummary[]> {
@@ -80,76 +18,6 @@ export async function getProgramOptions(): Promise<ProgramSummary[]> {
                 .select("id, name")
                 .order("start_date", { ascending: false });
             return data || [];
-        },
-    });
-}
-
-export async function createNutritionProgram(formData: FormData) {
-    return runTrackedAction({
-        eventName: "nutrition.program.create",
-        payload: { name: formData.get("name") as string },
-        action: async () => {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-
-    if (!user) throw new Error("Unauthorized");
-
-    const programData = {
-        user_id: user.id,
-        name: formData.get("name") as string,
-        description: (formData.get("description") as string) || null,
-        notes: (formData.get("notes") as string) || null,
-        start_date: formData.get("start_date") as string,
-        end_date: formData.get("end_date") as string,
-        is_public: formData.get("is_public") === "on",
-        status: 'active' // Default status
-    };
-
-    const { error } = await supabase.from("meal_plans").insert(programData);
-    if (error) throw new Error(error.message);
-
-    revalidatePath("/nutrition");
-        },
-    });
-}
-
-export async function updateNutritionProgram(formData: FormData, programId: string) {
-    return runTrackedAction({
-        eventName: "nutrition.program.update",
-        payload: { program_id: programId },
-        action: async () => {
-    const supabase = await createClient();
-
-    const updates = {
-        name: formData.get("name") as string,
-        description: formData.get("description") as string,
-        notes: formData.get("notes") as string,
-        start_date: formData.get("start_date") as string,
-        end_date: formData.get("end_date") as string,
-        is_public: formData.get("is_public") === "on",
-    };
-
-    const { error } = await supabase
-        .from("meal_plans")
-        .update(updates)
-        .eq("id", programId);
-
-    if (error) throw new Error(error.message);
-    
-    revalidatePath("/nutrition");
-    revalidatePath(`/nutrition/program/${programId}`);
-        },
-    });
-}
-
-export async function deleteProgram(id: string) {
-    return runTrackedAction({
-        eventName: "nutrition.program.delete",
-        payload: { program_id: id },
-        action: async () => {
-            const supabase = await createClient();
-            await supabase.from("meal_plans").delete().eq("id", id);
-            revalidatePath("/nutrition");
         },
     });
 }
@@ -175,72 +43,6 @@ export async function updateProgramNotes(programId: string, notes: string) {
             const supabase = await createClient();
             await supabase.from("meal_plans").update({ notes }).eq("id", programId);
             revalidatePath(`/nutrition/program/${programId}`);
-        },
-    });
-}
-
-export async function duplicateProgram(programId: string) {
-    return runTrackedAction({
-        eventName: "nutrition.program.duplicate",
-        payload: { program_id: programId },
-        action: async () => {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error("Unauthorized");
-
-    // 1. Fetch Original
-    const { data: original } = await supabase
-        .from("meal_plans")
-        .select("*")
-        .eq("id", programId)
-        .single();
-
-    if (!original) throw new Error("Program not found");
-
-    // 2. Create Copy
-    const { data: newProgram, error: progError } = await supabase
-        .from("meal_plans")
-        .insert({
-            user_id: user.id,
-            name: `Copy of ${original.name}`,
-            description: original.description,
-            notes: original.notes,
-            start_date: original.start_date,
-            end_date: original.end_date,
-            status: 'draft',
-            is_public: false
-        })
-        .select()
-        .single();
-
-    if (progError) throw new Error(progError.message);
-
-    // 3. Fetch Meals
-    const { data: meals } = await supabase
-        .from("meal_plan_meals")
-        .select("*")
-        .eq("program_id", programId);
-
-    // 4. Bulk Insert Meals
-    if (meals && meals.length > 0) {
-        const newMeals = meals.map(m => ({
-            program_id: newProgram.id,
-            meal_type: m.meal_type,
-            food_name: m.food_name,
-            calories: m.calories,
-            protein_g: m.protein_g,
-            carbs_g: m.carbs_g,
-            fats_g: m.fats_g,
-            instructions: m.instructions,
-            alternatives: m.alternatives,
-            position: m.position
-        }));
-
-        const { error: mealError } = await supabase.from("meal_plan_meals").insert(newMeals);
-        if (mealError) throw new Error(mealError.message);
-    }
-
-    revalidatePath("/nutrition");
         },
     });
 }

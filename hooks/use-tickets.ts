@@ -11,7 +11,7 @@ import {
 
 import {
   createTicketAction,
-  getTicketByIdAction,
+  getTicketDetailAction,
   getTicketsAction,
   toggleUpvoteTicketAction,
   type TicketCategory,
@@ -36,7 +36,7 @@ import {
 
 export type { TicketScope, TicketSortBy, SortOrder };
 
-export function buildTicketsQueryOptions(params: UseTicketsParams) {
+function buildTicketsQueryOptions(params: UseTicketsParams) {
   return {
     queryKey: ticketKeys.list(params) as QueryKey,
     queryFn: () =>
@@ -127,7 +127,7 @@ export function useAdminTickets(params: UseAdminTicketsParams) {
 export function useTicketDetail(ticketId: string) {
   return useQuery({
     queryKey: ticketKeys.detail(ticketId),
-    queryFn: () => getTicketByIdAction(ticketId),
+    queryFn: () => getTicketDetailAction(ticketId),
     enabled: Boolean(ticketId),
     staleTime: 30_000,
     gcTime: 5 * 60_000,
@@ -250,12 +250,4 @@ export function useTicketMutations() {
 
 export function useCreateTicket() {
   return useTicketMutations().createTicket;
-}
-
-export function useToggleUpvote() {
-  return useTicketMutations().toggleUpvote;
-}
-
-export function useUpdateTicketStatus() {
-  return useTicketMutations().updateAdminStatus;
 }

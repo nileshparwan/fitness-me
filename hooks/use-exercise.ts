@@ -1,45 +1,16 @@
 "use client";
 
-import { useInfiniteQuery, useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getExercises, createExercise, updateExercise, deleteExercise } from "@/app/actions/exercises";
 import { ExerciseFormValues } from "@/lib/validations/exercise";
 import { toast } from "sonner"; 
-import { createClient } from "@/lib/supabase/client";
 
 // Centralized keys ensure consistency across your app
 const exerciseKeys = {
   all: ["exercises"] as const,
-  list: (search?: string) => [...exerciseKeys.all, "list", { search }] as const,
   infinite: (search?: string, category?: string) =>
     [...exerciseKeys.all, "infinite", { search, category }] as const,
 };
-
-export function useExercises(search?: string) {
-  const supabase = createClient();
-
-  return useQuery({
-    // UPDATE: specific scope for simple lists
-    queryKey: exerciseKeys.list(search),
-    queryFn: async () => {
-      let query = supabase
-        .from("exercise_catalog")
-        .select("*")
-        .order("name");
-
-      if (search) {
-        // Safe search syntax for array columns
-        query = query.or(`name.ilike.%${search}%,aliases.cs.{"${search}"}`);
-      }
-
-      const { data, error } = await query;
-      if (error) throw error;
-      
-      // FIX: Always return an array to prevent "map is not a function" errors
-      return data || []; 
-    },
-    staleTime: 1000 * 60 * 60, 
-  });
-}
 
 export function useInfiniteQueryExercises(search: string, category?: string) {
   return useInfiniteQuery({

@@ -15,16 +15,6 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { Database } from "@/types/database";
 
-type TicketStatus = Database["public"]["Enums"]["ticket_status"];
-
-const updateTicketStatusSchema = z.object({
-  ticket_id: z.string().uuid(),
-  new_status: z.enum(["open", "in_progress", "resolved", "closed"]),
-});
-
-const deleteTicketSchema = z.object({
-  ticket_id: z.string().uuid(),
-});
 
 type AdminUsersPage = {
   rows: Array<{
@@ -717,56 +707,6 @@ export async function setAdminUserBlocked(userId: string, blocked: boolean) {
       });
       if (error) throw new Error(error.message);
       return { success: true, message: blocked ? "User blocked." : "User unblocked." };
-    },
-  });
-}
-
-export async function updateTicketStatus(
-  ticketId: string,
-  newStatus: TicketStatus
-) {
-  const payload = updateTicketStatusSchema.parse({
-    ticket_id: ticketId,
-    new_status: newStatus,
-  });
-  return runTrackedAction({
-    eventName: "admin.ticket.status.update",
-    payload: { ticket_id: payload.ticket_id, status: payload.new_status },
-    action: async () => {
-      await requireAdminUser();
-      const admin = createAdminClient();
-
-      const { error } = await admin
-        .from("tickets")
-        .update({ status: payload.new_status })
-        .eq("id", payload.ticket_id);
-
-      if (error) throw new Error(error.message);
-
-      revalidatePath("/support");
-      revalidatePath("/admin/tickets");
-      revalidatePath(`/support/${payload.ticket_id}`);
-      return { success: true };
-    },
-  });
-}
-
-export async function deleteTicket(ticketId: string) {
-  const payload = deleteTicketSchema.parse({ ticket_id: ticketId });
-  return runTrackedAction({
-    eventName: "admin.ticket.delete",
-    payload: { ticket_id: payload.ticket_id },
-    action: async () => {
-      await requireAdminUser();
-      const admin = createAdminClient();
-
-      const { error } = await admin.from("tickets").delete().eq("id", payload.ticket_id);
-      if (error) throw new Error(error.message);
-
-      revalidatePath("/support");
-      revalidatePath("/admin/tickets");
-      revalidatePath(`/support/${payload.ticket_id}`);
-      return { success: true };
     },
   });
 }

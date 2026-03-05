@@ -200,8 +200,13 @@ export async function createWorkoutAction(data: WorkoutActionInput) {
   // A. Insert Parent Workout
   const workoutPayload: WorkoutInsert = {
     user_id: user.id,
+    created_by_user_id: user.id,
+    subject_user_id: user.id,
+    subject_client_id: null,
     name: data.name,
     date: data.date.toISOString(),
+    performed_on: data.date.toISOString().slice(0, 10),
+    session_slot: "other",
     sport_type: data.sport_type || null,
     location: data.location || null,
     perceived_exertion: data.perceived_exertion ?? null,
@@ -260,7 +265,10 @@ export async function updateWorkoutAction(id: string, data: Partial<WorkoutActio
   // A. Update Header
   const updateData: Database['public']['Tables']['training_sessions']['Update'] = {};
   if (data.name) updateData.name = data.name;
-  if (data.date) updateData.date = data.date.toISOString();
+  if (data.date) {
+    updateData.date = data.date.toISOString();
+    updateData.performed_on = data.date.toISOString().slice(0, 10);
+  }
   if (data.sport_type !== undefined) updateData.sport_type = data.sport_type || null;
   if (data.location !== undefined) updateData.location = data.location || null;
   if (data.perceived_exertion !== undefined) updateData.perceived_exertion = data.perceived_exertion;

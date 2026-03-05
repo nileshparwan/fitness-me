@@ -32,7 +32,8 @@ export const goalsSchema = z.object({
   target_body_fat_percent: z.number().min(0).max(100).optional().nullable(),
   target_date: z.string().optional().nullable(),
   custom_description: z.string().max(500).optional().nullable(),
-  status: z.enum(["active", "paused", "completed", "cancelled"]).optional().nullable(),
+  // Keep aligned with DB check constraint (goals_status_check)
+  status: z.enum(["active", "completed"]).optional().nullable(),
   weekly_workouts: z.number().min(0).max(21),
   daily_calories: z.number().min(500),
   protein_target: z.number().min(0),

@@ -8,6 +8,8 @@ type RoleNavContext = {
 
 const AUTH_ONLY_PREFIXES = [
   "/dashboard",
+  "/coach",
+  "/clients",
   "/workouts",
   "/programs",
   "/exercises",
@@ -21,6 +23,8 @@ const AUTH_ONLY_PREFIXES = [
 
 const USER_PREFIXES = [
   "/dashboard",
+  "/coach",
+  "/clients",
   "/workouts",
   "/programs",
   "/exercises",
@@ -106,6 +110,8 @@ export function getSidebarSectionsForRole(context: RoleNavContext): SidebarSecti
               { title: "Nutrition", href: "/admin/nutrition", icon: "nutrition" },
               { title: "Analytics", href: "/admin/analytics", icon: "trend" },
               { title: "Tickets", href: "/admin/tickets", icon: "support" },
+              { title: "Support", href: "/admin/support", icon: "support" },
+              { title: "System", href: "/admin/system", icon: "settings" },
               { title: "Settings", href: "/admin/settings", icon: "settings" },
             ],
           },
@@ -128,8 +134,33 @@ export function getSidebarSectionsForRole(context: RoleNavContext): SidebarSecti
       ],
     },
     {
+      label: "Coach Tools",
+      items: [
+        {
+          title: "Clients",
+          href: "/clients",
+          icon: "users",
+        },
+        {
+          title: "Plan Templates",
+          href: "/coach/plans",
+          icon: "folder",
+        },
+      ],
+    },
+    {
       label: "Nutrition",
-      items: [{ title: "Meal Plans", href: "/nutrition", icon: "nutrition" }],
+      items: [
+        {
+          title: "Diary",
+          href: "/nutrition",
+          icon: "nutrition",
+          children: [
+            { title: "Plans", href: "/nutrition/plans", icon: "folder" },
+            { title: "Meal Groups", href: "/nutrition/meal-groups", icon: "book" },
+          ],
+        },
+      ],
     },
     {
       label: "Insights",

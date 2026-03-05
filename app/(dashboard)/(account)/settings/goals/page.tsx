@@ -4,10 +4,10 @@ import { GoalsForm } from "@/components/settings/goals-form";
 import { Database } from "@/types/database";
 
 type GoalRow = Database['public']['Tables']['fitness_goals']['Row'];
-type GoalStatus = "active" | "paused" | "completed" | "cancelled";
+type GoalStatus = "active" | "completed";
 
 const normalizeGoalStatus = (status: string | null): GoalStatus | null => {
-  if (status === "active" || status === "paused" || status === "completed" || status === "cancelled") {
+  if (status === "active" || status === "completed") {
     return status;
   }
   return null;
@@ -23,9 +23,10 @@ export default async function GoalsPage() {
     .from("fitness_goals")
     .select("*")
     .eq("user_id", user.id)
-    .single();
+    .order("updated_at", { ascending: false })
+    .limit(1);
 
-  const userGoals = goals as GoalRow;
+  const userGoals = (goals?.[0] ?? null) as GoalRow | null;
 
   return (
     <div className="stack-gap">

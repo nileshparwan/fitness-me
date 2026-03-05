@@ -1,6 +1,7 @@
 "use client";
 
 import { Apple, CheckCircle2, Droplets, Moon, Plus, Timer, UtensilsCrossed } from "lucide-react";
+import Link from "next/link";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -252,6 +253,10 @@ export function UserDashboardOverview({
               </Button>
             </div>
 
+            <Button asChild variant="outline" className="w-full">
+              <Link href="/clients">Open Coach Tools</Link>
+            </Button>
+
             <div className="rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
               <div className="mb-1 flex items-center gap-1 text-foreground">
                 <CheckCircle2 className="h-3.5 w-3.5 text-primary" />
@@ -265,4 +270,3 @@ export function UserDashboardOverview({
     </div>
   );
 }
-
