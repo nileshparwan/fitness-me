@@ -32,7 +32,7 @@ export default async function GoalsPage() {
       <div className="flex flex-col gap-1">
         <h3 className="text-2xl font-bold tracking-tight">Fitness Goals</h3>
         <p className="text-muted-foreground text-sm">
-          Set your targets to help the AI Coach build your plan.
+          Set your targets to help the AI guidance engine build your plan.
         </p>
       </div>
       <GoalsForm 

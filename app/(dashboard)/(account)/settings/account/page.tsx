@@ -10,11 +10,12 @@ export default async function AccountSettingsPage() {
   } = await supabase.auth.getUser();
 
   if (!user) redirect("/login");
-  const role =
-    typeof user.user_metadata?.role === "string"
-      ? String(user.user_metadata.role).toLowerCase()
-      : "user";
-  const isAdmin = role === "admin";
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .maybeSingle();
+  const isAdmin = profile?.role === "sysadmin";
   const providers = Array.isArray(user.app_metadata?.providers)
     ? (user.app_metadata.providers as unknown[])
         .filter((entry): entry is string => typeof entry === "string")

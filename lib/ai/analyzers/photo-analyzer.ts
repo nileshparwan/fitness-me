@@ -11,7 +11,7 @@ const physiqueAnalysisSchema = z.object({
     lagging: z.array(z.string()).describe("List of muscle groups that could use more focus."),
   }),
   postureAssessment: z.string().describe("Brief check on posture (e.g., rounded shoulders, anterior pelvic tilt)."),
-  visualFeedback: z.string().describe("Encouraging, professional coach-style feedback (max 2 sentences)."),
+  visualFeedback: z.string().describe("Encouraging, professional training feedback (max 2 sentences)."),
   muscleMassAnalysis: z.string().describe("Observations about visible muscle definition and symmetry."),
 });
 

@@ -7,7 +7,7 @@ import { Brain, Flame, Timer } from "lucide-react";
 
 type CardioLog = Database['public']['Tables']['cardio_sessions']['Row'];
 
-export function CardioCoach({ logs, birthDate }: { logs: CardioLog[], birthDate?: string | null }) {
+export function CardioGuidance({ logs, birthDate }: { logs: CardioLog[], birthDate?: string | null }) {
   // Ensure we have enough data before calculating
 const insights = logs.length >= 2 ? calculateCardioInsights(logs, birthDate) : null;
 
@@ -24,7 +24,7 @@ if (!insights) return null;
        <CardHeader className="pb-2">
          <div className="flex items-center gap-2 mb-1">
             <div className="p-1.5 bg-blue-500/20 rounded-md"><Brain className="h-4 w-4 text-blue-400" /></div>
-            <span className="text-xs font-bold uppercase tracking-wider text-blue-200">Endurance Coach</span>
+            <span className="text-xs font-bold uppercase tracking-wider text-blue-200">Endurance Guidance</span>
          </div>
          <CardTitle className="text-xl">Training Analysis</CardTitle>
        </CardHeader>

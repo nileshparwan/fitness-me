@@ -30,7 +30,7 @@ type AdminUsersPage = {
   rows: Array<{
     user_id: string;
     email: string | null;
-    role: "admin" | "user";
+    role: Database["public"]["Enums"]["user_role"];
     sessions_count: number;
     meal_plans_count: number;
     goals_count: number;
@@ -51,6 +51,7 @@ type StrengthSetRow = Database["public"]["Tables"]["strength_sets"]["Row"];
 type MealPlanRow = Database["public"]["Tables"]["meal_plans"]["Row"];
 type MealPlanMealRow = Database["public"]["Tables"]["meal_plan_meals"]["Row"];
 type TicketRow = Database["public"]["Tables"]["tickets"]["Row"];
+type AppRole = Database["public"]["Enums"]["user_role"];
 
 async function requireAdminUser() {
   const supabase = await createClient();
@@ -63,16 +64,13 @@ async function requireAdminUser() {
     throw new Error("Unauthorized");
   }
 
-  const appRole =
-    typeof user.app_metadata?.role === "string"
-      ? user.app_metadata.role.toLowerCase()
-      : null;
-  const userRole =
-    typeof user.user_metadata?.role === "string"
-      ? user.user_metadata.role.toLowerCase()
-      : null;
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .maybeSingle();
 
-  if (appRole !== "admin" && userRole !== "admin") {
+  if (profile?.role !== "sysadmin") {
     throw new Error("Unauthorized");
   }
 
@@ -118,9 +116,28 @@ function isUserCurrentlyLoggedIn(lastSignInAt: string | null | undefined) {
   return Date.now() - lastSignIn <= ONLINE_WINDOW_MS;
 }
 
-function resolveUserRole(user: AuthAdminUser): "admin" | "user" {
-  const role = (user.app_metadata?.role || user.user_metadata?.role) === "admin" ? "admin" : "user";
-  return role;
+function resolveUserRole(user: AuthAdminUser): Database["public"]["Enums"]["user_role"] {
+  const role = String(user.app_metadata?.role || user.user_metadata?.role || "").toLowerCase();
+  if (role === "admin" || role === "sysadmin") return "sysadmin";
+  return "user";
+}
+
+async function getProfileRoleMap(userIds: string[]): Promise<Map<string, AppRole>> {
+  const admin = createAdminClient();
+  const uniqueIds = Array.from(new Set(userIds));
+  if (uniqueIds.length === 0) return new Map<string, AppRole>();
+
+  const { data, error } = await admin
+    .from("profiles")
+    .select("id, role")
+    .in("id", uniqueIds);
+  if (error) throw new Error(error.message);
+
+  const map = new Map<string, AppRole>();
+  for (const row of data || []) {
+    map.set(row.id, row.role as AppRole);
+  }
+  return map;
 }
 
 function toIsoDay(value: string | null | undefined): string | null {
@@ -160,9 +177,13 @@ export async function getAdminDashboardStats() {
       if (mealPlansRes.error) throw new Error(mealPlansRes.error.message);
       if (ticketsRes.error) throw new Error(ticketsRes.error.message);
 
+      const roleMap = await getProfileRoleMap(users.map((user) => user.id));
+
       const currentlyLoggedInUsers = users.filter((user) => isUserCurrentlyLoggedIn(user.last_sign_in_at)).length;
       const currentlyLoggedInAdmins = users.filter(
-        (user) => isUserCurrentlyLoggedIn(user.last_sign_in_at) && resolveUserRole(user) === "admin"
+        (user) =>
+          isUserCurrentlyLoggedIn(user.last_sign_in_at) &&
+          (roleMap.get(user.id) ?? resolveUserRole(user)) === "sysadmin"
       ).length;
 
       const actionMap = new Map<string, number>();
@@ -216,6 +237,7 @@ export async function getAdminUsers(search = "", page = 1, pageSize = 100): Prom
   });
 
   if (error) throw new Error(error.message);
+  const roleMap = await getProfileRoleMap((data.users || []).map((user) => user.id));
 
   let users = data.users || [];
   if (search.trim()) {
@@ -223,7 +245,7 @@ export async function getAdminUsers(search = "", page = 1, pageSize = 100): Prom
     users = users.filter((u) => {
       const email = (u.email || "").toLowerCase();
       const id = u.id.toLowerCase();
-      const role = (String(u.app_metadata?.role || u.user_metadata?.role || "user")).toLowerCase();
+      const role = resolveUserRole(u).toLowerCase();
       return email.includes(term) || id.includes(term) || role.includes(term);
     });
   }
@@ -231,7 +253,7 @@ export async function getAdminUsers(search = "", page = 1, pageSize = 100): Prom
   const rows = users.map((u) => ({
     user_id: u.id,
     email: u.email ?? null,
-    role: ((u.app_metadata?.role || u.user_metadata?.role) === "admin" ? "admin" : "user") as "admin" | "user",
+    role: roleMap.get(u.id) ?? resolveUserRole(u),
     sessions_count: 0,
     meal_plans_count: 0,
     goals_count: 0,
@@ -256,6 +278,7 @@ export async function getAdminUserStats(days = 90) {
     action: async () => {
       await requireAdminUser();
       const users = await listAllAuthUsers();
+      const roleMap = await getProfileRoleMap(users.map((user) => user.id));
       const now = Date.now();
       const daysMs = days * 86400000;
       const thirtyMs = 30 * 86400000;
@@ -263,7 +286,9 @@ export async function getAdminUserStats(days = 90) {
       const atRiskDays = 14;
 
       const totalUsers = users.length;
-      const totalAdmins = users.filter((u) => (u.app_metadata?.role || u.user_metadata?.role) === "admin").length;
+      const totalAdmins = users.filter(
+        (u) => (roleMap.get(u.id) ?? resolveUserRole(u)) === "sysadmin"
+      ).length;
       const activeLast30 = users.filter(
         (u) => u.last_sign_in_at && now - new Date(u.last_sign_in_at).getTime() <= thirtyMs
       ).length;
@@ -654,7 +679,10 @@ export async function getAdminSettingsSnapshot() {
   });
 }
 
-export async function updateAdminUserRole(userId: string, role: "admin" | "user") {
+export async function updateAdminUserRole(
+  userId: string,
+  role: Database["public"]["Enums"]["user_role"]
+) {
   return runTrackedAction({
     eventName: "admin.user.role.update",
     payload: { user_id: userId, role },
@@ -662,9 +690,16 @@ export async function updateAdminUserRole(userId: string, role: "admin" | "user"
       await requireAdminUser();
       const admin = createAdminClient();
       const { error } = await admin.auth.admin.updateUserById(userId, {
-        app_metadata: { role },
+        app_metadata: { role: role === "sysadmin" ? "sysadmin" : role },
       });
       if (error) throw new Error(error.message);
+      const { error: profileError } = await admin
+        .from("profiles")
+        .update({
+          role,
+        })
+        .eq("id", userId);
+      if (profileError) throw new Error(profileError.message);
       return { success: true, message: `Role updated to ${role}.` };
     },
   });

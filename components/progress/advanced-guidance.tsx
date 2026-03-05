@@ -13,7 +13,7 @@ interface Props {
   exerciseName: string;
 }
 
-export function AdvancedCoach({ logs, exerciseName }: Props) {
+export function AdvancedGuidance({ logs, exerciseName }: Props) {
   if (!logs || logs.length === 0) return null;
 
   // 1. Sort logs by date (descending)
@@ -68,7 +68,7 @@ export function AdvancedCoach({ logs, exerciseName }: Props) {
                 <Brain className="h-6 w-6 text-indigo-400" />
             </div>
             <div>
-                <CardTitle className="text-lg tracking-wide text-indigo-100">COACH INTELLIGENCE</CardTitle>
+                <CardTitle className="text-lg tracking-wide text-indigo-100">TRAINING INTELLIGENCE</CardTitle>
                 <CardDescription className="text-slate-400">Analysis of recent performance</CardDescription>
             </div>
         </div>

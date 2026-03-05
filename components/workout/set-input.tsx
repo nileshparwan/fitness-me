@@ -91,7 +91,7 @@ export function SetInput({ index, setIndex, control, onRemove }: SetInputProps) 
           <AccordionItem value={`set-advanced-${index}-${setIndex}`} className="border-b-0">
             <AccordionTrigger className="py-1.5 text-xs">Advanced Set Details</AccordionTrigger>
             <AccordionContent>
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-4">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-6">
                 <FormField
                   control={control}
                   name={`exercises.${index}.sets.${setIndex}.rest_seconds`}
@@ -127,6 +127,44 @@ export function SetInput({ index, setIndex, control, onRemove }: SetInputProps) 
                 />
                 <FormField
                   control={control}
+                  name={`exercises.${index}.sets.${setIndex}.rpe`}
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormControl>
+                        <Input
+                          value={field.value ?? ""}
+                          onChange={(e) => field.onChange(e.target.value === "" ? undefined : Number(e.target.value))}
+                          type="number"
+                          min={1}
+                          max={10}
+                          className="h-9 text-xs sm:h-8"
+                          placeholder="RPE"
+                        />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={control}
+                  name={`exercises.${index}.sets.${setIndex}.rir`}
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormControl>
+                        <Input
+                          value={field.value ?? ""}
+                          onChange={(e) => field.onChange(e.target.value === "" ? undefined : Number(e.target.value))}
+                          type="number"
+                          min={0}
+                          max={10}
+                          className="h-9 text-xs sm:h-8"
+                          placeholder="RIR"
+                        />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={control}
                   name={`exercises.${index}.sets.${setIndex}.is_warmup`}
                   render={({ field }) => (
                     <FormItem className="flex h-9 flex-row items-center gap-2 rounded-md border px-2 sm:h-8">
@@ -152,6 +190,36 @@ export function SetInput({ index, setIndex, control, onRemove }: SetInputProps) 
                         />
                       </FormControl>
                       <span className="text-xs text-muted-foreground">Drop Set</span>
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={control}
+                  name={`exercises.${index}.sets.${setIndex}.paused`}
+                  render={({ field }) => (
+                    <FormItem className="flex h-9 flex-row items-center gap-2 rounded-md border px-2 sm:h-8">
+                      <FormControl>
+                        <Checkbox
+                          checked={Boolean(field.value)}
+                          onCheckedChange={(checked) => field.onChange(checked === true)}
+                        />
+                      </FormControl>
+                      <span className="text-xs text-muted-foreground">Paused</span>
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={control}
+                  name={`exercises.${index}.sets.${setIndex}.touch_and_go`}
+                  render={({ field }) => (
+                    <FormItem className="flex h-9 flex-row items-center gap-2 rounded-md border px-2 sm:h-8">
+                      <FormControl>
+                        <Checkbox
+                          checked={Boolean(field.value)}
+                          onCheckedChange={(checked) => field.onChange(checked === true)}
+                        />
+                      </FormControl>
+                      <span className="text-xs text-muted-foreground">Touch & Go</span>
                     </FormItem>
                   )}
                 />

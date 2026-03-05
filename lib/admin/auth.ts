@@ -1,24 +1,21 @@
 import { createClient } from "@/lib/supabase/server";
+import { getRoleContext } from "@/lib/auth/roles";
 
 export async function requireAdmin() {
+  const context = await getRoleContext();
+  if (!context) {
+    throw new Error("Unauthorized");
+  }
+  if (!context.isSysAdmin) {
+    throw new Error("Forbidden");
+  }
+
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-
   if (!user) {
     throw new Error("Unauthorized");
-  }
-
-  const metadataRole =
-    typeof user.user_metadata?.role === "string"
-      ? String(user.user_metadata.role).toLowerCase()
-      : null;
-
-  const allowed = metadataRole === "admin";
-
-  if (!allowed) {
-    throw new Error("Forbidden");
   }
 
   return { supabase, user };

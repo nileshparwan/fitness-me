@@ -45,7 +45,7 @@ export const analyzePhoto = inngest.createFunction(
     //     user_id: userId,
     //     date: new Date().toISOString().split('T')[0], // YYYY-MM-DD
     //     body_fat_percent: analysis.estimatedBodyFat,
-    //     ai_analysis: `${analysis.muscleMassAnalysis}\n\nCoach's Note: ${analysis.visualFeedback}`,
+    //     ai_analysis: `${analysis.muscleMassAnalysis}\n\nGuidance Note: ${analysis.visualFeedback}`,
     //     photo_front_url: imageUrl // Link the photo to the metric entry
     //   }, { onConflict: 'user_id, date' });
 

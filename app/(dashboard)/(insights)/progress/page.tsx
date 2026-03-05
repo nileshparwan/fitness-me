@@ -29,12 +29,12 @@ import { AthleteRadar } from "@/components/progress/athlete-radar";
 
 // CARDIO COMPONENTS
 import { CardioCharts } from "@/components/progress/cardio-charts";
-import { CardioCoach } from "@/components/progress/cardio-coach";
+import { CardioGuidance } from "@/components/progress/cardio-guidance";
 import { CardioAnalytics } from "@/components/progress/cardio-analytics";
 
 import { ProgressCharts } from "@/components/progress/progress-chart";
 import { PhysioChart } from "@/components/progress/physical-chart";
-import { AdvancedCoach } from "@/components/progress/advance-coach";
+import { AdvancedGuidance } from "@/components/progress/advanced-guidance";
 import { CardioInsightsBoard, StrengthInsightsBoard } from "@/components/progress/insights-board";
 import { ExerciseProfileSkeleton, ProgressCoreSkeleton } from "./_components/progress-section-skeletons";
 
@@ -281,7 +281,7 @@ export default function ProgressPage() {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <CardioCoach logs={cardioLogs} birthDate={profile?.birth_date} />
+            <CardioGuidance logs={cardioLogs} birthDate={profile?.birth_date} />
           </div>
 
           <div className="grid grid-cols-1">
@@ -314,7 +314,7 @@ export default function ProgressPage() {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <AdvancedCoach logs={strengthLogs} exerciseName={currentExerciseName} />
+            <AdvancedGuidance logs={strengthLogs} exerciseName={currentExerciseName} />
             <div className="col-span-1 h-full">
               <PersonalRecords logs={strengthLogs} />
             </div>

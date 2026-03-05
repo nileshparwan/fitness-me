@@ -94,7 +94,7 @@ const main = async () => {
     email: ADMIN_EMAIL,
     password: ADMIN_PASSWORD,
     email_confirm: true,
-    user_metadata: { full_name: 'Admin Coach' }
+    user_metadata: { full_name: 'Admin User' }
   });
   if (authError || !auth.user) throw new Error(`Auth failed: ${authError?.message}`);
   const userId = auth.user.id;
@@ -102,7 +102,7 @@ const main = async () => {
 
   await supabase.from('profiles').insert({
     id: userId,
-    display_name: 'Admin Coach',
+    display_name: 'Admin User',
     height: 180,
     birth_date: '1995-01-01',
     gender: 'male',

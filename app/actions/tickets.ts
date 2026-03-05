@@ -240,7 +240,11 @@ export async function listPublicTicketsAction(input: z.input<typeof listSchema>)
   } = await supabase.auth.getUser();
   if (!user) throw new Error("Unauthorized");
 
-  let query = supabase
+  // Use admin client for community board reads after authenticating caller.
+  // This guarantees new authenticated users can always see public tickets,
+  // independent of RLS drift while still enforcing `is_public = true`.
+  const admin = createAdminClient();
+  let query = admin
     .from("tickets")
     .select("*", { count: "exact" })
     .eq("is_public", true);
@@ -431,29 +435,36 @@ export async function getTicketDetailAction(ticketId: string): Promise<TicketDet
   } = await supabase.auth.getUser();
   if (!user) throw new Error("Unauthorized");
 
-  const { data, error } = await supabase
+  const { data: viewerProfile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .maybeSingle();
+  const viewerIsAdmin =
+    viewerProfile?.role === "sysadmin" ||
+    String(user.app_metadata?.role || "").toLowerCase() === "sysadmin" ||
+    String(user.app_metadata?.role || "").toLowerCase() === "admin";
+
+  const admin = createAdminClient();
+  const { data, error } = await admin
     .from("tickets")
     .select("*")
     .eq("id", safeTicketId)
-    .single();
-  if (error || !data) throw new Error(error?.message || "Ticket not found");
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error("Ticket not found or unavailable");
+  if (!data.is_public && data.user_id !== user.id && !viewerIsAdmin) {
+    throw new Error("Ticket not found or unavailable");
+  }
 
   const author = await getAuthorById(data.user_id);
   const upvotedIds = await getViewerUpvotedIds(user.id, [safeTicketId]);
-  const appRole =
-    typeof user.app_metadata?.role === "string"
-      ? user.app_metadata.role.toLowerCase()
-      : null;
-  const userRole =
-    typeof user.user_metadata?.role === "string"
-      ? user.user_metadata.role.toLowerCase()
-      : null;
   return {
     ...(data as TicketRow),
     viewer_has_upvoted: upvotedIds.has(safeTicketId),
     author,
     viewer_user_id: user.id,
-    viewer_is_admin: appRole === "admin" || userRole === "admin",
+    viewer_is_admin: viewerIsAdmin,
   };
     },
   });
@@ -511,15 +522,28 @@ export async function listTicketCommentsAction(ticketId: string): Promise<Ticket
   } = await supabase.auth.getUser();
   if (!user) throw new Error("Unauthorized");
 
-  // Ticket read check via RLS.
-  const { error: ticketError } = await supabase
-    .from("tickets")
-    .select("id")
-    .eq("id", safeTicketId)
-    .single();
-  if (ticketError) throw new Error(ticketError.message);
+  const { data: viewerProfile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .maybeSingle();
+  const viewerIsAdmin =
+    viewerProfile?.role === "sysadmin" ||
+    String(user.app_metadata?.role || "").toLowerCase() === "sysadmin" ||
+    String(user.app_metadata?.role || "").toLowerCase() === "admin";
 
-  const { data, error } = await supabase
+  const admin = createAdminClient();
+  const { data: ticket, error: ticketError } = await admin
+    .from("tickets")
+    .select("id, user_id, is_public")
+    .eq("id", safeTicketId)
+    .maybeSingle();
+  if (ticketError) throw new Error(ticketError.message);
+  if (!ticket || (!ticket.is_public && ticket.user_id !== user.id && !viewerIsAdmin)) {
+    throw new Error("Ticket not found or unavailable");
+  }
+
+  const { data, error } = await admin
     .from("ticket_comments")
     .select("*")
     .eq("ticket_id", safeTicketId)
@@ -551,16 +575,30 @@ export async function createTicketCommentAction(input: z.input<typeof createComm
   } = await supabase.auth.getUser();
   if (!user) throw new Error("Unauthorized");
 
-  // Access check via ticket RLS.
-  const { data: ticketData, error: ticketError } = await supabase
+  const { data: viewerProfile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .maybeSingle();
+  const viewerIsAdmin =
+    viewerProfile?.role === "sysadmin" ||
+    String(user.app_metadata?.role || "").toLowerCase() === "sysadmin" ||
+    String(user.app_metadata?.role || "").toLowerCase() === "admin";
+
+  const admin = createAdminClient();
+  const { data: ticketData, error: ticketError } = await admin
     .from("tickets")
-    .select("id, status")
+    .select("id, status, is_public, user_id")
     .eq("id", payload.ticket_id)
-    .single();
+    .maybeSingle();
   if (ticketError) throw new Error(ticketError.message);
+  if (!ticketData) throw new Error("Ticket not found or unavailable");
+  if (!ticketData.is_public && ticketData.user_id !== user.id && !viewerIsAdmin) {
+    throw new Error("Ticket not found or unavailable");
+  }
   if (ticketData?.status === "closed") throw new Error("This ticket is closed");
 
-  const { error } = await supabase.from("ticket_comments").insert({
+  const { error } = await admin.from("ticket_comments").insert({
     ticket_id: payload.ticket_id,
     user_id: user.id,
     content: payload.content.trim(),

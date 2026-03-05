@@ -30,6 +30,9 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { useInfiniteAdminUsers, useAdminUserStats, useSetAdminUserBlocked, useUpdateAdminUserRole } from "@/hooks/admin/use-admin";
 import { useDebounce } from "@/hooks/use-debounce";
+import { Database } from "@/types/database";
+
+type AppRole = Database["public"]["Enums"]["user_role"];
 
 export default function AdminUsersPage() {
   const [search, setSearch] = useState("");
@@ -68,7 +71,7 @@ export default function AdminUsersPage() {
 
       <section className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6">
         <CompactMetricCard title="Total Users" value={userStats?.total_users ?? 0} isLoading={loadingStats} />
-        <CompactMetricCard title="Admins" value={userStats?.total_admins ?? 0} isLoading={loadingStats} />
+        <CompactMetricCard title="SysAdmins" value={userStats?.total_admins ?? 0} isLoading={loadingStats} />
         <CompactMetricCard title="Active 30d" value={userStats?.active_last_30_days ?? 0} isLoading={loadingStats} />
         <CompactMetricCard title="At Risk 30d" value={userStats?.likely_leaving_30_days ?? 0} isLoading={loadingStats} />
         <CompactMetricCard title="Likely Left 90d" value={userStats?.likely_left_90_days ?? 0} isLoading={loadingStats} />
@@ -130,14 +133,14 @@ export default function AdminUsersPage() {
                     <Select
                       value={row.role}
                       disabled={isPending}
-                      onValueChange={(value) => mutateRole({ userId: row.user_id, role: value as "admin" | "user" })}
+                      onValueChange={(value) => mutateRole({ userId: row.user_id, role: value as AppRole })}
                     >
                       <SelectTrigger className="h-8 w-[110px]">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="user">User</SelectItem>
-                        <SelectItem value="admin">Admin</SelectItem>
+                        <SelectItem value="sysadmin">SysAdmin</SelectItem>
                       </SelectContent>
                     </Select>
                   </TableCell>
@@ -162,7 +165,7 @@ export default function AdminUsersPage() {
                     </div>
                   </TableCell>
                   <TableCell>
-                    {row.role === "user" ? (
+                    {row.role !== "sysadmin" ? (
                       <Switch
                         checked={row.is_blocked}
                         disabled={blockingPending}

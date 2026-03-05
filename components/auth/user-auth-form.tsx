@@ -8,6 +8,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
+import { checkAuthUserExistsAction } from "@/app/actions/auth";
 
 import { cn } from "@/utils";
 import { Button } from "@/components/ui/button";
@@ -21,27 +22,32 @@ interface UserAuthFormProps extends React.HTMLAttributes<HTMLDivElement> {
   type: "login" | "register";
 }
 
-// 1. Define a "Superset" type that includes ALL possible fields
-type FormData = z.infer<typeof registerSchema>;
+const authFormSchema = loginSchema.extend({
+  username: z.string().optional(),
+});
+type FormData = z.infer<typeof authFormSchema>;
 
 export function UserAuthForm({ className, type, ...props }: UserAuthFormProps) {
   const [isLoading, setIsLoading] = React.useState<boolean>(false);
   const router = useRouter();
   const supabase = createClient();
 
-  // 2. Select the schema based on type
-  const schema = type === "login" ? loginSchema : registerSchema;
-
-  // 3. Initialize Form with the Superset type <FormData>
-  // We explicitly cast the resolver to avoid the strict type mismatch error
+  // 2. Initialize form with superset schema; mode-specific validation is done in onSubmit.
   const form = useForm<FormData>({
-    resolver: zodResolver(schema) as any, 
+    resolver: zodResolver(authFormSchema),
     defaultValues: {
       email: "",
       password: "",
-      username: "", 
+      username: "",
     },
   });
+
+  React.useEffect(() => {
+    if (typeof window === "undefined") return;
+    const emailParam = new URLSearchParams(window.location.search).get("email") ?? "";
+    if (!emailParam) return;
+    form.setValue("email", emailParam, { shouldDirty: false });
+  }, [form]);
 
   // 4. Submit Handler
   async function onSubmit(data: FormData) {
@@ -49,25 +55,50 @@ export function UserAuthForm({ className, type, ...props }: UserAuthFormProps) {
 
     try {
       if (type === "register") {
-        const { error } = await supabase.auth.signUp({
-          email: data.email,
-          password: data.password,
+        const parsed = registerSchema.parse(data);
+        const username = parsed.username.trim() || parsed.email.split("@")[0];
+
+        const { data: signUpData, error } = await supabase.auth.signUp({
+          email: parsed.email,
+          password: parsed.password,
           options: {
             data: {
-              display_name: data.username,
+              display_name: username,
+              full_name: username,
+              role: "user",
               has_password: true,
               password_configured_at: new Date().toISOString(),
             },
-            emailRedirectTo: `${window.location.origin}/api/auth/callback`,
+            emailRedirectTo: `${window.location.origin}/api/auth/callback?intent=register&next=/settings/account`,
           },
         });
 
         if (error) throw error;
-        toast.success("Account created! Check your email to confirm.");
+
+        // If email confirmation is enabled, there may be no active session yet.
+        if (!signUpData.session) {
+          toast.success("Registration successful. Verify your email, then continue to account security.");
+          router.push("/login");
+          return;
+        }
+
+        toast.success("Registration successful. Continue to account security.");
+        router.push("/settings/account");
+        router.refresh();
       } else {
+        const parsed = loginSchema.parse(data);
+        const normalizedEmail = parsed.email.trim().toLowerCase();
+
+        const existence = await checkAuthUserExistsAction(normalizedEmail);
+        if (!existence.exists) {
+          toast.info("No account found for this email. Redirecting you to registration.");
+          router.push(`/register?email=${encodeURIComponent(normalizedEmail)}`);
+          return;
+        }
+
         const { error } = await supabase.auth.signInWithPassword({
-          email: data.email,
-          password: data.password,
+          email: normalizedEmail,
+          password: parsed.password,
         });
 
         if (error) throw error;
@@ -92,8 +123,9 @@ export function UserAuthForm({ className, type, ...props }: UserAuthFormProps) {
         router.refresh();
         router.push("/dashboard");
       }
-    } catch (error: any) {
-      toast.error(error.message || "Authentication failed");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Authentication failed";
+      toast.error(message);
     } finally {
       setIsLoading(false);
     }
@@ -105,11 +137,11 @@ export function UserAuthForm({ className, type, ...props }: UserAuthFormProps) {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: `${window.location.origin}/api/auth/callback?next=/dashboard`,
+          redirectTo: `${window.location.origin}/api/auth/callback?next=/dashboard&intent=${type}`,
         },
       });
       if (error) throw error;
-    } catch (error: any) {
+    } catch {
       toast.error("Google sign in failed");
       setIsLoading(false);
     }
@@ -168,6 +200,11 @@ export function UserAuthForm({ className, type, ...props }: UserAuthFormProps) {
             {form.formState.errors.password && (
               <p className="text-sm text-red-500">{form.formState.errors.password.message}</p>
             )}
+            {type === "register" && (
+              <p className="text-xs text-muted-foreground">
+                Use a strong password to protect your training history, health data, and account recovery access.
+              </p>
+            )}
             {type === "login" && (
               <div className="text-right">
                 <Link href="/forgot-password" className="text-xs text-primary hover:underline">
@@ -181,6 +218,24 @@ export function UserAuthForm({ className, type, ...props }: UserAuthFormProps) {
             {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             {type === "login" ? "Sign In" : "Create Account"}
           </Button>
+
+          {type === "login" ? (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isLoading}
+              onClick={() => {
+                const attemptedEmail = form.getValues("email")?.trim();
+                router.push(
+                  attemptedEmail
+                    ? `/register?email=${encodeURIComponent(attemptedEmail)}`
+                    : "/register"
+                );
+              }}
+            >
+              I&apos;m New, Register
+            </Button>
+          ) : null}
         </div>
       </form>
       

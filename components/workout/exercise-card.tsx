@@ -68,9 +68,13 @@ export function ExerciseCard({ index, remove, control }: ExerciseCardProps) {
                 reps: 0,
                 weight: 0,
                 rest_seconds: 90,
+                rpe: undefined,
+                rir: undefined,
                 tempo: "",
                 is_warmup: false,
                 is_dropset: false,
+                paused: false,
+                touch_and_go: false,
                 is_completed: false,
               })
             }
@@ -98,7 +102,7 @@ export function ExerciseCard({ index, remove, control }: ExerciseCardProps) {
                     <Textarea
                       value={field.value ?? ""}
                       onChange={field.onChange}
-                      placeholder="Coach notes (AI populated): strategy, cues, and progression guidance."
+                      placeholder="General notes (AI populated): strategy, cues, and progression guidance."
                       className="min-h-[88px] text-sm"
                     />
                   </FormControl>

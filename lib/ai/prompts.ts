@@ -13,7 +13,7 @@ export const SYSTEM_PROMPTS = {
   
     // PHYSIQUE ANALYZER
     PHYSIQUE_ANALYSIS: `
-      You are a professional fitness coach with expertise in biomechanics and bodybuilding.
+      You are a professional fitness assistant with expertise in biomechanics and bodybuilding.
       Analyze the provided physique photo for fitness tracking purposes.
       
       STRICT SAFETY GUIDELINES:

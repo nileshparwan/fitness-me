@@ -121,9 +121,13 @@ export default function WorkoutDetailPage() {
   const advancedSetDetails = (set: StrengthSetRow) =>
     [
       set.rest_seconds ? `Rest ${set.rest_seconds}s` : null,
+      set.rpe ? `RPE ${set.rpe}` : null,
+      set.rir !== null && set.rir !== undefined ? `RIR ${set.rir}` : null,
       set.tempo ? `Tempo ${set.tempo}` : null,
       set.is_warmup ? "Warm-up" : null,
       set.is_dropset ? "Drop set" : null,
+      set.paused ? "Paused" : null,
+      set.touch_and_go ? "Touch & Go" : null,
     ]
       .filter(Boolean)
       .join(" • ");
@@ -256,6 +260,13 @@ export default function WorkoutDetailPage() {
               <MetricLine icon={Activity} label="Cardio Time" value={formatMetric(totalCardioMinutes, " min")} />
               <MetricLine icon={HeartPulse} label="Calories" value={String(totalCardioCalories || "-")} />
             </div>
+            {(workout.sport_type || workout.location || workout.perceived_exertion) && (
+              <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                {workout.sport_type ? <Badge variant="outline">{workout.sport_type}</Badge> : null}
+                {workout.location ? <Badge variant="outline">{workout.location}</Badge> : null}
+                {workout.perceived_exertion ? <Badge variant="secondary">Session RPE {workout.perceived_exertion}</Badge> : null}
+              </div>
+            )}
 
             <div className="hidden flex-wrap items-center gap-1.5 sm:flex sm:gap-2">
               <Button
@@ -364,14 +375,14 @@ export default function WorkoutDetailPage() {
 
                   {item.sets.some((set) => Boolean(advancedSetDetails(set))) ? (
                     <Accordion type="single" collapsible className="w-full">
-                      <AccordionItem value={`coach-notes-${item.id}`} className="border-b-0">
-                        <AccordionTrigger className="py-2 text-sm">Coach Notes</AccordionTrigger>
+                      <AccordionItem value={`set-guidance-${item.id}`} className="border-b-0">
+                        <AccordionTrigger className="py-2 text-sm">Set Guidance</AccordionTrigger>
                         <AccordionContent>
                           <ul className="list-disc space-y-1 pl-5 text-xs text-muted-foreground">
                             {item.sets
                               .filter((set) => Boolean(advancedSetDetails(set)))
                               .map((set) => (
-                                <li key={`${set.id}-coach`}>
+                                <li key={`${set.id}-guidance`}>
                                   <span className="font-medium text-foreground">Set {set.set_number}:</span>{" "}
                                   {advancedSetDetails(set)}
                                 </li>
