@@ -3,10 +3,10 @@ import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { Database } from "@/types/database";
 
-export type AppRole = Database["public"]["Enums"]["user_role"];
+type AppRole = Database["public"]["Enums"]["user_role"];
 type ProfileRow = Database["public"]["Tables"]["profiles"]["Row"];
 
-export type RoleContext = {
+type RoleContext = {
   userId: string;
   role: AppRole;
   isSysAdmin: boolean;
@@ -81,21 +81,3 @@ export const getRoleContext = cache(async (): Promise<RoleContext | null> => {
     profile,
   };
 });
-
-export async function requireRole(roles: AppRole[]) {
-  const context = await getRoleContext();
-
-  if (!context) {
-    throw new Error("Unauthorized");
-  }
-
-  if (!roles.includes(context.role)) {
-    throw new Error("Forbidden");
-  }
-
-  return context;
-}
-
-export async function requireSysAdmin() {
-  return requireRole(["sysadmin"]);
-}

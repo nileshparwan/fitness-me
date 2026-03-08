@@ -86,7 +86,7 @@ const moduleDefaultAccess: Record<ClientModuleKey, ClientModuleAccessLevel> = {
   tasks: "enabled",
 };
 
-export type CoachClientScope = {
+type CoachClientScope = {
   actorId: string;
   client: Pick<
     Database["public"]["Tables"]["clients"]["Row"],
@@ -139,7 +139,7 @@ async function seedDefaultFeatureAccess(clientId: string, actorId: string) {
   if (error) throw new Error(error.message);
 }
 
-export type ClientPortalSettingsResult = {
+type ClientPortalSettingsResult = {
   client_id: string;
   username: string | null;
   status: Database["public"]["Enums"]["client_portal_auth_status"] | null;

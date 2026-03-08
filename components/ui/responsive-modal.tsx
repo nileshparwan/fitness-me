@@ -172,18 +172,6 @@ function ResponsiveModalHeader({
   );
 }
 
-function ResponsiveModalBody({
-  className,
-  ...props
-}: React.ComponentProps<"div">) {
-  return (
-    <div
-      className={cn(className)}
-      {...props}
-    />
-  );
-}
-
 function ResponsiveModalFooter({
   className,
   ...props
@@ -243,19 +231,6 @@ function ResponsiveModalCloseButton({
     </ResponsiveModalClose>
   );
 }
-
-export {
-  ResponsiveModal,
-  ResponsiveModalTrigger,
-  ResponsiveModalClose,
-  ResponsiveModalContent,
-  ResponsiveModalHeader,
-  ResponsiveModalBody,
-  ResponsiveModalFooter,
-  ResponsiveModalTitle,
-  ResponsiveModalDescription,
-  ResponsiveModalCloseButton,
-};
 
 export const Dialog = ResponsiveModal;
 export const DialogTrigger = ResponsiveModalTrigger;

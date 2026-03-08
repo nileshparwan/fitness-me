@@ -87,7 +87,7 @@ export type SidebarItemConfig = {
   children?: SidebarItemConfig[];
 };
 
-export type SidebarSectionConfig = {
+type SidebarSectionConfig = {
   label: string;
   items: SidebarItemConfig[];
 };
@@ -109,7 +109,6 @@ const USER_WORKSPACE_SECTIONS: SidebarSectionConfig[] = [
     label: "Coach Tools",
     items: [
       { title: "Clients", href: "/clients", icon: "users" },
-      { title: "Plan Templates", href: "/coach/plans", icon: "folder" },
     ],
   },
   {
@@ -189,7 +188,6 @@ const MOBILE_TABS_TRAINING: MobileNavTabConfig[] = [
 
 const MOBILE_TABS_COACH_TOOLS: MobileNavTabConfig[] = [
   { key: "clients", label: "Clients", href: "/clients", icon: "users" },
-  { key: "templates", label: "Templates", href: "/coach/plans", icon: "folder" },
   MOBILE_MENU_TAB,
 ];
 
@@ -206,10 +204,7 @@ function isTrainingPath(pathname: string) {
 }
 
 function isCoachToolsPath(pathname: string) {
-  return (
-    isPrefixMatch(pathname, "/clients") ||
-    isPrefixMatch(pathname, "/coach/plans")
-  );
+  return isPrefixMatch(pathname, "/clients");
 }
 
 function isNutritionPath(pathname: string) {

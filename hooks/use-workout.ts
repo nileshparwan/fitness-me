@@ -10,7 +10,7 @@ import { Database } from "@/types/database";
 type TrainingSessionRow = Database["public"]["Tables"]["training_sessions"]["Row"];
 type StrengthSetId = Pick<Database["public"]["Tables"]["strength_sets"]["Row"], "id">;
 
-export type WorkoutSummary = Pick<
+type WorkoutSummary = Pick<
   TrainingSessionRow,
   "id" | "name" | "status" | "date" | "duration_minutes" | "created_at"
 > & {

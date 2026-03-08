@@ -13,7 +13,7 @@ import {
   type ClientPortalContext,
 } from "@/lib/client-portal/session";
 
-export async function requireClientPortalContext(): Promise<ClientPortalContext> {
+async function requireClientPortalContext(): Promise<ClientPortalContext> {
   const context = await getClientPortalContext();
   if (!context) {
     redirect(CLIENT_PORTAL_LOGIN_PATH);
@@ -42,4 +42,3 @@ export async function requireClientModuleAccess(
     readOnly: !canWriteModule(level),
   };
 }
-

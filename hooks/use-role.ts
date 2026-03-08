@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { Database } from "@/types/database";
 
 type ProfileRow = Database["public"]["Tables"]["profiles"]["Row"];
-export type AppRole = Database["public"]["Enums"]["user_role"];
+type AppRole = Database["public"]["Enums"]["user_role"];
 
 type ClientRoleContext = {
   userId: string;

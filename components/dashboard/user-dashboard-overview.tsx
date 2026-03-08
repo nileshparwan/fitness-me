@@ -104,7 +104,7 @@ function MacroProgress({ metric }: { metric: MacroMetric }) {
   );
 }
 
-export type UserDashboardOverviewProps = {
+type UserDashboardOverviewProps = {
   activity?: ActivityRingMetric[];
   macros?: MacroMetric[];
   workouts?: WorkoutRow[];

@@ -276,7 +276,7 @@ function revalidateClientPortalPaths(clientId: string) {
   revalidatePath(`/clients/${clientId}`);
 }
 
-export type ClientPortalDashboard = {
+type ClientPortalDashboard = {
   client_id: string;
   display_name: string;
   timezone: string;

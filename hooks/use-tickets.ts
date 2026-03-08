@@ -29,12 +29,10 @@ import {
   ticketKeys,
   type AdminTicketListKeyParams as UseAdminTicketsParams,
   type TicketListKeyParams as UseTicketsParams,
-  type TicketScope,
   type TicketSortBy,
-  type SortOrder,
 } from "@/lib/query-keys";
 
-export type { TicketScope, TicketSortBy, SortOrder };
+export type { TicketSortBy };
 
 function buildTicketsQueryOptions(params: UseTicketsParams) {
   return {

@@ -188,7 +188,7 @@ function revalidateCoachPaths(clientId?: string) {
   if (clientId) revalidatePath(`/clients/${clientId}`);
 }
 
-export type ClientRosterRow = ClientRow & {
+type ClientRosterRow = ClientRow & {
   active_assignment: AssignmentRow | null;
   next_session: AssignmentSessionRow | null;
   today_sessions_count: number;

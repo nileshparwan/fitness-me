@@ -28,11 +28,11 @@ export type ClientPortalContext = {
   features: ClientPortalFeatureMap;
 };
 
-export function hashClientSessionToken(token: string) {
+function hashClientSessionToken(token: string) {
   return createHash("sha256").update(token).digest("hex");
 }
 
-export function createClientSessionToken() {
+function createClientSessionToken() {
   return randomBytes(32).toString("base64url");
 }
 
@@ -43,7 +43,7 @@ function defaultFeatureMap(): ClientPortalFeatureMap {
   }, {} as ClientPortalFeatureMap);
 }
 
-export function normalizeAccessLevel(
+function normalizeAccessLevel(
   value: string | null | undefined
 ): ClientModuleAccessLevel {
   if (value && CLIENT_ACCESS_LEVELS.includes(value as ClientModuleAccessLevel)) {
@@ -52,7 +52,7 @@ export function normalizeAccessLevel(
   return "disabled";
 }
 
-export function buildFeatureMap(rows: ClientFeatureAccessRow[]): ClientPortalFeatureMap {
+function buildFeatureMap(rows: ClientFeatureAccessRow[]): ClientPortalFeatureMap {
   const mapped = defaultFeatureMap();
   for (const row of rows) {
     mapped[row.module_key as ClientModuleKey] = normalizeAccessLevel(row.access_level);
@@ -210,4 +210,3 @@ export const getClientPortalContext = cache(async (): Promise<ClientPortalContex
     features: buildFeatureMap((featureRows || []) as ClientFeatureAccessRow[]),
   };
 });
-
