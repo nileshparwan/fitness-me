@@ -13,7 +13,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
+} from "@/components/ui/responsive-modal";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -122,7 +122,7 @@ export function AssignMealGroupDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="rounded-2xl border-border/70 bg-card/95 sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Assign Meal Group</DialogTitle>
           <DialogDescription>Assign a snapshot of {mealGroupName} to a user or client.</DialogDescription>
@@ -132,7 +132,7 @@ export function AssignMealGroupDialog({
           <div className="grid gap-2">
             <Label>Assign To</Label>
             <Select value={selectedTarget} onValueChange={setSelectedTarget}>
-              <SelectTrigger>
+              <SelectTrigger className="rounded-xl border-border/60 bg-muted/20">
                 <SelectValue placeholder="Select user or client" />
               </SelectTrigger>
               <SelectContent>
@@ -148,11 +148,11 @@ export function AssignMealGroupDialog({
           <div className="grid gap-2 md:grid-cols-2">
             <div className="grid gap-2">
               <Label>Start Date</Label>
-              <Input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} />
+              <Input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} className="rounded-xl border-border/60 bg-muted/20" />
             </div>
             <div className="grid gap-2">
               <Label>End Date</Label>
-              <Input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} />
+              <Input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} className="rounded-xl border-border/60 bg-muted/20" />
             </div>
           </div>
 
@@ -162,15 +162,16 @@ export function AssignMealGroupDialog({
               value={notes}
               onChange={(event) => setNotes(event.target.value)}
               placeholder="Optional assignment notes for coach/client context"
+              className="rounded-xl border-border/60 bg-muted/20"
             />
           </div>
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" className="rounded-xl border-border/60" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button onClick={() => void submit()} disabled={mutations.assignGroup.isPending || subjectsQuery.isLoading}>
+          <Button className="accent-strong rounded-xl" onClick={() => void submit()} disabled={mutations.assignGroup.isPending || subjectsQuery.isLoading}>
             {mutations.assignGroup.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
             Assign
           </Button>
@@ -179,4 +180,3 @@ export function AssignMealGroupDialog({
     </Dialog>
   );
 }
-

@@ -1,9 +1,5 @@
-import { ManualNutritionDiary } from "@/components/nutrition/manual-nutrition-diary";
+import { redirect } from "next/navigation";
 
 export default function NutritionDiaryPage() {
-  return (
-    <div className="page-shell">
-      <ManualNutritionDiary />
-    </div>
-  );
+  redirect("/nutrition/dashboard");
 }

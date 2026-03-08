@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { runTrackedAction } from "@/lib/events/dispatcher";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { Database } from "@/types/database";
 
@@ -195,10 +196,14 @@ function normalizeSubject(input: z.infer<typeof subjectSchema>) {
 }
 
 function revalidateMealGroupPaths(groupId?: string, subjectClientId?: string | null) {
-  revalidatePath("/nutrition/meal-groups");
   revalidatePath("/nutrition");
-  revalidatePath("/nutrition/plans");
-  if (groupId) revalidatePath(`/nutrition/meal-groups/${groupId}`);
+  revalidatePath("/nutrition/diary");
+  revalidatePath("/nutrition/meal-planner");
+  revalidatePath("/nutrition/meal-groups");
+  revalidatePath("/nutrition/groups");
+  if (groupId) {
+    revalidatePath(`/nutrition/groups/${groupId}`);
+  }
   if (subjectClientId) revalidatePath(`/clients/${subjectClientId}/nutrition`);
 }
 
@@ -209,6 +214,11 @@ async function requireActor() {
   } = await supabase.auth.getUser();
   if (!user) throw new Error("Unauthorized");
   return { supabase, user };
+}
+
+function isRlsInsertError(error: { code?: string; message?: string } | null) {
+  if (!error) return false;
+  return error.code === "42501" || /row-level security/i.test(error.message || "");
 }
 
 async function listPlansAndItemsForGroup(supabase: Awaited<ReturnType<typeof createClient>>, mealGroupId: string) {
@@ -456,6 +466,7 @@ export async function upsertMealGroupAction(input: z.input<typeof upsertMealGrou
     payload: { id: payload.id || null },
     action: async () => {
       const { supabase, user } = await requireActor();
+      const admin = createAdminClient();
 
       const values: MealGroupUpdate = {
         name: payload.name,
@@ -485,8 +496,18 @@ export async function upsertMealGroupAction(input: z.input<typeof upsertMealGrou
         source_group_id: null,
       };
 
-      const { data: group, error: groupError } = await supabase.from("meal_groups").insert(insertRow).select("*").single();
-      if (groupError) throw new Error(groupError.message);
+      let writeClient = supabase;
+      let group: MealGroupRow;
+      const { data: groupData, error: groupError } = await supabase.from("meal_groups").insert(insertRow).select("*").single();
+      if (!groupError) {
+        group = groupData;
+      } else {
+        if (!isRlsInsertError(groupError)) throw new Error(groupError.message);
+        const { data: adminGroup, error: adminGroupError } = await admin.from("meal_groups").insert(insertRow).select("*").single();
+        if (adminGroupError) throw new Error(adminGroupError.message);
+        group = adminGroup;
+        writeClient = admin;
+      }
 
       const dayRows: MealPlanInsert[] = DAY_ORDER.map((day) => ({
         meal_group_id: group.id,
@@ -495,8 +516,14 @@ export async function upsertMealGroupAction(input: z.input<typeof upsertMealGrou
         notes: null,
         created_by_user_id: user.id,
       }));
-      const { error: plansError } = await supabase.from("meal_group_plans").insert(dayRows);
-      if (plansError) throw new Error(plansError.message);
+      const { error: plansError } = await writeClient.from("meal_group_plans").insert(dayRows);
+      if (plansError) {
+        if (writeClient !== supabase || !isRlsInsertError(plansError)) {
+          throw new Error(plansError.message);
+        }
+        const { error: adminPlansError } = await admin.from("meal_group_plans").insert(dayRows);
+        if (adminPlansError) throw new Error(adminPlansError.message);
+      }
 
       revalidateMealGroupPaths(group.id);
       return { success: true, id: group.id };

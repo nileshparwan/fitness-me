@@ -3,15 +3,13 @@
 import { useState } from "react";
 import { updateMeal } from "@/app/actions/nutrition";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/responsive-modal";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { NutritionMeal } from "@/types/nutrition";
-import { useMediaQuery } from "@/hooks/use-media-query";
 
 interface EditMealDialogProps {
   meal: NutritionMeal;
@@ -20,8 +18,6 @@ interface EditMealDialogProps {
 }
 
 export function EditMealDialog({ meal, open, onOpenChange }: EditMealDialogProps) {
-  const isDesktop = useMediaQuery("(min-width: 768px)");
-
   async function action(formData: FormData) {
     if (!meal.program_id) return;
     await updateMeal(formData, meal.id, meal.program_id);
@@ -61,25 +57,14 @@ export function EditMealDialog({ meal, open, onOpenChange }: EditMealDialogProps
     </form>
   );
 
-  if (isDesktop) {
-    return (
-      <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="sm:max-w-[600px]">
-          <DialogHeader>
-            <DialogTitle>Edit Meal</DialogTitle>
-          </DialogHeader>
-          {FormContent}
-        </DialogContent>
-      </Dialog>
-    );
-  }
-
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="bottom" className="h-[90vh] rounded-t-xl overflow-y-auto">
-        <SheetHeader className="text-left"><SheetTitle>Edit Meal</SheetTitle></SheetHeader>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent size={{ tablet: "lg", desktop: "lg" }} className="overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Edit Meal</DialogTitle>
+        </DialogHeader>
         {FormContent}
-      </SheetContent>
-    </Sheet>
+      </DialogContent>
+    </Dialog>
   );
 }

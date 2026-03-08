@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  keepPreviousData,
   useMutation,
   useQuery,
   useQueryClient,
@@ -18,7 +17,6 @@ import {
   getClientNutritionSummary7dAction,
   getNutritionDiaryDayAction,
   listFavoriteMealItemsAction,
-  listMealPlansAction,
   listMyMealPlanTemplatesAction,
   listRecentMealItemsAction,
   removeMealItemAction,
@@ -28,12 +26,10 @@ import {
   upsertMealPlanAction,
   type ManualDiaryItem,
   type NutritionDiaryDay,
-  type MealPlanStatus,
   type MealType,
 } from "@/app/actions/nutrition-manual";
 import {
   nutritionKeys,
-  type NutritionPlansListParams,
   type NutritionSubject,
 } from "@/lib/query-keys-nutrition";
 
@@ -175,23 +171,6 @@ export function useNutritionDiary(performedOn: string, subject?: NutritionSubjec
       }),
     enabled: Boolean(performedOn),
     staleTime: 20_000,
-    refetchOnWindowFocus: false,
-  });
-}
-
-export function useNutritionPlans(params: NutritionPlansListParams) {
-  return useQuery({
-    queryKey: nutritionKeys.plansList(params),
-    queryFn: () =>
-      listMealPlansAction({
-        page: params.page,
-        page_size: params.pageSize ?? 12,
-        status: params.status ?? "all",
-        search: params.search?.trim() || undefined,
-        subject: params.subject,
-      }),
-    staleTime: 30_000,
-    placeholderData: keepPreviousData,
     refetchOnWindowFocus: false,
   });
 }

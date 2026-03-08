@@ -14,7 +14,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
+} from "@/components/ui/responsive-modal";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -62,11 +62,11 @@ function MacroSliderField({
   onChange: (next: number) => void;
 }) {
   return (
-    <div className="grid gap-2">
+    <div className="grid gap-2 rounded-xl border border-border/60 bg-background/40 p-3">
       <div className="flex items-center justify-between">
         <Label>{label}</Label>
         <Input
-          className="h-8 w-24 text-right"
+          className="h-8 w-24 rounded-lg border-border/60 bg-muted/20 text-right"
           type="number"
           min={0}
           max={max}
@@ -124,7 +124,7 @@ export function MealItemEditorDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
+      <DialogContent className="max-h-[90vh] overflow-y-auto rounded-2xl border-border/70 bg-card/95 sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description || "Configure meal type, calories, macros, and notes."}</DialogDescription>
@@ -134,7 +134,7 @@ export function MealItemEditorDialog({
           <div className="grid gap-2">
             <Label>Meal Type</Label>
             <Select value={type} onValueChange={(value) => setType(value as MealItemType)}>
-              <SelectTrigger>
+              <SelectTrigger className="rounded-xl border-border/60 bg-muted/20">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -149,7 +149,7 @@ export function MealItemEditorDialog({
 
           <div className="grid gap-2">
             <Label>Title</Label>
-            <Input value={itemTitle} onChange={(event) => setItemTitle(event.target.value)} placeholder={suggestedTitle} />
+            <Input value={itemTitle} onChange={(event) => setItemTitle(event.target.value)} placeholder={suggestedTitle} className="rounded-xl border-border/60 bg-muted/20" />
           </div>
 
           <MacroSliderField label="Calories (kcal)" value={calories} max={2000} step={5} onChange={setCalories} />
@@ -182,10 +182,10 @@ export function MealItemEditorDialog({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" className="rounded-xl border-border/60" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button onClick={() => void save()} disabled={pending}>
+          <Button className="accent-strong rounded-xl" onClick={() => void save()} disabled={pending}>
             {pending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
             Save
           </Button>

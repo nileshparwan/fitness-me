@@ -6,8 +6,8 @@ import dynamic from "next/dynamic";
 import { useQuery } from "@tanstack/react-query";
 import { format, parseISO } from "date-fns";
 import { createClient } from "@/lib/supabase/client";
+import { nutritionProgramKeys } from "@/lib/query-keys-nutrition-program";
 import { toast } from "sonner";
-import { useMediaQuery } from "@/hooks/use-media-query"; // Ensure you have this hook
 
 // Actions
 import { 
@@ -27,8 +27,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"; // Import Sheet
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/responsive-modal";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { ArrowLeft, CalendarDays, FileText, MoreHorizontal, Trash2 } from "lucide-react";
 
@@ -55,12 +54,9 @@ export default function ProgramPage({ params }: { params: Promise<{ id: string }
   const [orderedMeals, setOrderedMeals] = useState<NutritionMeal[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
-  // Responsive Check
-  const isDesktop = useMediaQuery("(min-width: 768px)");
-
   // 1. Queries
   const { data: program, isLoading: progLoading, refetch: refetchProg } = useQuery<NutritionProgram | null>({
-    queryKey: ["program-meta", id],
+    queryKey: nutritionProgramKeys.plan(id),
     queryFn: async () => {
       const { data, error } = await supabase
         .from("meal_plans")
@@ -80,13 +76,13 @@ export default function ProgramPage({ params }: { params: Promise<{ id: string }
 });
 
   const { data: meals, refetch: refetchMeals, isLoading: mealsLoading } = useQuery<NutritionMeal[]>({
-    queryKey: ["program-meals", id],
+    queryKey: nutritionProgramKeys.planMeals(id),
     queryFn: () => getProgramMeals(id),
     enabled: !!program 
   });
 
   const { data: allPrograms } = useQuery<ProgramSummary[]>({
-    queryKey: ["program-options"],
+    queryKey: nutritionProgramKeys.planOptions(),
     queryFn: getProgramOptions
   });
 
@@ -299,22 +295,12 @@ export default function ProgramPage({ params }: { params: Promise<{ id: string }
          </DndContext>
       </div>
 
-      {/* --- RESPONSIVE NOTES MODAL --- */}
-      {isDesktop ? (
-        <Dialog open={isNotesOpen} onOpenChange={setIsNotesOpen}>
-          <DialogContent>
-            <DialogHeader><DialogTitle>Program Notes</DialogTitle></DialogHeader>
-            {NotesForm}
-          </DialogContent>
-        </Dialog>
-      ) : (
-        <Sheet open={isNotesOpen} onOpenChange={setIsNotesOpen}>
-          <SheetContent side="bottom" className="h-[80vh] rounded-t-xl px-3 sm:px-4">
-            <SheetHeader className="text-left"><SheetTitle>Program Notes</SheetTitle></SheetHeader>
-            {NotesForm}
-          </SheetContent>
-        </Sheet>
-      )}
+      <Dialog open={isNotesOpen} onOpenChange={setIsNotesOpen}>
+        <DialogContent size={{ tablet: "md", desktop: "lg" }}>
+          <DialogHeader><DialogTitle>Program Notes</DialogTitle></DialogHeader>
+          {NotesForm}
+        </DialogContent>
+      </Dialog>
 
       {selectedIds.length > 0 && (
          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 w-[90%] max-w-lg bg-foreground text-background p-3 rounded-lg shadow-2xl flex items-center justify-between z-50 animate-in slide-in-from-bottom-5 fade-in">

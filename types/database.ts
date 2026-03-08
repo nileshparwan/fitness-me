@@ -2904,7 +2904,17 @@ export type Database = {
         | "post_workout_meal"
         | "dinner"
         | "protein_drink"
-      meal_log_type: "breakfast" | "lunch" | "dinner" | "snacks" | "other"
+      meal_log_type:
+        | "breakfast"
+        | "snack"
+        | "lunch"
+        | "pre_workout_meal"
+        | "post_workout_meal"
+        | "dinner"
+        | "protein_drink"
+        | "water"
+        | "snacks"
+        | "other"
       nutrition_tracking_mode: "macro" | "habit" | "intuitive"
       payment_method: "cash" | "bank_transfer" | "card" | "other"
       payment_status: "pending" | "paid" | "failed" | "refunded"
@@ -3101,7 +3111,18 @@ export const Constants = {
         "dinner",
         "protein_drink",
       ],
-      meal_log_type: ["breakfast", "lunch", "dinner", "snacks", "other"],
+      meal_log_type: [
+        "breakfast",
+        "snack",
+        "lunch",
+        "pre_workout_meal",
+        "post_workout_meal",
+        "dinner",
+        "protein_drink",
+        "water",
+        "snacks",
+        "other",
+      ],
       nutrition_tracking_mode: ["macro", "habit", "intuitive"],
       payment_method: ["cash", "bank_transfer", "card", "other"],
       payment_status: ["pending", "paid", "failed", "refunded"],

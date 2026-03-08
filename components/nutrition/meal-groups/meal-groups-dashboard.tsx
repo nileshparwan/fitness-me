@@ -2,24 +2,15 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-
 import { CalendarRange, Copy, Edit, Loader2, Plus, Search, Trash2, UtensilsCrossed } from "lucide-react";
 import { toast } from "sonner";
 
-import type { MealGroupStatus, MealGroupListRow } from "@/app/actions/meal-groups";
+import type { MealGroupListRow, MealGroupStatus } from "@/app/actions/meal-groups";
 import { AssignMealGroupDialog } from "@/components/nutrition/meal-groups/assign-meal-group-dialog";
-import { MEAL_GROUP_STATUS_LABELS } from "@/components/nutrition/meal-groups/meal-group-types";
+import { MEAL_DAY_LABELS, MEAL_DAY_ORDER, MEAL_GROUP_STATUS_LABELS } from "@/components/nutrition/meal-groups/meal-group-types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/responsive-modal";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -27,6 +18,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { useDebounce } from "@/hooks/use-debounce";
 import { useMealGroupMutations, useMealGroups } from "@/hooks/use-meal-groups";
+import { cn } from "@/utils";
 
 type StatusFilter = "all" | MealGroupStatus;
 
@@ -56,10 +48,28 @@ function formatDateRange(start: string | null, end: string | null) {
   return `${start} → ${end}`;
 }
 
-function statusVariant(status: MealGroupStatus): "secondary" | "default" | "outline" {
-  if (status === "active") return "default";
-  if (status === "archived") return "outline";
-  return "secondary";
+function statusChipStyle(status: MealGroupStatus) {
+  if (status === "active") return "border-chart-2/40 bg-chart-2/15 text-chart-2";
+  if (status === "archived") return "border-chart-4/40 bg-chart-4/15 text-chart-4";
+  return "border-border/60 bg-muted/40 text-muted-foreground";
+}
+
+function DayTabsPreview() {
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {MEAL_DAY_ORDER.map((day, index) => (
+        <span
+          key={day}
+          className={cn(
+            "segmented-tab h-8 min-w-10 px-2 py-1.5 text-[11px]",
+            index === 0 ? "active" : undefined
+          )}
+        >
+          {MEAL_DAY_LABELS[day].slice(0, 3).toUpperCase()}
+        </span>
+      ))}
+    </div>
+  );
 }
 
 export function MealGroupsDashboard() {
@@ -115,156 +125,155 @@ export function MealGroupsDashboard() {
         end_date: draft.end_date || null,
         status: draft.status,
       });
-      toast.success(draft.id ? "Meal group updated." : "Meal group created.");
+      toast.success(draft.id ? "Meal group updated" : "Meal group created");
       setIsGroupDialogOpen(false);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to save meal group.");
+      toast.error(error instanceof Error ? error.message : "Unable to save meal group");
     }
   };
 
   const deleteGroup = async (groupId: string) => {
     try {
       await mutations.deleteGroup.mutateAsync({ meal_group_id: groupId });
-      toast.success("Meal group removed.");
+      toast.success("Meal group removed");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to delete meal group.");
+      toast.error(error instanceof Error ? error.message : "Unable to delete meal group");
     }
   };
 
   const duplicateGroup = async (groupId: string) => {
     try {
       await mutations.duplicateGroup.mutateAsync({ meal_group_id: groupId });
-      toast.success("Meal group duplicated.");
+      toast.success("Meal group duplicated");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to duplicate meal group.");
+      toast.error(error instanceof Error ? error.message : "Unable to duplicate meal group");
     }
   };
 
   return (
-    <div className="space-y-4">
-      <section className="native-surface surface-pad flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h1 className="text-xl font-semibold">Meal Groups</h1>
-          <p className="text-sm text-muted-foreground">
-            Build 7-day manual meal structures, then assign snapshot copies to users or clients.
-          </p>
+    <div className="space-y-4 md:space-y-5">
+      <section className="glass-surface surface-pad space-y-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">Meal Groups</h1>
+            <p className="text-sm text-muted-foreground">Weekly templates with snapshot assignments for users and clients.</p>
+          </div>
+          <Button className="accent-strong rounded-xl" onClick={openCreateDialog}>
+            <Plus className="mr-2 h-4 w-4" />
+            New Group
+          </Button>
         </div>
-        <Button onClick={openCreateDialog}>
-          <Plus className="mr-2 h-4 w-4" />
-          New Meal Group
-        </Button>
-      </section>
 
-      <section className="native-surface surface-pad flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div className="relative w-full md:max-w-sm">
-          <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            className="pl-9"
-            value={search}
-            onChange={(event) => {
-              setSearch(event.target.value);
+        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+          <div className="relative w-full md:max-w-md">
+            <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              className="rounded-xl border-border/60 bg-muted/20 pl-9"
+              value={search}
+              onChange={(event) => {
+                setSearch(event.target.value);
+                setPage(0);
+              }}
+              placeholder="Search meal groups"
+            />
+          </div>
+
+          <Select
+            value={status}
+            onValueChange={(value) => {
+              setStatus(value as StatusFilter);
               setPage(0);
             }}
-            placeholder="Search meal groups"
-          />
+          >
+            <SelectTrigger className="w-full rounded-xl border-border/60 bg-muted/20 md:w-52">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All statuses</SelectItem>
+              <SelectItem value="draft">Draft</SelectItem>
+              <SelectItem value="active">Active</SelectItem>
+              <SelectItem value="archived">Archived</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
-
-        <Select
-          value={status}
-          onValueChange={(value) => {
-            setStatus(value as StatusFilter);
-            setPage(0);
-          }}
-        >
-          <SelectTrigger className="w-full md:w-52">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Statuses</SelectItem>
-            <SelectItem value="draft">Draft</SelectItem>
-            <SelectItem value="active">Active</SelectItem>
-            <SelectItem value="archived">Archived</SelectItem>
-          </SelectContent>
-        </Select>
       </section>
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {query.isLoading && !query.data
-          ? Array.from({ length: 6 }).map((_, index) => <Skeleton key={index} className="h-56 w-full" />)
+          ? Array.from({ length: 6 }).map((_, index) => <Skeleton key={index} className="h-80 w-full rounded-3xl" />)
           : null}
 
         {!query.isLoading && rows.length === 0 ? (
-          <Card className="native-surface md:col-span-2 xl:col-span-3">
-            <CardContent className="flex min-h-48 flex-col items-center justify-center gap-3 text-center">
+          <article className="glass-surface surface-pad md:col-span-2 xl:col-span-3">
+            <div className="flex min-h-52 flex-col items-center justify-center gap-3 text-center">
               <UtensilsCrossed className="h-8 w-8 text-muted-foreground" />
-              <p className="font-medium">No meal groups found.</p>
-              <p className="text-sm text-muted-foreground">Create your first 7-day structure to start assigning meal plans.</p>
-              <Button onClick={openCreateDialog}>Create Meal Group</Button>
-            </CardContent>
-          </Card>
+              <p className="text-lg font-medium">No meal groups found</p>
+              <p className="max-w-lg text-sm text-muted-foreground">Create your first weekly template to assign nutrition structures quickly.</p>
+              <Button className="accent-strong rounded-xl" onClick={openCreateDialog}>Create Meal Group</Button>
+            </div>
+          </article>
         ) : null}
 
         {rows.map((row) => (
-          <Card key={row.id} className="native-surface">
-            <CardHeader className="space-y-2">
+          <article key={row.id} className="glass-surface surface-pad flex flex-col gap-4">
+            <div className="space-y-2">
               <div className="flex items-start justify-between gap-2">
-                <CardTitle className="line-clamp-2 text-base">{row.name}</CardTitle>
-                <Badge variant={statusVariant(row.status)}>{MEAL_GROUP_STATUS_LABELS[row.status]}</Badge>
+                <h3 className="text-xl font-semibold leading-tight">{row.name}</h3>
+                <Badge className={cn("rounded-full border px-3 py-1 text-xs uppercase tracking-[0.12em]", statusChipStyle(row.status))}>
+                  {MEAL_GROUP_STATUS_LABELS[row.status]}
+                </Badge>
               </div>
-              <CardDescription className="line-clamp-2">{row.description || "No description provided."}</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid gap-2 text-sm text-muted-foreground">
-                <div className="flex items-center gap-2">
-                  <CalendarRange className="h-4 w-4" />
-                  <span>{formatDateRange(row.start_date, row.end_date)}</span>
-                </div>
-                <div className="flex gap-4">
-                  <span>{row.plans_count} day plans</span>
-                  <span>{row.assignment_count} assignments</span>
-                </div>
+              <p className="text-sm text-muted-foreground">{row.description || "7-day template structure"}</p>
+              <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                <span className="inline-flex items-center gap-1">
+                  <CalendarRange className="h-3.5 w-3.5" />
+                  {formatDateRange(row.start_date, row.end_date)}
+                </span>
+                <span>{row.plans_count} day plans</span>
+                <span>{row.assignment_count} assignments</span>
               </div>
+            </div>
 
-              <div className="grid grid-cols-2 gap-2">
-                <Button asChild variant="secondary">
-                  <Link href={`/nutrition/meal-groups/${row.id}`}>View</Link>
-                </Button>
-                <Button variant="outline" onClick={() => openEditDialog(row)}>
-                  <Edit className="mr-2 h-4 w-4" />
-                  Edit
-                </Button>
-                <Button variant="outline" onClick={() => void duplicateGroup(row.id)}>
-                  <Copy className="mr-2 h-4 w-4" />
-                  Duplicate
-                </Button>
-                <Button variant="outline" onClick={() => setAssignTarget(row)}>
-                  Assign
-                </Button>
-                <Button className="col-span-2" variant="destructive" onClick={() => void deleteGroup(row.id)}>
-                  <Trash2 className="mr-2 h-4 w-4" />
-                  Delete
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+            <DayTabsPreview />
+
+            <div className="glass-subtle p-3">
+              <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Monday totals preview</p>
+              <p className="mt-1 text-xl font-semibold">Template ready for edits</p>
+              <p className="text-sm text-muted-foreground">Open group to manage meal items, notes, and assignment snapshots.</p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <Button asChild className="rounded-xl accent-strong">
+                <Link href={`/nutrition/groups/${row.id}`}>Open</Link>
+              </Button>
+              <Button variant="outline" className="rounded-xl border-border/60" onClick={() => openEditDialog(row)}>
+                <Edit className="mr-1.5 h-4 w-4" />
+                Edit
+              </Button>
+              <Button variant="outline" className="rounded-xl border-border/60" onClick={() => void duplicateGroup(row.id)}>
+                <Copy className="mr-1.5 h-4 w-4" />
+                Duplicate
+              </Button>
+              <Button variant="outline" className="rounded-xl border-border/60" onClick={() => setAssignTarget(row)}>
+                Assign
+              </Button>
+              <Button className="col-span-2 rounded-xl" variant="destructive" onClick={() => void deleteGroup(row.id)}>
+                <Trash2 className="mr-1.5 h-4 w-4" />
+                Delete
+              </Button>
+            </div>
+          </article>
         ))}
       </section>
 
       {query.data?.total ? (
-        <section className="flex items-center justify-between rounded-xl border p-3 text-sm">
-          <span className="text-muted-foreground">
-            Showing {rows.length} of {query.data.total}
-          </span>
+        <section className="glass-subtle flex items-center justify-between p-3 text-sm">
+          <span className="text-muted-foreground">Showing {rows.length} of {query.data.total}</span>
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" disabled={page === 0} onClick={() => setPage((previous) => Math.max(0, previous - 1))}>
+            <Button variant="outline" size="sm" className="rounded-xl border-border/60" disabled={page === 0} onClick={() => setPage((previous) => Math.max(0, previous - 1))}>
               Previous
             </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={!query.data.has_more}
-              onClick={() => setPage((previous) => previous + 1)}
-            >
+            <Button variant="outline" size="sm" className="rounded-xl border-border/60" disabled={!query.data.has_more} onClick={() => setPage((previous) => previous + 1)}>
               Next
             </Button>
           </div>
@@ -272,43 +281,41 @@ export function MealGroupsDashboard() {
       ) : null}
 
       <Dialog open={isGroupDialogOpen} onOpenChange={setIsGroupDialogOpen}>
-        <DialogContent className="sm:max-w-xl">
+        <DialogContent className="max-h-[92vh] overflow-y-auto rounded-2xl border-border/70 bg-card/95 sm:max-w-xl">
           <DialogHeader>
             <DialogTitle>{draft.id ? "Edit Meal Group" : "Create Meal Group"}</DialogTitle>
-            <DialogDescription>Configure your 7-day template metadata and lifecycle status.</DialogDescription>
+            <DialogDescription>Configure metadata, duration, status, and notes for this weekly template.</DialogDescription>
           </DialogHeader>
-          <div className="grid gap-3 py-2">
-            <div className="grid gap-2">
+
+          <div className="space-y-3 py-1">
+            <div className="space-y-2">
               <Label>Name</Label>
-              <Input value={draft.name} onChange={(event) => setDraft((previous) => ({ ...previous, name: event.target.value }))} />
+              <Input value={draft.name} onChange={(event) => setDraft((previous) => ({ ...previous, name: event.target.value }))} className="rounded-xl border-border/60 bg-muted/20" />
             </div>
-            <div className="grid gap-2">
+            <div className="space-y-2">
               <Label>Description</Label>
-              <Input
-                value={draft.description}
-                onChange={(event) => setDraft((previous) => ({ ...previous, description: event.target.value }))}
-              />
+              <Input value={draft.description} onChange={(event) => setDraft((previous) => ({ ...previous, description: event.target.value }))} className="rounded-xl border-border/60 bg-muted/20" />
             </div>
-            <div className="grid gap-2">
+            <div className="space-y-2">
               <Label>Group Notes</Label>
-              <Textarea value={draft.notes} onChange={(event) => setDraft((previous) => ({ ...previous, notes: event.target.value }))} />
+              <Textarea value={draft.notes} onChange={(event) => setDraft((previous) => ({ ...previous, notes: event.target.value }))} className="min-h-20 rounded-xl border-border/60 bg-muted/20" />
             </div>
 
             <div className="grid gap-3 md:grid-cols-2">
-              <div className="grid gap-2">
+              <div className="space-y-2">
                 <Label>Start Date</Label>
-                <Input type="date" value={draft.start_date} onChange={(event) => setDraft((previous) => ({ ...previous, start_date: event.target.value }))} />
+                <Input type="date" value={draft.start_date} onChange={(event) => setDraft((previous) => ({ ...previous, start_date: event.target.value }))} className="rounded-xl border-border/60 bg-muted/20" />
               </div>
-              <div className="grid gap-2">
+              <div className="space-y-2">
                 <Label>End Date</Label>
-                <Input type="date" value={draft.end_date} onChange={(event) => setDraft((previous) => ({ ...previous, end_date: event.target.value }))} />
+                <Input type="date" value={draft.end_date} onChange={(event) => setDraft((previous) => ({ ...previous, end_date: event.target.value }))} className="rounded-xl border-border/60 bg-muted/20" />
               </div>
             </div>
 
-            <div className="grid gap-2">
+            <div className="space-y-2">
               <Label>Status</Label>
               <Select value={draft.status} onValueChange={(value) => setDraft((previous) => ({ ...previous, status: value as MealGroupStatus }))}>
-                <SelectTrigger>
+                <SelectTrigger className="rounded-xl border-border/60 bg-muted/20">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -319,13 +326,14 @@ export function MealGroupsDashboard() {
               </Select>
             </div>
           </div>
+
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsGroupDialogOpen(false)}>
+            <Button variant="outline" className="rounded-xl border-border/60" onClick={() => setIsGroupDialogOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={() => void saveGroup()} disabled={mutations.upsertGroup.isPending}>
+            <Button className="accent-strong rounded-xl" onClick={() => void saveGroup()} disabled={mutations.upsertGroup.isPending}>
               {mutations.upsertGroup.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              Save
+              Save Group
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -346,4 +354,3 @@ export function MealGroupsDashboard() {
     </div>
   );
 }
-
