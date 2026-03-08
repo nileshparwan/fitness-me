@@ -1559,10 +1559,14 @@ export type Database = {
           id: string
           meal_plan_id: string
           notes: string | null
+          quantity: number | null
+          planned_date: string | null
+          planned_time: string | null
           position: number
           protein_g: number
           title: string
           type: Database["public"]["Enums"]["meal_item_type"]
+          unit: string | null
           updated_at: string
         }
         Insert: {
@@ -1574,10 +1578,14 @@ export type Database = {
           id?: string
           meal_plan_id: string
           notes?: string | null
+          quantity?: number | null
+          planned_date?: string | null
+          planned_time?: string | null
           position?: number
           protein_g?: number
           title: string
           type: Database["public"]["Enums"]["meal_item_type"]
+          unit?: string | null
           updated_at?: string
         }
         Update: {
@@ -1589,10 +1597,14 @@ export type Database = {
           id?: string
           meal_plan_id?: string
           notes?: string | null
+          quantity?: number | null
+          planned_date?: string | null
+          planned_time?: string | null
           position?: number
           protein_g?: number
           title?: string
           type?: Database["public"]["Enums"]["meal_item_type"]
+          unit?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -1656,6 +1668,51 @@ export type Database = {
             columns: ["meal_group_id"]
             isOneToOne: false
             referencedRelation: "meal_groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      meal_group_plan_types: {
+        Row: {
+          created_at: string
+          created_by_user_id: string
+          id: string
+          meal_plan_id: string
+          position: number
+          type: Database["public"]["Enums"]["meal_item_type"]
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by_user_id: string
+          id?: string
+          meal_plan_id: string
+          position: number
+          type: Database["public"]["Enums"]["meal_item_type"]
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by_user_id?: string
+          id?: string
+          meal_plan_id?: string
+          position?: number
+          type?: Database["public"]["Enums"]["meal_item_type"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meal_group_plan_types_created_by_user_id_fkey"
+            columns: ["created_by_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meal_group_plan_types_meal_plan_id_fkey"
+            columns: ["meal_plan_id"]
+            isOneToOne: false
+            referencedRelation: "meal_group_plans"
             referencedColumns: ["id"]
           },
         ]
@@ -1730,6 +1787,7 @@ export type Database = {
           id: string
           item_name: string
           last_used_at: string | null
+          meal_type: Database["public"]["Enums"]["meal_log_type"] | null
           notes: string | null
           protein_g: number | null
           quantity: number | null
@@ -1747,6 +1805,7 @@ export type Database = {
           id?: string
           item_name: string
           last_used_at?: string | null
+          meal_type?: Database["public"]["Enums"]["meal_log_type"] | null
           notes?: string | null
           protein_g?: number | null
           quantity?: number | null
@@ -1764,6 +1823,7 @@ export type Database = {
           id?: string
           item_name?: string
           last_used_at?: string | null
+          meal_type?: Database["public"]["Enums"]["meal_log_type"] | null
           notes?: string | null
           protein_g?: number | null
           quantity?: number | null
@@ -1786,6 +1846,7 @@ export type Database = {
         Row: {
           calories: number | null
           carbs_g: number | null
+          consumed_time: string | null
           created_at: string
           created_by_client_id: string | null
           created_by_user_id: string | null
@@ -1805,6 +1866,7 @@ export type Database = {
         Insert: {
           calories?: number | null
           carbs_g?: number | null
+          consumed_time?: string | null
           created_at?: string
           created_by_client_id?: string | null
           created_by_user_id?: string | null
@@ -1824,6 +1886,7 @@ export type Database = {
         Update: {
           calories?: number | null
           carbs_g?: number | null
+          consumed_time?: string | null
           created_at?: string
           created_by_client_id?: string | null
           created_by_user_id?: string | null
@@ -1864,12 +1927,81 @@ export type Database = {
           },
         ]
       }
+      meal_log_sections: {
+        Row: {
+          created_at: string
+          created_by_user_id: string | null
+          id: string
+          meal_group_id: string
+          meal_type: Database["public"]["Enums"]["meal_log_type"]
+          performed_on: string
+          position: number
+          subject_client_id: string | null
+          subject_user_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by_user_id?: string | null
+          id?: string
+          meal_group_id: string
+          meal_type: Database["public"]["Enums"]["meal_log_type"]
+          performed_on: string
+          position: number
+          subject_client_id?: string | null
+          subject_user_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by_user_id?: string | null
+          id?: string
+          meal_group_id?: string
+          meal_type?: Database["public"]["Enums"]["meal_log_type"]
+          performed_on?: string
+          position?: number
+          subject_client_id?: string | null
+          subject_user_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meal_log_sections_created_by_user_id_fkey"
+            columns: ["created_by_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meal_log_sections_meal_group_id_fkey"
+            columns: ["meal_group_id"]
+            isOneToOne: false
+            referencedRelation: "meal_groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meal_log_sections_subject_client_id_fkey"
+            columns: ["subject_client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meal_log_sections_subject_user_id_fkey"
+            columns: ["subject_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       meal_logs: {
         Row: {
           created_at: string
           created_by_client_id: string | null
           created_by_user_id: string | null
           id: string
+          meal_group_id: string | null
           meal_type: Database["public"]["Enums"]["meal_log_type"]
           notes: string | null
           performed_on: string
@@ -1888,6 +2020,7 @@ export type Database = {
           created_by_client_id?: string | null
           created_by_user_id?: string | null
           id?: string
+          meal_group_id?: string | null
           meal_type: Database["public"]["Enums"]["meal_log_type"]
           notes?: string | null
           performed_on: string
@@ -1906,6 +2039,7 @@ export type Database = {
           created_by_client_id?: string | null
           created_by_user_id?: string | null
           id?: string
+          meal_group_id?: string | null
           meal_type?: Database["public"]["Enums"]["meal_log_type"]
           notes?: string | null
           performed_on?: string
@@ -1932,6 +2066,13 @@ export type Database = {
             columns: ["created_by_user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meal_logs_meal_group_id_fkey"
+            columns: ["meal_group_id"]
+            isOneToOne: false
+            referencedRelation: "meal_groups"
             referencedColumns: ["id"]
           },
           {
