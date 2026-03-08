@@ -16,7 +16,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
+} from "@/components/ui/responsive-modal";
 import { toast } from "sonner";
 import { QRCodeSVG } from "qrcode.react"; 
 
@@ -94,7 +94,7 @@ export function ShareExerciseButton({ exercise }: { exercise: any }) {
           <DialogHeader className="mb-4">
              <DialogTitle>Scan for Instructions</DialogTitle>
           </DialogHeader>
-          <div className="bg-white p-4 rounded-lg shadow-sm">
+          <div className="bg-card p-4 rounded-lg shadow-sm border border-border">
              <QRCodeSVG value={shareUrl} size={180} />
           </div>
           <p className="text-sm text-muted-foreground mt-4">

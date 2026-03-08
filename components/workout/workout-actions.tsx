@@ -10,7 +10,7 @@ import {
     DialogHeader,
     DialogTitle,
     DialogDescription,
-} from "@/components/ui/dialog";
+} from "@/components/ui/responsive-modal";
 import { QRCodeSVG } from "qrcode.react";
 
 // NEW IMPORTS
@@ -86,7 +86,7 @@ export function WorkoutActions({ workout, strengthLogs, cardioLogs, isPublicPage
                     </DialogHeader>
 
                     <div className="space-y-4 p-3 text-center sm:p-2">
-                        <div className="bg-white p-4 rounded-lg shadow-inner border">
+                        <div className="bg-card p-4 rounded-lg shadow-inner border border-border">
                             <QRCodeSVG value={shareUrl} size={150} />
                         </div>
                         <p className="text-xs text-muted-foreground">
