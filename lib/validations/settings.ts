@@ -5,7 +5,6 @@ export const profileSchema = z.object({
   full_name: z.string().min(2).optional(),
   username: z.string().min(3).max(20).optional(),
   bio: z.string().max(160).optional(),
-  website: z.string().url().optional().or(z.literal("")),
   avatar_url: z.string().url().optional(),
 
   height: z.number().min(0).max(300).optional(), // cm

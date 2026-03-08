@@ -42,7 +42,6 @@ export async function updateProfile(data: ProfileFormValues) {
           full_name: parsed.full_name,
           username: parsed.username,
           bio: parsed.bio,
-          website: parsed.website,
           avatar_url: parsed.avatar_url,
           height: parsed.height,
           birth_date: parsed.birth_date,
