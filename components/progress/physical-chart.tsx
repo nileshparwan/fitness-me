@@ -32,10 +32,10 @@ export function PhysioChart({ data }: { data: PhysioPoint[] }) {
             <XAxis dataKey="date" tickFormatter={(val) => format(parseISO(val), "MMM d")} tickLine={false} axisLine={false} style={{ fontSize: '10px' }} />
             
             {/* Left Axis: Strength */}
-            <YAxis yAxisId="left" orientation="left" stroke="hsl(var(--primary))" tickLine={false} axisLine={false} style={{ fontSize: '10px' }} domain={['dataMin - 5', 'auto']} />
+            <YAxis yAxisId="left" orientation="left" stroke="var(--primary)" tickLine={false} axisLine={false} style={{ fontSize: '10px' }} domain={['dataMin - 5', 'auto']} />
             
             {/* Right Axis: Body Weight */}
-            <YAxis yAxisId="right" orientation="right" stroke="#82ca9d" tickLine={false} axisLine={false} style={{ fontSize: '10px' }} domain={['dataMin - 2', 'auto']} />
+            <YAxis yAxisId="right" orientation="right" stroke="var(--chart-2)" tickLine={false} axisLine={false} style={{ fontSize: '10px' }} domain={['dataMin - 2', 'auto']} />
             
             <Tooltip 
                 labelFormatter={(l) => format(parseISO(l), "MMM d, yyyy")}
@@ -43,11 +43,11 @@ export function PhysioChart({ data }: { data: PhysioPoint[] }) {
             />
             <Legend />
             
-            <Area yAxisId="left" type="monotone" dataKey="estimated_1rm" name="Est. 1RM (kg)" fill="hsl(var(--primary))" fillOpacity={0.2} stroke="hsl(var(--primary))" strokeWidth={2} />
-            <Line yAxisId="right" type="monotone" dataKey="bodyWeight" name="Body Weight (kg)" stroke="#82ca9d" strokeWidth={2} dot={{r:3}} />
-            <Line yAxisId="right" type="monotone" dataKey="bodyFatPercent" name="Body Fat (%)" stroke="#ef4444" strokeWidth={1.5} dot={false} />
-            <Line yAxisId="right" type="monotone" dataKey="muscleMassKg" name="Muscle Mass (kg)" stroke="#a855f7" strokeWidth={1.5} dot={false} />
-            <Line yAxisId="right" type="monotone" dataKey="waistCm" name="Waist (cm)" stroke="#0ea5e9" strokeWidth={1.5} dot={false} />
+            <Area yAxisId="left" type="monotone" dataKey="estimated_1rm" name="Est. 1RM (kg)" fill="var(--primary)" fillOpacity={0.2} stroke="var(--primary)" strokeWidth={2} />
+            <Line yAxisId="right" type="monotone" dataKey="bodyWeight" name="Body Weight (kg)" stroke="var(--chart-2)" strokeWidth={2} dot={{r:3}} />
+            <Line yAxisId="right" type="monotone" dataKey="bodyFatPercent" name="Body Fat (%)" stroke="var(--destructive)" strokeWidth={1.5} dot={false} />
+            <Line yAxisId="right" type="monotone" dataKey="muscleMassKg" name="Muscle Mass (kg)" stroke="var(--chart-5)" strokeWidth={1.5} dot={false} />
+            <Line yAxisId="right" type="monotone" dataKey="waistCm" name="Waist (cm)" stroke="var(--chart-3)" strokeWidth={1.5} dot={false} />
           </ComposedChart>
         </ResponsiveContainer>
       </CardContent>

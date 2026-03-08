@@ -23,8 +23,8 @@ export function AthleteRadar({ data }: { data: RadarData[] }) {
                <Radar 
                   name="Score" 
                   dataKey="score" 
-                  stroke="hsl(var(--primary))" 
-                  fill="hsl(var(--primary))" 
+                  stroke="var(--primary)" 
+                  fill="var(--primary)" 
                   fillOpacity={0.4} 
                />
                <Tooltip 

@@ -39,7 +39,14 @@ interface Props {
 }
 
 // --- Constants ---
-const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
+const COLORS = [
+  "var(--chart-1)",
+  "var(--chart-2)",
+  "var(--chart-4)",
+  "var(--destructive)",
+  "var(--chart-5)",
+  "var(--chart-3)",
+];
 
 export function AnalyticsView({ initialEvents, totalHistoricalEvents, activeUserCount }: Props) {
   // --- State ---
@@ -189,14 +196,14 @@ export function AnalyticsView({ initialEvents, totalHistoricalEvents, activeUser
               <AreaChart data={stats.dailyData}>
                 <defs>
                   <linearGradient id="colorCount" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
-                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                    <stop offset="5%" stopColor="var(--chart-3)" stopOpacity={0.3}/>
+                    <stop offset="95%" stopColor="var(--chart-3)" stopOpacity={0}/>
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.1} />
                 <XAxis 
                   dataKey="date" 
-                  tick={{fontSize: 12, fill: '#888'}} 
+                  tick={{fontSize: 12, fill: "var(--muted-foreground)"}} 
                   tickFormatter={(val) => format(parseISO(val), "MMM d")}
                   minTickGap={30}
                   axisLine={false}
@@ -209,7 +216,7 @@ export function AnalyticsView({ initialEvents, totalHistoricalEvents, activeUser
                 <Area 
                   type="monotone" 
                   dataKey="count" 
-                  stroke="#3b82f6" 
+                  stroke="var(--chart-3)" 
                   strokeWidth={2} 
                   fill="url(#colorCount)" 
                   animationDuration={1000}

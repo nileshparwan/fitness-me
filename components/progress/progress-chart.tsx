@@ -60,8 +60,8 @@ export function ProgressCharts({ data, exerciseName, timeRange }: Props) {
                         <AreaChart data={data} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
                             <defs>
                                 <linearGradient id="fillStrength" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
-                                    <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+                                    <stop offset="5%" stopColor="var(--primary)" stopOpacity={0.3} />
+                                    <stop offset="95%" stopColor="var(--primary)" stopOpacity={0} />
                                 </linearGradient>
                             </defs>
                             <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="var(--border)" />
@@ -95,7 +95,7 @@ export function ProgressCharts({ data, exerciseName, timeRange }: Props) {
                             <Area
                                 type="monotone"
                                 dataKey="estimated_1rm"
-                                stroke="hsl(var(--primary))"
+                                stroke="var(--primary)"
                                 fill="url(#fillStrength)"
                                 strokeWidth={3}
                             />
@@ -132,7 +132,7 @@ export function ProgressCharts({ data, exerciseName, timeRange }: Props) {
                             />
                             <Bar
                                 dataKey="volume"
-                                fill="hsl(var(--primary))"
+                                fill="var(--primary)"
                                 radius={[4, 4, 0, 0]}
                                 opacity={0.8}
                             />
