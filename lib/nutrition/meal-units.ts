@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const MEAL_UNITS = [
+const MEAL_UNITS = [
   "g",
   "kg",
   "mg",
@@ -32,7 +32,7 @@ export const MEAL_UNITS = [
   "pint",
 ] as const;
 
-export type MealUnit = (typeof MEAL_UNITS)[number];
+type MealUnit = (typeof MEAL_UNITS)[number];
 
 const MEAL_UNIT_SET = new Set<string>(MEAL_UNITS);
 

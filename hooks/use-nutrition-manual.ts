@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  keepPreviousData,
   useMutation,
   useQuery,
   useQueryClient,
@@ -10,6 +11,7 @@ import {
 
 import {
   addMealItemAction,
+  addMealLogSectionAction,
   archiveMealPlanAction,
   assignMealPlanToSubjectAction,
   copyMealsFromDateAction,
@@ -18,7 +20,6 @@ import {
   getNutritionDiaryDayAction,
   listFavoriteMealItemsAction,
   listMyMealPlanTemplatesAction,
-  listRecentMealItemsAction,
   removeMealItemAction,
   toggleFavoriteMealItemAction,
   updateMealItemAction,
@@ -84,6 +85,7 @@ function withOptimisticItemAdd(
   key: QueryKey,
   payload: {
     meal_type: MealType;
+    meal_group_id?: string | null;
     item: {
       item_name: string;
       quantity?: number | null;
@@ -95,6 +97,7 @@ function withOptimisticItemAdd(
       fiber_g?: number | null;
       notes?: string | null;
       is_quick_add?: boolean;
+      consumed_time?: string | null;
     };
   }
 ) {
@@ -119,6 +122,7 @@ function withOptimisticItemAdd(
     fiber_g: payload.item.fiber_g ?? null,
     notes: payload.item.notes ?? null,
     is_quick_add: payload.item.is_quick_add ?? false,
+    consumed_time: payload.item.consumed_time ?? null,
     position: (existingLog?.items.length ?? 0) + 1,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
@@ -142,6 +146,7 @@ function withOptimisticItemAdd(
       subject_client_id: current.subject.subject_client_id,
       created_by_user_id: current.subject.subject_user_id || null,
       created_by_client_id: current.subject.subject_client_id || null,
+      meal_group_id: payload.meal_group_id ?? null,
       performed_on: current.performed_on,
       meal_type: targetMealType,
       timezone: current.timezone,
@@ -160,17 +165,20 @@ function withOptimisticItemAdd(
   queryClient.setQueryData(key, recomputeDiary(next));
 }
 
-export function useNutritionDiary(performedOn: string, subject?: NutritionSubject, timezone?: string) {
+export function useNutritionDiary(performedOn: string, subject?: NutritionSubject, timezone?: string, mealGroupId?: string | null) {
   return useQuery({
-    queryKey: nutritionKeys.diaryDay(performedOn, subject) as QueryKey,
+    queryKey: nutritionKeys.diaryDay(performedOn, subject, mealGroupId) as QueryKey,
     queryFn: () =>
       getNutritionDiaryDayAction({
         performed_on: performedOn,
         subject,
         timezone,
+        meal_group_id: mealGroupId ?? undefined,
       }),
-    enabled: Boolean(performedOn),
-    staleTime: 20_000,
+    enabled: Boolean(performedOn && mealGroupId),
+    staleTime: 45_000,
+    gcTime: 5 * 60_000,
+    placeholderData: keepPreviousData,
     refetchOnWindowFocus: false,
   });
 }
@@ -179,25 +187,30 @@ export function useMealPlanTemplates() {
   return useQuery({
     queryKey: nutritionKeys.templates(),
     queryFn: listMyMealPlanTemplatesAction,
-    staleTime: 30_000,
+    staleTime: 60_000,
+    gcTime: 5 * 60_000,
     refetchOnWindowFocus: false,
   });
 }
 
-export function useRecentMealItems(subject?: NutritionSubject, limit = 30) {
+export function useFavoriteMealItems(limit = 30, mealType?: MealType | null) {
+  const normalizedLimit = Math.max(1, Math.min(200, Math.trunc(limit || 30)));
   return useQuery({
-    queryKey: nutritionKeys.recentList(subject, limit),
-    queryFn: () => listRecentMealItemsAction({ subject, limit }),
-    staleTime: 20_000,
-    refetchOnWindowFocus: false,
-  });
-}
-
-export function useFavoriteMealItems(limit = 30) {
-  return useQuery({
-    queryKey: nutritionKeys.favoritesList(limit),
-    queryFn: () => listFavoriteMealItemsAction({ limit }),
-    staleTime: 20_000,
+    queryKey: nutritionKeys.favoritesList(normalizedLimit, mealType ?? null),
+    queryFn: () =>
+      listFavoriteMealItemsAction(
+        mealType
+          ? {
+              limit: normalizedLimit,
+              meal_type: mealType,
+            }
+          : {
+              limit: normalizedLimit,
+            }
+      ),
+    staleTime: 45_000,
+    gcTime: 5 * 60_000,
+    placeholderData: keepPreviousData,
     refetchOnWindowFocus: false,
   });
 }
@@ -207,19 +220,21 @@ export function useClientNutritionSummary7d(clientId: string, endDate?: string) 
     queryKey: nutritionKeys.clientSummary7d(clientId, endDate),
     queryFn: () => getClientNutritionSummary7dAction({ client_id: clientId, end_date: endDate }),
     enabled: Boolean(clientId),
-    staleTime: 20_000,
+    staleTime: 45_000,
+    gcTime: 5 * 60_000,
+    placeholderData: keepPreviousData,
     refetchOnWindowFocus: false,
   });
 }
 
-export function useNutritionMutations(performedOn: string, subject?: NutritionSubject) {
+export function useNutritionMutations(performedOn: string, subject?: NutritionSubject, mealGroupId?: string | null) {
   const queryClient = useQueryClient();
-  const dayKey = nutritionKeys.diaryDay(performedOn, subject) as QueryKey;
+  const dayKey = nutritionKeys.diaryDay(performedOn, subject, mealGroupId) as QueryKey;
 
   const invalidatePrimary = async () => {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: dayKey }),
-      queryClient.invalidateQueries({ queryKey: nutritionKeys.recent() }),
+      queryClient.invalidateQueries({ queryKey: nutritionKeys.dashboard() }),
       queryClient.invalidateQueries({ queryKey: nutritionKeys.favorites() }),
       queryClient.invalidateQueries({ queryKey: nutritionKeys.plans() }),
       queryClient.invalidateQueries({ queryKey: nutritionKeys.clientSummary() }),
@@ -234,6 +249,7 @@ export function useNutritionMutations(performedOn: string, subject?: NutritionSu
       const previous = queryClient.getQueryData<NutritionDiaryDay>(dayKey);
       withOptimisticItemAdd(queryClient, dayKey, {
         meal_type: payload.meal_type,
+        meal_group_id: payload.meal_group_id,
         item: payload.item,
       });
       return { previous };
@@ -382,7 +398,15 @@ export function useNutritionMutations(performedOn: string, subject?: NutritionSu
     },
   });
 
+  const addSection = useMutation({
+    mutationFn: addMealLogSectionAction,
+    onSuccess: async () => {
+      await invalidatePrimary();
+    },
+  });
+
   return {
+    addSection,
     addItem,
     updateItem,
     removeItem,

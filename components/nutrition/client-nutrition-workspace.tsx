@@ -6,6 +6,15 @@ import { useQuery } from "@tanstack/react-query";
 import { CalendarDays, ExternalLink, Lock } from "lucide-react";
 
 import { listClientDetailAction } from "@/app/actions/coach-tools";
+import {
+  useNutritionMealGroup,
+  useNutritionMealGroupAssignments,
+} from "@/hooks/use-nutrition-data";
+import {
+  useSetNutritionActiveSubject,
+  useSetNutritionNavigationSource,
+  useSetNutritionViewMode,
+} from "@/stores/use-nutrition-ui-store";
 import { MEAL_DAY_LABELS, MEAL_DAY_ORDER } from "@/components/nutrition/meal-groups/meal-group-types";
 import { ManualNutritionDiary } from "@/components/nutrition/manual-nutrition-diary";
 import { Badge } from "@/components/ui/badge";
@@ -16,7 +25,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useCoachClientPortalSettings } from "@/hooks/use-client-portal";
 import { useClientNotes } from "@/hooks/use-coach-tools";
 import { coachKeys } from "@/lib/query-keys-coach";
-import { useMealGroupAssignments, useMealGroupDetail } from "@/hooks/use-meal-groups";
 import { cn } from "@/utils";
 
 type DayOfWeek = (typeof MEAL_DAY_ORDER)[number];
@@ -35,6 +43,10 @@ function accessBannerTone(accessLevel: "disabled" | "read_only" | "enabled") {
 }
 
 export function ClientNutritionWorkspace({ clientId }: { clientId: string }) {
+  const setViewMode = useSetNutritionViewMode();
+  const setNavigationSource = useSetNutritionNavigationSource();
+  const setActiveSubject = useSetNutritionActiveSubject();
+
   const clientQuery = useQuery({
     queryKey: coachKeys.clientDetail(clientId),
     queryFn: () => listClientDetailAction(clientId),
@@ -43,7 +55,7 @@ export function ClientNutritionWorkspace({ clientId }: { clientId: string }) {
     refetchOnWindowFocus: false,
   });
 
-  const assignmentsQuery = useMealGroupAssignments({
+  const assignmentsQuery = useNutritionMealGroupAssignments({
     status: "active",
     subject: { subject_client_id: clientId },
   });
@@ -53,6 +65,12 @@ export function ClientNutritionWorkspace({ clientId }: { clientId: string }) {
 
   const [selectedAssignmentId, setSelectedAssignmentId] = useState("");
   const [selectedDay, setSelectedDay] = useState<DayOfWeek>("mon");
+
+  useEffect(() => {
+    setViewMode("diary");
+    setNavigationSource("client-workspace");
+    setActiveSubject("client", clientId);
+  }, [clientId, setActiveSubject, setNavigationSource, setViewMode]);
 
   useEffect(() => {
     if (!assignmentsQuery.data?.length) {
@@ -71,7 +89,7 @@ export function ClientNutritionWorkspace({ clientId }: { clientId: string }) {
   );
 
   const assignedSnapshotId = selectedAssignment?.meal_group_id || "";
-  const assignedDetailQuery = useMealGroupDetail(assignedSnapshotId);
+  const assignedDetailQuery = useNutritionMealGroup(assignedSnapshotId);
 
   const assignedPlanByDay = useMemo(
     () => new Map((assignedDetailQuery.data?.plans ?? []).map((plan) => [plan.day_of_week, plan])),

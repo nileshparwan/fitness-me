@@ -1,7 +1,6 @@
 "use client";
 
-import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { addDays, format, subDays } from "date-fns";
 import {
   CalendarDays,
@@ -12,6 +11,7 @@ import {
   Flame,
   Loader2,
   Pencil,
+  SlidersHorizontal,
   Sparkles,
   Star,
   Trash2,
@@ -20,6 +20,7 @@ import { toast } from "sonner";
 
 import type { ManualDiaryItem, ManualDiaryLog, MealType } from "@/app/actions/nutrition-manual";
 import { MEAL_TYPE_ICONS, MEAL_TYPE_LABELS } from "@/components/nutrition/meal-groups/meal-group-types";
+import { NutritionScopeControls } from "@/components/nutrition/nutrition-scope-controls";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -37,10 +38,23 @@ import {
   useMealPlanTemplates,
   useNutritionDiary,
   useNutritionMutations,
-  useRecentMealItems,
 } from "@/hooks/use-nutrition-manual";
+import { resolveNutritionSubject, useNutritionAutoMealGroupSelection } from "@/hooks/use-nutrition-data";
+import {
+  useNutritionActiveSubject,
+  useSetNutritionActiveSubject,
+  useNutritionSelectedDate,
+  useNutritionSelectedMealGroupId,
+  useSetNutritionDiaryFilters,
+  useSetNutritionNavigationSource,
+  useNutritionRecentDiaryItems,
+  usePushNutritionRecentDiaryItem,
+  useSetNutritionSelectedDate,
+  useSetNutritionViewMode,
+} from "@/stores/use-nutrition-ui-store";
 import { getMealUnitOptions, normalizeMealUnit } from "@/lib/nutrition/meal-units";
 import type { NutritionSubject } from "@/lib/query-keys-nutrition";
+import { applyMacroQuickAction, canNavigateDate, isMealGroupSelected, mealTypeOrderRank, type MacroQuickAction } from "@/lib/nutrition/meal-ui";
 import { cn } from "@/utils";
 
 type DiaryMealSection =
@@ -55,6 +69,7 @@ type DiaryMealSection =
   | "other";
 
 const DIARY_SECTIONS: Array<{ key: DiaryMealSection; label: string; accent: string }> = [
+  { key: "water", label: "Water", accent: "text-chart-3" },
   { key: "breakfast", label: "Breakfast", accent: "text-chart-1" },
   { key: "snack", label: "Snack", accent: "text-chart-4" },
   { key: "lunch", label: "Lunch", accent: "text-chart-2" },
@@ -62,10 +77,17 @@ const DIARY_SECTIONS: Array<{ key: DiaryMealSection; label: string; accent: stri
   { key: "post_workout_meal", label: "Post-workout", accent: "text-chart-5" },
   { key: "dinner", label: "Dinner", accent: "text-chart-4" },
   { key: "protein_drink", label: "Protein Drink", accent: "text-chart-1" },
-  { key: "water", label: "Water", accent: "text-chart-3" },
+  { key: "other", label: "Other", accent: "text-muted-foreground" },
 ];
 
-const BASE_COPY_SECTIONS = DIARY_SECTIONS.map((section) => section.key);
+type VisibleSectionCard = {
+  id: string;
+  key: DiaryMealSection;
+  label: string;
+  accent: string;
+  position: number;
+};
+
 const NO_UNIT_SELECT_VALUE = "__no_unit__";
 
 function toDateInput(date: Date) {
@@ -229,21 +251,32 @@ export function ManualNutritionDiary({
   timezone,
   showAssignmentTools = false,
   clientIdForSummary,
-  title = "Meal Diary",
 }: ManualNutritionDiaryProps) {
-  const [performedOn, setPerformedOn] = useState(() => toDateInput(new Date()));
+  const performedOn = useNutritionSelectedDate();
+  const setPerformedOn = useSetNutritionSelectedDate();
+  const selectedMealGroupId = useNutritionSelectedMealGroupId();
+  const { activeSubjectType, activeSubjectId } = useNutritionActiveSubject();
+  const setViewMode = useSetNutritionViewMode();
+  const setNavigationSource = useSetNutritionNavigationSource();
+  const setDiaryFilters = useSetNutritionDiaryFilters();
+  const setActiveSubject = useSetNutritionActiveSubject();
+
   const [sourceDate, setSourceDate] = useState(() => toDateInput(subDays(new Date(), 1)));
   const [copySections, setCopySections] = useState<DiaryMealSection[]>([]);
 
   const [itemDialogOpen, setItemDialogOpen] = useState(false);
   const [quickDialogOpen, setQuickDialogOpen] = useState(false);
   const [recentDialogOpen, setRecentDialogOpen] = useState(false);
-  const [favoritesDialogOpen, setFavoritesDialogOpen] = useState(false);
+  const [optionsDialogOpen, setOptionsDialogOpen] = useState(false);
   const [copyDialogOpen, setCopyDialogOpen] = useState(false);
+  const [addMealTypeDialogOpen, setAddMealTypeDialogOpen] = useState(false);
+  const [newMealType, setNewMealType] = useState<DiaryMealSection>("water");
 
-  const [selectedSection, setSelectedSection] = useState<DiaryMealSection>("breakfast");
+  const [selectedSection, setSelectedSection] = useState<DiaryMealSection>("water");
+  const [favoriteSection, setFavoriteSection] = useState<DiaryMealSection>("breakfast");
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [editingOriginalUnit, setEditingOriginalUnit] = useState<string | null>(null);
+  const [itemTime, setItemTime] = useState("");
 
   const [itemName, setItemName] = useState("");
   const [quantity, setQuantity] = useState("");
@@ -264,22 +297,60 @@ export function ManualNutritionDiary({
 
   const [mealNotesDraft, setMealNotesDraft] = useState<Record<string, string>>({});
   const [planTemplateId, setPlanTemplateId] = useState("");
+  const lastDateNavAtRef = useRef(0);
 
-  const diaryQuery = useNutritionDiary(performedOn, subject, timezone);
-  const recentQuery = useRecentMealItems(subject, 30);
-  const favoritesQuery = useFavoriteMealItems(40);
+  const resolvedSubject = useMemo(() => {
+    if (subject?.subject_client_id || subject?.subject_user_id) return subject;
+    return resolveNutritionSubject(activeSubjectType, activeSubjectId);
+  }, [activeSubjectId, activeSubjectType, subject]);
+  useNutritionAutoMealGroupSelection({
+    subject: resolvedSubject,
+    enabled: Boolean(subject?.subject_client_id || subject?.subject_user_id),
+  });
+
+  const mealGroupSelected = isMealGroupSelected(selectedMealGroupId);
+  const selectedFavoriteMealType = toActionMealType(favoriteSection);
+  const recentItems = useNutritionRecentDiaryItems();
+  const pushRecentDiaryItem = usePushNutritionRecentDiaryItem();
+
+  const diaryQuery = useNutritionDiary(performedOn, resolvedSubject, timezone, selectedMealGroupId || null);
+  const allFavoritesQuery = useFavoriteMealItems(200, null);
+  const favoritesQuery = useFavoriteMealItems(40, selectedFavoriteMealType);
   const templatesQuery = useMealPlanTemplates();
-  const summaryQuery = useClientNutritionSummary7d(clientIdForSummary || "", performedOn);
+  const summaryQuery = useClientNutritionSummary7d(clientIdForSummary || resolvedSubject?.subject_client_id || "", performedOn);
 
-  const mutations = useNutritionMutations(performedOn, subject);
+  const mutations = useNutritionMutations(performedOn, resolvedSubject, selectedMealGroupId || null);
+
+  useEffect(() => {
+    setViewMode("diary");
+    setNavigationSource("diary");
+  }, [setNavigationSource, setViewMode]);
+
+  useEffect(() => {
+    if (!subject?.subject_client_id && !subject?.subject_user_id) return;
+    if (subject?.subject_client_id) {
+      setActiveSubject("client", subject.subject_client_id);
+      return;
+    }
+    if (subject?.subject_user_id) {
+      setActiveSubject("user", subject.subject_user_id);
+      return;
+    }
+  }, [setActiveSubject, subject?.subject_client_id, subject?.subject_user_id]);
+
+  useEffect(() => {
+    setDiaryFilters({
+      favorites_meal_type: selectedFavoriteMealType,
+    });
+  }, [selectedFavoriteMealType, setDiaryFilters]);
 
   const favoriteMap = useMemo(() => {
     const map = new Map<string, boolean>();
-    for (const favorite of favoritesQuery.data || []) {
+    for (const favorite of allFavoritesQuery.data || []) {
       map.set(`${favorite.item_name.toLowerCase()}::${favorite.unit || ""}`, true);
     }
     return map;
-  }, [favoritesQuery.data]);
+  }, [allFavoritesQuery.data]);
 
   const logsBySection = useMemo(() => {
     const map = new Map<DiaryMealSection, ManualDiaryLog>();
@@ -304,18 +375,81 @@ export function ManualNutritionDiary({
     return map;
   }, [diaryQuery.data?.logs]);
 
-  const visibleSections = useMemo(() => {
-    if (logsBySection.has("other")) {
-      return [...DIARY_SECTIONS, { key: "other" as const, label: "Other", accent: "text-muted-foreground" }];
+  const visibleSections = useMemo<VisibleSectionCard[]>(() => {
+    const sectionMeta = new Map(DIARY_SECTIONS.map((section) => [section.key, section]));
+
+    const configuredSections: VisibleSectionCard[] = (diaryQuery.data?.meal_sections || [])
+      .map((section, index) => {
+        const key = normalizeMealSection(section.meal_type);
+        const meta = sectionMeta.get(key) || sectionMeta.get("other");
+        return {
+          id: `${section.source}-${section.meal_type}-${section.position}-${index}`,
+          key,
+          label: meta?.label || getSectionLabel(key),
+          accent: meta?.accent || "text-muted-foreground",
+          position: section.position,
+        };
+      })
+      .sort((a, b) => {
+        if (a.position !== b.position) return a.position - b.position;
+        return mealTypeOrderRank(a.key) - mealTypeOrderRank(b.key);
+      });
+
+    const configuredTypes = new Set(configuredSections.map((section) => section.key));
+    const inferredSections: VisibleSectionCard[] = [];
+
+    for (const key of logsBySection.keys()) {
+      if (configuredTypes.has(key)) continue;
+      const meta = sectionMeta.get(key) || sectionMeta.get("other");
+      inferredSections.push({
+        id: `inferred-${key}`,
+        key,
+        label: meta?.label || getSectionLabel(key),
+        accent: meta?.accent || "text-muted-foreground",
+        position: (configuredSections.at(-1)?.position ?? 0) + inferredSections.length + 1,
+      });
     }
-    return DIARY_SECTIONS;
-  }, [logsBySection]);
+
+    return [...configuredSections, ...inferredSections].sort((a, b) => {
+      if (a.position !== b.position) return a.position - b.position;
+      return mealTypeOrderRank(a.key) - mealTypeOrderRank(b.key);
+    });
+  }, [diaryQuery.data?.meal_sections, logsBySection]);
+
+  const visibleSectionTypeOptions = useMemo(() => {
+    const byType = new Map<DiaryMealSection, { key: DiaryMealSection; label: string; accent: string }>();
+    for (const section of visibleSections) {
+      if (byType.has(section.key)) continue;
+      byType.set(section.key, {
+        key: section.key,
+        label: section.label,
+        accent: section.accent,
+      });
+    }
+    return Array.from(byType.values());
+  }, [visibleSections]);
 
   const unitOptions = useMemo(() => getMealUnitOptions(unit), [unit]);
+  const favoriteSectionOptions = useMemo(
+    () => DIARY_SECTIONS.filter((section) => section.key !== "other"),
+    []
+  );
+
+  useEffect(() => {
+    if (visibleSectionTypeOptions.length === 0) return;
+    if (visibleSectionTypeOptions.some((section) => section.key === selectedSection)) return;
+    setSelectedSection(visibleSectionTypeOptions[0].key);
+  }, [selectedSection, visibleSectionTypeOptions]);
+
+  useEffect(() => {
+    if (favoriteSectionOptions.some((section) => section.key === favoriteSection)) return;
+    setFavoriteSection("breakfast");
+  }, [favoriteSection, favoriteSectionOptions]);
 
   const resetItemForm = () => {
     setEditingItemId(null);
     setEditingOriginalUnit(null);
+    setItemTime("");
     setItemName("");
     setQuantity("");
     setUnit("");
@@ -329,12 +463,20 @@ export function ManualNutritionDiary({
   };
 
   const openAddDialog = (section: DiaryMealSection) => {
+    if (!mealGroupSelected) {
+      toast.error("Select a meal group to continue.");
+      return;
+    }
     resetItemForm();
     setSelectedSection(section);
     setItemDialogOpen(true);
   };
 
   const openQuickDialog = (section: DiaryMealSection) => {
+    if (!mealGroupSelected) {
+      toast.error("Select a meal group to continue.");
+      return;
+    }
     setSelectedSection(section);
     setQuickCalories(0);
     setQuickProtein(0);
@@ -348,6 +490,7 @@ export function ManualNutritionDiary({
     setSelectedSection(section);
     setEditingItemId(item.id);
     setEditingOriginalUnit(item.unit || null);
+    setItemTime(item.consumed_time || "");
     setItemName(item.item_name || "");
     setQuantity(item.quantity?.toString() || "");
     setUnit(normalizeMealUnit(item.unit) || item.unit || "");
@@ -361,12 +504,40 @@ export function ManualNutritionDiary({
     setItemDialogOpen(true);
   };
 
+  const rememberRecentItem = (item: {
+    item_name: string;
+    quantity: number | null;
+    unit: string | null;
+    calories: number | null;
+    protein_g: number | null;
+    carbs_g: number | null;
+    fat_g: number | null;
+    fiber_g: number | null;
+    notes: string | null;
+  }) => {
+    pushRecentDiaryItem({
+      item_name: item.item_name,
+      quantity: item.quantity,
+      unit: item.unit,
+      calories: item.calories,
+      protein_g: item.protein_g,
+      carbs_g: item.carbs_g,
+      fat_g: item.fat_g,
+      fiber_g: item.fiber_g,
+      notes: item.notes,
+    });
+  };
+
   const onSaveItem = async () => {
+    if (!mealGroupSelected) {
+      toast.error("Select a meal group to continue.");
+      return;
+    }
+
     if (!itemName.trim()) {
       toast.error("Item name is required.");
       return;
     }
-
     const normalizedName = itemName.trim();
     const selectedUnit = unit.trim();
     const canonicalUnit = normalizeMealUnit(selectedUnit);
@@ -398,27 +569,34 @@ export function ManualNutritionDiary({
             fat_g: fat,
             fiber_g: fiber,
             notes: itemNotes.trim() || null,
+            consumed_time: itemTime.trim() || null,
           },
         });
       } else {
+        const recentItem = {
+          item_name: normalizedName,
+          quantity: quantity ? Number(quantity) : null,
+          unit: unitForCreate,
+          calories,
+          protein_g: protein,
+          carbs_g: carbs,
+          fat_g: fat,
+          fiber_g: fiber,
+          notes: itemNotes.trim() || null,
+        };
         await mutations.addItem.mutateAsync({
           performed_on: performedOn,
           meal_type: toActionMealType(selectedSection),
           timezone: timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
-          subject,
+          subject: resolvedSubject,
+          meal_group_id: selectedMealGroupId,
           item: {
-            item_name: normalizedName,
-            quantity: quantity ? Number(quantity) : null,
-            unit: unitForCreate,
-            calories,
-            protein_g: protein,
-            carbs_g: carbs,
-            fat_g: fat,
-            fiber_g: fiber,
-            notes: itemNotes.trim() || null,
+            ...recentItem,
             is_quick_add: false,
+            consumed_time: itemTime.trim() || null,
           },
         });
+        rememberRecentItem(recentItem);
       }
 
       if (saveToFavorites) {
@@ -431,14 +609,15 @@ export function ManualNutritionDiary({
               unit: unitForCreate,
               calories,
               protein_g: protein,
-              carbs_g: carbs,
-              fat_g: fat,
-              fiber_g: fiber,
-              notes: itemNotes.trim() || null,
-            },
-          });
-        }
-      }
+                  carbs_g: carbs,
+                  fat_g: fat,
+                  fiber_g: fiber,
+                  notes: itemNotes.trim() || null,
+                },
+                meal_type: toActionMealType(selectedSection),
+              });
+            }
+          }
 
       toast.success(editingItemId ? "Meal item updated" : "Meal item added");
       setItemDialogOpen(false);
@@ -449,28 +628,40 @@ export function ManualNutritionDiary({
   };
 
   const onSaveQuickItem = async () => {
+    if (!mealGroupSelected) {
+      toast.error("Select a meal group to continue.");
+      return;
+    }
+
     if (quickCalories + quickProtein + quickCarbs + quickFat + quickFiber <= 0) {
       toast.error("Add at least one value before saving.");
       return;
     }
 
     try {
+      const recentItem = {
+        item_name: "Quick Add",
+        quantity: null,
+        unit: null,
+        calories: quickCalories || null,
+        protein_g: quickProtein || null,
+        carbs_g: quickCarbs || null,
+        fat_g: quickFat || null,
+        fiber_g: quickFiber || null,
+        notes: null,
+      };
       await mutations.addItem.mutateAsync({
         performed_on: performedOn,
         meal_type: toActionMealType(selectedSection),
         timezone: timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
-        subject,
+        subject: resolvedSubject,
+        meal_group_id: selectedMealGroupId,
         item: {
-          item_name: "Quick Add",
-          unit: null,
-          calories: quickCalories || null,
-          protein_g: quickProtein || null,
-          carbs_g: quickCarbs || null,
-          fat_g: quickFat || null,
-          fiber_g: quickFiber || null,
+          ...recentItem,
           is_quick_add: true,
         },
       });
+      rememberRecentItem(recentItem);
       toast.success("Quick add saved");
       setQuickDialogOpen(false);
     } catch (error) {
@@ -504,6 +695,7 @@ export function ManualNutritionDiary({
           ...item,
           unit: normalizeMealUnit(item.unit),
         },
+        meal_type: toActionMealType(selectedSection),
       });
       toast.success(result.favorited ? "Added to favorites" : "Removed from favorites");
     } catch (error) {
@@ -525,18 +717,28 @@ export function ManualNutritionDiary({
       notes: string | null;
     }
   ) => {
+    if (!mealGroupSelected) {
+      toast.error("Select a meal group to continue.");
+      return;
+    }
+
     try {
+      const recentItem = {
+        ...item,
+        unit: normalizeMealUnit(item.unit),
+      };
       await mutations.addItem.mutateAsync({
         performed_on: performedOn,
         meal_type: toActionMealType(section),
         timezone: timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
-        subject,
+        subject: resolvedSubject,
+        meal_group_id: selectedMealGroupId,
         item: {
-          ...item,
-          unit: normalizeMealUnit(item.unit),
+          ...recentItem,
           is_quick_add: false,
         },
       });
+      rememberRecentItem(recentItem);
       toast.success("Item added to diary");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to add item");
@@ -544,12 +746,22 @@ export function ManualNutritionDiary({
   };
 
   const onCopyMeals = async () => {
+    if (!mealGroupSelected) {
+      toast.error("Select a meal group to continue.");
+      return;
+    }
+
+    const defaultSections = visibleSectionTypeOptions
+      .map((section) => section.key)
+      .filter((section): section is DiaryMealSection => section !== "other");
+
     try {
       await mutations.copyFromDate.mutateAsync({
         source_date: sourceDate,
         target_date: performedOn,
-        meal_types: (copySections.length > 0 ? copySections : BASE_COPY_SECTIONS).map((section) => toActionMealType(section)),
-        subject,
+        meal_types: (copySections.length > 0 ? copySections : defaultSections).map((section) => toActionMealType(section)),
+        subject: resolvedSubject,
+        meal_group_id: selectedMealGroupId,
       });
       toast.success("Meals copied successfully");
       setCopyDialogOpen(false);
@@ -577,53 +789,82 @@ export function ManualNutritionDiary({
     }
   };
 
+  const onAddMealType = async () => {
+    if (!mealGroupSelected) {
+      toast.error("Select a meal group to continue.");
+      return;
+    }
+
+    const targetType = newMealType;
+    if (targetType === "other") {
+      toast.error("Please select a meal type.");
+      return;
+    }
+
+    try {
+      await mutations.addSection.mutateAsync({
+        meal_group_id: selectedMealGroupId,
+        performed_on: performedOn,
+        meal_type: toActionMealType(targetType),
+        subject: resolvedSubject,
+      });
+      setSelectedSection(targetType);
+      setAddMealTypeDialogOpen(false);
+      toast.success("Meal type added");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to add meal type");
+    }
+  };
+
+  const applyQuickActionToItemForm = (action: MacroQuickAction) => {
+    const next = applyMacroQuickAction(
+      {
+        calories,
+        protein_g: protein,
+        carbs_g: carbs,
+        fat_g: fat,
+      },
+      action
+    );
+    setCalories(next.calories);
+    setProtein(next.protein_g);
+    setCarbs(next.carbs_g);
+    setFat(next.fat_g);
+  };
+
+  const applyQuickActionToQuickAdd = (action: MacroQuickAction) => {
+    const next = applyMacroQuickAction(
+      {
+        calories: quickCalories,
+        protein_g: quickProtein,
+        carbs_g: quickCarbs,
+        fat_g: quickFat,
+      },
+      action
+    );
+    setQuickCalories(next.calories);
+    setQuickProtein(next.protein_g);
+    setQuickCarbs(next.carbs_g);
+    setQuickFat(next.fat_g);
+  };
+
   const currentDate = new Date(`${performedOn}T00:00:00`);
+
+  const navigateDateBy = (offsetDays: number) => {
+    const now = Date.now();
+    if (!canNavigateDate(lastDateNavAtRef.current, now) || diaryQuery.isFetching) return;
+    lastDateNavAtRef.current = now;
+    setPerformedOn(toDateInput(offsetDays < 0 ? subDays(currentDate, Math.abs(offsetDays)) : addDays(currentDate, offsetDays)));
+  };
 
   return (
     <div className="space-y-4 md:space-y-5">
-      <section className="glass-surface surface-pad space-y-4">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">{title}</h1>
-            <p className="text-sm text-muted-foreground">Manual nutrition tracking with section-based meal logging and macro controls.</p>
+      <section className="space-y-4">
+        {!mealGroupSelected ? (
+          <div className="rounded-xl border border-dashed border-border/70 bg-muted/20 px-4 py-3 text-sm text-muted-foreground">
+            Select a meal group to enable diary actions, meal type cards, and item modals.
           </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            {!subject?.subject_client_id ? (
-              <>
-                <Button asChild variant="outline" size="sm" className="rounded-xl border-border/60">
-                  <Link href="/nutrition/meal-planner">Meal Planner</Link>
-                </Button>
-                <Button asChild variant="outline" size="sm" className="rounded-xl border-border/60">
-                  <Link href="/nutrition/groups">Meal Groups</Link>
-                </Button>
-              </>
-            ) : null}
-            <Button variant="outline" size="sm" className="rounded-xl border-border/60" onClick={() => setCopyDialogOpen(true)}>
-              <Copy className="mr-2 h-4 w-4" />
-              Copy
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="rounded-xl border-border/60"
-              onClick={() => {
-                setSourceDate(toDateInput(subDays(currentDate, 1)));
-                setCopySections([]);
-                setCopyDialogOpen(true);
-              }}
-            >
-              <Sparkles className="mr-2 h-4 w-4" />
-              Yesterday
-            </Button>
-            <Button variant="outline" size="sm" className="rounded-xl border-border/60" onClick={() => setRecentDialogOpen(true)}>
-              Recent
-            </Button>
-            <Button variant="outline" size="sm" className="rounded-xl border-border/60" onClick={() => setFavoritesDialogOpen(true)}>
-              Favorites
-            </Button>
-          </div>
-        </div>
+        ) : null}
 
         <div className="glass-subtle flex items-center justify-between gap-2 px-2 py-2">
           <Button
@@ -631,7 +872,8 @@ export function ManualNutritionDiary({
             size="icon"
             variant="ghost"
             className="h-10 w-10 rounded-xl"
-            onClick={() => setPerformedOn(toDateInput(subDays(currentDate, 1)))}
+            onClick={() => navigateDateBy(-1)}
+            disabled={!mealGroupSelected || diaryQuery.isFetching}
           >
             <ChevronLeft className="h-4 w-4" />
           </Button>
@@ -645,6 +887,7 @@ export function ManualNutritionDiary({
                 className="h-9 w-[168px] rounded-xl border-border/60 bg-muted/20 pl-9"
                 value={performedOn}
                 onChange={(event) => setPerformedOn(event.target.value)}
+                disabled={!mealGroupSelected}
               />
             </div>
           </div>
@@ -654,9 +897,55 @@ export function ManualNutritionDiary({
             size="icon"
             variant="ghost"
             className="h-10 w-10 rounded-xl"
-            onClick={() => setPerformedOn(toDateInput(addDays(currentDate, 1)))}
+            onClick={() => navigateDateBy(1)}
+            disabled={!mealGroupSelected || diaryQuery.isFetching}
           >
             <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
+
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <Button
+            variant="outline"
+            size="sm"
+            className="shrink-0 rounded-xl border-border/60"
+            onClick={() => setOptionsDialogOpen(true)}
+          >
+            <SlidersHorizontal className="mr-2 h-4 w-4" />
+            Options
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="shrink-0 rounded-xl border-border/60"
+            onClick={() => setCopyDialogOpen(true)}
+            disabled={!mealGroupSelected}
+          >
+            <Copy className="mr-2 h-4 w-4" />
+            Copy
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="shrink-0 rounded-xl border-border/60"
+            onClick={() => {
+              setSourceDate(toDateInput(subDays(currentDate, 1)));
+              setCopySections([]);
+              setCopyDialogOpen(true);
+            }}
+            disabled={!mealGroupSelected}
+          >
+            <Sparkles className="mr-2 h-4 w-4" />
+            Yesterday
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="shrink-0 rounded-xl border-border/60"
+            onClick={() => setRecentDialogOpen(true)}
+            disabled={!mealGroupSelected}
+          >
+            Recent
           </Button>
         </div>
 
@@ -677,7 +966,11 @@ export function ManualNutritionDiary({
                 </SelectContent>
               </Select>
             </div>
-            <Button className="accent-strong rounded-xl" onClick={() => void onAssignTemplateToClient()} disabled={mutations.assignPlan.isPending}>
+            <Button
+              className="accent-strong rounded-xl"
+              onClick={() => void onAssignTemplateToClient()}
+              disabled={mutations.assignPlan.isPending || !mealGroupSelected}
+            >
               {mutations.assignPlan.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               Assign Plan
             </Button>
@@ -784,12 +1077,36 @@ export function ManualNutritionDiary({
           ) : null}
 
           <section className="space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-sm font-semibold uppercase tracking-[0.12em] text-muted-foreground">Meal Types</h2>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="rounded-xl border-border/60"
+                onClick={() => {
+                  setNewMealType("water");
+                  setAddMealTypeDialogOpen(true);
+                }}
+                disabled={!mealGroupSelected}
+              >
+                <CirclePlus className="mr-2 h-4 w-4" />
+                Add Meal Type
+              </Button>
+            </div>
+
+            {visibleSections.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-border/60 px-4 py-8 text-center text-sm text-muted-foreground">
+                No meal types added for this date yet.
+              </div>
+            ) : null}
+
             {visibleSections.map((section) => {
               const log = logsBySection.get(section.key);
               const items = log?.items || [];
 
               return (
-                <article key={section.key} className="glass-surface overflow-hidden">
+                <article key={section.id} className="glass-surface overflow-hidden">
                   <div className="flex items-center justify-between gap-2 border-b border-border/40 px-4 py-3 md:px-5">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
@@ -802,7 +1119,13 @@ export function ManualNutritionDiary({
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
-                      <Button variant="outline" size="sm" className="hidden rounded-xl border-border/60 md:inline-flex" onClick={() => openQuickDialog(section.key)}>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="hidden rounded-xl border-border/60 md:inline-flex"
+                        onClick={() => openQuickDialog(section.key)}
+                        disabled={!mealGroupSelected}
+                      >
                         Quick Add
                       </Button>
                       <Button
@@ -810,6 +1133,7 @@ export function ManualNutritionDiary({
                         className="h-10 w-10 rounded-full accent-strong"
                         onClick={() => openAddDialog(section.key)}
                         aria-label={`Add item to ${section.label}`}
+                        disabled={!mealGroupSelected}
                       >
                         <CirclePlus className="h-5 w-5" />
                       </Button>
@@ -817,7 +1141,14 @@ export function ManualNutritionDiary({
                   </div>
 
                   {items.length === 0 ? (
-                    <div className="px-5 py-8 text-center text-sm text-muted-foreground">Tap + to add</div>
+                    <button
+                      type="button"
+                      className="w-full px-5 py-8 text-center text-sm text-muted-foreground transition-colors hover:text-foreground"
+                      onClick={() => openAddDialog(section.key)}
+                      disabled={!mealGroupSelected}
+                    >
+                      Tap + to add
+                    </button>
                   ) : (
                     <div className="divide-y divide-border/30 px-4 md:px-5">
                       {items
@@ -934,12 +1265,12 @@ export function ManualNutritionDiary({
                 <Star className="h-4 w-4 text-chart-4" />
                 <p className="text-sm font-semibold">Favorites</p>
               </div>
-              <Select value={selectedSection} onValueChange={(value) => setSelectedSection(value as DiaryMealSection)}>
+              <Select value={favoriteSection} onValueChange={(value) => setFavoriteSection(value as DiaryMealSection)}>
                 <SelectTrigger className="h-9 w-[170px] rounded-xl border-border/60 bg-muted/20">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {visibleSections.map((section) => (
+                  {favoriteSectionOptions.map((section) => (
                     <SelectItem key={section.key} value={section.key}>
                       {getSectionLabel(section.key)}
                     </SelectItem>
@@ -955,7 +1286,7 @@ export function ManualNutritionDiary({
                   variant="outline"
                   className="rounded-full border-border/60 bg-muted/20"
                   onClick={() =>
-                    void addPresetItemToMeal(selectedSection, {
+                    void addPresetItemToMeal(favoriteSection, {
                       item_name: item.item_name,
                       quantity: item.quantity,
                       unit: item.unit,
@@ -997,7 +1328,7 @@ export function ManualNutritionDiary({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {visibleSections.map((section) => (
+                    {visibleSectionTypeOptions.map((section) => (
                       <SelectItem key={section.key} value={section.key}>
                         {getSectionLabel(section.key)}
                       </SelectItem>
@@ -1006,14 +1337,24 @@ export function ManualNutritionDiary({
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>Item Name</Label>
+                <Label>Time</Label>
                 <Input
-                  value={itemName}
-                  onChange={(event) => setItemName(event.target.value)}
-                  placeholder="e.g. Greek Yogurt Bowl"
+                  type="time"
+                  value={itemTime}
+                  onChange={(event) => setItemTime(event.target.value)}
                   className="rounded-xl border-border/60 bg-muted/20"
                 />
               </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Item Name</Label>
+              <Input
+                value={itemName}
+                onChange={(event) => setItemName(event.target.value)}
+                placeholder="e.g. Greek Yogurt Bowl"
+                className="rounded-xl border-border/60 bg-muted/20"
+              />
             </div>
 
             <div className="grid gap-2 sm:grid-cols-2">
@@ -1056,6 +1397,24 @@ export function ManualNutritionDiary({
               <MetricControl label="Fiber" value={fiber} onChange={setFiber} max={120} step={1} unit="g" accent="text-chart-5" />
             </div>
 
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" size="sm" variant="outline" onClick={() => applyQuickActionToItemForm("plus_50_kcal")}>
+                +50 kcal
+              </Button>
+              <Button type="button" size="sm" variant="outline" onClick={() => applyQuickActionToItemForm("plus_100_kcal")}>
+                +100 kcal
+              </Button>
+              <Button type="button" size="sm" variant="outline" onClick={() => applyQuickActionToItemForm("plus_10_protein")}>
+                +10g protein
+              </Button>
+              <Button type="button" size="sm" variant="outline" onClick={() => applyQuickActionToItemForm("plus_10_carbs")}>
+                +10g carbs
+              </Button>
+              <Button type="button" size="sm" variant="outline" onClick={() => applyQuickActionToItemForm("plus_5_fat")}>
+                +5g fat
+              </Button>
+            </div>
+
             <div className="space-y-2">
               <Label>Notes</Label>
               <Textarea
@@ -1081,7 +1440,7 @@ export function ManualNutritionDiary({
             <Button
               className="accent-strong rounded-xl"
               onClick={() => void onSaveItem()}
-              disabled={mutations.addItem.isPending || mutations.updateItem.isPending}
+              disabled={mutations.addItem.isPending || mutations.updateItem.isPending || !mealGroupSelected}
             >
               {mutations.addItem.isPending || mutations.updateItem.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               Save Item
@@ -1105,7 +1464,7 @@ export function ManualNutritionDiary({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {visibleSections.map((section) => (
+                  {visibleSectionTypeOptions.map((section) => (
                     <SelectItem key={section.key} value={section.key}>
                       {getSectionLabel(section.key)}
                     </SelectItem>
@@ -1121,13 +1480,31 @@ export function ManualNutritionDiary({
               <MetricControl label="Fat" value={quickFat} onChange={setQuickFat} max={300} step={1} unit="g" accent="text-chart-4" />
               <MetricControl label="Fiber" value={quickFiber} onChange={setQuickFiber} max={120} step={1} unit="g" accent="text-chart-5" />
             </div>
+
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" size="sm" variant="outline" onClick={() => applyQuickActionToQuickAdd("plus_50_kcal")}>
+                +50 kcal
+              </Button>
+              <Button type="button" size="sm" variant="outline" onClick={() => applyQuickActionToQuickAdd("plus_100_kcal")}>
+                +100 kcal
+              </Button>
+              <Button type="button" size="sm" variant="outline" onClick={() => applyQuickActionToQuickAdd("plus_10_protein")}>
+                +10g protein
+              </Button>
+              <Button type="button" size="sm" variant="outline" onClick={() => applyQuickActionToQuickAdd("plus_10_carbs")}>
+                +10g carbs
+              </Button>
+              <Button type="button" size="sm" variant="outline" onClick={() => applyQuickActionToQuickAdd("plus_5_fat")}>
+                +5g fat
+              </Button>
+            </div>
           </div>
 
           <DialogFooter>
             <Button variant="outline" className="rounded-xl border-border/60" onClick={() => setQuickDialogOpen(false)}>
               Cancel
             </Button>
-            <Button className="accent-strong rounded-xl" onClick={() => void onSaveQuickItem()} disabled={mutations.addItem.isPending}>
+            <Button className="accent-strong rounded-xl" onClick={() => void onSaveQuickItem()} disabled={mutations.addItem.isPending || !mealGroupSelected}>
               {mutations.addItem.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               Save Quick Add
             </Button>
@@ -1135,36 +1512,37 @@ export function ManualNutritionDiary({
         </DialogContent>
       </Dialog>
 
+      <Dialog open={optionsDialogOpen} onOpenChange={setOptionsDialogOpen}>
+        <DialogContent className="rounded-2xl border-border/70 bg-card/95 sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Diary Options</DialogTitle>
+            <DialogDescription>Manage user and meal group context for this diary day.</DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3 py-1">
+            {!subject?.subject_client_id && !subject?.subject_user_id ? (
+              <NutritionScopeControls showHelperText fullWidthOnMobile />
+            ) : (
+              <p className="text-sm text-muted-foreground">Context is fixed for this view.</p>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={recentDialogOpen} onOpenChange={setRecentDialogOpen}>
         <DialogContent className="rounded-2xl border-border/70 bg-card/95">
           <DialogHeader>
             <DialogTitle>Recent Items</DialogTitle>
-            <DialogDescription>Add items from your recent logs.</DialogDescription>
+            <DialogDescription>Your latest 10 meal items.</DialogDescription>
           </DialogHeader>
 
           <div className="space-y-3">
-            <div className="grid gap-2">
-              <Label>Target Section</Label>
-              <Select value={selectedSection} onValueChange={(value) => setSelectedSection(value as DiaryMealSection)}>
-                <SelectTrigger className="rounded-xl border-border/60 bg-muted/20">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {visibleSections.map((section) => (
-                    <SelectItem key={section.key} value={section.key}>
-                      {getSectionLabel(section.key)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
             <div className="max-h-[360px] overflow-auto rounded-xl border border-border/60 bg-background/40">
-              {(recentQuery.data || []).length === 0 ? (
+              {recentItems.length === 0 ? (
                 <p className="p-4 text-sm text-muted-foreground">No recent items yet.</p>
               ) : (
                 <div className="divide-y divide-border/40">
-                  {(recentQuery.data || []).map((item, index) => (
+                  {recentItems.map((item, index) => (
                     <div key={`${item.item_name}-${index}`} className="flex items-center justify-between gap-3 p-3">
                       <div className="min-w-0">
                         <p className="truncate text-sm font-medium">{item.item_name}</p>
@@ -1184,68 +1562,40 @@ export function ManualNutritionDiary({
         </DialogContent>
       </Dialog>
 
-      <Dialog open={favoritesDialogOpen} onOpenChange={setFavoritesDialogOpen}>
-        <DialogContent className="rounded-2xl border-border/70 bg-card/95">
+      <Dialog open={addMealTypeDialogOpen} onOpenChange={setAddMealTypeDialogOpen}>
+        <DialogContent className="rounded-2xl border-border/70 bg-card/95 sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Favorites</DialogTitle>
-            <DialogDescription>Save time by reusing your favorite meal entries.</DialogDescription>
+            <DialogTitle>Add Meal Type</DialogTitle>
+            <DialogDescription>Add a meal type card to the end of the day sequence.</DialogDescription>
           </DialogHeader>
 
           <div className="space-y-3">
-            <div className="grid gap-2">
-              <Label>Target Section</Label>
-              <Select value={selectedSection} onValueChange={(value) => setSelectedSection(value as DiaryMealSection)}>
-                <SelectTrigger className="rounded-xl border-border/60 bg-muted/20">
+            <div className="flex items-center justify-between gap-3">
+              <Label className="shrink-0">Meal Type</Label>
+              <Select value={newMealType} onValueChange={(value) => setNewMealType(value as DiaryMealSection)}>
+                <SelectTrigger className="w-[200px] rounded-xl border-border/60 bg-muted/20">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {visibleSections.map((section) => (
+                  {DIARY_SECTIONS.filter((section) => section.key !== "other").map((section) => (
                     <SelectItem key={section.key} value={section.key}>
-                      {getSectionLabel(section.key)}
+                      {section.label}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
-
-            <div className="max-h-[360px] overflow-auto rounded-xl border border-border/60 bg-background/40">
-              {(favoritesQuery.data || []).length === 0 ? (
-                <p className="p-4 text-sm text-muted-foreground">No favorites yet.</p>
-              ) : (
-                <div className="divide-y divide-border/40">
-                  {(favoritesQuery.data || []).map((item) => (
-                    <div key={item.id} className="flex items-center justify-between gap-3 p-3">
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-medium">{item.item_name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {Math.round(Number(item.calories || 0))} kcal • P {Math.round(Number(item.protein_g || 0))}g • C {Math.round(Number(item.carbs_g || 0))}g • F {Math.round(Number(item.fat_g || 0))}g
-                        </p>
-                      </div>
-                      <Button
-                        size="sm"
-                        className="accent-strong rounded-lg"
-                        onClick={() =>
-                          void addPresetItemToMeal(selectedSection, {
-                            item_name: item.item_name,
-                            quantity: item.quantity,
-                            unit: item.unit,
-                            calories: item.calories,
-                            protein_g: item.protein_g,
-                            carbs_g: item.carbs_g,
-                            fat_g: item.fat_g,
-                            fiber_g: item.fiber_g,
-                            notes: item.notes,
-                          })
-                        }
-                      >
-                        Add
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
           </div>
+
+          <DialogFooter>
+            <Button variant="outline" className="rounded-xl border-border/60" onClick={() => setAddMealTypeDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button className="accent-strong rounded-xl" onClick={() => void onAddMealType()} disabled={mutations.addSection.isPending || !mealGroupSelected}>
+              {mutations.addSection.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Add Type
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -1270,7 +1620,7 @@ export function ManualNutritionDiary({
             <div className="space-y-2">
               <Label>Sections (leave empty to copy all)</Label>
               <div className="flex flex-wrap gap-2">
-                {visibleSections
+                {visibleSectionTypeOptions
                   .filter((section) => section.key !== "other")
                   .map((section) => {
                     const active = copySections.includes(section.key);

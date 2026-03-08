@@ -1,14 +1,24 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { CalendarDays, Clock3, Drumstick, Flame, Plus, TrendingUp, Users, UtensilsCrossed, Wheat } from "lucide-react";
+import { CalendarDays, Clock3, Drumstick, Flame, Plus, SlidersHorizontal, TrendingUp, Users, UtensilsCrossed, Wheat } from "lucide-react";
 
+import {
+  useNutritionDashboardData,
+  useNutritionPrefetch,
+} from "@/hooks/use-nutrition-data";
+import {
+  useSetNutritionNavigationSource,
+  useSetNutritionViewMode,
+} from "@/stores/use-nutrition-ui-store";
+import { NutritionScopeControls } from "@/components/nutrition/nutrition-scope-controls";
 import { NutritionDashboardSkeleton } from "@/components/nutrition/dashboard/nutrition-dashboard-skeleton";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/responsive-modal";
 import { Separator } from "@/components/ui/separator";
-import { useNutritionDashboard } from "@/hooks/use-nutrition-dashboard";
-import type { NutritionDashboardActivity, NutritionDashboardMacro, NutritionDashboardQuickAction } from "@/lib/mock-api/nutrition-dashboard";
+import type { NutritionDashboardActivity, NutritionDashboardMacro, NutritionDashboardQuickAction } from "@/lib/nutrition/dashboard";
 import { cn } from "@/utils";
 
 function CalorieRing({ consumed, target, compact = false }: { consumed: number; target: number; compact?: boolean }) {
@@ -175,7 +185,17 @@ function RecentActivityRow({
 }
 
 export function NutritionDashboard() {
-  const query = useNutritionDashboard();
+  const [scopeDialogOpen, setScopeDialogOpen] = useState(false);
+  const query = useNutritionDashboardData();
+  const setViewMode = useSetNutritionViewMode();
+  const setNavigationSource = useSetNutritionNavigationSource();
+
+  useNutritionPrefetch();
+
+  useEffect(() => {
+    setViewMode("dashboard");
+    setNavigationSource("dashboard");
+  }, [setNavigationSource, setViewMode]);
 
   if (query.isLoading) {
     return <NutritionDashboardSkeleton />;
@@ -205,10 +225,21 @@ export function NutritionDashboard() {
             <h1 className="text-4xl font-semibold tracking-tight">Nutrition Dashboard</h1>
             <p className="mt-1 text-sm text-muted-foreground">{data.greetingSubtitle}</p>
           </div>
-          <Button size="icon" className="accent-strong h-14 w-14 shrink-0 rounded-2xl text-black">
-            <Plus className="h-6 w-6" />
-            <span className="sr-only">Quick add</span>
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              size="icon"
+              variant="outline"
+              className="glass-subtle h-14 w-14 shrink-0 rounded-2xl border-border/60"
+              onClick={() => setScopeDialogOpen(true)}
+            >
+              <SlidersHorizontal className="h-5 w-5 text-chart-2" />
+              <span className="sr-only">Select user and meal group</span>
+            </Button>
+            <Button size="icon" className="accent-strong h-14 w-14 shrink-0 rounded-2xl text-black">
+              <Plus className="h-6 w-6" />
+              <span className="sr-only">Quick add</span>
+            </Button>
+          </div>
         </div>
       </section>
 
@@ -253,15 +284,29 @@ export function NutritionDashboard() {
       <section className="glass-surface surface-pad">
         <h2 className="mb-2 text-xl font-semibold tracking-tight">Recent Activity</h2>
         <div className="rounded-2xl border border-border/60 bg-card/60 px-4">
-          {data.recentActivity.map((activity, index) => (
-            <RecentActivityRow
-              key={activity.id}
-              activity={activity}
-              withSeparator={index < data.recentActivity.length - 1}
-            />
-          ))}
+          {data.recentActivity.length === 0 ? (
+            <p className="py-6 text-sm text-muted-foreground">No recent nutrition activity yet.</p>
+          ) : (
+            data.recentActivity.map((activity, index) => (
+              <RecentActivityRow
+                key={activity.id}
+                activity={activity}
+                withSeparator={index < data.recentActivity.length - 1}
+              />
+            ))
+          )}
         </div>
       </section>
+
+      <Dialog open={scopeDialogOpen} onOpenChange={setScopeDialogOpen}>
+        <DialogContent className="rounded-2xl border-border/70 bg-card/95 sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>User & Meal Group</DialogTitle>
+            <DialogDescription>Select the user and meal group context for nutrition pages.</DialogDescription>
+          </DialogHeader>
+          <NutritionScopeControls showHelperText fullWidthOnMobile />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

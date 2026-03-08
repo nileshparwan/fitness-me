@@ -1,8 +1,9 @@
+import { nutritionKeys } from "@/lib/query-keys-nutrition";
+
 export const nutritionProgramKeys = {
-  plans: () => ["meal_plans"] as const,
-  plan: (programId: string) => [...nutritionProgramKeys.plans(), programId] as const,
-  planOptions: () => [...nutritionProgramKeys.plans(), "options"] as const,
-  planMealsRoot: () => ["meal_plan_meals"] as const,
-  planMeals: (programId: string) =>
-    [...nutritionProgramKeys.planMealsRoot(), { program_id: programId }] as const,
+  plans: nutritionKeys.programs,
+  plan: nutritionKeys.programById,
+  planOptions: nutritionKeys.programOptions,
+  planMealsRoot: nutritionKeys.programMealsRoot,
+  planMeals: nutritionKeys.programMealsByProgramId,
 };

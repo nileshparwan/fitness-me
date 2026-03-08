@@ -5,13 +5,12 @@ import Link from "next/link";
 import dynamic from "next/dynamic";
 import { useQuery } from "@tanstack/react-query";
 import { format, parseISO } from "date-fns";
-import { createClient } from "@/lib/supabase/client";
 import { nutritionProgramKeys } from "@/lib/query-keys-nutrition-program";
 import { toast } from "sonner";
 
 // Actions
 import { 
-  getProgramMeals, updateProgramStatus, updateProgramNotes, deleteMeal, updateMealPositions, getProgramOptions, updateMealStatus
+  getProgramById, getProgramMeals, updateProgramStatus, updateProgramNotes, deleteMeal, updateMealPositions, getProgramOptions, updateMealStatus
 } from "@/app/actions/nutrition";
 
 // dnd-kit
@@ -46,7 +45,6 @@ const DownloadNutritionButton = dynamic(
 
 export default function ProgramPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
-  const supabase = createClient();
   
   // State
   const [notesBuffer, setNotesBuffer] = useState("");
@@ -58,14 +56,8 @@ export default function ProgramPage({ params }: { params: Promise<{ id: string }
   const { data: program, isLoading: progLoading, refetch: refetchProg } = useQuery<NutritionProgram | null>({
     queryKey: nutritionProgramKeys.plan(id),
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("meal_plans")
-        .select("*")
-        .eq("id", id)
-        .maybeSingle();
+      const data = await getProgramById(id);
 
-      if (error) throw error;
-      
       // If data is null, we return null. 
       // The Type Generic <NutritionProgram | null> now accepts this.
       if (!data) return null;

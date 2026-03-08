@@ -1,6 +1,6 @@
-import { createClient } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
 import { format, parseISO } from "date-fns";
+import { getPublicProgramWithMeals } from "@/app/actions/nutrition";
 import {
     Accordion,
     AccordionContent,
@@ -20,26 +20,11 @@ import { NutritionAnalytics } from "@/components/nutrition/nutrition-analytics";
 export default async function PublicNutritionPage({ params }: { params: Promise<{ id: string }> }) {
     // Await params in Next.js 15
     const { id } = await params;
-    const supabase = await createClient();
+    const data = await getPublicProgramWithMeals(id);
+    if (!data) return notFound();
 
-    // 1. Fetch Program
-    const { data: program } = await supabase
-        .from("meal_plans")
-        .select("*")
-        .eq("id", id)
-        .eq("is_public", true) // Enforce public check
-        .single();
-
-    if (!program) return notFound();
-
-    // 2. Fetch Meals (Ordered by position now, not date)
-    const { data: meals } = await supabase
-        .from("meal_plan_meals")
-        .select("*")
-        .eq("program_id", id)
-        .order("position", { ascending: true });
-
-    const safeMeals = meals || [];
+    const { program } = data;
+    const safeMeals = data.meals;
 
     return (
         <div className="min-h-screen bg-background p-4 md:p-8">

@@ -3,9 +3,67 @@
 import { createClient } from "@/lib/supabase/server";
 import { runTrackedAction } from "@/lib/events/dispatcher";
 import { revalidatePath } from "next/cache";
-import { NutritionMeal, ProgramSummary } from "@/types/nutrition";
+import { NutritionMeal, NutritionProgram, ProgramSummary } from "@/types/nutrition";
+import { z } from "zod";
+
+const programIdSchema = z.string().uuid();
 
 // --- PROGRAMS ---
+
+export async function getProgramById(programId: string): Promise<NutritionProgram | null> {
+    const safeProgramId = programIdSchema.parse(programId);
+    return runTrackedAction({
+        eventName: "nutrition.program.read",
+        payload: { program_id: safeProgramId },
+        action: async () => {
+            const supabase = await createClient();
+            const {
+                data: { user },
+            } = await supabase.auth.getUser();
+            if (!user) throw new Error("Unauthorized");
+
+            const { data, error } = await supabase
+                .from("meal_plans")
+                .select("*")
+                .eq("id", safeProgramId)
+                .eq("user_id", user.id)
+                .maybeSingle();
+            if (error) throw new Error(error.message);
+            return (data || null) as NutritionProgram | null;
+        },
+    });
+}
+
+export async function getPublicProgramWithMeals(programId: string): Promise<{ program: NutritionProgram; meals: NutritionMeal[] } | null> {
+    const safeProgramId = programIdSchema.parse(programId);
+    return runTrackedAction({
+        eventName: "nutrition.program.public.read",
+        payload: { program_id: safeProgramId },
+        action: async () => {
+            const supabase = await createClient();
+            const { data: program, error: programError } = await supabase
+                .from("meal_plans")
+                .select("*")
+                .eq("id", safeProgramId)
+                .eq("is_public", true)
+                .maybeSingle();
+            if (programError) throw new Error(programError.message);
+            if (!program) return null;
+
+            const { data: meals, error: mealsError } = await supabase
+                .from("meal_plan_meals")
+                .select("*")
+                .eq("program_id", safeProgramId)
+                .order("position", { ascending: true });
+            if (mealsError) throw new Error(mealsError.message);
+
+            return {
+                program: program as NutritionProgram,
+                meals: (meals || []) as NutritionMeal[],
+            };
+        },
+    });
+}
 
 // PERFORMANCE FIX: Lean query for dropdowns
 export async function getProgramOptions(): Promise<ProgramSummary[]> {

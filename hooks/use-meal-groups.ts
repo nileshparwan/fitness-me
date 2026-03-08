@@ -5,6 +5,7 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tansta
 import {
   archiveMealGroupAssignmentAction,
   assignMealGroupToSubjectAction,
+  createMealPlanTypeAction,
   createMealItemAction,
   deleteMealGroupAction,
   deleteMealItemAction,
@@ -21,6 +22,7 @@ import {
   type MealGroupDetail,
 } from "@/app/actions/meal-groups";
 import { mealGroupKeys, type MealGroupAssignmentListParams, type MealGroupListParams } from "@/lib/query-keys-meal-groups";
+import { nutritionKeys } from "@/lib/query-keys-nutrition";
 
 export function useMealGroups(params: MealGroupListParams) {
   return useQuery({
@@ -34,6 +36,7 @@ export function useMealGroups(params: MealGroupListParams) {
         include_snapshots: params.includeSnapshots ?? false,
       }),
     staleTime: 20_000,
+    gcTime: 5 * 60_000,
     refetchOnWindowFocus: false,
     placeholderData: keepPreviousData,
   });
@@ -44,7 +47,8 @@ export function useMealGroupDetail(mealGroupId: string) {
     queryKey: mealGroupKeys.detailById(mealGroupId),
     queryFn: () => getMealGroupDetailAction(mealGroupId),
     enabled: Boolean(mealGroupId),
-    staleTime: 20_000,
+    staleTime: 45_000,
+    gcTime: 5 * 60_000,
     refetchOnWindowFocus: false,
   });
 }
@@ -57,7 +61,8 @@ export function useMealGroupAssignments(params: MealGroupAssignmentListParams) {
         status: params.status ?? "active",
         subject: params.subject,
       }),
-    staleTime: 15_000,
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
     refetchOnWindowFocus: false,
   });
 }
@@ -66,7 +71,8 @@ export function useAssignableSubjects() {
   return useQuery({
     queryKey: mealGroupKeys.assignableSubjects(),
     queryFn: listAssignableSubjectsAction,
-    staleTime: 30_000,
+    staleTime: 60_000,
+    gcTime: 5 * 60_000,
     refetchOnWindowFocus: false,
   });
 }
@@ -80,6 +86,8 @@ export function useMealGroupMutations() {
       queryClient.invalidateQueries({ queryKey: mealGroupKeys.detail() }),
       queryClient.invalidateQueries({ queryKey: mealGroupKeys.assignments() }),
       queryClient.invalidateQueries({ queryKey: mealGroupKeys.assignableSubjects() }),
+      queryClient.invalidateQueries({ queryKey: nutritionKeys.dashboard() }),
+      queryClient.invalidateQueries({ queryKey: nutritionKeys.diary() }),
     ]);
   };
 
@@ -108,6 +116,11 @@ export function useMealGroupMutations() {
     onSuccess: invalidateAll,
   });
 
+  const createPlanType = useMutation({
+    mutationFn: createMealPlanTypeAction,
+    onSuccess: invalidateAll,
+  });
+
   const updateItem = useMutation({
     mutationFn: updateMealItemAction,
     onMutate: async (payload) => {
@@ -127,6 +140,10 @@ export function useMealGroupMutations() {
                   ...(payload.changes.carbs_g !== undefined ? { carbs_g: payload.changes.carbs_g } : {}),
                   ...(payload.changes.fat_g !== undefined ? { fat_g: payload.changes.fat_g } : {}),
                   ...(payload.changes.notes !== undefined ? { notes: payload.changes.notes || null } : {}),
+                  ...(payload.changes.quantity !== undefined ? { quantity: payload.changes.quantity ?? null } : {}),
+                  ...(payload.changes.unit !== undefined ? { unit: payload.changes.unit || null } : {}),
+                  ...(payload.changes.planned_date !== undefined ? { planned_date: payload.changes.planned_date || null } : {}),
+                  ...(payload.changes.planned_time !== undefined ? { planned_time: payload.changes.planned_time || null } : {}),
                 }
               : item
           ),
@@ -176,6 +193,7 @@ export function useMealGroupMutations() {
     deleteGroup,
     duplicateGroup,
     updatePlanNote,
+    createPlanType,
     createItem,
     updateItem,
     deleteItem,

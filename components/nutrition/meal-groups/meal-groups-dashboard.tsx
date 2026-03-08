@@ -1,11 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
-import { CalendarRange, Copy, Edit, Loader2, Plus, Search, Trash2, UtensilsCrossed } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { CalendarRange, Copy, Edit, Loader2, MoreVertical, Plus, Search, Trash2, UtensilsCrossed } from "lucide-react";
 import { toast } from "sonner";
 
 import type { MealGroupListRow, MealGroupStatus } from "@/app/actions/meal-groups";
+import {
+  useNutritionGroupMutations,
+  useNutritionMealGroups,
+} from "@/hooks/use-nutrition-data";
+import {
+  useSetNutritionNavigationSource,
+  useSetNutritionViewMode,
+} from "@/stores/use-nutrition-ui-store";
 import { AssignMealGroupDialog } from "@/components/nutrition/meal-groups/assign-meal-group-dialog";
 import { MEAL_DAY_LABELS, MEAL_DAY_ORDER, MEAL_GROUP_STATUS_LABELS } from "@/components/nutrition/meal-groups/meal-group-types";
 import { Badge } from "@/components/ui/badge";
@@ -17,7 +25,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { useDebounce } from "@/hooks/use-debounce";
-import { useMealGroupMutations, useMealGroups } from "@/hooks/use-meal-groups";
 import { cn } from "@/utils";
 
 type StatusFilter = "all" | MealGroupStatus;
@@ -79,16 +86,27 @@ export function MealGroupsDashboard() {
   const [draft, setDraft] = useState<GroupDraft>(EMPTY_DRAFT);
   const [isGroupDialogOpen, setIsGroupDialogOpen] = useState(false);
   const [assignTarget, setAssignTarget] = useState<MealGroupListRow | null>(null);
+  const [actionTarget, setActionTarget] = useState<MealGroupListRow | null>(null);
+  const [duplicateTarget, setDuplicateTarget] = useState<MealGroupListRow | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<MealGroupListRow | null>(null);
+
+  const setViewMode = useSetNutritionViewMode();
+  const setNavigationSource = useSetNutritionNavigationSource();
 
   const debouncedSearch = useDebounce(search, 250);
-  const query = useMealGroups({
+  const query = useNutritionMealGroups({
     page,
     pageSize: 12,
     status,
     search: debouncedSearch,
     includeSnapshots: false,
   });
-  const mutations = useMealGroupMutations();
+  const mutations = useNutritionGroupMutations();
+
+  useEffect(() => {
+    setViewMode("groups");
+    setNavigationSource("groups");
+  }, [setNavigationSource, setViewMode]);
 
   const rows = useMemo(() => query.data?.rows || [], [query.data?.rows]);
 
@@ -150,22 +168,23 @@ export function MealGroupsDashboard() {
     }
   };
 
+  const confirmDuplicateGroup = async () => {
+    if (!duplicateTarget) return;
+    await duplicateGroup(duplicateTarget.id);
+    setDuplicateTarget(null);
+  };
+
+  const confirmDeleteGroup = async () => {
+    if (!deleteTarget) return;
+    await deleteGroup(deleteTarget.id);
+    setDeleteTarget(null);
+  };
+
   return (
     <div className="space-y-4 md:space-y-5">
-      <section className="glass-surface surface-pad space-y-4">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">Meal Groups</h1>
-            <p className="text-sm text-muted-foreground">Weekly templates with snapshot assignments for users and clients.</p>
-          </div>
-          <Button className="accent-strong rounded-xl" onClick={openCreateDialog}>
-            <Plus className="mr-2 h-4 w-4" />
-            New Group
-          </Button>
-        </div>
-
-        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-          <div className="relative w-full md:max-w-md">
+      <section className="space-y-3">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="relative w-full sm:max-w-md">
             <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
               className="rounded-xl border-border/60 bg-muted/20 pl-9"
@@ -178,23 +197,30 @@ export function MealGroupsDashboard() {
             />
           </div>
 
-          <Select
-            value={status}
-            onValueChange={(value) => {
-              setStatus(value as StatusFilter);
-              setPage(0);
-            }}
-          >
-            <SelectTrigger className="w-full rounded-xl border-border/60 bg-muted/20 md:w-52">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All statuses</SelectItem>
-              <SelectItem value="draft">Draft</SelectItem>
-              <SelectItem value="active">Active</SelectItem>
-              <SelectItem value="archived">Archived</SelectItem>
-            </SelectContent>
-          </Select>
+          <div className="flex items-center gap-2">
+            <Select
+              value={status}
+              onValueChange={(value) => {
+                setStatus(value as StatusFilter);
+                setPage(0);
+              }}
+            >
+              <SelectTrigger className="w-full rounded-xl border-border/60 bg-muted/20 sm:w-44">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All statuses</SelectItem>
+                <SelectItem value="draft">Draft</SelectItem>
+                <SelectItem value="active">Active</SelectItem>
+                <SelectItem value="archived">Archived</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <Button className="accent-strong rounded-xl px-3 sm:px-4" onClick={openCreateDialog} aria-label="New group">
+              <Plus className="h-4 w-4" />
+              <span className="hidden sm:ml-2 sm:inline">New Group</span>
+            </Button>
+          </div>
         </div>
       </section>
 
@@ -242,24 +268,18 @@ export function MealGroupsDashboard() {
               <p className="text-sm text-muted-foreground">Open group to manage meal items, notes, and assignment snapshots.</p>
             </div>
 
-            <div className="grid grid-cols-2 gap-2">
-              <Button asChild className="rounded-xl accent-strong">
+            <div className="flex items-center gap-2">
+              <Button asChild className="flex-1 rounded-xl accent-strong">
                 <Link href={`/nutrition/groups/${row.id}`}>Open</Link>
               </Button>
-              <Button variant="outline" className="rounded-xl border-border/60" onClick={() => openEditDialog(row)}>
-                <Edit className="mr-1.5 h-4 w-4" />
-                Edit
-              </Button>
-              <Button variant="outline" className="rounded-xl border-border/60" onClick={() => void duplicateGroup(row.id)}>
-                <Copy className="mr-1.5 h-4 w-4" />
-                Duplicate
-              </Button>
-              <Button variant="outline" className="rounded-xl border-border/60" onClick={() => setAssignTarget(row)}>
-                Assign
-              </Button>
-              <Button className="col-span-2 rounded-xl" variant="destructive" onClick={() => void deleteGroup(row.id)}>
-                <Trash2 className="mr-1.5 h-4 w-4" />
-                Delete
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-10 w-10 rounded-xl border-border/60"
+                aria-label={`More actions for ${row.name}`}
+                onClick={() => setActionTarget(row)}
+              >
+                <MoreVertical className="h-4 w-4" />
               </Button>
             </div>
           </article>
@@ -334,6 +354,120 @@ export function MealGroupsDashboard() {
             <Button className="accent-strong rounded-xl" onClick={() => void saveGroup()} disabled={mutations.upsertGroup.isPending}>
               {mutations.upsertGroup.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               Save Group
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(actionTarget)}
+        onOpenChange={(open) => {
+          if (!open) setActionTarget(null);
+        }}
+      >
+        <DialogContent className="rounded-2xl border-border/70 bg-card/95 sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Group Actions</DialogTitle>
+            <DialogDescription>{actionTarget?.name || "Meal group"}</DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-2 py-1">
+            <Button
+              variant="outline"
+              className="justify-start rounded-xl border-border/60"
+              onClick={() => {
+                if (!actionTarget) return;
+                openEditDialog(actionTarget);
+                setActionTarget(null);
+              }}
+            >
+              <Edit className="mr-2 h-4 w-4" />
+              Edit
+            </Button>
+            <Button
+              variant="outline"
+              className="justify-start rounded-xl border-border/60"
+              onClick={() => {
+                if (!actionTarget) return;
+                setDuplicateTarget(actionTarget);
+                setActionTarget(null);
+              }}
+            >
+              <Copy className="mr-2 h-4 w-4" />
+              Duplicate
+            </Button>
+            <Button
+              variant="outline"
+              className="justify-start rounded-xl border-border/60"
+              onClick={() => {
+                if (!actionTarget) return;
+                setAssignTarget(actionTarget);
+                setActionTarget(null);
+              }}
+            >
+              Assign
+            </Button>
+            <Button
+              variant="destructive"
+              className="justify-start rounded-xl"
+              onClick={() => {
+                if (!actionTarget) return;
+                setDeleteTarget(actionTarget);
+                setActionTarget(null);
+              }}
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              Delete
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(duplicateTarget)}
+        onOpenChange={(open) => {
+          if (!open) setDuplicateTarget(null);
+        }}
+      >
+        <DialogContent className="rounded-2xl border-border/70 bg-card/95 sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Duplicate Meal Group?</DialogTitle>
+            <DialogDescription>
+              This will create a copy of {duplicateTarget?.name || "this meal group"}.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" className="rounded-xl border-border/60" onClick={() => setDuplicateTarget(null)}>
+              Cancel
+            </Button>
+            <Button className="accent-strong rounded-xl" onClick={() => void confirmDuplicateGroup()} disabled={mutations.duplicateGroup.isPending}>
+              {mutations.duplicateGroup.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Duplicate
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(deleteTarget)}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null);
+        }}
+      >
+        <DialogContent className="rounded-2xl border-border/70 bg-card/95 sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete Meal Group?</DialogTitle>
+            <DialogDescription>
+              This action cannot be undone for {deleteTarget?.name || "this meal group"}.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" className="rounded-xl border-border/60" onClick={() => setDeleteTarget(null)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" className="rounded-xl" onClick={() => void confirmDeleteGroup()} disabled={mutations.deleteGroup.isPending}>
+              {mutations.deleteGroup.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Delete
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -6,6 +6,15 @@ import { CalendarDays, Copy, Loader2, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import type { MealGroupStatus, MealItemType } from "@/app/actions/meal-groups";
+import {
+  useNutritionGroupMutations,
+  useNutritionMealGroup,
+} from "@/hooks/use-nutrition-data";
+import {
+  useSetNutritionNavigationSource,
+  useSetNutritionSelectedMealGroupId,
+  useSetNutritionViewMode,
+} from "@/stores/use-nutrition-ui-store";
 import { AssignMealGroupDialog } from "@/components/nutrition/meal-groups/assign-meal-group-dialog";
 import { MealItemEditorDialog } from "@/components/nutrition/meal-groups/meal-item-editor-dialog";
 import {
@@ -22,7 +31,6 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
-import { useMealGroupDetail, useMealGroupMutations } from "@/hooks/use-meal-groups";
 import type { Database } from "@/types/database";
 import { cn } from "@/utils";
 
@@ -70,8 +78,11 @@ function MacroTotalCard({ label, value, unit, accent }: { label: string; value: 
 }
 
 export function MealGroupDetail({ mealGroupId }: { mealGroupId: string }) {
-  const detailQuery = useMealGroupDetail(mealGroupId);
-  const mutations = useMealGroupMutations();
+  const detailQuery = useNutritionMealGroup(mealGroupId);
+  const mutations = useNutritionGroupMutations();
+  const setViewMode = useSetNutritionViewMode();
+  const setNavigationSource = useSetNutritionNavigationSource();
+  const setSelectedMealGroupId = useSetNutritionSelectedMealGroupId();
 
   const [selectedDay, setSelectedDay] = useState<MealDayOfWeek>("mon");
   const [groupName, setGroupName] = useState("");
@@ -85,6 +96,12 @@ export function MealGroupDetail({ mealGroupId }: { mealGroupId: string }) {
   const [editItem, setEditItem] = useState<MealItemRow | null>(null);
   const [assignOpen, setAssignOpen] = useState(false);
   const [dayNotesDraft, setDayNotesDraft] = useState("");
+
+  useEffect(() => {
+    setViewMode("groups");
+    setNavigationSource("groups");
+    setSelectedMealGroupId(mealGroupId);
+  }, [mealGroupId, setNavigationSource, setSelectedMealGroupId, setViewMode]);
 
   const data = detailQuery.data;
   const group = data?.group || null;
