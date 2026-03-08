@@ -7,8 +7,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card"; // Removed unused imports
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/responsive-modal";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,9 +16,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { useInfinitePrograms } from "@/hooks/use-program"; 
 import { createProgram, deletePrograms } from "@/app/actions/program";
+import { trainingKeys } from "@/lib/query-keys-training";
 import { cn } from "@/utils"; 
 import { useQueryClient } from "@tanstack/react-query";
-import { useMediaQuery } from "@/hooks/use-media-query";
 import { ProgramListItem } from "@/components/program/program-list-item";
 
 // --- Extracted Grid Card Component ---
@@ -84,7 +83,6 @@ const ProgramGridCard = ({
 export default function ProgramsPage() {
   const programs = useInfinitePrograms();
   const queryClient = useQueryClient();
-  const isDesktop = useMediaQuery("(min-width: 768px)");
   const programRows = programs.data?.pages.flatMap((page) => page.data) || [];
 
   // State
@@ -99,7 +97,7 @@ export default function ProgramsPage() {
   async function handleSubmit(formData: FormData) {
     try {
       await createProgram(formData);
-      await queryClient.invalidateQueries({ queryKey: ["workout-programs"] });
+      await queryClient.invalidateQueries({ queryKey: trainingKeys.plans() });
       setIsOpen(false);
       toast.success("Program created!");
     } catch (e) {
@@ -113,7 +111,7 @@ export default function ProgramsPage() {
     setIsDeleting(true);
     try {
       await deletePrograms(selectedIds);
-      await queryClient.invalidateQueries({ queryKey: ["workout-programs"] });
+      await queryClient.invalidateQueries({ queryKey: trainingKeys.plans() });
       setSelectedIds([]); 
       setIsSelectionMode(false);
       toast.success("Deleted successfully");
@@ -229,27 +227,18 @@ export default function ProgramsPage() {
                  </Button>
 
                  {/* CREATE ACTION */}
-                 {isDesktop ? (
-                   <Dialog open={isOpen} onOpenChange={setIsOpen}>
-                    <DialogTrigger asChild>
-                      <Button><Plus className="mr-2 h-4 w-4" /> New</Button>
-                    </DialogTrigger>
-                    <DialogContent className="sm:max-w-[425px]">
-                      <DialogHeader><DialogTitle>Create New Program</DialogTitle></DialogHeader>
-                      <CreateProgramForm />
-                    </DialogContent>
-                   </Dialog>
-                 ) : (
-                   <Sheet open={isOpen} onOpenChange={setIsOpen}>
-                    <SheetTrigger asChild>
-                      <Button size="icon" className="w-10 h-10"><Plus className="h-5 w-5" /></Button>
-                    </SheetTrigger>
-                    <SheetContent side="bottom" className="h-[80vh] rounded-t-xl px-3 sm:px-4">
-                      <SheetHeader className="text-left mb-4"><SheetTitle>Create New Program</SheetTitle></SheetHeader>
-                      <CreateProgramForm />
-                    </SheetContent>
-                   </Sheet>
-                 )}
+                 <Dialog open={isOpen} onOpenChange={setIsOpen}>
+                  <DialogTrigger asChild>
+                    <Button className="hidden md:inline-flex"><Plus className="mr-2 h-4 w-4" /> New</Button>
+                  </DialogTrigger>
+                  <DialogTrigger asChild>
+                    <Button size="icon" className="h-10 w-10 md:hidden"><Plus className="h-5 w-5" /></Button>
+                  </DialogTrigger>
+                  <DialogContent size={{ tablet: "md", desktop: "md" }}>
+                    <DialogHeader><DialogTitle>Create New Program</DialogTitle></DialogHeader>
+                    <CreateProgramForm />
+                  </DialogContent>
+                 </Dialog>
               </div>
             </div>
           </>

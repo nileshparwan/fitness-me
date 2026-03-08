@@ -83,7 +83,7 @@ export function useUpdateAdminUserRole() {
     mutationFn: async (payload: { userId: string; role: AppRole }) => {
       return await updateAdminUserRole(payload.userId, payload.role);
     },
-    onSuccess: (result) => {
+    onSuccess: (result, payload) => {
       if (!result.success) {
         toast.error(result.message);
         return;
@@ -91,6 +91,7 @@ export function useUpdateAdminUserRole() {
 
       queryClient.invalidateQueries({ queryKey: ["admin", "users"] });
       queryClient.invalidateQueries({ queryKey: ["admin", "user-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["admin", "user", payload.userId] });
       toast.success(result.message);
     },
     onError: (error) => {
@@ -106,7 +107,7 @@ export function useSetAdminUserBlocked() {
     mutationFn: async (payload: { userId: string; blocked: boolean }) => {
       return await setAdminUserBlocked(payload.userId, payload.blocked);
     },
-    onSuccess: (result) => {
+    onSuccess: (result, payload) => {
       if (!result.success) {
         toast.error(result.message);
         return;
@@ -114,6 +115,7 @@ export function useSetAdminUserBlocked() {
 
       queryClient.invalidateQueries({ queryKey: ["admin", "users"] });
       queryClient.invalidateQueries({ queryKey: ["admin", "user-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["admin", "user", payload.userId] });
       toast.success(result.message);
     },
     onError: (error) => {

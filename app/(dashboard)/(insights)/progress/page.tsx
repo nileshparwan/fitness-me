@@ -11,6 +11,7 @@ import {
   type CardioChartPoint,
   type StrengthChartPoint,
 } from "@/app/actions/progress";
+import { progressKeys } from "@/lib/query-keys-progress";
 import { Database } from "@/types/database";
 
 // UI Components
@@ -48,7 +49,7 @@ export default function ProgressPage() {
 
   // 1. Fetch Exercises List
   const { data: exercises, isLoading: loadingExercises } = useQuery({
-    queryKey: ["exercises-list"],
+    queryKey: progressKeys.availableExercises(),
     queryFn: getAvailableExercises,
     staleTime: 1000 * 60 * 10, // Cache for 10 mins
   });
@@ -57,7 +58,7 @@ export default function ProgressPage() {
 
   // 2. Fetch Metrics (metrics wait for 'exercise' to be set)
   const { data: metrics, isLoading: loadingMetrics, isFetching: fetchingMetrics } = useQuery({
-    queryKey: ["metrics", selectedExercise, range],
+    queryKey: progressKeys.exerciseMetrics(selectedExercise, range),
     queryFn: () => getExerciseMetrics(selectedExercise, range),
     enabled: !!selectedExercise,
     placeholderData: (previous) => previous,
@@ -65,19 +66,19 @@ export default function ProgressPage() {
 
   // 3. Parallel Data Fetching
   const { data: profile } = useQuery({
-    queryKey: ["profile"],
+    queryKey: progressKeys.userProfile(),
     queryFn: getUserProfile,
     staleTime: 1000 * 60 * 30,
   });
 
   const { data: radarData, isLoading: loadingRadar } = useQuery<RadarDatum[]>({
-    queryKey: ["radar-balance"],
+    queryKey: progressKeys.muscleBalance(),
     queryFn: getMuscleBalance,
     staleTime: 1000 * 60 * 10,
   });
 
   const { data: exDetails, isLoading: loadingExerciseDetails } = useQuery({
-    queryKey: ["ex-details", selectedExercise],
+    queryKey: progressKeys.exerciseDetails(selectedExercise),
     queryFn: () => getExerciseDetails(selectedExercise),
     enabled: !!selectedExercise,
     staleTime: 1000 * 60 * 30,

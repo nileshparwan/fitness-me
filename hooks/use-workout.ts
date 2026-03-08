@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { createWorkoutAction, deleteWorkoutAction, updateWorkoutAction, type WorkoutActionInput } from "@/app/actions/workout";
+import { trainingKeys } from "@/lib/query-keys-training";
 import { Database } from "@/types/database";
 
 type TrainingSessionRow = Database["public"]["Tables"]["training_sessions"]["Row"];
@@ -20,7 +21,7 @@ export function useWorkout(id: string) {
   const supabase = createClient();
 
   return useQuery({
-    queryKey: ["workout", id],
+    queryKey: trainingKeys.session(id),
     queryFn: async () => {
       const { data, error } = await supabase
         .from("training_sessions")
@@ -40,7 +41,7 @@ export function useWorkouts() {
 
   // Lean payload for list rendering and faster first paint.
   const history = useQuery({
-    queryKey: ["workouts"],
+    queryKey: trainingKeys.sessions(),
     queryFn: async () => {
       const { data, error } = await supabase
         .from("training_sessions")
@@ -71,7 +72,7 @@ export function useWorkouts() {
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["workouts"] });
+      queryClient.invalidateQueries({ queryKey: trainingKeys.sessions() });
       toast.success("Workout created!");
     },
     onError: (err) => {
@@ -96,8 +97,8 @@ export function useWorkouts() {
       });
     },
     onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ["workouts"] });
-      queryClient.invalidateQueries({ queryKey: ["workout", variables.id] });
+      queryClient.invalidateQueries({ queryKey: trainingKeys.sessions() });
+      queryClient.invalidateQueries({ queryKey: trainingKeys.session(variables.id) });
       toast.success("Workout updated!");
     },
     onError: (err) => {
@@ -112,7 +113,7 @@ export function useWorkouts() {
       await deleteWorkoutAction(ids);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["workouts"] });
+      queryClient.invalidateQueries({ queryKey: trainingKeys.sessions() });
       toast.success("Deleted successfully");
       // Optional: Only redirect if we were on the detail page, 
       // but if deleting from list, no redirect needed.
