@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import { canAccessPathForRole, getRoleHomePath, isProtectedAppPath } from "@/lib/auth/route-access";
 
 const redirectMap: Record<string, string> = {
   "/signin": "/login",
@@ -48,6 +49,30 @@ export async function updateSession(request: NextRequest) {
     : []
   const isSocialOnly = providers.length > 0 && !providers.includes("email")
   const hasPassword = Boolean(user?.user_metadata?.has_password)
+  const profile = user
+    ? await (async () => {
+        const { data } = await supabase
+          .from("profiles")
+          .select("role")
+          .eq("id", user.id)
+          .maybeSingle()
+        return data ?? null
+      })()
+    : null
+  const profileRole = typeof profile?.role === "string" ? profile.role.toLowerCase() : null
+  const appRole =
+    typeof user?.app_metadata?.role === "string" ? String(user.app_metadata.role).toLowerCase() : null
+  const userRole =
+    typeof user?.user_metadata?.role === "string" ? String(user.user_metadata.role).toLowerCase() : null
+  const resolvedRole = profileRole || appRole || userRole || "user"
+  const normalizedRole: "sysadmin" | "user" =
+    resolvedRole === "admin" || resolvedRole === "sysadmin"
+      ? "sysadmin"
+      : "user"
+
+  const roleContext = {
+    role: normalizedRole,
+  } as const
 
   // ---------------------------------------------------------
   // 3.6 NEW: Handle Root Path (localhost:3000 -> /)
@@ -55,7 +80,7 @@ export async function updateSession(request: NextRequest) {
   if (pathname === '/') {
     const url = request.nextUrl.clone()
     if (user) {
-      url.pathname = '/dashboard' // User is logged in -> Dashboard
+      url.pathname = getRoleHomePath(roleContext)
     } else {
       url.pathname = '/login'     // User is guest -> Login
     }
@@ -71,10 +96,7 @@ export async function updateSession(request: NextRequest) {
 
   // 4. Protect Routes
   // This array contains all the paths you want to secure
-  const protectedPaths = ['/dashboard', '/workouts', '/exercises', '/progress', '/analytics', '/settings', '/programs', '/admin'];
-
-  // Check if the current path starts with any of the protected paths
-  const isProtected = protectedPaths.some(path => request.nextUrl.pathname.startsWith(path));
+  const isProtected = isProtectedAppPath(request.nextUrl.pathname);
 
   if (!user && isProtected) {
     const url = request.nextUrl.clone()
@@ -121,10 +143,20 @@ export async function updateSession(request: NextRequest) {
     }
   }
 
+  // Role-route ownership guard for all protected app routes.
+  if (user && isProtected) {
+    const allowed = canAccessPathForRole(request.nextUrl.pathname, roleContext);
+    if (!allowed) {
+      const url = request.nextUrl.clone();
+      url.pathname = getRoleHomePath(roleContext);
+      return NextResponse.redirect(url);
+    }
+  }
+
   // Also redirect logged-in users away from login page
   if (user && !isDeleted && (request.nextUrl.pathname === '/login' || request.nextUrl.pathname === '/register')) {
     const url = request.nextUrl.clone()
-    url.pathname = '/dashboard'
+    url.pathname = getRoleHomePath(roleContext)
     return NextResponse.redirect(url)
   }
 

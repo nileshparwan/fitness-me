@@ -10,15 +10,15 @@ const config: Config = {
   theme: {
     extend: {
       boxShadow: {
-        soft: "0 10px 40px -10px rgba(15, 23, 42, 0.08)",
-        colored: "0 14px 36px -12px rgba(244, 63, 94, 0.35)",
+        soft: "0 14px 40px -24px rgba(2, 6, 23, 0.82)",
+        colored: "0 18px 40px -20px rgba(255, 77, 125, 0.5)",
       },
       colors: {
         brand: {
-          navy: "#111827",
-          pink: "#f43f5e",
-          orange: "#fb923c",
-          coral: "#fb7185",
+          navy: "#040815",
+          pink: "#ff4d7d",
+          orange: "#f5ac28",
+          coral: "#9b88f5",
         },
       },
       borderRadius: {

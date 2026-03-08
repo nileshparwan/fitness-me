@@ -3,15 +3,13 @@
 import { useState, useEffect } from "react";
 import { copyMeal, moveMeal } from "@/app/actions/nutrition";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/responsive-modal";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Copy, ArrowRightLeft } from "lucide-react";
 import { toast } from "sonner";
 import { NutritionMeal, ProgramSummary } from "@/types/nutrition";
-import { useMediaQuery } from "@/hooks/use-media-query";
 
 interface Props {
   meal: NutritionMeal;
@@ -23,7 +21,6 @@ interface Props {
 export function CopyMealDialog({ meal, programs, open, onOpenChange }: Props) {
   const [mode, setMode] = useState<"copy" | "move">("copy");
   const [targetProgram, setTargetProgram] = useState("");
-  const isDesktop = useMediaQuery("(min-width: 768px)");
 
   // Safety check: Ensure programs is always an array
   const safePrograms = programs || [];
@@ -82,20 +79,14 @@ export function CopyMealDialog({ meal, programs, open, onOpenChange }: Props) {
     </div>
   );
 
-  if (isDesktop) {
-    return (
-      <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="px-6"><DialogHeader><DialogTitle>Organize Meal</DialogTitle></DialogHeader>{Content}</DialogContent>
-      </Dialog>
-    );
-  }
-
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="bottom" className="rounded-t-xl px-6">
-        <SheetHeader className="text-left"><SheetTitle>Organize Meal</SheetTitle></SheetHeader>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent size={{ tablet: "md", desktop: "md" }} className="px-6">
+        <DialogHeader>
+          <DialogTitle>Organize Meal</DialogTitle>
+        </DialogHeader>
         {Content}
-      </SheetContent>
-    </Sheet>
+      </DialogContent>
+    </Dialog>
   );
 }

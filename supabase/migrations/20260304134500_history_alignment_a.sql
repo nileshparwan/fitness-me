@@ -1,0 +1,2 @@
+-- Intentionally empty.
+-- Retained only so local migration history matches the remote project.

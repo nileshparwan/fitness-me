@@ -19,7 +19,7 @@ export function buildIsoDateRange(days: number): string[] {
   return dates;
 }
 
-export function toShortDateLabel(isoDate: string): string {
+function toShortDateLabel(isoDate: string): string {
   return format(parseISO(isoDate), "MMM d");
 }
 

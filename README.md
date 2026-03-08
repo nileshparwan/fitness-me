@@ -1,8 +1,10 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+## Fitness Tracker
+
+Production Next.js App Router project using Supabase (Postgres + Auth + RLS), Server Actions, and TanStack Query.
 
 ## Getting Started
 
-First, run the development server:
+Run the development server:
 
 ```bash
 npm run dev
@@ -14,23 +16,39 @@ pnpm dev
 bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Client Portal Auth (Non-Supabase Users)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+This project supports a **client portal** for clients who are not Supabase auth users.
 
-## Learn More
+- Clients authenticate with `username + password` stored in `public.client_auth`.
+- Passwords are hashed with `bcryptjs`.
+- Portal sessions are server-managed via `public.client_sessions` and an `httpOnly` cookie (`client_portal_session`).
+- All client portal reads/writes run through server actions using the service role client.
+- Module access is enforced by `public.client_feature_access` and server-side guards.
 
-To learn more about Next.js, take a look at the following resources:
+## Coach-Controlled Module Access
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Per client, coach can configure module access level:
+- `disabled`: hidden/no access
+- `read_only`: visible, writes blocked
+- `enabled`: full read/write
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Modules: workouts, training plan, meal plan, meal logging, steps tracking, goals, check-ins, coach notes, tasks.
 
-## Deploy on Vercel
+## Migration
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Apply latest migrations:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+supabase db push
+```
+
+Key migration for this feature:
+- `supabase/migrations/20260305190000_client_portal_auth_and_feature_access.sql`
+
+## UX Checklist
+
+Client portal UX checklist used in this implementation:
+- `docs/client-portal-ux-checklist.md`

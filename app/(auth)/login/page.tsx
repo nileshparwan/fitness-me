@@ -20,6 +20,13 @@ export default function LoginPage() {
       <div className="flex flex-col space-y-2 text-center">
         <h1 className="text-2xl font-semibold tracking-tight">Welcome back</h1>
         <p className="text-sm text-muted-foreground">Enter your credentials to access your dashboard</p>
+        <p className="text-xs text-muted-foreground">
+          You are currently on the login page. New here?{" "}
+          <Link href="/register" className="font-medium text-primary hover:underline">
+            Go to registration
+          </Link>
+          .
+        </p>
       </div>
       <UserAuthForm type="login" />
     </>

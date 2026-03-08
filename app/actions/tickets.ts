@@ -3,7 +3,6 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
-import { requireAdmin } from "@/lib/admin/auth";
 import { runTrackedAction, trackEvent } from "@/lib/events/dispatcher";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -12,7 +11,6 @@ import { AppEventName } from "@/types/events";
 
 export type TicketRow = Database["public"]["Tables"]["tickets"]["Row"];
 type TicketInsert = Database["public"]["Tables"]["tickets"]["Insert"];
-type TicketUpdate = Database["public"]["Tables"]["tickets"]["Update"];
 export type TicketCommentRow = Database["public"]["Tables"]["ticket_comments"]["Row"];
 type TicketUpvoteRow = Database["public"]["Tables"]["ticket_upvotes"]["Row"];
 export type TicketStatus = Database["public"]["Enums"]["ticket_status"];
@@ -35,13 +33,6 @@ const listSchema = z.object({
   status: z.enum(["open", "in_progress", "resolved", "closed"]).optional(),
   sort_by: z.enum(["upvotes", "created_at", "updated_at"]).optional(),
   sort_order: z.enum(["asc", "desc"]).optional(),
-});
-
-const adminUpdateSchema = z.object({
-  id: z.string().uuid(),
-  status: z.enum(["open", "in_progress", "resolved", "closed"]),
-  admin_notes: z.string().max(5000).optional().nullable(),
-  metadata_patch: z.record(z.string(), z.unknown()).optional(),
 });
 
 const ticketIdSchema = z.string().uuid();
@@ -79,11 +70,6 @@ export type TicketDetail = TicketListRow & {
 export type TicketCommentDetail = TicketCommentRow & {
   author: TicketAuthor;
 };
-
-function asJsonObject(value: Json | null | undefined): Record<string, unknown> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
-  return value as Record<string, unknown>;
-}
 
 function isMissingTicketUpvotesTableError(error: { code?: string; message?: string } | null | undefined) {
   if (!error) return false;
@@ -228,7 +214,7 @@ export async function createTicketAction(input: z.input<typeof createTicketSchem
   }
 }
 
-export async function listPublicTicketsAction(input: z.input<typeof listSchema>): Promise<TicketListResult> {
+async function listPublicTicketsAction(input: z.input<typeof listSchema>): Promise<TicketListResult> {
   const params = listSchema.parse(input);
   return runTrackedAction({
     eventName: "support.tickets.list.public",
@@ -240,7 +226,11 @@ export async function listPublicTicketsAction(input: z.input<typeof listSchema>)
   } = await supabase.auth.getUser();
   if (!user) throw new Error("Unauthorized");
 
-  let query = supabase
+  // Use admin client for community board reads after authenticating caller.
+  // This guarantees new authenticated users can always see public tickets,
+  // independent of RLS drift while still enforcing `is_public = true`.
+  const admin = createAdminClient();
+  let query = admin
     .from("tickets")
     .select("*", { count: "exact" })
     .eq("is_public", true);
@@ -287,7 +277,7 @@ export async function listPublicTicketsAction(input: z.input<typeof listSchema>)
   });
 }
 
-export async function listMyTicketsAction(input: z.input<typeof listSchema>): Promise<TicketListResult> {
+async function listMyTicketsAction(input: z.input<typeof listSchema>): Promise<TicketListResult> {
   const params = listSchema.parse(input);
   return runTrackedAction({
     eventName: "support.tickets.list.mine",
@@ -417,8 +407,6 @@ export async function toggleUpvoteTicketAction(ticketId: string) {
   });
 }
 
-export const upvoteTicketAction = toggleUpvoteTicketAction;
-
 export async function getTicketDetailAction(ticketId: string): Promise<TicketDetail> {
   const safeTicketId = ticketIdSchema.parse(ticketId);
   return runTrackedAction({
@@ -431,29 +419,36 @@ export async function getTicketDetailAction(ticketId: string): Promise<TicketDet
   } = await supabase.auth.getUser();
   if (!user) throw new Error("Unauthorized");
 
-  const { data, error } = await supabase
+  const { data: viewerProfile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .maybeSingle();
+  const viewerIsAdmin =
+    viewerProfile?.role === "sysadmin" ||
+    String(user.app_metadata?.role || "").toLowerCase() === "sysadmin" ||
+    String(user.app_metadata?.role || "").toLowerCase() === "admin";
+
+  const admin = createAdminClient();
+  const { data, error } = await admin
     .from("tickets")
     .select("*")
     .eq("id", safeTicketId)
-    .single();
-  if (error || !data) throw new Error(error?.message || "Ticket not found");
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error("Ticket not found or unavailable");
+  if (!data.is_public && data.user_id !== user.id && !viewerIsAdmin) {
+    throw new Error("Ticket not found or unavailable");
+  }
 
   const author = await getAuthorById(data.user_id);
   const upvotedIds = await getViewerUpvotedIds(user.id, [safeTicketId]);
-  const appRole =
-    typeof user.app_metadata?.role === "string"
-      ? user.app_metadata.role.toLowerCase()
-      : null;
-  const userRole =
-    typeof user.user_metadata?.role === "string"
-      ? user.user_metadata.role.toLowerCase()
-      : null;
   return {
     ...(data as TicketRow),
     viewer_has_upvoted: upvotedIds.has(safeTicketId),
     author,
     viewer_user_id: user.id,
-    viewer_is_admin: appRole === "admin" || userRole === "admin",
+    viewer_is_admin: viewerIsAdmin,
   };
     },
   });
@@ -511,15 +506,28 @@ export async function listTicketCommentsAction(ticketId: string): Promise<Ticket
   } = await supabase.auth.getUser();
   if (!user) throw new Error("Unauthorized");
 
-  // Ticket read check via RLS.
-  const { error: ticketError } = await supabase
-    .from("tickets")
-    .select("id")
-    .eq("id", safeTicketId)
-    .single();
-  if (ticketError) throw new Error(ticketError.message);
+  const { data: viewerProfile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .maybeSingle();
+  const viewerIsAdmin =
+    viewerProfile?.role === "sysadmin" ||
+    String(user.app_metadata?.role || "").toLowerCase() === "sysadmin" ||
+    String(user.app_metadata?.role || "").toLowerCase() === "admin";
 
-  const { data, error } = await supabase
+  const admin = createAdminClient();
+  const { data: ticket, error: ticketError } = await admin
+    .from("tickets")
+    .select("id, user_id, is_public")
+    .eq("id", safeTicketId)
+    .maybeSingle();
+  if (ticketError) throw new Error(ticketError.message);
+  if (!ticket || (!ticket.is_public && ticket.user_id !== user.id && !viewerIsAdmin)) {
+    throw new Error("Ticket not found or unavailable");
+  }
+
+  const { data, error } = await admin
     .from("ticket_comments")
     .select("*")
     .eq("ticket_id", safeTicketId)
@@ -551,16 +559,30 @@ export async function createTicketCommentAction(input: z.input<typeof createComm
   } = await supabase.auth.getUser();
   if (!user) throw new Error("Unauthorized");
 
-  // Access check via ticket RLS.
-  const { data: ticketData, error: ticketError } = await supabase
+  const { data: viewerProfile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .maybeSingle();
+  const viewerIsAdmin =
+    viewerProfile?.role === "sysadmin" ||
+    String(user.app_metadata?.role || "").toLowerCase() === "sysadmin" ||
+    String(user.app_metadata?.role || "").toLowerCase() === "admin";
+
+  const admin = createAdminClient();
+  const { data: ticketData, error: ticketError } = await admin
     .from("tickets")
-    .select("id, status")
+    .select("id, status, is_public, user_id")
     .eq("id", payload.ticket_id)
-    .single();
+    .maybeSingle();
   if (ticketError) throw new Error(ticketError.message);
+  if (!ticketData) throw new Error("Ticket not found or unavailable");
+  if (!ticketData.is_public && ticketData.user_id !== user.id && !viewerIsAdmin) {
+    throw new Error("Ticket not found or unavailable");
+  }
   if (ticketData?.status === "closed") throw new Error("This ticket is closed");
 
-  const { error } = await supabase.from("ticket_comments").insert({
+  const { error } = await admin.from("ticket_comments").insert({
     ticket_id: payload.ticket_id,
     user_id: user.id,
     content: payload.content.trim(),
@@ -573,91 +595,6 @@ export async function createTicketCommentAction(input: z.input<typeof createComm
   });
 }
 
-export async function listAdminTicketsAction(input: z.input<typeof listSchema>): Promise<TicketListResult> {
-  const params = listSchema.parse(input);
-  return runTrackedAction({
-    eventName: "admin.tickets.list.legacy",
-    payload: { page: params.page, page_size: params.page_size },
-    action: async () => {
-  await requireAdmin();
-  const supabase = createAdminClient();
-
-  let query = supabase.from("tickets").select("*", { count: "exact" });
-  if (params.search) {
-    query = query.or(`title.ilike.%${params.search}%,description.ilike.%${params.search}%`);
-  }
-  if (params.category) query = query.eq("category", params.category);
-  if (params.status) query = query.eq("status", params.status);
-
-  const from = params.page * params.page_size;
-  const to = from + params.page_size - 1;
-  const sortBy = params.sort_by ?? "upvotes";
-  const ascending = (params.sort_order ?? "desc") === "asc";
-
-  let sortedQuery = query.order(sortBy, { ascending });
-  if (sortBy !== "created_at") {
-    sortedQuery = sortedQuery.order("created_at", { ascending: false });
-  }
-
-  const { data, error, count } = await sortedQuery.range(from, to);
-
-  if (error) throw new Error(error.message);
-
-  const total = count ?? 0;
-  const rows = ((data || []) as TicketRow[]).map((row) => ({
-    ...row,
-    viewer_has_upvoted: false,
-  }));
-  return {
-    rows,
-    page: params.page,
-    page_size: params.page_size,
-    has_more: from + rows.length < total,
-    total,
-  };
-    },
-  });
-}
-
-export async function adminUpdateTicketAction(input: z.input<typeof adminUpdateSchema>) {
-  const params = adminUpdateSchema.parse(input);
-  return runTrackedAction({
-    eventName: "admin.ticket.update.legacy",
-    payload: { ticket_id: params.id, status: params.status },
-    action: async () => {
-  await requireAdmin();
-  const supabase = createAdminClient();
-
-  const { data: existing, error: fetchError } = await supabase
-    .from("tickets")
-    .select("metadata")
-    .eq("id", params.id)
-    .single();
-  if (fetchError) throw new Error(fetchError.message);
-
-  const mergedMetadata = {
-    ...asJsonObject(existing?.metadata),
-    ...(params.metadata_patch || {}),
-  } as Json;
-
-  const updatePayload: TicketUpdate = {
-    status: params.status as TicketStatus,
-    admin_notes: params.admin_notes?.trim() || null,
-    metadata: mergedMetadata,
-  };
-
-  const { error } = await supabase.from("tickets").update(updatePayload).eq("id", params.id);
-  if (error) throw new Error(error.message);
-
-  revalidateSupportPaths(params.id);
-  revalidatePath("/admin/tickets");
-  return { success: true };
-    },
-  });
-}
-
-export const getTicketByIdAction = getTicketDetailAction;
-export const getTicketCommentsAction = listTicketCommentsAction;
 
 const getTicketsSchema = listSchema.extend({
   scope: z.enum(["public", "mine"]).default("public"),

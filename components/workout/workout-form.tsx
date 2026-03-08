@@ -61,6 +61,9 @@ export function WorkoutForm({ initialData, workoutId }: WorkoutFormProps) {
   const toWorkoutActionInput = (data: WorkoutFormValues): WorkoutActionInput => ({
     name: data.name,
     date: data.date,
+    sport_type: data.sport_type,
+    location: data.location,
+    perceived_exertion: data.perceived_exertion,
     notes: data.notes || null,
     overall_rating: data.overall_rating,
     ai_feedback: data.ai_feedback,
@@ -74,6 +77,9 @@ export function WorkoutForm({ initialData, workoutId }: WorkoutFormProps) {
       name: "",
       notes: "",
       date: new Date(),
+      sport_type: "",
+      location: "",
+      perceived_exertion: undefined,
       overall_rating: undefined,
       ai_feedback: "",
       template_id: "",
@@ -161,15 +167,23 @@ export function WorkoutForm({ initialData, workoutId }: WorkoutFormProps) {
 
   const formatStrengthAdvancedDetails = (set: {
     rest_seconds?: number;
+    rpe?: number;
+    rir?: number;
     tempo?: string;
     is_warmup?: boolean;
     is_dropset?: boolean;
+    paused?: boolean;
+    touch_and_go?: boolean;
   }) =>
     [
       set.rest_seconds ? `Rest ${set.rest_seconds}s` : null,
+      set.rpe ? `RPE ${set.rpe}` : null,
+      set.rir !== undefined ? `RIR ${set.rir}` : null,
       set.tempo ? `Tempo ${set.tempo}` : null,
       set.is_warmup ? "Warm-up" : null,
       set.is_dropset ? "Drop set" : null,
+      set.paused ? "Paused" : null,
+      set.touch_and_go ? "Touch & Go" : null,
     ]
       .filter(Boolean)
       .join(" • ");
@@ -225,6 +239,12 @@ export function WorkoutForm({ initialData, workoutId }: WorkoutFormProps) {
                       </p>
                       <p className="text-muted-foreground">
                         Program: <span className="text-foreground">{selectedProgramLabel}</span>
+                      </p>
+                      <p className="text-muted-foreground">
+                        Sport: <span className="text-foreground">{form.watch("sport_type") || "General"}</span>
+                      </p>
+                      <p className="text-muted-foreground">
+                        Session RPE: <span className="text-foreground">{form.watch("perceived_exertion") ?? "-"}</span>
                       </p>
                     </div>
                     <Accordion type="single" collapsible className="w-full">
@@ -302,6 +322,53 @@ export function WorkoutForm({ initialData, workoutId }: WorkoutFormProps) {
                             </FormItem>
                           );
                         }}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="sport_type"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Sport Type</FormLabel>
+                            <FormControl>
+                              <Input placeholder="e.g. Strength, Running, Hyrox" {...field} />
+                            </FormControl>
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="location"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Location</FormLabel>
+                            <FormControl>
+                              <Input placeholder="Gym / Home / Track" {...field} />
+                            </FormControl>
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="perceived_exertion"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Session RPE (1-10)</FormLabel>
+                            <FormControl>
+                              <Input
+                                type="number"
+                                min={1}
+                                max={10}
+                                value={field.value ?? ""}
+                                onChange={(event) =>
+                                  field.onChange(
+                                    event.target.value === "" ? undefined : Number(event.target.value)
+                                  )
+                                }
+                                placeholder="8"
+                              />
+                            </FormControl>
+                          </FormItem>
+                        )}
                       />
                     </div>
                     <Accordion type="single" collapsible className="w-full">
@@ -436,9 +503,15 @@ export function WorkoutForm({ initialData, workoutId }: WorkoutFormProps) {
                               reps: 0,
                               weight: 0,
                               rest_seconds: 90,
+                              rpe: undefined,
+                              rir: undefined,
                               tempo: "",
                               is_warmup: false,
                               is_dropset: false,
+                              paused: false,
+                              touch_and_go: false,
+                              equipment_type: "",
+                              side: undefined,
                               is_completed: false,
                             },
                           ],
@@ -466,6 +539,16 @@ export function WorkoutForm({ initialData, workoutId }: WorkoutFormProps) {
                           distance: undefined,
                           calories: undefined,
                           heartRate: undefined,
+                          sport_type: "",
+                          indoor_outdoor: undefined,
+                          weather_conditions: "",
+                          device_source: "",
+                          avg_cadence_rpm: undefined,
+                          avg_power_watts: undefined,
+                          avg_speed_kmh: undefined,
+                          max_speed_kmh: undefined,
+                          vo2max_estimate: undefined,
+                          training_load_score: undefined,
                           notes: "",
                           sets: [],
                         })

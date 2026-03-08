@@ -23,7 +23,6 @@ interface ProgramStore {
   addItem: (item: ProgramItem) => void;
   removeItem: (itemId: string) => void;
   moveItem: (oldIndex: number, newIndex: number) => void;
-  updateItemOrder: (id: string, newIndex: number) => void; // For DB sync logic helper
 }
 
 export const useProgramStore = create<ProgramStore>((set) => ({
@@ -43,9 +42,5 @@ export const useProgramStore = create<ProgramStore>((set) => ({
 
   moveItem: (oldIndex, newIndex) => set((state) => ({
     items: arrayMove(state.items, oldIndex, newIndex)
-  })),
-
-  updateItemOrder: (id, newIndex) => {
-    // Helper if we needed granular updates, usually moveItem is enough
-  }
+  }))
 }));

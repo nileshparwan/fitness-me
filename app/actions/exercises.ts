@@ -150,6 +150,13 @@ export async function createExercise(values: ExerciseFormValues) {
         payload: { name: values.name, category: values.category },
         action: async () => {
     const supabase = await createClient();
+    const {
+        data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+        throw new Error("Unauthorized");
+    }
 
     const { error } = await supabase.from("exercise_catalog").insert({
         name: values.name,
@@ -159,6 +166,7 @@ export async function createExercise(values: ExerciseFormValues) {
         description: values.description,
         video_url: values.video_url || null,
         aliases: values.aliases,
+        created_by: user.id,
     });
 
     if (error) throw new Error(error.message);

@@ -6,7 +6,6 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2, X } from "lucide-react";
 import { ExerciseFormValues, exerciseSchema } from "@/lib/validations/exercise";
 import { useExerciseMutations } from "@/hooks/use-exercise";
-import { useMediaQuery } from "@/hooks/use-media-query";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,19 +20,12 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-} from "@/components/ui/sheet";
-import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogDescription,
-} from "@/components/ui/dialog";
+} from "@/components/ui/responsive-modal";
 
 // --- TAG INPUT COMPONENT (Unchanged) ---
 interface TagInputProps {
@@ -105,7 +97,6 @@ interface ExerciseSheetProps {
 }
 
 export function ExerciseSheet({ open, onOpenChange, exerciseToEdit }: ExerciseSheetProps) {
-  const isDesktop = useMediaQuery("(min-width: 768px)");
   const { create, update } = useExerciseMutations();
   const isEditing = !!exerciseToEdit;
 
@@ -292,33 +283,17 @@ export function ExerciseSheet({ open, onOpenChange, exerciseToEdit }: ExerciseSh
     </Form>
   );
 
-  if (isDesktop) {
-    return (
-      <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="sm:max-w-[500px]">
-          <DialogHeader>
-            <DialogTitle>{isEditing ? "Edit Exercise" : "New Exercise"}</DialogTitle>
-            <DialogDescription>
-              {isEditing ? "Update exercise details." : "Add a new exercise to your library."}
-            </DialogDescription>
-          </DialogHeader>
-          {FormContent}
-        </DialogContent>
-      </Dialog>
-    );
-  }
-
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="bottom" className="h-[90vh] rounded-t-xl overflow-y-auto">
-        <SheetHeader className="text-left">
-          <SheetTitle>{isEditing ? "Edit Exercise" : "New Exercise"}</SheetTitle>
-          <SheetDescription>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent size={{ tablet: "md", desktop: "md" }} className="overflow-y-auto">
+        <DialogHeader className="text-left">
+          <DialogTitle>{isEditing ? "Edit Exercise" : "New Exercise"}</DialogTitle>
+          <DialogDescription>
             {isEditing ? "Update exercise details." : "Add a new exercise to your library."}
-          </SheetDescription>
-        </SheetHeader>
+          </DialogDescription>
+        </DialogHeader>
         {FormContent}
-      </SheetContent>
-    </Sheet>
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { getProgressData } from "@/app/actions/nutrition-progress";
 import { ProgressCharts } from "@/components/nutrition/progress-charts";
+import { progressKeys } from "@/lib/query-keys-progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ArrowLeft, TrendingUp } from "lucide-react";
 import Link from "next/link";
@@ -10,7 +11,7 @@ import { Button } from "@/components/ui/button";
 
 export default function NutritionProgressPage() {
   const { data, isLoading } = useQuery({
-    queryKey: ["nutrition-progress"],
+    queryKey: progressKeys.nutrition(),
     queryFn: getProgressData
   });
 

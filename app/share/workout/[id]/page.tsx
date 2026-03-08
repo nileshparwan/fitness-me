@@ -46,13 +46,13 @@ export default async function PublicWorkoutPage({ params }: { params: Promise<{ 
     const typedCardioLogs = (cardioLogs || []) as CardioLog[];
 
     return (
-        <div className="min-h-screen bg-gray-100 p-4 md:p-8">
+        <div className="min-h-screen bg-background p-4 md:p-8">
             {/* Floating Header for Actions */}
-            <div className="max-w-3xl mx-auto flex justify-between items-center mb-6 bg-white p-4 rounded-lg shadow-sm border">
+            <div className="max-w-3xl mx-auto flex justify-between items-center mb-6 bg-card p-4 rounded-lg shadow-sm border border-border">
                 <div className="flex items-center gap-2">
                     <Link href="/" className="font-bold text-lg tracking-tight">FitTrack</Link>
-                    <span className="text-gray-300">|</span>
-                    <span className="text-sm text-gray-500">Public Viewer</span>
+                    <span className="text-muted-foreground">|</span>
+                    <span className="text-sm text-muted-foreground">Public Viewer</span>
                 </div>
 
                 <WorkoutActions

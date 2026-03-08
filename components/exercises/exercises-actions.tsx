@@ -11,13 +11,13 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-  SheetClose,
-} from "@/components/ui/sheet";
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/responsive-modal";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { useExerciseMutations } from "@/hooks/use-exercise";
 import { toast } from "sonner";
@@ -66,8 +66,8 @@ export function ExerciseActions({ exercise, onEdit }: ExerciseActionsProps) {
   }
 
   return (
-    <Sheet open={isOpen} onOpenChange={setIsOpen}>
-      <SheetTrigger asChild>
+    <Dialog open={isOpen} onOpenChange={setIsOpen}>
+      <DialogTrigger asChild>
         {/* Mobile Trigger with Primary Color & Larger Hit Area */}
         <Button 
           variant="ghost" 
@@ -76,28 +76,28 @@ export function ExerciseActions({ exercise, onEdit }: ExerciseActionsProps) {
         >
           <MoreHorizontal className="h-5 w-5" />
         </Button>
-      </SheetTrigger>
-      <SheetContent side="bottom" className="rounded-t-xl px-3 pb-8 sm:px-4">
-        <SheetHeader className="text-left mb-4">
-          <SheetTitle>Manage {exercise.name}</SheetTitle>
-        </SheetHeader>
+      </DialogTrigger>
+      <DialogContent size={{ tablet: "md", desktop: "md" }} className="px-3 pb-8 sm:px-4">
+        <DialogHeader className="mb-4 text-left">
+          <DialogTitle>Manage {exercise.name}</DialogTitle>
+        </DialogHeader>
         
         <div className="flex flex-col gap-3">
-          <SheetClose asChild>
+          <DialogClose asChild>
             <Button variant="outline" className="w-full justify-start h-12 text-base" onClick={() => onEdit(exercise)}>
               <Pencil className="mr-3 h-4 w-4" /> Edit Details
             </Button>
-          </SheetClose>
+          </DialogClose>
 
           <div className="my-1 border-t" />
           
-          <SheetClose asChild>
+          <DialogClose asChild>
             <Button variant="destructive" className="w-full justify-start h-12 text-base" onClick={handleDelete}>
               <Trash2 className="mr-3 h-4 w-4" /> Delete Exercise
             </Button>
-          </SheetClose>
+          </DialogClose>
         </div>
-      </SheetContent>
-    </Sheet>
+      </DialogContent>
+    </Dialog>
   );
 }

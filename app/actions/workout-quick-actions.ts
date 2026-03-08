@@ -102,8 +102,13 @@ export async function createWorkoutWithExercise(exercise: QuickExercise) {
         .from("training_sessions")
         .insert({
           user_id: user.id,
+          created_by_user_id: user.id,
+          subject_user_id: user.id,
+          subject_client_id: null,
           name: `${exercise.name} Session`,
           date: new Date().toISOString(),
+          performed_on: new Date().toISOString().slice(0, 10),
+          session_slot: "other",
           status: "active",
         })
         .select()

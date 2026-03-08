@@ -19,7 +19,6 @@ export default async function ProfilePage() {
     full_name: meta.full_name ?? meta.display_name ?? "",
     username: meta.username ?? "",
     bio: meta.bio ?? "",
-    website: meta.website ?? "",
     avatar_url: meta.avatar_url ?? undefined, // Optional in schema
 
     // REQUIRED FIELDS (These caused the error because they were missing)

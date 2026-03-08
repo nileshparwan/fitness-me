@@ -11,8 +11,11 @@ import {
   setAdminUserBlocked,
   updateAdminUserRole,
 } from "@/app/actions/admin";
+import { Database } from "@/types/database";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+
+type AppRole = Database["public"]["Enums"]["user_role"];
 
 export function useAdminDashboardStats() {
   return useQuery({
@@ -77,10 +80,10 @@ export function useUpdateAdminUserRole() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (payload: { userId: string; role: "admin" | "user" }) => {
+    mutationFn: async (payload: { userId: string; role: AppRole }) => {
       return await updateAdminUserRole(payload.userId, payload.role);
     },
-    onSuccess: (result) => {
+    onSuccess: (result, payload) => {
       if (!result.success) {
         toast.error(result.message);
         return;
@@ -88,6 +91,7 @@ export function useUpdateAdminUserRole() {
 
       queryClient.invalidateQueries({ queryKey: ["admin", "users"] });
       queryClient.invalidateQueries({ queryKey: ["admin", "user-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["admin", "user", payload.userId] });
       toast.success(result.message);
     },
     onError: (error) => {
@@ -103,7 +107,7 @@ export function useSetAdminUserBlocked() {
     mutationFn: async (payload: { userId: string; blocked: boolean }) => {
       return await setAdminUserBlocked(payload.userId, payload.blocked);
     },
-    onSuccess: (result) => {
+    onSuccess: (result, payload) => {
       if (!result.success) {
         toast.error(result.message);
         return;
@@ -111,6 +115,7 @@ export function useSetAdminUserBlocked() {
 
       queryClient.invalidateQueries({ queryKey: ["admin", "users"] });
       queryClient.invalidateQueries({ queryKey: ["admin", "user-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["admin", "user", payload.userId] });
       toast.success(result.message);
     },
     onError: (error) => {

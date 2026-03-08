@@ -274,22 +274,6 @@ export function ProfileForm({ initialData, email }: ProfileFormProps) {
           />
         </div>
 
-        <div className="space-y-4 pt-4 border-t">
-          <FormField
-            control={form.control}
-            name="website"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Website</FormLabel>
-                <FormControl>
-                  <Input placeholder="https://example.com" {...field} value={field.value || ""} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        </div>
-
         <Button type="submit" disabled={isPending}>
           {isPending ? "Saving..." : "Update profile"}
         </Button>

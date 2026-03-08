@@ -37,7 +37,7 @@ export default function SupportDashboardPage() {
 
   const [publicPage, setPublicPage] = useState(0);
   const [publicSearch, setPublicSearch] = useState("");
-  const [publicStatus, setPublicStatus] = useState<TicketStatus | "all">("open");
+  const [publicStatus, setPublicStatus] = useState<TicketStatus | "all">("all");
   const [publicCategory, setPublicCategory] = useState<TicketCategory | "all">("all");
   const [publicSortBy, setPublicSortBy] = useState<TicketSortBy>("upvotes");
 

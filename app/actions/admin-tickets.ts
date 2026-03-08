@@ -59,16 +59,13 @@ async function requireAdminUser() {
     throw new Error("Unauthorized");
   }
 
-  const appRole =
-    typeof user.app_metadata?.role === "string"
-      ? user.app_metadata.role.toLowerCase()
-      : null;
-  const userRole =
-    typeof user.user_metadata?.role === "string"
-      ? user.user_metadata.role.toLowerCase()
-      : null;
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .maybeSingle();
 
-  if (appRole !== "admin" && userRole !== "admin") {
+  if (profile?.role !== "sysadmin") {
     throw new Error("Unauthorized");
   }
 

@@ -39,6 +39,41 @@ export function CardioEntryCard({ index, remove, control }: CardioEntryCardProps
         </Button>
       </div>
 
+      <div className="grid grid-cols-1 gap-2 px-3 pb-2 sm:grid-cols-2">
+        <FormField
+          control={control}
+          name={`exercises.${index}.sport_type`}
+          render={({ field }) => (
+            <FormItem>
+              <FormControl>
+                <Input
+                  value={field.value ?? ""}
+                  onChange={field.onChange}
+                  placeholder="Sport Type (running, rowing)"
+                  className="h-9 text-sm"
+                />
+              </FormControl>
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={control}
+          name={`exercises.${index}.indoor_outdoor`}
+          render={({ field }) => (
+            <FormItem>
+              <FormControl>
+                <Input
+                  value={field.value ?? ""}
+                  onChange={field.onChange}
+                  placeholder="Indoor / Outdoor"
+                  className="h-9 text-sm"
+                />
+              </FormControl>
+            </FormItem>
+          )}
+        />
+      </div>
+
       <div className="grid grid-cols-10 gap-2 border-b px-3 py-2 text-center text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
         <div className="col-span-1">Set</div>
         <div className="col-span-3">Duration</div>
@@ -164,6 +199,142 @@ export function CardioEntryCard({ index, remove, control }: CardioEntryCardProps
                           </FormControl>
                         </FormItem>
                         )}
+                    />
+                  </div>
+                  <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    <FormField
+                      control={control}
+                      name={`exercises.${index}.avg_cadence_rpm`}
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormControl>
+                            <Input
+                              type="number"
+                              value={field.value ?? ""}
+                              onChange={(e) => field.onChange(e.target.value === "" ? undefined : Number(e.target.value))}
+                              placeholder="Avg Cadence (rpm)"
+                              className="h-9 text-sm"
+                            />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={control}
+                      name={`exercises.${index}.avg_power_watts`}
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormControl>
+                            <Input
+                              type="number"
+                              value={field.value ?? ""}
+                              onChange={(e) => field.onChange(e.target.value === "" ? undefined : Number(e.target.value))}
+                              placeholder="Avg Power (watts)"
+                              className="h-9 text-sm"
+                            />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={control}
+                      name={`exercises.${index}.avg_speed_kmh`}
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormControl>
+                            <Input
+                              type="number"
+                              value={field.value ?? ""}
+                              onChange={(e) => field.onChange(e.target.value === "" ? undefined : Number(e.target.value))}
+                              placeholder="Avg Speed (km/h)"
+                              className="h-9 text-sm"
+                            />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={control}
+                      name={`exercises.${index}.max_speed_kmh`}
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormControl>
+                            <Input
+                              type="number"
+                              value={field.value ?? ""}
+                              onChange={(e) => field.onChange(e.target.value === "" ? undefined : Number(e.target.value))}
+                              placeholder="Max Speed (km/h)"
+                              className="h-9 text-sm"
+                            />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={control}
+                      name={`exercises.${index}.training_load_score`}
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormControl>
+                            <Input
+                              type="number"
+                              value={field.value ?? ""}
+                              onChange={(e) => field.onChange(e.target.value === "" ? undefined : Number(e.target.value))}
+                              placeholder="Training Load Score"
+                              className="h-9 text-sm"
+                            />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={control}
+                      name={`exercises.${index}.vo2max_estimate`}
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormControl>
+                            <Input
+                              type="number"
+                              value={field.value ?? ""}
+                              onChange={(e) => field.onChange(e.target.value === "" ? undefined : Number(e.target.value))}
+                              placeholder="VO2max Estimate"
+                              className="h-9 text-sm"
+                            />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={control}
+                      name={`exercises.${index}.device_source`}
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormControl>
+                            <Input
+                              value={field.value ?? ""}
+                              onChange={field.onChange}
+                              placeholder="Device Source"
+                              className="h-9 text-sm"
+                            />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={control}
+                      name={`exercises.${index}.weather_conditions`}
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormControl>
+                            <Input
+                              value={field.value ?? ""}
+                              onChange={field.onChange}
+                              placeholder="Weather Conditions"
+                              className="h-9 text-sm"
+                            />
+                          </FormControl>
+                        </FormItem>
+                      )}
                     />
                   </div>
                 </AccordionContent>

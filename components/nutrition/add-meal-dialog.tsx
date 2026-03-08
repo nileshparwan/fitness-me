@@ -3,16 +3,15 @@
 import { useState } from "react";
 import { Plus, ChefHat, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/responsive-modal";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { addMeal } from "@/app/actions/nutrition";
+import { nutritionProgramKeys } from "@/lib/query-keys-nutrition-program";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
-import { useMediaQuery } from "@/hooks/use-media-query";
 
 interface Props {
   programId: string;
@@ -21,12 +20,15 @@ interface Props {
 export function AddMealDialog({ programId }: Props) {
   const [open, setOpen] = useState(false);
   const queryClient = useQueryClient();
-  const isDesktop = useMediaQuery("(min-width: 768px)");
 
   async function action(formData: FormData) {
     try {
       await addMeal(formData, programId);
-      await queryClient.invalidateQueries({ queryKey: ["program-meals", programId] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: nutritionProgramKeys.planMeals(programId) }),
+        queryClient.invalidateQueries({ queryKey: nutritionProgramKeys.plan(programId) }),
+        queryClient.invalidateQueries({ queryKey: nutritionProgramKeys.planOptions() }),
+      ]);
       toast.success("Meal added successfully");
       setOpen(false);
     } catch (error) {
@@ -75,28 +77,19 @@ export function AddMealDialog({ programId }: Props) {
     </form>
   );
 
-  if (isDesktop) {
-    return (
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogTrigger asChild><Button size="sm"><Plus className="mr-2 h-4 w-4" /> Add Meal</Button></DialogTrigger>
-        <DialogContent className="sm:max-w-[600px]">
-          {/* FIX: Added Header and Title */}
-          <DialogHeader>
-            <DialogTitle>Add New Meal</DialogTitle>
-          </DialogHeader>
-          {FormContent}
-        </DialogContent>
-      </Dialog>
-    );
-  }
-
   return (
-    <Sheet open={open} onOpenChange={setOpen}>
-      <SheetTrigger asChild><Button size="sm"><Plus className="mr-2 h-4 w-4" /> Add Meal</Button></SheetTrigger>
-      <SheetContent side="bottom" className="h-[90vh] rounded-t-xl overflow-y-auto px-4">
-        <SheetHeader className="text-left"><SheetTitle>Add New Meal</SheetTitle></SheetHeader>
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button size="sm">
+          <Plus className="mr-2 h-4 w-4" /> Add Meal
+        </Button>
+      </DialogTrigger>
+      <DialogContent size={{ tablet: "lg", desktop: "lg" }} className="overflow-y-auto px-4">
+        <DialogHeader>
+          <DialogTitle>Add New Meal</DialogTitle>
+        </DialogHeader>
         {FormContent}
-      </SheetContent>
-    </Sheet>
+      </DialogContent>
+    </Dialog>
   );
 }

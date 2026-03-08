@@ -2,6 +2,7 @@
 
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
+import { trainingKeys } from "@/lib/query-keys-training";
 import { Database } from "@/types/database";
 
 const PROGRAM_PAGE_SIZE = 24;
@@ -15,7 +16,7 @@ export function usePrograms() {
   const supabase = createClient();
 
   const programs = useQuery({
-    queryKey: ["workout-programs"],
+    queryKey: trainingKeys.plansList(),
     queryFn: async () => {
       const { data, error } = await supabase
         .from("training_plans")
@@ -33,7 +34,7 @@ export function useInfinitePrograms() {
   const supabase = createClient();
 
   return useInfiniteQuery({
-    queryKey: ["workout-programs", "infinite"],
+    queryKey: trainingKeys.plansInfinite(),
     queryFn: async ({ pageParam = 0 }) => {
       const from = pageParam * PROGRAM_PAGE_SIZE;
       const to = from + PROGRAM_PAGE_SIZE - 1;

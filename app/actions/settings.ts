@@ -7,12 +7,24 @@ import { profileSchema, goalsSchema, ProfileFormValues, GoalsFormValues } from "
 import { Database } from "@/types/database";
 
 type GoalsInsert = Database["public"]["Tables"]["fitness_goals"]["Insert"];
+type GoalsUpdate = Database["public"]["Tables"]["fitness_goals"]["Update"];
 
-const inferGoalType = (currentWeight: number, targetWeight: number) => {
+const ALLOWED_GOAL_TYPES = ["weight_loss", "muscle_gain", "strength", "endurance"] as const;
+const ALLOWED_GOAL_STATUSES = ["active", "completed"] as const;
+type AllowedGoalType = (typeof ALLOWED_GOAL_TYPES)[number];
+type AllowedGoalStatus = (typeof ALLOWED_GOAL_STATUSES)[number];
+
+const inferGoalType = (currentWeight: number, targetWeight: number): AllowedGoalType => {
   if (targetWeight < currentWeight) return "weight_loss";
-  if (targetWeight > currentWeight) return "weight_gain";
-  return "maintenance";
+  if (targetWeight > currentWeight) return "muscle_gain";
+  return "strength";
 };
+
+const normalizeGoalType = (value: string | null | undefined, fallback: AllowedGoalType): AllowedGoalType =>
+  ALLOWED_GOAL_TYPES.includes((value || "") as AllowedGoalType) ? (value as AllowedGoalType) : fallback;
+
+const normalizeGoalStatus = (value: string | null | undefined): AllowedGoalStatus =>
+  ALLOWED_GOAL_STATUSES.includes((value || "") as AllowedGoalStatus) ? (value as AllowedGoalStatus) : "active";
 
 export async function updateProfile(data: ProfileFormValues) {
   return runTrackedAction({
@@ -30,7 +42,6 @@ export async function updateProfile(data: ProfileFormValues) {
           full_name: parsed.full_name,
           username: parsed.username,
           bio: parsed.bio,
-          website: parsed.website,
           avatar_url: parsed.avatar_url,
           height: parsed.height,
           birth_date: parsed.birth_date,
@@ -59,23 +70,27 @@ export async function updateGoals(data: GoalsFormValues) {
       if (!user) throw new Error("Unauthorized");
 
       const parsed = goalsSchema.parse(data);
-      const { data: existingGoal } = await supabase
+      const { data: existingGoalRows, error: existingGoalError } = await supabase
         .from("fitness_goals")
-        .select("goal_type")
+        .select("id, goal_type")
         .eq("user_id", user.id)
-        .maybeSingle();
+        .order("updated_at", { ascending: false })
+        .limit(1);
+      if (existingGoalError) throw existingGoalError;
+      const existingGoal = existingGoalRows?.[0] ?? null;
 
-      const goal_type = existingGoal?.goal_type || inferGoalType(parsed.current_weight, parsed.target_weight);
+      const inferredGoalType = inferGoalType(parsed.current_weight, parsed.target_weight);
+      const goal_type = normalizeGoalType(existingGoal?.goal_type, inferredGoalType);
+      const status = normalizeGoalStatus(parsed.status);
 
-      const payload: GoalsInsert = {
-        user_id: user.id,
+      const payload: GoalsUpdate = {
         goal_type,
         target_weight: parsed.target_weight,
         current_weight: parsed.current_weight,
         target_body_fat_percent: parsed.target_body_fat_percent ?? null,
         target_date: parsed.target_date ?? null,
         custom_description: parsed.custom_description ?? null,
-        status: parsed.status ?? "active",
+        status,
         weekly_workouts: parsed.weekly_workouts,
         daily_calories: parsed.daily_calories,
         protein_target: parsed.protein_target,
@@ -84,9 +99,20 @@ export async function updateGoals(data: GoalsFormValues) {
         updated_at: new Date().toISOString(),
       };
 
-      const { error } = await supabase
-        .from("fitness_goals")
-        .upsert(payload, { onConflict: 'user_id' });
+      let error: Error | null = null;
+      if (existingGoal?.id) {
+        const updateRes = await supabase.from("fitness_goals").update(payload).eq("id", existingGoal.id);
+        error = updateRes.error;
+      } else {
+        const insertPayload: GoalsInsert = {
+          ...payload,
+          user_id: user.id,
+          goal_type,
+          status,
+        };
+        const insertRes = await supabase.from("fitness_goals").insert(insertPayload);
+        error = insertRes.error;
+      }
 
       if (error) throw error;
       revalidatePath("/settings/goals");

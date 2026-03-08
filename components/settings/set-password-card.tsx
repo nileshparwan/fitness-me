@@ -3,6 +3,7 @@
 import * as React from "react";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,10 +14,13 @@ type SetPasswordCardProps = {
 };
 
 export function SetPasswordCard({ isSocialOnly }: SetPasswordCardProps) {
+  const router = useRouter();
   const supabase = createClient();
   const [password, setPassword] = React.useState("");
   const [confirmPassword, setConfirmPassword] = React.useState("");
   const [isLoading, setIsLoading] = React.useState(false);
+  const [isSigningOut, setIsSigningOut] = React.useState(false);
+  const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -45,15 +49,34 @@ export function SetPasswordCard({ isSocialOnly }: SetPasswordCardProps) {
       setPassword("");
       setConfirmPassword("");
       toast.success("Password set successfully. You can now sign in using email and password.");
+      await wait(2400);
+      toast.message("Signing out for security. Please log in again.");
+      setIsSigningOut(true);
+
+      await wait(1100);
+      await supabase.auth.signOut();
+      router.push("/login");
+      router.refresh();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to set password");
+      setIsSigningOut(false);
     } finally {
       setIsLoading(false);
     }
   }
 
   return (
-    <div className="native-surface surface-pad stack-gap">
+    <>
+      {isSigningOut ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/70 backdrop-blur-sm">
+          <div className="flex items-center gap-2 rounded-md border border-border bg-card px-4 py-3 text-sm font-medium shadow-sm">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            <span>Signing out securely...</span>
+          </div>
+        </div>
+      ) : null}
+
+      <div className="native-surface surface-pad stack-gap">
       <div className="space-y-1">
         <h3 className="text-base font-semibold">Set Password</h3>
         <p className="text-sm text-muted-foreground">
@@ -75,7 +98,7 @@ export function SetPasswordCard({ isSocialOnly }: SetPasswordCardProps) {
             autoComplete="new-password"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
-            disabled={isLoading}
+            disabled={isLoading || isSigningOut}
           />
         </div>
         <div className="grid gap-2">
@@ -86,14 +109,15 @@ export function SetPasswordCard({ isSocialOnly }: SetPasswordCardProps) {
             autoComplete="new-password"
             value={confirmPassword}
             onChange={(event) => setConfirmPassword(event.target.value)}
-            disabled={isLoading}
+            disabled={isLoading || isSigningOut}
           />
         </div>
-        <Button disabled={isLoading} className="w-full sm:w-auto">
+        <Button disabled={isLoading || isSigningOut} className="w-full sm:w-auto">
           {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
           Save password
         </Button>
       </form>
-    </div>
+      </div>
+    </>
   );
 }

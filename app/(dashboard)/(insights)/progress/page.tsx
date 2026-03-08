@@ -11,6 +11,7 @@ import {
   type CardioChartPoint,
   type StrengthChartPoint,
 } from "@/app/actions/progress";
+import { progressKeys } from "@/lib/query-keys-progress";
 import { Database } from "@/types/database";
 
 // UI Components
@@ -29,12 +30,12 @@ import { AthleteRadar } from "@/components/progress/athlete-radar";
 
 // CARDIO COMPONENTS
 import { CardioCharts } from "@/components/progress/cardio-charts";
-import { CardioCoach } from "@/components/progress/cardio-coach";
+import { CardioGuidance } from "@/components/progress/cardio-guidance";
 import { CardioAnalytics } from "@/components/progress/cardio-analytics";
 
 import { ProgressCharts } from "@/components/progress/progress-chart";
 import { PhysioChart } from "@/components/progress/physical-chart";
-import { AdvancedCoach } from "@/components/progress/advance-coach";
+import { AdvancedGuidance } from "@/components/progress/advanced-guidance";
 import { CardioInsightsBoard, StrengthInsightsBoard } from "@/components/progress/insights-board";
 import { ExerciseProfileSkeleton, ProgressCoreSkeleton } from "./_components/progress-section-skeletons";
 
@@ -48,7 +49,7 @@ export default function ProgressPage() {
 
   // 1. Fetch Exercises List
   const { data: exercises, isLoading: loadingExercises } = useQuery({
-    queryKey: ["exercises-list"],
+    queryKey: progressKeys.availableExercises(),
     queryFn: getAvailableExercises,
     staleTime: 1000 * 60 * 10, // Cache for 10 mins
   });
@@ -57,7 +58,7 @@ export default function ProgressPage() {
 
   // 2. Fetch Metrics (metrics wait for 'exercise' to be set)
   const { data: metrics, isLoading: loadingMetrics, isFetching: fetchingMetrics } = useQuery({
-    queryKey: ["metrics", selectedExercise, range],
+    queryKey: progressKeys.exerciseMetrics(selectedExercise, range),
     queryFn: () => getExerciseMetrics(selectedExercise, range),
     enabled: !!selectedExercise,
     placeholderData: (previous) => previous,
@@ -65,19 +66,19 @@ export default function ProgressPage() {
 
   // 3. Parallel Data Fetching
   const { data: profile } = useQuery({
-    queryKey: ["profile"],
+    queryKey: progressKeys.userProfile(),
     queryFn: getUserProfile,
     staleTime: 1000 * 60 * 30,
   });
 
   const { data: radarData, isLoading: loadingRadar } = useQuery<RadarDatum[]>({
-    queryKey: ["radar-balance"],
+    queryKey: progressKeys.muscleBalance(),
     queryFn: getMuscleBalance,
     staleTime: 1000 * 60 * 10,
   });
 
   const { data: exDetails, isLoading: loadingExerciseDetails } = useQuery({
-    queryKey: ["ex-details", selectedExercise],
+    queryKey: progressKeys.exerciseDetails(selectedExercise),
     queryFn: () => getExerciseDetails(selectedExercise),
     enabled: !!selectedExercise,
     staleTime: 1000 * 60 * 30,
@@ -281,7 +282,7 @@ export default function ProgressPage() {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <CardioCoach logs={cardioLogs} birthDate={profile?.birth_date} />
+            <CardioGuidance logs={cardioLogs} birthDate={profile?.birth_date} />
           </div>
 
           <div className="grid grid-cols-1">
@@ -314,7 +315,7 @@ export default function ProgressPage() {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <AdvancedCoach logs={strengthLogs} exerciseName={currentExerciseName} />
+            <AdvancedGuidance logs={strengthLogs} exerciseName={currentExerciseName} />
             <div className="col-span-1 h-full">
               <PersonalRecords logs={strengthLogs} />
             </div>

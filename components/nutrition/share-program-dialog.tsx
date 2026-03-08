@@ -1,20 +1,17 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/responsive-modal";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Share2, Copy, Smartphone } from "lucide-react";
 import { toast } from "sonner";
-import { useMediaQuery } from "@/hooks/use-media-query";
 
 export function ShareProgramDialog({ programId, programName }: { programId: string, programName: string }) {
   const [open, setOpen] = useState(false);
   const [shareUrl, setShareUrl] = useState("");
-  const isDesktop = useMediaQuery("(min-width: 768px)");
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -60,7 +57,7 @@ export function ShareProgramDialog({ programId, programName }: { programId: stri
       </TabsContent>
       
       <TabsContent value="qr" className="flex flex-col items-center justify-center py-4 space-y-4">
-         <div className="bg-white p-4 rounded-lg shadow-inner border">
+         <div className="bg-card p-4 rounded-lg shadow-inner border border-border">
             {shareUrl && (
                 /* eslint-disable-next-line @next/next/no-img-element */
                 <img 
@@ -75,29 +72,24 @@ export function ShareProgramDialog({ programId, programName }: { programId: stri
     </Tabs>
   );
 
-  if (isDesktop) {
-    return (
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogTrigger asChild>
-          {/* FIX: Render SINGLE element directly (Desktop Button) */}
-          <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
-              <Share2 className="mr-2 h-4 w-4" /> Share
-          </Button>
-        </DialogTrigger>
-        <DialogContent className="sm:max-w-md"><DialogHeader><DialogTitle>Share Plan</DialogTitle></DialogHeader>{Content}</DialogContent>
-      </Dialog>
-    );
-  }
-
   return (
-    <Sheet open={open} onOpenChange={setOpen}>
-      <SheetTrigger asChild>
-        {/* FIX: Render SINGLE element directly (Mobile Button) */}
-        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setOpen(true)}>
-            <Share2 className="h-4 w-4" />
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button variant="outline" size="sm" className="hidden md:inline-flex" onClick={() => setOpen(true)}>
+          <Share2 className="mr-2 h-4 w-4" /> Share
         </Button>
-      </SheetTrigger>
-      <SheetContent side="bottom" className="rounded-t-xl"><SheetHeader className="text-left"><SheetTitle>Share Plan</SheetTitle></SheetHeader>{Content}</SheetContent>
-    </Sheet>
+      </DialogTrigger>
+      <DialogTrigger asChild>
+        <Button variant="ghost" size="icon" className="h-8 w-8 md:hidden" onClick={() => setOpen(true)}>
+          <Share2 className="h-4 w-4" />
+        </Button>
+      </DialogTrigger>
+      <DialogContent size={{ tablet: "md", desktop: "md" }}>
+        <DialogHeader>
+          <DialogTitle>Share Plan</DialogTitle>
+        </DialogHeader>
+        {Content}
+      </DialogContent>
+    </Dialog>
   );
 }

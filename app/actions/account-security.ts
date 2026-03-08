@@ -250,11 +250,12 @@ export async function requestSoftDeleteAccount(challengeToken: string, challenge
       throw new Error("Challenge verification is required");
     }
 
-    const role =
-      typeof user.user_metadata?.role === "string"
-        ? String(user.user_metadata.role).toLowerCase()
-        : "user";
-    if (role === "admin") {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .maybeSingle();
+    if (profile?.role === "sysadmin") {
       throw new Error("Admin accounts cannot self-deactivate.");
     }
 

@@ -44,7 +44,7 @@ export const generateInsights = inngest.createFunction(
           type: z.enum(['workout_feedback', 'progress_analysis', 'recovery_suggestion', 'goal_adjustment']),
           priority: z.enum(['low', 'medium', 'high'])
         }),
-        prompt: `You are a fitness coach. Analyze this user's last 5 workouts against their goal: ${JSON.stringify(context.goals)}. 
+        prompt: `You are a fitness assistant. Analyze this user's last 5 workouts against their goal: ${JSON.stringify(context.goals)}. 
                  Workouts: ${JSON.stringify(context.workouts)}.
                  Identify one key pattern (consistency, intensity, etc.) and give 2 sentences of specific advice.`
       });

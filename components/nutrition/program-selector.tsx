@@ -19,12 +19,12 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from "@/components/ui/sheet";
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/responsive-modal";
 import { NutritionProgram } from "@/types/nutrition";
 
 interface ProgramSelectorProps {
@@ -96,8 +96,8 @@ export function ProgramSelector({ programs, selectedId, onSelect }: ProgramSelec
   }
 
   return (
-    <Sheet open={open} onOpenChange={setOpen}>
-      <SheetTrigger asChild>
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
         <Button
           variant="outline"
           role="combobox"
@@ -107,15 +107,15 @@ export function ProgramSelector({ programs, selectedId, onSelect }: ProgramSelec
           {selectedProgram ? selectedProgram.name : "Select program..."}
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
-      </SheetTrigger>
-      <SheetContent side="bottom" className="h-[50vh] rounded-t-xl p-0">
-        <SheetHeader className="p-4 pb-0 text-left">
-          <SheetTitle>Select Nutrition Plan</SheetTitle>
-        </SheetHeader>
-        <div className="p-2 h-full">
-            <ProgramList />
+      </DialogTrigger>
+      <DialogContent size={{ tablet: "md", desktop: "md" }} className="p-0">
+        <DialogHeader className="p-4 pb-0 text-left">
+          <DialogTitle>Select Nutrition Plan</DialogTitle>
+        </DialogHeader>
+        <div className="h-full p-2">
+          <ProgramList />
         </div>
-      </SheetContent>
-    </Sheet>
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -1,16 +1,11 @@
-import { redirect } from "next/navigation";
-import { requireAdmin } from "@/lib/admin/auth";
+import { guardServerRole } from "@/lib/auth/server-role-guard";
 
 type AdminLayoutProps = {
   children: React.ReactNode;
 };
 
 export default async function AdminLayout({ children }: AdminLayoutProps) {
-  try {
-    await requireAdmin();
-  } catch {
-    redirect("/dashboard");
-  }
+  await guardServerRole(["sysadmin"]);
 
   return (
     <div className="page-shell section-gap">

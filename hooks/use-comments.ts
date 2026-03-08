@@ -159,7 +159,3 @@ export function useCommentMutations(ticketId: string, viewer?: ViewerMeta) {
     deleteComment,
   };
 }
-
-export function useAddComment(ticketId: string, viewer?: ViewerMeta) {
-  return useCommentMutations(ticketId, viewer).addComment;
-}
