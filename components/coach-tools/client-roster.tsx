@@ -2,29 +2,43 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { Loader2, Plus, Search } from "lucide-react";
+import { formatDistanceToNowStrict } from "date-fns";
+import { Loader2, MoreVertical, Plus, Search, UserRound } from "lucide-react";
 import { toast } from "sonner";
-import { type ColumnDef, flexRender, getCoreRowModel, useReactTable } from "@tanstack/react-table";
 
 import type { ClientStatus } from "@/app/actions/coach-tools";
-import type { ClientRosterRow } from "@/app/actions/coach-tools";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/responsive-modal";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useDebounce } from "@/hooks/use-debounce";
 import { useCoachClients, useCoachToolMutations } from "@/hooks/use-coach-tools";
+import { cn } from "@/utils";
 
 const STATUSES: ClientStatus[] = ["active", "paused", "blocked", "archived"];
 
-function statusClass(status: ClientStatus) {
-  if (status === "active") return "text-emerald-500";
-  if (status === "paused") return "text-amber-500";
-  if (status === "blocked") return "text-rose-500";
+function statusDotClass(status: ClientStatus) {
+  if (status === "active") return "bg-chart-2";
+  if (status === "paused") return "bg-chart-4";
+  if (status === "blocked") return "bg-destructive";
+  return "bg-muted-foreground/60";
+}
+
+function statusTextClass(status: ClientStatus) {
+  if (status === "active") return "text-chart-2";
+  if (status === "paused") return "text-chart-4";
+  if (status === "blocked") return "text-destructive";
   return "text-muted-foreground";
+}
+
+function relativeUpdatedAt(value: string | null) {
+  if (!value) return "no recent activity";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "no recent activity";
+  return `${formatDistanceToNowStrict(parsed, { addSuffix: true })}`;
 }
 
 export function ClientRoster() {
@@ -32,13 +46,15 @@ export function ClientRoster() {
   const [status, setStatus] = useState<ClientStatus | "all">("active");
   const [page, setPage] = useState(0);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
-  const [timezone, setTimezone] = useState("UTC");
+  const [timezone, setTimezone] = useState(Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC");
   const [newStatus, setNewStatus] = useState<ClientStatus>("active");
 
   const debouncedSearch = useDebounce(search, 250);
+
   const clientsQuery = useCoachClients({
     page,
     pageSize: 12,
@@ -48,71 +64,13 @@ export function ClientRoster() {
   const mutations = useCoachToolMutations();
 
   const rows = useMemo(() => clientsQuery.data?.rows || [], [clientsQuery.data?.rows]);
-  const columns = useMemo<ColumnDef<ClientRosterRow>[]>(
-    () => [
-      {
-        accessorKey: "display_name",
-        header: "Client",
-        cell: ({ row }) => (
-          <div>
-            <div className="font-medium">
-              {row.original.display_name || `${row.original.first_name} ${row.original.last_name || ""}`.trim()}
-            </div>
-            <div className="text-xs text-muted-foreground">{row.original.email || "No email linked"}</div>
-          </div>
-        ),
-      },
-      {
-        accessorKey: "status",
-        header: "Status",
-        cell: ({ row }) => (
-          <span className={`text-xs font-medium capitalize ${statusClass(row.original.status)}`}>{row.original.status}</span>
-        ),
-      },
-      {
-        id: "next_session",
-        header: "Next Session",
-        cell: ({ row }) => (
-          <span className="text-sm text-muted-foreground">
-            {row.original.next_session
-              ? `#${row.original.next_session.sequence_no} ${row.original.next_session.title}`
-              : "No active session"}
-          </span>
-        ),
-      },
-      {
-        accessorKey: "today_sessions_count",
-        header: "Today",
-      },
-      {
-        id: "action",
-        header: () => <div className="text-right">Action</div>,
-        cell: ({ row }) => (
-          <div className="flex justify-end gap-2">
-            <Button asChild size="sm" variant="ghost">
-              <Link href={`/clients/${row.original.id}`}>Profile</Link>
-            </Button>
-            <Button asChild size="sm" variant="outline">
-              <Link href={`/clients/${row.original.id}/nutrition`}>Nutrition</Link>
-            </Button>
-          </div>
-        ),
-      },
-    ],
-    []
-  );
-
-  const table = useReactTable({
-    data: rows,
-    columns,
-    getCoreRowModel: getCoreRowModel(),
-  });
 
   const onCreateClient = async () => {
     if (!firstName.trim()) {
       toast.error("First name is required.");
       return;
     }
+
     try {
       await mutations.upsertClient.mutateAsync({
         first_name: firstName.trim(),
@@ -121,10 +79,11 @@ export function ClientRoster() {
         timezone,
         status: newStatus,
       });
+
       setFirstName("");
       setLastName("");
       setEmail("");
-      setTimezone("UTC");
+      setTimezone(Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC");
       setNewStatus("active");
       setIsCreateOpen(false);
       toast.success("Client created");
@@ -134,68 +93,67 @@ export function ClientRoster() {
   };
 
   return (
-    <div className="space-y-4">
-      <section className="native-surface surface-pad flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h1 className="text-xl font-semibold">Client Roster</h1>
-          <p className="text-sm text-muted-foreground">
-            Manage clients, monitor today&apos;s sessions, and open each client hub.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" asChild>
-            <Link href="/coach/plans">Plan Templates</Link>
-          </Button>
+    <div className="space-y-4 md:space-y-5">
+      <section className="glass-surface surface-pad space-y-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">Clients</h1>
+
           <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
             <DialogTrigger asChild>
-              <Button>
+              <Button className="accent-strong rounded-xl">
                 <Plus className="mr-2 h-4 w-4" />
-                New Client
+                Add
               </Button>
             </DialogTrigger>
-            <DialogContent>
+            <DialogContent className="rounded-2xl border-border/70 bg-card/95 sm:max-w-lg">
               <DialogHeader>
                 <DialogTitle>Add Client</DialogTitle>
-                <DialogDescription>Create a client profile. Client account linking is optional.</DialogDescription>
+                <DialogDescription>Create a client profile. Account linking is optional.</DialogDescription>
               </DialogHeader>
-              <div className="grid gap-3">
-                <div className="grid gap-2">
-                  <Label htmlFor="first_name">First Name</Label>
-                  <Input id="first_name" value={firstName} onChange={(event) => setFirstName(event.target.value)} />
+
+              <div className="space-y-3 py-1">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>First Name</Label>
+                    <Input value={firstName} onChange={(event) => setFirstName(event.target.value)} className="rounded-xl border-border/60 bg-muted/20" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Last Name</Label>
+                    <Input value={lastName} onChange={(event) => setLastName(event.target.value)} className="rounded-xl border-border/60 bg-muted/20" />
+                  </div>
                 </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="last_name">Last Name</Label>
-                  <Input id="last_name" value={lastName} onChange={(event) => setLastName(event.target.value)} />
+
+                <div className="space-y-2">
+                  <Label>Email (optional)</Label>
+                  <Input value={email} onChange={(event) => setEmail(event.target.value)} className="rounded-xl border-border/60 bg-muted/20" />
                 </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="email">Email (optional)</Label>
-                  <Input id="email" value={email} onChange={(event) => setEmail(event.target.value)} />
-                </div>
-                <div className="grid gap-2">
-                  <Label>Status</Label>
-                  <Select value={newStatus} onValueChange={(value) => setNewStatus(value as ClientStatus)}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {STATUSES.map((item) => (
-                        <SelectItem key={item} value={item}>
-                          {item}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="timezone">Timezone</Label>
-                  <Input id="timezone" value={timezone} onChange={(event) => setTimezone(event.target.value)} />
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>Status</Label>
+                    <Select value={newStatus} onValueChange={(value) => setNewStatus(value as ClientStatus)}>
+                      <SelectTrigger className="rounded-xl border-border/60 bg-muted/20">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {STATUSES.map((item) => (
+                          <SelectItem key={item} value={item}>{item}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Timezone</Label>
+                    <Input value={timezone} onChange={(event) => setTimezone(event.target.value)} className="rounded-xl border-border/60 bg-muted/20" />
+                  </div>
                 </div>
               </div>
+
               <DialogFooter>
-                <Button variant="outline" onClick={() => setIsCreateOpen(false)}>
+                <Button variant="outline" className="rounded-xl border-border/60" onClick={() => setIsCreateOpen(false)}>
                   Cancel
                 </Button>
-                <Button onClick={() => void onCreateClient()} disabled={mutations.upsertClient.isPending}>
+                <Button className="accent-strong rounded-xl" onClick={() => void onCreateClient()} disabled={mutations.upsertClient.isPending}>
                   {mutations.upsertClient.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                   Save
                 </Button>
@@ -203,22 +161,21 @@ export function ClientRoster() {
             </DialogContent>
           </Dialog>
         </div>
-      </section>
 
-      <section className="native-surface surface-pad flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-        <div className="relative w-full md:max-w-sm">
-          <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            value={search}
-            onChange={(event) => {
-              setSearch(event.target.value);
-              setPage(0);
-            }}
-            className="pl-9"
-            placeholder="Search clients..."
-          />
-        </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+          <div className="relative w-full md:max-w-xl">
+            <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(event) => {
+                setSearch(event.target.value);
+                setPage(0);
+              }}
+              className="rounded-xl border-border/60 bg-muted/20 pl-9"
+              placeholder="Search clients..."
+            />
+          </div>
+
           <Select
             value={status}
             onValueChange={(value) => {
@@ -226,71 +183,87 @@ export function ClientRoster() {
               setPage(0);
             }}
           >
-            <SelectTrigger className="w-[180px]">
+            <SelectTrigger className="w-full rounded-xl border-border/60 bg-muted/20 md:w-52">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All statuses</SelectItem>
               {STATUSES.map((item) => (
-                <SelectItem key={item} value={item}>
-                  {item}
-                </SelectItem>
+                <SelectItem key={item} value={item}>{item}</SelectItem>
               ))}
             </SelectContent>
           </Select>
         </div>
       </section>
 
-      <section className="native-surface surface-pad">
+      <section className="space-y-3">
         {clientsQuery.isLoading && !clientsQuery.data ? (
-          <div className="space-y-2">
-            <Skeleton className="h-10 w-full" />
-            <Skeleton className="h-10 w-full" />
-            <Skeleton className="h-10 w-full" />
-          </div>
+          <>
+            <Skeleton className="h-24 w-full rounded-2xl" />
+            <Skeleton className="h-24 w-full rounded-2xl" />
+            <Skeleton className="h-24 w-full rounded-2xl" />
+          </>
+        ) : rows.length === 0 ? (
+          <div className="glass-surface surface-pad text-center text-sm text-muted-foreground">No clients found.</div>
         ) : (
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                {table.getHeaderGroups().map((headerGroup) => (
-                  <TableRow key={headerGroup.id}>
-                    {headerGroup.headers.map((header) => (
-                      <TableHead key={header.id}>
-                        {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
-                      </TableHead>
-                    ))}
-                  </TableRow>
-                ))}
-              </TableHeader>
-              <TableBody>
-                {table.getRowModel().rows.map((row) => (
-                  <TableRow key={row.id}>
-                    {row.getVisibleCells().map((cell) => (
-                      <TableCell key={cell.id}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</TableCell>
-                    ))}
-                  </TableRow>
-                ))}
-                {!clientsQuery.isLoading && rows.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={5} className="py-8 text-center text-sm text-muted-foreground">
-                      No clients found.
-                    </TableCell>
-                  </TableRow>
-                ) : null}
-              </TableBody>
-            </Table>
-          </div>
+          rows.map((row) => {
+            const displayName = row.display_name || `${row.first_name} ${row.last_name || ""}`.trim();
+            const activePlans = row.active_assignment ? 1 : 0;
+            const lastActivity = relativeUpdatedAt(row.updated_at);
+
+            return (
+              <article key={row.id} className="glass-surface surface-pad">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <div className="grid h-14 w-14 place-items-center rounded-2xl border border-chart-2/35 bg-chart-2/10">
+                      <UserRound className="h-6 w-6 text-chart-2" />
+                    </div>
+
+                    <div className="min-w-0">
+                      <p className="truncate text-xl font-semibold leading-tight">{displayName}</p>
+                      <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                        <span className={cn("inline-flex h-2 w-2 rounded-full", statusDotClass(row.status))} />
+                        <span className={cn("capitalize", statusTextClass(row.status))}>{row.status}</span>
+                        <span>•</span>
+                        <span>{activePlans} active plans</span>
+                        <span>•</span>
+                        <span>{lastActivity}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="icon" className="h-10 w-10 rounded-xl border border-border/50 bg-background/30">
+                        <MoreVertical className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-44 rounded-xl border-border/70 bg-card/95">
+                      <DropdownMenuItem asChild>
+                        <Link href={`/clients/${row.id}`}>Open Profile</Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <Link href={`/clients/${row.id}/nutrition`}>Nutrition Hub</Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <Link href={`/clients/${row.id}/access`}>Access Control</Link>
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+              </article>
+            );
+          })
         )}
-        <div className="mt-3 flex items-center justify-end gap-2">
-          <Button size="sm" variant="outline" disabled={page === 0} onClick={() => setPage((current) => Math.max(0, current - 1))}>
+      </section>
+
+      <section className="glass-subtle flex items-center justify-between p-3 text-sm">
+        <span className="text-muted-foreground">Page {page + 1} • {clientsQuery.data?.total ?? 0} total</span>
+        <div className="flex items-center gap-2">
+          <Button size="sm" variant="outline" className="rounded-xl border-border/60" disabled={page === 0} onClick={() => setPage((current) => Math.max(0, current - 1))}>
             Previous
           </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={!clientsQuery.data?.has_more}
-            onClick={() => setPage((current) => current + 1)}
-          >
+          <Button size="sm" variant="outline" className="rounded-xl border-border/60" disabled={!clientsQuery.data?.has_more} onClick={() => setPage((current) => current + 1)}>
             Next
           </Button>
         </div>

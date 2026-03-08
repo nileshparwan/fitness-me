@@ -244,8 +244,8 @@ export async function coachSetClientCredentialsAction(
 
       await seedDefaultFeatureAccess(payload.client_id, scope.actorId);
 
-      revalidatePath(`/coach/clients/${payload.client_id}`);
-      revalidatePath("/coach/clients");
+      revalidatePath(`/clients/${payload.client_id}`);
+      revalidatePath("/clients");
       return { success: true };
     },
   });
@@ -281,7 +281,7 @@ export async function coachResetClientPasswordAction(
 
       await revokeAllClientPortalSessions(payload.client_id);
 
-      revalidatePath(`/coach/clients/${payload.client_id}`);
+      revalidatePath(`/clients/${payload.client_id}`);
       return { success: true };
     },
   });
@@ -309,7 +309,7 @@ export async function coachChangeClientUsernameAction(
 
       await revokeAllClientPortalSessions(payload.client_id);
 
-      revalidatePath(`/coach/clients/${payload.client_id}`);
+      revalidatePath(`/clients/${payload.client_id}`);
       return { success: true };
     },
   });
@@ -329,7 +329,7 @@ export async function coachBlockClientAccessAction(clientId: string) {
         updatedByUserId: scope.actorId,
       });
       await revokeAllClientPortalSessions(safeClientId);
-      revalidatePath(`/coach/clients/${safeClientId}`);
+      revalidatePath(`/clients/${safeClientId}`);
       return { success: true };
     },
   });
@@ -349,7 +349,7 @@ export async function coachRemoveClientAccessAction(clientId: string) {
         updatedByUserId: scope.actorId,
       });
       await revokeAllClientPortalSessions(safeClientId);
-      revalidatePath(`/coach/clients/${safeClientId}`);
+      revalidatePath(`/clients/${safeClientId}`);
       return { success: true };
     },
   });
@@ -379,7 +379,7 @@ export async function coachUpdateClientModuleAccessAction(
         );
       if (error) throw new Error(error.message);
 
-      revalidatePath(`/coach/clients/${payload.client_id}`);
+      revalidatePath(`/clients/${payload.client_id}`);
       return { success: true };
     },
   });

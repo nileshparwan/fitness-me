@@ -183,11 +183,8 @@ async function requireActor() {
 }
 
 function revalidateCoachPaths(clientId?: string) {
-  revalidatePath("/coach");
-  revalidatePath("/coach/clients");
   revalidatePath("/coach/plans");
   revalidatePath("/clients");
-  if (clientId) revalidatePath(`/coach/clients/${clientId}`);
   if (clientId) revalidatePath(`/clients/${clientId}`);
 }
 

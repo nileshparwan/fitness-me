@@ -257,8 +257,8 @@ export function useClientPortalMutations(performedOn: string) {
       queryClient.invalidateQueries({ queryKey: clientPortalKeys.trainingPlan() }),
       queryClient.invalidateQueries({ queryKey: clientPortalKeys.workouts(performedOn) }),
       queryClient.invalidateQueries({ queryKey: mealDiaryKey }),
-      queryClient.invalidateQueries({ queryKey: clientPortalKeys.mealRecent(30) }),
-      queryClient.invalidateQueries({ queryKey: clientPortalKeys.mealFavorites(30) }),
+      queryClient.invalidateQueries({ queryKey: clientPortalKeys.mealRecentRoot() }),
+      queryClient.invalidateQueries({ queryKey: clientPortalKeys.mealFavoritesRoot() }),
       queryClient.invalidateQueries({ queryKey: clientPortalKeys.steps(performedOn) }),
       queryClient.invalidateQueries({ queryKey: clientPortalKeys.checkins() }),
       queryClient.invalidateQueries({ queryKey: clientPortalKeys.goals() }),
@@ -296,8 +296,8 @@ export function useClientPortalMutations(performedOn: string) {
       mutationFn: toggleClientFavoriteMealItemAction,
       onSuccess: async () => {
         await Promise.all([
-          queryClient.invalidateQueries({ queryKey: clientPortalKeys.mealFavorites(30) }),
-          queryClient.invalidateQueries({ queryKey: clientPortalKeys.mealRecent(30) }),
+          queryClient.invalidateQueries({ queryKey: clientPortalKeys.mealFavoritesRoot() }),
+          queryClient.invalidateQueries({ queryKey: clientPortalKeys.mealRecentRoot() }),
         ]);
       },
     }),

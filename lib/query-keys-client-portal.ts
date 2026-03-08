@@ -12,10 +12,12 @@ export const clientPortalKeys = {
     [...clientPortalKeys.all, "meal-plan", performedOn] as const,
   mealDiary: (performedOn: string) =>
     [...clientPortalKeys.all, "meal-diary", performedOn] as const,
+  mealRecentRoot: () => [...clientPortalKeys.all, "meal-recent"] as const,
   mealRecent: (limit: number) =>
-    [...clientPortalKeys.all, "meal-recent", limit] as const,
+    [...clientPortalKeys.mealRecentRoot(), limit] as const,
+  mealFavoritesRoot: () => [...clientPortalKeys.all, "meal-favorites"] as const,
   mealFavorites: (limit: number) =>
-    [...clientPortalKeys.all, "meal-favorites", limit] as const,
+    [...clientPortalKeys.mealFavoritesRoot(), limit] as const,
   steps: (performedOn: string) =>
     [...clientPortalKeys.all, "steps", performedOn] as const,
   checkins: () => [...clientPortalKeys.all, "check-ins"] as const,
@@ -26,4 +28,3 @@ export const clientPortalKeys = {
   coachClientModule: (clientId: string, moduleKey: ClientModuleKey) =>
     [...clientPortalKeys.coachClientSettings(clientId), moduleKey] as const,
 };
-
