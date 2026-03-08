@@ -9,7 +9,7 @@ import { ReadOnlyBanner } from "@/components/client-portal/read-only-banner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/responsive-modal";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -31,6 +31,7 @@ import {
   useClientPortalTrainingPlan,
   useClientPortalWorkouts,
 } from "@/hooks/use-client-portal";
+import { normalizeMealUnit } from "@/lib/nutrition/meal-units";
 import { cn } from "@/utils";
 
 function todayIso() {
@@ -447,6 +448,7 @@ export function ClientPortalNutritionView({ readOnly }: { readOnly: boolean }) {
       timezone: diaryQuery.data?.timezone || "UTC",
       item: {
         item_name: itemName.trim() || "Quick Add",
+        unit: null,
         calories: calories ? Number(calories) : null,
         protein_g: protein ? Number(protein) : null,
         carbs_g: carbs ? Number(carbs) : null,
@@ -567,7 +569,7 @@ export function ClientPortalNutritionView({ readOnly }: { readOnly: boolean }) {
                                         item: {
                                           item_name: item.item_name,
                                           quantity: item.quantity,
-                                          unit: item.unit,
+                                          unit: normalizeMealUnit(item.unit),
                                           calories: item.calories,
                                           protein_g: item.protein_g,
                                           carbs_g: item.carbs_g,
@@ -632,7 +634,7 @@ export function ClientPortalNutritionView({ readOnly }: { readOnly: boolean }) {
                         item: {
                           item_name: item.item_name,
                           quantity: item.quantity,
-                          unit: item.unit,
+                          unit: normalizeMealUnit(item.unit),
                           calories: item.calories,
                           protein_g: item.protein_g,
                           carbs_g: item.carbs_g,
@@ -682,7 +684,7 @@ export function ClientPortalNutritionView({ readOnly }: { readOnly: boolean }) {
                         item: {
                           item_name: item.item_name,
                           quantity: item.quantity,
-                          unit: item.unit,
+                          unit: normalizeMealUnit(item.unit),
                           calories: item.calories,
                           protein_g: item.protein_g,
                           carbs_g: item.carbs_g,

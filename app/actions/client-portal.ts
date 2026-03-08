@@ -11,6 +11,7 @@ import {
   getClientPortalContext,
   getModuleAccessLevel,
 } from "@/lib/client-portal/session";
+import { mealUnitInputSchema } from "@/lib/nutrition/meal-units";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireCoachAccess } from "@/app/actions/client-portal-auth";
 import { Database } from "@/types/database";
@@ -41,6 +42,20 @@ type SessionLocationType = Database["public"]["Enums"]["session_location_type"];
 type CoachNoteTag = Database["public"]["Enums"]["coach_note_tag"];
 type ClientNoteVisibility = Database["public"]["Enums"]["client_note_visibility"];
 type MealType = Database["public"]["Enums"]["meal_log_type"];
+
+const CLIENT_PORTAL_MEAL_TYPES = [
+  "breakfast",
+  "snack",
+  "lunch",
+  "pre_workout_meal",
+  "post_workout_meal",
+  "dinner",
+  "protein_drink",
+  "water",
+  // Backward-compatible legacy values.
+  "snacks",
+  "other",
+] as const;
 
 const isoDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
@@ -129,7 +144,7 @@ const workoutSchema = z.object({
 const mealItemSchema = z.object({
   item_name: z.string().trim().min(1).max(220),
   quantity: z.number().min(0).nullable().optional(),
-  unit: z.string().trim().max(40).nullable().optional(),
+  unit: mealUnitInputSchema,
   calories: z.number().min(0).nullable().optional(),
   protein_g: z.number().min(0).nullable().optional(),
   carbs_g: z.number().min(0).nullable().optional(),
@@ -141,7 +156,7 @@ const mealItemSchema = z.object({
 
 const addMealItemSchema = z.object({
   performed_on: isoDateSchema,
-  meal_type: z.enum(["breakfast", "lunch", "dinner", "snacks", "other"]),
+  meal_type: z.enum(CLIENT_PORTAL_MEAL_TYPES),
   timezone: z.string().trim().min(1).max(64).default("UTC"),
   item: mealItemSchema,
 });
@@ -161,7 +176,7 @@ const favoriteToggleSchema = z.object({
 const copyMealsSchema = z.object({
   source_date: isoDateSchema,
   target_date: isoDateSchema,
-  meal_types: z.array(z.enum(["breakfast", "lunch", "dinner", "snacks", "other"])).optional(),
+  meal_types: z.array(z.enum(CLIENT_PORTAL_MEAL_TYPES)).optional(),
 });
 
 const stepsSchema = z.object({
@@ -258,7 +273,7 @@ function revalidateClientPortalPaths(clientId: string) {
   revalidatePath("/client/notes");
   revalidatePath("/client/check-ins");
   revalidatePath("/client/goals");
-  revalidatePath(`/coach/clients/${clientId}`);
+  revalidatePath(`/clients/${clientId}`);
 }
 
 export type ClientPortalDashboard = {
@@ -1000,7 +1015,7 @@ export async function toggleClientFavoriteMealItemAction(
         .eq("client_id", context.client.id)
         .ilike("item_name", payload.item.item_name.trim());
       query = payload.item.unit
-        ? query.eq("unit", payload.item.unit.trim())
+        ? query.eq("unit", payload.item.unit)
         : query.is("unit", null);
       const { data: existing, error: existingError } = await query.maybeSingle();
       if (existingError) throw new Error(existingError.message);

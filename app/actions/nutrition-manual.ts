@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { runTrackedAction } from "@/lib/events/dispatcher";
+import { mealUnitInputSchema } from "@/lib/nutrition/meal-units";
 import { createClient } from "@/lib/supabase/server";
 import { Database, Json } from "@/types/database";
 
@@ -24,7 +25,19 @@ type FavoriteRow = Database["public"]["Tables"]["meal_item_favorites"]["Row"];
 
 type ClientRow = Database["public"]["Tables"]["clients"]["Row"];
 
-const MEAL_TYPES = ["breakfast", "lunch", "dinner", "snacks", "other"] as const;
+const MEAL_TYPES = [
+  "breakfast",
+  "snack",
+  "lunch",
+  "pre_workout_meal",
+  "post_workout_meal",
+  "dinner",
+  "protein_drink",
+  "water",
+  // Backward-compatible legacy values.
+  "snacks",
+  "other",
+] as const;
 export type MealType = (typeof MEAL_TYPES)[number];
 
 const PLAN_STATUSES = ["draft", "active", "archived"] as const;
@@ -160,7 +173,7 @@ const diaryDaySchema = z.object({
 const mealItemBaseSchema = z.object({
   item_name: z.string().trim().min(1).max(220),
   quantity: z.number().min(0).nullable().optional(),
-  unit: z.string().trim().max(40).nullable().optional(),
+  unit: mealUnitInputSchema,
   calories: z.number().min(0).nullable().optional(),
   protein_g: z.number().min(0).nullable().optional(),
   carbs_g: z.number().min(0).nullable().optional(),
@@ -241,9 +254,14 @@ function normalizeMealType(input: string | null | undefined): MealType {
   if (!input) return "other";
   const value = input.toLowerCase();
   if (value === "breakfast") return "breakfast";
+  if (value === "snack") return "snack";
   if (value === "lunch") return "lunch";
+  if (value === "pre_workout_meal") return "pre_workout_meal";
+  if (value === "post_workout_meal") return "post_workout_meal";
   if (value === "dinner") return "dinner";
-  if (value === "snack" || value === "snacks") return "snacks";
+  if (value === "protein_drink") return "protein_drink";
+  if (value === "water") return "water";
+  if (value === "snacks") return "snack";
   return "other";
 }
 
@@ -283,10 +301,10 @@ function computeProgress(totals: DailyTotals, activePlan: ActiveNutritionPlan | 
 
 function revalidateNutritionPaths(subjectClientId?: string | null) {
   revalidatePath("/nutrition");
-  revalidatePath("/nutrition/plans");
+  revalidatePath("/nutrition/diary");
+  revalidatePath("/nutrition/meal-planner");
   if (subjectClientId) {
     revalidatePath(`/clients/${subjectClientId}/nutrition`);
-    revalidatePath(`/coach/clients/${subjectClientId}`);
   }
 }
 
