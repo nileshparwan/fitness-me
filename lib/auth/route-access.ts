@@ -2,7 +2,7 @@ import type { Database } from "@/types/database";
 
 type AppRole = Database["public"]["Enums"]["user_role"];
 
-type RoleNavContext = {
+export type RoleNavContext = {
   role: AppRole;
 };
 
@@ -15,7 +15,6 @@ const AUTH_ONLY_PREFIXES = [
   "/exercises",
   "/nutrition",
   "/progress",
-  "/analytics",
   "/settings",
   "/support",
   "/admin",
@@ -30,7 +29,6 @@ const USER_PREFIXES = [
   "/exercises",
   "/nutrition",
   "/progress",
-  "/analytics",
   "/support",
   "/settings",
 ] as const;
@@ -94,96 +92,148 @@ export type SidebarSectionConfig = {
   items: SidebarItemConfig[];
 };
 
-export function getSidebarSectionsForRole(context: RoleNavContext): SidebarSectionConfig[] {
-  if (context.role === "sysadmin") {
-    return [
+const USER_WORKSPACE_SECTIONS: SidebarSectionConfig[] = [
+  {
+    label: "Overview",
+    items: [{ title: "Dashboard", href: "/dashboard", icon: "home" }],
+  },
+  {
+    label: "Training",
+    items: [
+      { title: "Workouts", href: "/workouts", icon: "dumbbell" },
+      { title: "Programs", href: "/programs", icon: "folder" },
+      { title: "Exercises", href: "/exercises", icon: "book" },
+    ],
+  },
+  {
+    label: "Coach Tools",
+    items: [
+      { title: "Clients", href: "/clients", icon: "users" },
+      { title: "Plan Templates", href: "/coach/plans", icon: "folder" },
+    ],
+  },
+  {
+    label: "Nutrition",
+    items: [
+      { title: "Nutrition Dashboard", href: "/nutrition/dashboard", icon: "home" },
+      { title: "Meal Diary", href: "/nutrition/diary", icon: "book" },
+      { title: "Meal Planner", href: "/nutrition/meal-planner", icon: "nutrition" },
+      { title: "Meal Groups", href: "/nutrition/meal-groups", icon: "book" },
+    ],
+  },
+  {
+    label: "Insights",
+    items: [{ title: "Progress", href: "/progress", icon: "trend" }],
+  },
+  {
+    label: "Support",
+    items: [{ title: "Tickets", href: "/support", icon: "support" }],
+  },
+  {
+    label: "Settings",
+    items: [{ title: "Goals", href: "/settings/goals", icon: "target" }],
+  },
+];
+
+const SYSADMIN_SECTIONS: SidebarSectionConfig[] = [
+  {
+    label: "Admin Console",
+    items: [
       {
-        label: "Admin Console",
-        items: [
-          {
-            title: "Overview",
-            href: "/admin",
-            icon: "shield",
-            children: [
-              { title: "Users", href: "/admin/users", icon: "users" },
-              { title: "Training", href: "/admin/training", icon: "dumbbell" },
-              { title: "Nutrition", href: "/admin/nutrition", icon: "nutrition" },
-              { title: "Analytics", href: "/admin/analytics", icon: "trend" },
-              { title: "Tickets", href: "/admin/tickets", icon: "support" },
-              { title: "Support", href: "/admin/support", icon: "support" },
-              { title: "System", href: "/admin/system", icon: "settings" },
-              { title: "Settings", href: "/admin/settings", icon: "settings" },
-            ],
-          },
+        title: "Overview",
+        href: "/admin",
+        icon: "shield",
+        children: [
+          { title: "Users", href: "/admin/users", icon: "users" },
+          { title: "Training", href: "/admin/training", icon: "dumbbell" },
+          { title: "Nutrition", href: "/admin/nutrition", icon: "nutrition" },
+          { title: "Analytics", href: "/admin/analytics", icon: "trend" },
+          { title: "Tickets", href: "/admin/tickets", icon: "support" },
+          { title: "System", href: "/admin/system", icon: "settings" },
+          { title: "Settings", href: "/admin/settings", icon: "settings" },
         ],
       },
-    ];
+    ],
+  },
+];
+
+export type MobileNavTabConfig = {
+  key: string;
+  label: string;
+  href?: string;
+  icon: "home" | "dumbbell" | "folder" | "book" | "nutrition" | "trend" | "users" | "target" | "menu";
+  action?: "menu";
+};
+
+const MOBILE_MENU_TAB: MobileNavTabConfig = {
+  key: "menu",
+  label: "Menu",
+  icon: "menu",
+  action: "menu",
+};
+
+const MOBILE_TABS_DEFAULT: MobileNavTabConfig[] = [
+  { key: "dashboard", label: "Home", href: "/dashboard", icon: "home" },
+  { key: "progress", label: "Progress", href: "/progress", icon: "trend" },
+  { key: "tickets", label: "Tickets", href: "/support", icon: "book" },
+  { key: "goals", label: "Goals", href: "/settings/goals", icon: "target" },
+  MOBILE_MENU_TAB,
+];
+
+const MOBILE_TABS_TRAINING: MobileNavTabConfig[] = [
+  { key: "workouts", label: "Workouts", href: "/workouts", icon: "dumbbell" },
+  { key: "programs", label: "Programs", href: "/programs", icon: "folder" },
+  { key: "exercises", label: "Exercises", href: "/exercises", icon: "book" },
+  MOBILE_MENU_TAB,
+];
+
+const MOBILE_TABS_COACH_TOOLS: MobileNavTabConfig[] = [
+  { key: "clients", label: "Clients", href: "/clients", icon: "users" },
+  { key: "templates", label: "Templates", href: "/coach/plans", icon: "folder" },
+  MOBILE_MENU_TAB,
+];
+
+const MOBILE_TABS_NUTRITION: MobileNavTabConfig[] = [
+  { key: "nutrition-dashboard", label: "Dashboard", href: "/nutrition/dashboard", icon: "home" },
+  { key: "nutrition-diary", label: "Diary", href: "/nutrition/diary", icon: "book" },
+  { key: "nutrition-planner", label: "Planner", href: "/nutrition/meal-planner", icon: "nutrition" },
+  { key: "nutrition-groups", label: "Groups", href: "/nutrition/meal-groups", icon: "folder" },
+  MOBILE_MENU_TAB,
+];
+
+function isTrainingPath(pathname: string) {
+  return isPrefixMatch(pathname, "/workouts") || isPrefixMatch(pathname, "/programs") || isPrefixMatch(pathname, "/exercises");
+}
+
+function isCoachToolsPath(pathname: string) {
+  return (
+    isPrefixMatch(pathname, "/clients") ||
+    isPrefixMatch(pathname, "/coach/plans")
+  );
+}
+
+function isNutritionPath(pathname: string) {
+  return isPrefixMatch(pathname, "/nutrition");
+}
+
+export function getWorkspaceSubtitle(context: RoleNavContext) {
+  return context.role === "sysadmin" ? "Sysadmin Workspace" : "User Workspace";
+}
+
+export function getMobileTabsForRole(pathname: string, context: RoleNavContext): MobileNavTabConfig[] {
+  if (context.role === "sysadmin") {
+    return [];
+  }
+  if (isNutritionPath(pathname)) return MOBILE_TABS_NUTRITION;
+  if (isTrainingPath(pathname)) return MOBILE_TABS_TRAINING;
+  if (isCoachToolsPath(pathname)) return MOBILE_TABS_COACH_TOOLS;
+  return MOBILE_TABS_DEFAULT;
+}
+
+export function getSidebarSectionsForRole(context: RoleNavContext): SidebarSectionConfig[] {
+  if (context.role === "sysadmin") {
+    return SYSADMIN_SECTIONS;
   }
 
-  return [
-    {
-      label: "Overview",
-      items: [{ title: "Dashboard", href: "/dashboard", icon: "home" }],
-    },
-    {
-      label: "Training",
-      items: [
-        { title: "Workouts", href: "/workouts", icon: "dumbbell" },
-        { title: "Programs", href: "/programs", icon: "folder" },
-        { title: "Exercises", href: "/exercises", icon: "book" },
-      ],
-    },
-    {
-      label: "Coach Tools",
-      items: [
-        {
-          title: "Clients",
-          href: "/clients",
-          icon: "users",
-        },
-        {
-          title: "Plan Templates",
-          href: "/coach/plans",
-          icon: "folder",
-        },
-      ],
-    },
-    {
-      label: "Nutrition",
-      items: [
-        {
-          title: "Diary",
-          href: "/nutrition",
-          icon: "nutrition",
-          children: [
-            { title: "Plans", href: "/nutrition/plans", icon: "folder" },
-            { title: "Meal Groups", href: "/nutrition/meal-groups", icon: "book" },
-          ],
-        },
-      ],
-    },
-    {
-      label: "Insights",
-      items: [
-        {
-          title: "Progress",
-          href: "/progress",
-          icon: "trend",
-          children: [{ title: "Nutrition Trends", href: "/progress/nutrition", icon: "nutrition" }],
-        },
-      ],
-    },
-    {
-      label: "Support",
-      items: [{ title: "Tickets", href: "/support", icon: "support" }],
-    },
-    {
-      label: "Settings",
-      items: [
-        { title: "Goals", href: "/settings/goals", icon: "target" },
-        { title: "Profile", href: "/settings/profile", icon: "user" },
-        { title: "Account", href: "/settings/account", icon: "settings" },
-      ],
-    },
-  ];
+  return USER_WORKSPACE_SECTIONS;
 }
