@@ -8,6 +8,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test tests/*.test.ts",
     "seed": "node ./scripts/db.seed.ts",
     "db:backup": "bash ./scripts/db-backup.sh",
     "db:rollback": "bash ./scripts/db-rollback.sh",
