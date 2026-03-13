@@ -633,6 +633,81 @@ export type Database = {
           },
         ]
       }
+      client_billing_plans: {
+        Row: {
+          billing_cycle_day: number | null
+          billing_type: Database["public"]["Enums"]["billing_type"]
+          client_id: string
+          coach_id: string
+          created_at: string
+          currency: string
+          id: string
+          is_active: boolean
+          monthly_amount: number | null
+          notes: string | null
+          payment_method: Database["public"]["Enums"]["payment_method"]
+          program_end_date: string | null
+          program_start_date: string | null
+          session_rate: number
+          sessions_purchased: number
+          sessions_used: number
+          updated_at: string
+        }
+        Insert: {
+          billing_cycle_day?: number | null
+          billing_type?: Database["public"]["Enums"]["billing_type"]
+          client_id: string
+          coach_id: string
+          created_at?: string
+          currency?: string
+          id?: string
+          is_active?: boolean
+          monthly_amount?: number | null
+          notes?: string | null
+          payment_method?: Database["public"]["Enums"]["payment_method"]
+          program_end_date?: string | null
+          program_start_date?: string | null
+          session_rate: number
+          sessions_purchased?: number
+          sessions_used?: number
+          updated_at?: string
+        }
+        Update: {
+          billing_cycle_day?: number | null
+          billing_type?: Database["public"]["Enums"]["billing_type"]
+          client_id?: string
+          coach_id?: string
+          created_at?: string
+          currency?: string
+          id?: string
+          is_active?: boolean
+          monthly_amount?: number | null
+          notes?: string | null
+          payment_method?: Database["public"]["Enums"]["payment_method"]
+          program_end_date?: string | null
+          program_start_date?: string | null
+          session_rate?: number
+          sessions_purchased?: number
+          sessions_used?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_billing_plans_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_billing_plans_coach_id_fkey"
+            columns: ["coach_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       client_payments: {
         Row: {
           amount: number
@@ -689,6 +764,76 @@ export type Database = {
           },
           {
             foreignKeyName: "client_payments_coach_id_fkey"
+            columns: ["coach_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payment_logs: {
+        Row: {
+          amount: number | null
+          billing_plan_id: string | null
+          billing_type_snapshot: Database["public"]["Enums"]["billing_type"]
+          client_id: string
+          coach_id: string
+          created_at: string
+          id: string
+          notes: string | null
+          session_date: string
+          session_rate_snapshot: number
+          sessions_remaining_after: number | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          amount?: number | null
+          billing_plan_id?: string | null
+          billing_type_snapshot: Database["public"]["Enums"]["billing_type"]
+          client_id: string
+          coach_id: string
+          created_at?: string
+          id?: string
+          notes?: string | null
+          session_date?: string
+          session_rate_snapshot: number
+          sessions_remaining_after?: number | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number | null
+          billing_plan_id?: string | null
+          billing_type_snapshot?: Database["public"]["Enums"]["billing_type"]
+          client_id?: string
+          coach_id?: string
+          created_at?: string
+          id?: string
+          notes?: string | null
+          session_date?: string
+          session_rate_snapshot?: number
+          sessions_remaining_after?: number | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_logs_billing_plan_id_fkey"
+            columns: ["billing_plan_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_plans"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_logs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_logs_coach_id_fkey"
             columns: ["coach_id"]
             isOneToOne: false
             referencedRelation: "profiles"
@@ -3007,6 +3152,12 @@ export type Database = {
       show_trgm: { Args: { "": string }; Returns: string[] }
     }
     Enums: {
+      billing_type:
+        | "per_session"
+        | "session_package"
+        | "monthly"
+        | "program"
+        | "hourly"
       checkin_status: "pending_review" | "reviewed" | "actioned"
       client_checkin_status: "pending" | "reviewed" | "actioned"
       client_module_access_level: "disabled" | "read_only" | "enabled"
@@ -3208,6 +3359,13 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      billing_type: [
+        "per_session",
+        "session_package",
+        "monthly",
+        "program",
+        "hourly",
+      ],
       checkin_status: ["pending_review", "reviewed", "actioned"],
       client_checkin_status: ["pending", "reviewed", "actioned"],
       client_module_access_level: ["disabled", "read_only", "enabled"],

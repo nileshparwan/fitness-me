@@ -32,6 +32,9 @@ type CardioSessionInsert = Database["public"]["Tables"]["cardio_sessions"]["Inse
 type CheckinInsert = Database["public"]["Tables"]["client_checkins"]["Insert"];
 type CoachNoteInsert = Database["public"]["Tables"]["coach_notes"]["Insert"];
 type PaymentInsert = Database["public"]["Tables"]["client_payments"]["Insert"];
+type BillingPlanInsert = Database["public"]["Tables"]["client_billing_plans"]["Insert"];
+type BillingPlanUpdate = Database["public"]["Tables"]["client_billing_plans"]["Update"];
+type PaymentLogInsert = Database["public"]["Tables"]["payment_logs"]["Insert"];
 type GoalInsert = Database["public"]["Tables"]["fitness_goals"]["Insert"];
 type GoalUpdate = Database["public"]["Tables"]["fitness_goals"]["Update"];
 type GoalProgressHistoryInsert = Database["public"]["Tables"]["goal_progress_history"]["Insert"];
@@ -45,6 +48,7 @@ export type ClientCheckinStatus = Database["public"]["Enums"]["client_checkin_st
 export type CoachNoteTag = Database["public"]["Enums"]["coach_note_tag"];
 export type PaymentMethod = Database["public"]["Enums"]["payment_method"];
 export type PaymentStatus = Database["public"]["Enums"]["payment_status"];
+export type BillingType = Database["public"]["Enums"]["billing_type"];
 export type GoalStatus = ClientGoalStatus;
 export type GoalTrend = ClientGoalTrend;
 
@@ -280,6 +284,72 @@ const updatePaymentDetailsSchema = z
     "At least one field must be provided."
   );
 
+const createBillingPlanSchema = z.object({
+  client_id: z.string().uuid(),
+  billing_type: z.enum(["per_session", "session_package", "monthly", "program", "hourly"]).default("per_session"),
+  session_rate: z.number().positive(),
+  currency: z.string().trim().min(3).max(8).default("USD"),
+  payment_method: z.enum(["cash", "bank_transfer", "card", "other"]).default("cash"),
+  sessions_purchased: z.number().int().min(0).default(0),
+  monthly_amount: z.number().positive().nullable().optional(),
+  billing_cycle_day: z.number().int().min(1).max(28).nullable().optional(),
+  program_start_date: z.string().date().nullable().optional(),
+  program_end_date: z.string().date().nullable().optional(),
+  notes: z.string().trim().max(5000).nullable().optional(),
+});
+
+const updateBillingPlanSchema = z
+  .object({
+    id: z.string().uuid(),
+    session_rate: z.number().positive().optional(),
+    sessions_purchased: z.number().int().min(0).optional(),
+    monthly_amount: z.number().positive().nullable().optional(),
+    billing_cycle_day: z.number().int().min(1).max(28).nullable().optional(),
+    payment_method: z.enum(["cash", "bank_transfer", "card", "other"]).optional(),
+    notes: z.string().trim().max(5000).nullable().optional(),
+    is_active: z.boolean().optional(),
+  })
+  .refine(
+    (value) =>
+      value.session_rate !== undefined ||
+      value.sessions_purchased !== undefined ||
+      value.monthly_amount !== undefined ||
+      value.billing_cycle_day !== undefined ||
+      value.payment_method !== undefined ||
+      value.notes !== undefined ||
+      value.is_active !== undefined,
+    "At least one field must be provided."
+  );
+
+const renewPackageSchema = z.object({
+  billing_plan_id: z.string().uuid(),
+  sessions_to_add: z.number().int().positive(),
+  payment_amount: z.number().positive(),
+  payment_method: z.enum(["cash", "bank_transfer", "card", "other"]).default("cash"),
+  notes: z.string().trim().max(5000).nullable().optional(),
+});
+
+const logSessionSchema = z.object({
+  client_id: z.string().uuid(),
+  session_date: z.string().date().optional(),
+  notes: z.string().trim().max(5000).nullable().optional(),
+});
+
+const voidSessionLogSchema = z.object({
+  log_id: z.string().uuid(),
+});
+
+const listClientPaymentLogsSchema = z.object({
+  client_id: z.string().uuid(),
+  date_from: z.string().date().optional(),
+  date_to: z.string().date().optional(),
+  limit: z.number().int().min(1).max(500).default(100),
+  page: z.number().int().min(0).default(0),
+  sort_dir: z.enum(["asc", "desc"]).default("desc"),
+  status: z.enum(["all", "logged", "confirmed", "voided"]).default("all"),
+  search: z.string().trim().max(120).optional(),
+});
+
 const listClientGoalsSchema = z.object({
   client_id: z.string().uuid(),
   status: z.enum([...GOAL_STATUS_VALUES, "all"]).default("all"),
@@ -379,7 +449,9 @@ async function requireActor() {
 function revalidateCoachPaths(clientId?: string) {
   revalidatePath("/coach/plans");
   revalidatePath("/clients");
+  revalidatePath("/clients/payments");
   if (clientId) revalidatePath(`/clients/${clientId}`);
+  if (clientId) revalidatePath(`/clients/${clientId}/payments`);
 }
 
 type ClientRosterRow = ClientRow & {
@@ -416,11 +488,42 @@ export type CoachPaymentTransactionRow = {
   updated_at: string;
 };
 
+export type BillingPlanRow = Database["public"]["Tables"]["client_billing_plans"]["Row"];
+export type PaymentLogRow = Database["public"]["Tables"]["payment_logs"]["Row"];
+
+export type ClientBillingPlanWithRemaining = BillingPlanRow & {
+  sessions_remaining: number;
+};
+
+export type TodayLogMapEntry = {
+  client_id: string;
+  log: PaymentLogRow;
+};
+
+export type CoachPaymentsTodayBoardRow = {
+  client_id: string;
+  client_name: string;
+  client_status: ClientStatus;
+  billing_plan: ClientBillingPlanWithRemaining;
+  today_log: PaymentLogRow | null;
+};
+
 export type CoachPaymentClientBillingRow = {
   client_id: string;
   client_name: string;
   client_status: ClientStatus;
-  monthly_amount: number;
+  billing_type: BillingType | null;
+  session_rate: number | null;
+  payment_method: PaymentMethod | null;
+  sessions_purchased: number;
+  sessions_used: number;
+  sessions_remaining: number;
+  is_active_plan: boolean;
+  monthly_amount: number | null;
+  billing_cycle_day: number | null;
+  program_start_date: string | null;
+  program_end_date: string | null;
+  plan_notes: string | null;
   total_paid: number;
   outstanding: number;
   next_billing_date: string | null;
@@ -432,13 +535,27 @@ export type CoachPaymentsDashboard = {
     pending_amount: number;
     overdue_amount: number;
     active_billing: number;
+    sessions_logged_today: number;
+    sessions_logged_this_week: number;
+    sessions_logged_this_month: number;
+    packages_expiring_soon: number;
+    clients_due_today: number;
   };
   transactions: CoachPaymentTransactionRow[];
   transactions_total: number;
   page: number;
   page_size: number;
   has_more: boolean;
+  todays_board: CoachPaymentsTodayBoardRow[];
   client_billing: CoachPaymentClientBillingRow[];
+};
+
+export type ClientPaymentLogsPayload = {
+  rows: PaymentLogRow[];
+  total: number;
+  page: number;
+  page_size: number;
+  has_more: boolean;
 };
 
 type GoalRow = Database["public"]["Tables"]["fitness_goals"]["Row"];
@@ -2143,6 +2260,481 @@ export async function updateClientPaymentDetailsAction(input: z.input<typeof upd
 
       revalidateCoachPaths(data.client_id);
       return { success: true };
+    },
+  });
+}
+
+function sessionDateBoundary() {
+  const now = new Date();
+  const todayIso = now.toISOString().slice(0, 10);
+  const sevenDaysAgo = new Date(now);
+  sevenDaysAgo.setUTCDate(sevenDaysAgo.getUTCDate() - 7);
+  return {
+    todayIso,
+    minSessionDateIso: sevenDaysAgo.toISOString().slice(0, 10),
+  };
+}
+
+function startOfWeekIso(date = new Date()) {
+  const utc = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+  const day = utc.getUTCDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  utc.setUTCDate(utc.getUTCDate() + diff);
+  return utc.toISOString().slice(0, 10);
+}
+
+function startOfMonthIso(date = new Date()) {
+  const utc = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1));
+  return utc.toISOString().slice(0, 10);
+}
+
+function billingPlanWithRemaining(plan: BillingPlanRow): ClientBillingPlanWithRemaining {
+  return {
+    ...plan,
+    sessions_remaining: Math.max(0, (plan.sessions_purchased || 0) - (plan.sessions_used || 0)),
+  };
+}
+
+function assertProgramDates(startDate?: string | null, endDate?: string | null) {
+  if (!startDate || !endDate) return;
+  if (endDate <= startDate) {
+    throw new Error("Program end date must be after program start date.");
+  }
+}
+
+function validateBillingPlanByType(input: {
+  billing_type: BillingType;
+  sessions_purchased: number;
+  monthly_amount: number | null;
+  billing_cycle_day: number | null;
+  program_start_date: string | null;
+  program_end_date: string | null;
+}) {
+  if (input.billing_type === "session_package" || input.billing_type === "program") {
+    if (input.sessions_purchased <= 0) {
+      throw new Error("Sessions purchased must be greater than 0 for package or program billing.");
+    }
+  }
+  if (input.billing_type === "monthly") {
+    if (!input.monthly_amount || input.monthly_amount <= 0) {
+      throw new Error("Monthly amount is required for monthly billing.");
+    }
+    if (!input.billing_cycle_day) {
+      throw new Error("Billing cycle day is required for monthly billing.");
+    }
+  }
+  if (input.billing_type === "program") {
+    assertProgramDates(input.program_start_date, input.program_end_date);
+  }
+}
+
+export async function createBillingPlanAction(input: z.input<typeof createBillingPlanSchema>): Promise<ClientBillingPlanWithRemaining> {
+  const payload = createBillingPlanSchema.parse(input);
+  validateBillingPlanByType({
+    billing_type: payload.billing_type,
+    sessions_purchased: payload.sessions_purchased,
+    monthly_amount: payload.monthly_amount ?? null,
+    billing_cycle_day: payload.billing_cycle_day ?? null,
+    program_start_date: payload.program_start_date ?? null,
+    program_end_date: payload.program_end_date ?? null,
+  });
+
+  return runTrackedAction({
+    eventName: "coach.client.billing_plan.create",
+    payload: {
+      client_id: payload.client_id,
+      billing_type: payload.billing_type,
+      session_rate: payload.session_rate,
+    },
+    action: async () => {
+      const { supabase, user } = await requireActor();
+
+      const { error: deactivateError } = await supabase
+        .from("client_billing_plans")
+        .update({ is_active: false })
+        .eq("client_id", payload.client_id)
+        .eq("coach_id", user.id)
+        .eq("is_active", true);
+      if (deactivateError) throw new Error(deactivateError.message);
+
+      const insertPayload: BillingPlanInsert = {
+        client_id: payload.client_id,
+        coach_id: user.id,
+        billing_type: payload.billing_type,
+        session_rate: payload.session_rate,
+        currency: payload.currency.toUpperCase(),
+        payment_method: payload.payment_method,
+        sessions_purchased: payload.sessions_purchased,
+        sessions_used: 0,
+        monthly_amount: payload.monthly_amount ?? null,
+        billing_cycle_day: payload.billing_cycle_day ?? null,
+        program_start_date: payload.program_start_date ?? null,
+        program_end_date: payload.program_end_date ?? null,
+        is_active: true,
+        notes: payload.notes || null,
+      };
+
+      const { data, error } = await supabase
+        .from("client_billing_plans")
+        .insert(insertPayload)
+        .select("*")
+        .single();
+      if (error) throw new Error(error.message);
+
+      revalidateCoachPaths(payload.client_id);
+      return billingPlanWithRemaining(data as BillingPlanRow);
+    },
+  });
+}
+
+export async function updateBillingPlanAction(input: z.input<typeof updateBillingPlanSchema>) {
+  const payload = updateBillingPlanSchema.parse(input);
+  return runTrackedAction({
+    eventName: "coach.client.billing_plan.update",
+    payload: { id: payload.id },
+    action: async () => {
+      const { supabase, user } = await requireActor();
+      const { data: currentPlan, error: currentPlanError } = await supabase
+        .from("client_billing_plans")
+        .select("*")
+        .eq("id", payload.id)
+        .eq("coach_id", user.id)
+        .single();
+      if (currentPlanError) throw new Error(currentPlanError.message);
+
+      if (
+        payload.sessions_purchased !== undefined &&
+        payload.sessions_purchased < Number((currentPlan as BillingPlanRow).sessions_used || 0)
+      ) {
+        throw new Error("Sessions purchased cannot be lower than sessions already used.");
+      }
+
+      const changes: BillingPlanUpdate = {};
+      if (payload.session_rate !== undefined) changes.session_rate = payload.session_rate;
+      if (payload.sessions_purchased !== undefined) changes.sessions_purchased = payload.sessions_purchased;
+      if (payload.monthly_amount !== undefined) changes.monthly_amount = payload.monthly_amount;
+      if (payload.billing_cycle_day !== undefined) changes.billing_cycle_day = payload.billing_cycle_day;
+      if (payload.payment_method !== undefined) changes.payment_method = payload.payment_method;
+      if (payload.notes !== undefined) changes.notes = payload.notes;
+      if (payload.is_active !== undefined) changes.is_active = payload.is_active;
+
+      const { data, error } = await supabase
+        .from("client_billing_plans")
+        .update(changes)
+        .eq("id", payload.id)
+        .eq("coach_id", user.id)
+        .select("client_id")
+        .single();
+      if (error) throw new Error(error.message);
+
+      revalidateCoachPaths(data.client_id);
+      return { success: true };
+    },
+  });
+}
+
+export async function getClientBillingPlanAction(clientId: string): Promise<ClientBillingPlanWithRemaining | null> {
+  return runTrackedAction({
+    eventName: "coach.client.billing_plan.get",
+    payload: { client_id: clientId },
+    action: async () => {
+      const { supabase, user } = await requireActor();
+      const { data, error } = await supabase
+        .from("client_billing_plans")
+        .select("*")
+        .eq("client_id", clientId)
+        .eq("coach_id", user.id)
+        .eq("is_active", true)
+        .order("created_at", { ascending: false })
+        .maybeSingle();
+      if (error) throw new Error(error.message);
+      if (!data) return null;
+      return billingPlanWithRemaining(data as BillingPlanRow);
+    },
+  });
+}
+
+export async function listClientBillingPlanHistoryAction(clientId: string): Promise<ClientBillingPlanWithRemaining[]> {
+  return runTrackedAction({
+    eventName: "coach.client.billing_plan.history",
+    payload: { client_id: clientId },
+    action: async () => {
+      const { supabase, user } = await requireActor();
+      const { data, error } = await supabase
+        .from("client_billing_plans")
+        .select("*")
+        .eq("client_id", clientId)
+        .eq("coach_id", user.id)
+        .order("created_at", { ascending: false });
+      if (error) throw new Error(error.message);
+      return ((data || []) as BillingPlanRow[]).map((row) => billingPlanWithRemaining(row));
+    },
+  });
+}
+
+export async function renewPackageAction(input: z.input<typeof renewPackageSchema>) {
+  const payload = renewPackageSchema.parse(input);
+  return runTrackedAction({
+    eventName: "coach.client.billing_plan.renew",
+    payload: {
+      billing_plan_id: payload.billing_plan_id,
+      sessions_to_add: payload.sessions_to_add,
+      payment_amount: payload.payment_amount,
+    },
+    action: async () => {
+      const { supabase, user } = await requireActor();
+      const { data: currentPlan, error: currentPlanError } = await supabase
+        .from("client_billing_plans")
+        .select("*")
+        .eq("id", payload.billing_plan_id)
+        .eq("coach_id", user.id)
+        .single();
+      if (currentPlanError) throw new Error(currentPlanError.message);
+      const plan = currentPlan as BillingPlanRow;
+      if (plan.billing_type !== "session_package" && plan.billing_type !== "program") {
+        throw new Error("Renew package is only available for session package or program billing.");
+      }
+
+      const nextPurchased = Number(plan.sessions_purchased || 0) + payload.sessions_to_add;
+      const { data: updatedPlan, error: updateError } = await supabase
+        .from("client_billing_plans")
+        .update({ sessions_purchased: nextPurchased })
+        .eq("id", plan.id)
+        .eq("coach_id", user.id)
+        .select("*")
+        .single();
+      if (updateError) throw new Error(updateError.message);
+
+      const paymentInsert: PaymentInsert = {
+        client_id: plan.client_id,
+        coach_id: user.id,
+        amount: payload.payment_amount,
+        currency: (plan.currency || "USD").toUpperCase(),
+        method: payload.payment_method,
+        payment_date: new Date().toISOString().slice(0, 10),
+        status: "paid",
+        notes:
+          payload.notes?.trim() ||
+          `Package renewal: +${payload.sessions_to_add} sessions`,
+      };
+      const { data: paymentRow, error: paymentError } = await supabase
+        .from("client_payments")
+        .insert(paymentInsert)
+        .select("*")
+        .single();
+      if (paymentError) throw new Error(paymentError.message);
+
+      revalidateCoachPaths(plan.client_id);
+      return {
+        plan: billingPlanWithRemaining(updatedPlan as BillingPlanRow),
+        payment: paymentRow as Database["public"]["Tables"]["client_payments"]["Row"],
+      };
+    },
+  });
+}
+
+export async function getTodayLogsAction(): Promise<Record<string, PaymentLogRow>> {
+  return runTrackedAction({
+    eventName: "coach.payments.today",
+    payload: {},
+    action: async () => {
+      const { supabase, user } = await requireActor();
+      const todayIso = new Date().toISOString().slice(0, 10);
+      const { data, error } = await supabase
+        .from("payment_logs")
+        .select("*")
+        .eq("coach_id", user.id)
+        .eq("session_date", todayIso)
+        .neq("status", "voided");
+      if (error) throw new Error(error.message);
+      const map: Record<string, PaymentLogRow> = {};
+      for (const row of (data || []) as PaymentLogRow[]) {
+        map[row.client_id] = row;
+      }
+      return map;
+    },
+  });
+}
+
+export async function logSessionAction(input: z.input<typeof logSessionSchema>) {
+  const payload = logSessionSchema.parse(input);
+  return runTrackedAction({
+    eventName: "coach.client.session.log",
+    payload: { client_id: payload.client_id, session_date: payload.session_date || null },
+    action: async () => {
+      const { supabase, user } = await requireActor();
+      const { todayIso, minSessionDateIso } = sessionDateBoundary();
+      const sessionDate = payload.session_date || todayIso;
+      if (sessionDate > todayIso) {
+        throw new Error("Session date cannot be in the future.");
+      }
+      if (sessionDate < minSessionDateIso) {
+        throw new Error("Session date cannot be more than 7 days in the past.");
+      }
+
+      const { data: activePlan, error: activePlanError } = await supabase
+        .from("client_billing_plans")
+        .select("*")
+        .eq("client_id", payload.client_id)
+        .eq("coach_id", user.id)
+        .eq("is_active", true)
+        .maybeSingle();
+      if (activePlanError) throw new Error(activePlanError.message);
+      if (!activePlan) {
+        throw new Error("No active billing plan for this client.");
+      }
+      const plan = activePlan as BillingPlanRow;
+
+      const { data: existingLog, error: existingLogError } = await supabase
+        .from("payment_logs")
+        .select("id")
+        .eq("client_id", payload.client_id)
+        .eq("session_date", sessionDate)
+        .neq("status", "voided")
+        .maybeSingle();
+      if (existingLogError) throw new Error(existingLogError.message);
+      if (existingLog?.id) {
+        throw new Error("Session already logged for this date.");
+      }
+
+      let amount: number | null = null;
+      let sessionsRemainingAfter: number | null = null;
+
+      if (plan.billing_type === "per_session" || plan.billing_type === "hourly") {
+        amount = Number(plan.session_rate || 0);
+      } else if (plan.billing_type === "session_package" || plan.billing_type === "program") {
+        const remaining = Number(plan.sessions_purchased || 0) - Number(plan.sessions_used || 0);
+        if (remaining <= 0) {
+          throw new Error("No sessions remaining. Renew the package.");
+        }
+        const nextUsed = Number(plan.sessions_used || 0) + 1;
+        const { data: updatedPlan, error: updatePlanError } = await supabase
+          .from("client_billing_plans")
+          .update({ sessions_used: nextUsed })
+          .eq("id", plan.id)
+          .eq("coach_id", user.id)
+          .select("sessions_purchased, sessions_used")
+          .single();
+        if (updatePlanError) throw new Error(updatePlanError.message);
+        sessionsRemainingAfter = Number(updatedPlan.sessions_purchased || 0) - Number(updatedPlan.sessions_used || 0);
+      }
+
+      const logInsert: PaymentLogInsert = {
+        client_id: payload.client_id,
+        coach_id: user.id,
+        billing_plan_id: plan.id,
+        session_date: sessionDate,
+        amount,
+        session_rate_snapshot: Number(plan.session_rate || 0),
+        sessions_remaining_after: sessionsRemainingAfter,
+        billing_type_snapshot: plan.billing_type,
+        status: "logged",
+        notes: payload.notes || null,
+      };
+      const { data: createdLog, error: createLogError } = await supabase
+        .from("payment_logs")
+        .insert(logInsert)
+        .select("*")
+        .single();
+      if (createLogError) throw new Error(createLogError.message);
+
+      revalidateCoachPaths(payload.client_id);
+      return {
+        log: createdLog as PaymentLogRow,
+        sessions_remaining: sessionsRemainingAfter,
+      };
+    },
+  });
+}
+
+export async function voidSessionLogAction(input: z.input<typeof voidSessionLogSchema>) {
+  const payload = voidSessionLogSchema.parse(input);
+  return runTrackedAction({
+    eventName: "coach.client.session.void",
+    payload,
+    action: async () => {
+      const { supabase, user } = await requireActor();
+      const { data: logRow, error: logError } = await supabase
+        .from("payment_logs")
+        .select("*")
+        .eq("id", payload.log_id)
+        .eq("coach_id", user.id)
+        .single();
+      if (logError) throw new Error(logError.message);
+      const log = logRow as PaymentLogRow;
+      if (log.status === "voided") return { success: true };
+
+      const { error: markVoidedError } = await supabase
+        .from("payment_logs")
+        .update({ status: "voided" })
+        .eq("id", payload.log_id)
+        .eq("coach_id", user.id);
+      if (markVoidedError) throw new Error(markVoidedError.message);
+
+      if (
+        log.billing_plan_id &&
+        (log.billing_type_snapshot === "session_package" || log.billing_type_snapshot === "program")
+      ) {
+        const { data: plan, error: planError } = await supabase
+          .from("client_billing_plans")
+          .select("id, sessions_used")
+          .eq("id", log.billing_plan_id)
+          .eq("coach_id", user.id)
+          .maybeSingle();
+        if (planError) throw new Error(planError.message);
+        if (plan) {
+          const nextUsed = Math.max(0, Number(plan.sessions_used || 0) - 1);
+          const { error: updatePlanError } = await supabase
+            .from("client_billing_plans")
+            .update({ sessions_used: nextUsed })
+            .eq("id", log.billing_plan_id)
+            .eq("coach_id", user.id);
+          if (updatePlanError) throw new Error(updatePlanError.message);
+        }
+      }
+
+      revalidateCoachPaths(log.client_id);
+      return { success: true };
+    },
+  });
+}
+
+export async function listClientPaymentLogsAction(
+  input: z.input<typeof listClientPaymentLogsSchema>
+): Promise<ClientPaymentLogsPayload> {
+  const payload = listClientPaymentLogsSchema.parse(input);
+  return runTrackedAction({
+    eventName: "coach.client.payment_logs.list",
+    payload,
+    action: async () => {
+      const { supabase, user } = await requireActor();
+      const from = payload.page * payload.limit;
+      const to = from + payload.limit - 1;
+      let query = supabase
+        .from("payment_logs")
+        .select("*", { count: "exact" })
+        .eq("client_id", payload.client_id)
+        .eq("coach_id", user.id)
+        .order("session_date", { ascending: payload.sort_dir === "asc" })
+        .order("created_at", { ascending: payload.sort_dir === "asc" })
+        .range(from, to);
+
+      if (payload.date_from) query = query.gte("session_date", payload.date_from);
+      if (payload.date_to) query = query.lte("session_date", payload.date_to);
+      if (payload.status !== "all") query = query.eq("status", payload.status);
+      if (payload.search) query = query.ilike("notes", `%${payload.search.replace(/[%_]/g, "")}%`);
+
+      const { data, error, count } = await query;
+      if (error) throw new Error(error.message);
+      const rows = (data || []) as PaymentLogRow[];
+      const total = count ?? rows.length;
+      return {
+        rows,
+        total,
+        page: payload.page,
+        page_size: payload.limit,
+        has_more: from + rows.length < total,
+      };
     },
   });
 }
