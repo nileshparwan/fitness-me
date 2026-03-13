@@ -10,18 +10,25 @@ import {
 
 import {
   assignTemplateToClientAction,
+  createBillingPlanAction,
   createClientGoalAction,
   createClientCheckinAction,
   createCoachNoteAction,
   createCoachPlanTemplateAction,
   deleteClientPaymentAction,
   deleteClientGoalAction,
+  getClientBillingPlanAction,
+  getClientPaymentLogStatsAction,
+  getTodayLogsAction,
   getClientNextSessionAction,
+  listClientBillingPlanHistoryAction,
+  listClientPaymentLogsAction,
   listClientGoalsAction,
   listCoachPaymentsDashboardAction,
   listClientAssignmentsAction,
   listClientCheckinsAction,
   listClientDetailAction,
+  logSessionAction,
   listClientNotesAction,
   listClientPaymentsAction,
   listClientSessionsByRangeAction,
@@ -30,20 +37,33 @@ import {
   listCoachPlanTemplatesAction,
   logClientWorkoutAction,
   recordClientPaymentAction,
+  renewPackageAction,
   removeClientAction,
+  updateBillingPlanAction,
   updateClientPaymentDetailsAction,
   updateClientGoalAction,
   updateClientGoalStatusAction,
   updateClientPaymentStatusAction,
   updateClientCheckinAction,
   updateCoachNoteAction,
+  deleteSessionLogAction,
   upsertClientAction,
+  type BillingType,
   type ClientGoalItem,
   type ClientGoalsPayload,
+  type ClientPaymentLogsPayload,
+  type ClientBillingPlanWithRemaining,
+  type ClientPaymentLogStats,
   type CoachPaymentsDashboard,
+  type PaymentLogRow,
   type PaymentAlert,
 } from "@/app/actions/coach-tools";
-import { coachKeys, type CoachClientsKeyParams, type CoachPaymentsKeyParams } from "@/lib/query-keys-coach";
+import {
+  coachKeys,
+  type ClientPaymentLogsKeyParams,
+  type CoachClientsKeyParams,
+  type CoachPaymentsKeyParams,
+} from "@/lib/query-keys-coach";
 import { Database } from "@/types/database";
 
 type ClientPaymentRow = Database["public"]["Tables"]["client_payments"]["Row"];
@@ -87,10 +107,16 @@ export function useCoachClients(params: CoachClientsKeyParams & { enabled?: bool
   });
 }
 
-export function useClientDetail(clientId: string) {
+export function useClientDetail(
+  clientId: string,
+  options?: {
+    initialData?: Awaited<ReturnType<typeof listClientDetailAction>>;
+  }
+) {
   return useQuery({
     queryKey: coachKeys.clientDetail(clientId),
     queryFn: () => listClientDetailAction(clientId),
+    initialData: options?.initialData,
     enabled: Boolean(clientId),
     staleTime: 30_000,
     refetchOnWindowFocus: false,
@@ -198,6 +224,100 @@ export function useClientPayments(clientId: string) {
   });
 }
 
+export function useClientBillingPlan(
+  clientId: string,
+  options?: {
+    initialData?: ClientBillingPlanWithRemaining | null;
+  }
+) {
+  return useQuery<ClientBillingPlanWithRemaining | null>({
+    queryKey: coachKeys.billingPlan(clientId),
+    queryFn: () => getClientBillingPlanAction(clientId),
+    initialData: options?.initialData,
+    enabled: Boolean(clientId),
+    staleTime: 60_000,
+    gcTime: 10 * 60_000,
+    refetchOnWindowFocus: false,
+  });
+}
+
+export function useClientBillingPlanHistory(
+  clientId: string,
+  options?: {
+    initialData?: ClientBillingPlanWithRemaining[];
+  }
+) {
+  return useQuery<ClientBillingPlanWithRemaining[]>({
+    queryKey: coachKeys.billingPlanHistory(clientId),
+    queryFn: () => listClientBillingPlanHistoryAction(clientId),
+    initialData: options?.initialData,
+    enabled: Boolean(clientId),
+    staleTime: 60_000,
+    gcTime: 10 * 60_000,
+    placeholderData: keepPreviousData,
+    refetchOnWindowFocus: false,
+  });
+}
+
+export function useClientPaymentLogs(
+  clientId: string,
+  params?: ClientPaymentLogsKeyParams,
+  options?: {
+    initialData?: ClientPaymentLogsPayload;
+  }
+) {
+  return useQuery<ClientPaymentLogsPayload>({
+    queryKey: coachKeys.paymentLogs(clientId, params),
+    queryFn: () =>
+      listClientPaymentLogsAction({
+        client_id: clientId,
+        date_from: params?.dateFrom,
+        date_to: params?.dateTo,
+        limit: params?.limit ?? 20,
+        page: params?.page ?? 0,
+        sort_by: params?.sortBy ?? "session_date",
+        sort_dir: params?.sortDir ?? "desc",
+        status: params?.status ?? "all",
+        search: params?.search?.trim() || undefined,
+      }),
+    initialData: options?.initialData,
+    enabled: Boolean(clientId),
+    staleTime: 30_000,
+    gcTime: 10 * 60_000,
+    placeholderData: keepPreviousData,
+    refetchOnWindowFocus: false,
+  });
+}
+
+export function useClientPaymentLogStats(
+  clientId: string,
+  options?: {
+    initialData?: ClientPaymentLogStats;
+  }
+) {
+  return useQuery<ClientPaymentLogStats>({
+    queryKey: [...coachKeys.clients(), "payment-log-stats", clientId],
+    queryFn: () => getClientPaymentLogStatsAction(clientId),
+    initialData: options?.initialData,
+    enabled: Boolean(clientId),
+    staleTime: 30_000,
+    gcTime: 10 * 60_000,
+    placeholderData: keepPreviousData,
+    refetchOnWindowFocus: false,
+  });
+}
+
+export function useTodayLogs() {
+  return useQuery<Record<string, PaymentLogRow>>({
+    queryKey: coachKeys.todayLogs(),
+    queryFn: () => getTodayLogsAction(),
+    staleTime: 30_000,
+    gcTime: 10 * 60_000,
+    placeholderData: keepPreviousData,
+    refetchOnWindowFocus: false,
+  });
+}
+
 export function useCoachPaymentsDashboard(
   params?: CoachPaymentsKeyParams,
   options?: {
@@ -213,7 +333,7 @@ export function useCoachPaymentsDashboard(
         limit: params?.limit ?? 1000,
         page: params?.page ?? 0,
         page_size: params?.pageSize ?? 10,
-        sort_by: params?.sortBy ?? "payment_date",
+        sort_by: params?.sortBy ?? "created_at",
         sort_dir: params?.sortDir ?? "desc",
       }),
     initialData: options?.initialData,
@@ -287,6 +407,15 @@ export function useCoachToolMutations() {
       clientId
         ? queryClient.invalidateQueries({ queryKey: coachKeys.clientPayments(clientId) })
         : Promise.resolve(),
+      clientId ? queryClient.invalidateQueries({ queryKey: coachKeys.billingPlan(clientId) }) : Promise.resolve(),
+      clientId ? queryClient.invalidateQueries({ queryKey: coachKeys.billingPlanHistory(clientId) }) : Promise.resolve(),
+      clientId
+        ? queryClient.invalidateQueries({ queryKey: [...coachKeys.clients(), "payment-logs", clientId] })
+        : Promise.resolve(),
+      clientId
+        ? queryClient.invalidateQueries({ queryKey: [...coachKeys.clients(), "payment-log-stats", clientId] })
+        : Promise.resolve(),
+      queryClient.invalidateQueries({ queryKey: coachKeys.todayLogs() }),
     ]);
   };
 
@@ -381,6 +510,132 @@ export function useCoachToolMutations() {
         queryClient.invalidateQueries({ queryKey: coachKeys.clients() }),
         queryClient.invalidateQueries({ queryKey: coachKeys.dashboard() }),
         queryClient.invalidateQueries({ queryKey: coachKeys.payments() }),
+      ]);
+    },
+  });
+
+  const createBillingPlan = useMutation({
+    mutationFn: createBillingPlanAction,
+    onSuccess: async (result) => {
+      await invalidateClient(result.client_id);
+    },
+  });
+
+  const updateBillingPlan = useMutation({
+    mutationFn: updateBillingPlanAction,
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: coachKeys.payments() }),
+        queryClient.invalidateQueries({ queryKey: coachKeys.todayLogs() }),
+        queryClient.invalidateQueries({ queryKey: [...coachKeys.clients(), "billing-plan"] }),
+        queryClient.invalidateQueries({ queryKey: [...coachKeys.clients(), "billing-plan-history"] }),
+      ]);
+    },
+  });
+
+  const renewPackage = useMutation({
+    mutationFn: renewPackageAction,
+    onSuccess: async (result) => {
+      await invalidateClient(result.plan.client_id);
+    },
+  });
+
+  const logSession = useMutation({
+    mutationFn: logSessionAction,
+    onMutate: async (payload) => {
+      await queryClient.cancelQueries({ queryKey: coachKeys.todayLogs() });
+      const previousTodayLogs = queryClient.getQueryData<Record<string, PaymentLogRow>>(coachKeys.todayLogs());
+      const todayIso = new Date().toISOString().slice(0, 10);
+      const sessionDate = payload.session_date || todayIso;
+      const optimisticToday = sessionDate === todayIso;
+
+      if (optimisticToday) {
+        const nextMap = {
+          ...(previousTodayLogs || {}),
+          [payload.client_id]: {
+            id: `optimistic-${payload.client_id}-${todayIso}`,
+            client_id: payload.client_id,
+            coach_id: "",
+            billing_plan_id: null,
+            session_date: todayIso,
+            amount: null,
+            session_rate_snapshot: 0,
+            sessions_remaining_after: null,
+            billing_type_snapshot: "per_session" as BillingType,
+            status: "logged",
+            notes: payload.notes || null,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          } as PaymentLogRow,
+        };
+        queryClient.setQueryData(coachKeys.todayLogs(), nextMap);
+      }
+
+      return { previousTodayLogs, clientId: payload.client_id, optimisticToday };
+    },
+    onError: (_error, _payload, context) => {
+      if (!context) return;
+      queryClient.setQueryData(coachKeys.todayLogs(), context.previousTodayLogs || {});
+    },
+    onSuccess: async (result, payload) => {
+      const todayIso = new Date().toISOString().slice(0, 10);
+      const sessionDate = payload.session_date || todayIso;
+      if (sessionDate === todayIso) {
+        queryClient.setQueryData<Record<string, PaymentLogRow>>(coachKeys.todayLogs(), (current) => ({
+          ...(current || {}),
+          [payload.client_id]: result.log,
+        }));
+      }
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: coachKeys.payments() }),
+        queryClient.invalidateQueries({ queryKey: coachKeys.clientPayments(payload.client_id) }),
+        queryClient.invalidateQueries({ queryKey: coachKeys.billingPlan(payload.client_id) }),
+        queryClient.invalidateQueries({ queryKey: coachKeys.paymentLogs(payload.client_id) }),
+        queryClient.invalidateQueries({ queryKey: [...coachKeys.clients(), "payment-log-stats", payload.client_id] }),
+      ]);
+    },
+    onSettled: async (_result, _error, payload) => {
+      if (!payload) return;
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: coachKeys.todayLogs() }),
+        queryClient.invalidateQueries({ queryKey: coachKeys.payments() }),
+        queryClient.invalidateQueries({ queryKey: coachKeys.paymentLogs(payload.client_id) }),
+        queryClient.invalidateQueries({ queryKey: [...coachKeys.clients(), "payment-log-stats", payload.client_id] }),
+      ]);
+    },
+  });
+
+  const deleteSessionLog = useMutation({
+    mutationFn: deleteSessionLogAction,
+    onMutate: async (payload) => {
+      await queryClient.cancelQueries({ queryKey: coachKeys.todayLogs() });
+      const previousTodayLogs = queryClient.getQueryData<Record<string, PaymentLogRow>>(coachKeys.todayLogs());
+      const todayIso = new Date().toISOString().slice(0, 10);
+
+      if (payload.client_id && payload.session_date === todayIso) {
+        queryClient.setQueryData<Record<string, PaymentLogRow>>(coachKeys.todayLogs(), (current) => {
+          if (!current) return current;
+          const next = { ...current };
+          delete next[payload.client_id as string];
+          return next;
+        });
+      }
+
+      return {
+        previousTodayLogs,
+      };
+    },
+    onError: (_error, _payload, context) => {
+      if (!context) return;
+      queryClient.setQueryData(coachKeys.todayLogs(), context.previousTodayLogs || {});
+    },
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: coachKeys.todayLogs() }),
+        queryClient.invalidateQueries({ queryKey: coachKeys.payments() }),
+        queryClient.invalidateQueries({ queryKey: [...coachKeys.clients(), "payment-logs"] }),
+        queryClient.invalidateQueries({ queryKey: [...coachKeys.clients(), "billing-plan"] }),
+        queryClient.invalidateQueries({ queryKey: [...coachKeys.clients(), "payment-log-stats"] }),
       ]);
     },
   });
@@ -490,5 +745,10 @@ export function useCoachToolMutations() {
     deletePayment,
     updatePaymentStatus,
     updatePaymentDetails,
+    createBillingPlan,
+    updateBillingPlan,
+    renewPackage,
+    logSession,
+    deleteSessionLog,
   };
 }

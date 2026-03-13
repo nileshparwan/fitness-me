@@ -430,19 +430,6 @@ async function buildClientsDashboard(payload: DashboardPayload): Promise<Clients
   for (const row of payments) {
     const clientName = clientNameById.get(row.client_id) || "Client";
     const paymentTime = parseIsoDate(row.payment_date)?.getTime() || 0;
-    if (row.status === "failed") {
-      attentionDraft.push({
-        id: `payment-${row.id}`,
-        type: "payment",
-        client_id: row.client_id,
-        client_name: clientName,
-        context: `Payment failed (${dateLabel(row.payment_date)})`,
-        priority: 0,
-        timestamp: paymentTime,
-      });
-      continue;
-    }
-
     if (row.status === "pending" && row.payment_date <= todayIso) {
       attentionDraft.push({
         id: `payment-${row.id}`,
@@ -675,13 +662,8 @@ async function buildClientsDashboard(payload: DashboardPayload): Promise<Clients
   }));
 
   const paymentAlerts = payments
-    .filter((row) => row.status === "failed" || row.status === "pending")
-    .sort((a, b) => {
-      if (a.status === b.status) return b.payment_date.localeCompare(a.payment_date);
-      if (a.status === "failed") return -1;
-      if (b.status === "failed") return 1;
-      return 0;
-    })
+    .filter((row) => row.status === "pending")
+    .sort((a, b) => b.payment_date.localeCompare(a.payment_date))
     .slice(0, payload.payments_limit)
     .map((row) => ({
       id: row.id,

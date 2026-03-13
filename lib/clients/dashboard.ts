@@ -219,8 +219,8 @@ export function computeGoalProgressPercent(input: {
     typeof input.current_weight === "number" &&
     input.current_weight > 0;
 
-  const isWeightGoal =
-    isLegacyWeightGoal(input.goal_type) || (input.goal_type || "").toLowerCase().replace(/\s+/g, "_").includes("weight");
+  const normalizedGoalType = (input.goal_type || "").toLowerCase().replace(/\s+/g, "_");
+  const isWeightGoal = normalizedGoalType === "weight";
 
   const inferDirectionFromValues = (start: number | null, target: number | null): "increase" | "decrease" | null => {
     if (
@@ -263,7 +263,7 @@ export function computeGoalProgressPercent(input: {
       if (input.current_value > input.target_value) return "decrease";
       if (input.current_value < input.target_value) return "increase";
     }
-    if (isLegacyDecreaseGoal(input.goal_type)) return "decrease";
+    if (normalizedGoalType === "weight") return "decrease";
     return "increase";
   };
 
@@ -292,16 +292,6 @@ export function computeGoalProgressPercent(input: {
   }
 
   return 0;
-}
-
-function isLegacyWeightGoal(goalType: string | null | undefined) {
-  const t = (goalType || "").toLowerCase();
-  return t.includes("weight") || t.includes("lose") || t.includes("loss") || t.includes("cut") || t.includes("fat");
-}
-
-function isLegacyDecreaseGoal(goalType: string | null | undefined) {
-  const t = (goalType || "").toLowerCase();
-  return t.includes("lose") || t.includes("loss") || t.includes("cut") || t.includes("fat");
 }
 
 export function computeGoalTrend(currentProgress: number, previousProgress?: number | null): ClientGoalTrend {

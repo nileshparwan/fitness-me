@@ -3212,7 +3212,7 @@ export type Database = {
         | "other"
       nutrition_tracking_mode: "macro" | "habit" | "intuitive"
       payment_method: "cash" | "bank_transfer" | "card" | "other"
-      payment_status: "pending" | "paid" | "failed" | "refunded"
+      payment_status: "pending" | "paid"
       session_location_type: "gym" | "home" | "outdoor" | "travel" | "other"
       session_slot: "morning" | "afternoon" | "evening" | "other"
       ticket_category:
@@ -3425,7 +3425,7 @@ export const Constants = {
       ],
       nutrition_tracking_mode: ["macro", "habit", "intuitive"],
       payment_method: ["cash", "bank_transfer", "card", "other"],
-      payment_status: ["pending", "paid", "failed", "refunded"],
+      payment_status: ["pending", "paid"],
       session_location_type: ["gym", "home", "outdoor", "travel", "other"],
       session_slot: ["morning", "afternoon", "evening", "other"],
       ticket_category: [

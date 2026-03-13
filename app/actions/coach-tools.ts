@@ -47,7 +47,8 @@ export type SessionLocationType = Database["public"]["Enums"]["session_location_
 export type ClientCheckinStatus = Database["public"]["Enums"]["client_checkin_status"];
 export type CoachNoteTag = Database["public"]["Enums"]["coach_note_tag"];
 export type PaymentMethod = Database["public"]["Enums"]["payment_method"];
-export type PaymentStatus = Database["public"]["Enums"]["payment_status"];
+type DbPaymentStatus = Database["public"]["Enums"]["payment_status"];
+export type PaymentStatus = "pending" | "paid";
 export type BillingType = Database["public"]["Enums"]["billing_type"];
 export type GoalStatus = ClientGoalStatus;
 export type GoalTrend = ClientGoalTrend;
@@ -97,11 +98,11 @@ const listClientsSchema = z.object({
 
 const listCoachPaymentsSchema = z.object({
   search: z.string().trim().max(120).optional(),
-  status: z.enum(["all", "paid", "pending", "failed", "refunded", "overdue"]).default("all"),
+  status: z.enum(["all", "paid", "pending", "overdue"]).default("all"),
   limit: z.number().int().min(1).max(2000).default(1000),
   page: z.number().int().min(0).default(0),
   page_size: z.number().int().min(5).max(100).default(10),
-  sort_by: z.enum(["payment_date", "amount", "status", "updated_at", "created_at"]).default("payment_date"),
+  sort_by: z.enum(["payment_date", "amount", "status", "updated_at", "created_at"]).default("created_at"),
   sort_dir: z.enum(["asc", "desc"]).default("desc"),
 });
 
@@ -248,7 +249,7 @@ const recordPaymentSchema = z.object({
   payment_date: z.string().date(),
   period_start: z.string().date().nullable().optional(),
   period_end: z.string().date().nullable().optional(),
-  status: z.enum(["pending", "paid", "failed", "refunded"]).default("pending"),
+  status: z.enum(["pending", "paid"]).default("pending"),
   notes: z.string().trim().max(5000).nullable().optional(),
 });
 
@@ -258,29 +259,21 @@ const deletePaymentSchema = z.object({
 
 const updatePaymentStatusSchema = z.object({
   id: z.string().uuid(),
-  status: z.enum(["pending", "paid", "failed", "refunded"]),
+  status: z.enum(["pending", "paid"]),
 });
 
 const updatePaymentDetailsSchema = z
   .object({
     id: z.string().uuid(),
-    amount: z.number().positive().optional(),
-    payment_date: z.string().date().optional(),
     method: z.enum(["cash", "bank_transfer", "card", "other"]).optional(),
-    status: z.enum(["pending", "paid", "failed", "refunded"]).optional(),
+    status: z.enum(["pending", "paid"]).optional(),
     notes: z.string().trim().max(5000).nullable().optional(),
-    period_start: z.string().date().nullable().optional(),
-    period_end: z.string().date().nullable().optional(),
   })
   .refine(
     (value) =>
-      value.amount !== undefined ||
-      value.payment_date !== undefined ||
       value.method !== undefined ||
       value.status !== undefined ||
-      value.notes !== undefined ||
-      value.period_start !== undefined ||
-      value.period_end !== undefined,
+      value.notes !== undefined,
     "At least one field must be provided."
   );
 
@@ -335,8 +328,10 @@ const logSessionSchema = z.object({
   notes: z.string().trim().max(5000).nullable().optional(),
 });
 
-const voidSessionLogSchema = z.object({
+const deleteSessionLogSchema = z.object({
   log_id: z.string().uuid(),
+  client_id: z.string().uuid().optional(),
+  session_date: z.string().date().optional(),
 });
 
 const listClientPaymentLogsSchema = z.object({
@@ -345,8 +340,9 @@ const listClientPaymentLogsSchema = z.object({
   date_to: z.string().date().optional(),
   limit: z.number().int().min(1).max(500).default(100),
   page: z.number().int().min(0).default(0),
+  sort_by: z.enum(["session_date", "amount", "status", "created_at"]).default("session_date"),
   sort_dir: z.enum(["asc", "desc"]).default("desc"),
-  status: z.enum(["all", "logged", "confirmed", "voided"]).default("all"),
+  status: z.enum(["all", "logged", "confirmed"]).default("all"),
   search: z.string().trim().max(120).optional(),
 });
 
@@ -475,15 +471,12 @@ export type CoachPaymentTransactionRow = {
   client_name: string;
   client_status: ClientStatus;
   description: string;
-  type: "subscription" | "package" | "one_time";
   amount: number;
   currency: string;
   status: PaymentStatus | "overdue";
   payment_date: string;
   method: PaymentMethod;
   notes: string | null;
-  period_start: string | null;
-  period_end: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -512,8 +505,10 @@ export type CoachPaymentClientBillingRow = {
   client_id: string;
   client_name: string;
   client_status: ClientStatus;
+  billing_plan_id: string | null;
   billing_type: BillingType | null;
   session_rate: number | null;
+  currency: string | null;
   payment_method: PaymentMethod | null;
   sessions_purchased: number;
   sessions_used: number;
@@ -530,6 +525,10 @@ export type CoachPaymentClientBillingRow = {
 };
 
 export type CoachPaymentsDashboard = {
+  features: {
+    billing_plans_available: boolean;
+    payment_logs_available: boolean;
+  };
   kpis: {
     total_collected: number;
     pending_amount: number;
@@ -556,6 +555,12 @@ export type ClientPaymentLogsPayload = {
   page: number;
   page_size: number;
   has_more: boolean;
+};
+
+export type ClientPaymentLogStats = {
+  sessions_this_month: number;
+  revenue_this_month: number;
+  total_sessions: number;
 };
 
 type GoalRow = Database["public"]["Tables"]["fitness_goals"]["Row"];
@@ -612,15 +617,31 @@ export type ClientGoalsPayload = {
 };
 
 function normalizeGoalCategory(value: string) {
-  let normalized = value.trim().toLowerCase().replace(/\s+/g, "_");
-  if (normalized === "weight_loss") normalized = "weight";
-  if (normalized === "habit") normalized = "custom";
+  const normalized = value.trim().toLowerCase().replace(/\s+/g, "_");
   if ((GOAL_CATEGORY_VALUES as readonly string[]).includes(normalized)) return normalized;
   return normalized.slice(0, 120) || "custom";
 }
 
 function isGoalHistoryTableMissing(message: string) {
   return /(goal_progress_history|relation .* does not exist|schema cache)/i.test(message);
+}
+
+function isPaymentLogsTableMissing(message: string) {
+  return /payment_logs|relation .*payment_logs.*does not exist|schema cache/i.test(message);
+}
+
+function isClientBillingPlansTableMissing(message: string) {
+  return /client_billing_plans|relation .*client_billing_plans.*does not exist|schema cache/i.test(message);
+}
+
+const BILLING_TABLES_MIGRATION_MESSAGE =
+  "Billing plans/session logs are not available on this database yet. Apply migration `20260313100000_billing_plans_and_payment_logs.sql` and reload the Supabase schema cache.";
+
+function normalizeBillingTablesError(message: string) {
+  if (isClientBillingPlansTableMissing(message) || isPaymentLogsTableMissing(message)) {
+    return BILLING_TABLES_MIGRATION_MESSAGE;
+  }
+  return message;
 }
 
 type FallbackColumn = "notes" | "start_date" | "start_value" | "start_weight" | "goal_direction" | "check_in_interval_days";
@@ -643,18 +664,6 @@ function missingFitnessGoalsColumn(message: string): FallbackColumn | null {
 function isFitnessGoalStatusConstraintError(message: string) {
   const lower = message.toLowerCase();
   return lower.includes("fitness_goals") && lower.includes("status") && lower.includes("check constraint");
-}
-
-function isFitnessGoalTypeConstraintError(message: string) {
-  const lower = message.toLowerCase();
-  return (
-    lower.includes("goals_goal_type_check") ||
-    (lower.includes("fitness_goals") && lower.includes("goal_type") && lower.includes("check constraint"))
-  );
-}
-
-function maybeLegacyGoalType(value: unknown) {
-  return value === "weight" ? "weight_loss" : null;
 }
 
 function isRlsViolationError(error: { code?: string | null; message: string } | null | undefined) {
@@ -1419,17 +1428,6 @@ export async function createClientGoalAction(input: z.input<typeof createGoalSch
         insertResult = await admin.from("fitness_goals").insert(attemptedInsert).select("*").single();
       }
 
-      if (insertResult.error && isFitnessGoalTypeConstraintError(insertResult.error.message)) {
-        const legacyGoalType = maybeLegacyGoalType((attemptedInsert as Record<string, unknown>).goal_type);
-        if (legacyGoalType) {
-          attemptedInsert = {
-            ...attemptedInsert,
-            goal_type: legacyGoalType,
-          };
-          insertResult = await admin.from("fitness_goals").insert(attemptedInsert).select("*").single();
-        }
-      }
-
       if (insertResult.error && isFitnessGoalStatusConstraintError(insertResult.error.message)) {
         throw new Error(
           "Goal status values are not fully supported in this database. Apply the latest goal-status migration and retry."
@@ -1548,23 +1546,6 @@ export async function updateClientGoalAction(input: z.input<typeof updateGoalSch
           .eq("user_id", client.linked_user_id)
           .select("*")
           .single();
-      }
-
-      if (updateResult.error && isFitnessGoalTypeConstraintError(updateResult.error.message)) {
-        const legacyGoalType = maybeLegacyGoalType((attemptedUpdates as Record<string, unknown>).goal_type);
-        if (legacyGoalType) {
-          attemptedUpdates = {
-            ...attemptedUpdates,
-            goal_type: legacyGoalType,
-          };
-          updateResult = await admin
-            .from("fitness_goals")
-            .update(attemptedUpdates)
-            .eq("id", payload.goal_id)
-            .eq("user_id", client.linked_user_id)
-            .select("*")
-            .single();
-        }
       }
 
       if (updateResult.error && isFitnessGoalStatusConstraintError(updateResult.error.message) && attemptedUpdates.status) {
@@ -2242,13 +2223,9 @@ export async function updateClientPaymentDetailsAction(input: z.input<typeof upd
     action: async () => {
       const { supabase } = await requireActor();
       const changes: Database["public"]["Tables"]["client_payments"]["Update"] = {};
-      if (payload.amount !== undefined) changes.amount = payload.amount;
-      if (payload.payment_date !== undefined) changes.payment_date = payload.payment_date;
       if (payload.method !== undefined) changes.method = payload.method;
       if (payload.status !== undefined) changes.status = payload.status;
       if (payload.notes !== undefined) changes.notes = payload.notes;
-      if (payload.period_start !== undefined) changes.period_start = payload.period_start;
-      if (payload.period_end !== undefined) changes.period_end = payload.period_end;
 
       const { data, error } = await supabase
         .from("client_payments")
@@ -2355,7 +2332,7 @@ export async function createBillingPlanAction(input: z.input<typeof createBillin
         .eq("client_id", payload.client_id)
         .eq("coach_id", user.id)
         .eq("is_active", true);
-      if (deactivateError) throw new Error(deactivateError.message);
+      if (deactivateError) throw new Error(normalizeBillingTablesError(deactivateError.message));
 
       const insertPayload: BillingPlanInsert = {
         client_id: payload.client_id,
@@ -2379,7 +2356,7 @@ export async function createBillingPlanAction(input: z.input<typeof createBillin
         .insert(insertPayload)
         .select("*")
         .single();
-      if (error) throw new Error(error.message);
+      if (error) throw new Error(normalizeBillingTablesError(error.message));
 
       revalidateCoachPaths(payload.client_id);
       return billingPlanWithRemaining(data as BillingPlanRow);
@@ -2400,7 +2377,7 @@ export async function updateBillingPlanAction(input: z.input<typeof updateBillin
         .eq("id", payload.id)
         .eq("coach_id", user.id)
         .single();
-      if (currentPlanError) throw new Error(currentPlanError.message);
+      if (currentPlanError) throw new Error(normalizeBillingTablesError(currentPlanError.message));
 
       if (
         payload.sessions_purchased !== undefined &&
@@ -2425,7 +2402,7 @@ export async function updateBillingPlanAction(input: z.input<typeof updateBillin
         .eq("coach_id", user.id)
         .select("client_id")
         .single();
-      if (error) throw new Error(error.message);
+      if (error) throw new Error(normalizeBillingTablesError(error.message));
 
       revalidateCoachPaths(data.client_id);
       return { success: true };
@@ -2447,7 +2424,10 @@ export async function getClientBillingPlanAction(clientId: string): Promise<Clie
         .eq("is_active", true)
         .order("created_at", { ascending: false })
         .maybeSingle();
-      if (error) throw new Error(error.message);
+      if (error) {
+        if (isClientBillingPlansTableMissing(error.message)) return null;
+        throw new Error(error.message);
+      }
       if (!data) return null;
       return billingPlanWithRemaining(data as BillingPlanRow);
     },
@@ -2466,7 +2446,10 @@ export async function listClientBillingPlanHistoryAction(clientId: string): Prom
         .eq("client_id", clientId)
         .eq("coach_id", user.id)
         .order("created_at", { ascending: false });
-      if (error) throw new Error(error.message);
+      if (error) {
+        if (isClientBillingPlansTableMissing(error.message)) return [];
+        throw new Error(error.message);
+      }
       return ((data || []) as BillingPlanRow[]).map((row) => billingPlanWithRemaining(row));
     },
   });
@@ -2489,7 +2472,7 @@ export async function renewPackageAction(input: z.input<typeof renewPackageSchem
         .eq("id", payload.billing_plan_id)
         .eq("coach_id", user.id)
         .single();
-      if (currentPlanError) throw new Error(currentPlanError.message);
+      if (currentPlanError) throw new Error(normalizeBillingTablesError(currentPlanError.message));
       const plan = currentPlan as BillingPlanRow;
       if (plan.billing_type !== "session_package" && plan.billing_type !== "program") {
         throw new Error("Renew package is only available for session package or program billing.");
@@ -2503,7 +2486,7 @@ export async function renewPackageAction(input: z.input<typeof renewPackageSchem
         .eq("coach_id", user.id)
         .select("*")
         .single();
-      if (updateError) throw new Error(updateError.message);
+      if (updateError) throw new Error(normalizeBillingTablesError(updateError.message));
 
       const paymentInsert: PaymentInsert = {
         client_id: plan.client_id,
@@ -2546,7 +2529,10 @@ export async function getTodayLogsAction(): Promise<Record<string, PaymentLogRow
         .eq("coach_id", user.id)
         .eq("session_date", todayIso)
         .neq("status", "voided");
-      if (error) throw new Error(error.message);
+      if (error) {
+        if (isPaymentLogsTableMissing(error.message)) return {};
+        throw new Error(error.message);
+      }
       const map: Record<string, PaymentLogRow> = {};
       for (const row of (data || []) as PaymentLogRow[]) {
         map[row.client_id] = row;
@@ -2579,7 +2565,7 @@ export async function logSessionAction(input: z.input<typeof logSessionSchema>) 
         .eq("coach_id", user.id)
         .eq("is_active", true)
         .maybeSingle();
-      if (activePlanError) throw new Error(activePlanError.message);
+      if (activePlanError) throw new Error(normalizeBillingTablesError(activePlanError.message));
       if (!activePlan) {
         throw new Error("No active billing plan for this client.");
       }
@@ -2587,14 +2573,23 @@ export async function logSessionAction(input: z.input<typeof logSessionSchema>) 
 
       const { data: existingLog, error: existingLogError } = await supabase
         .from("payment_logs")
-        .select("id")
+        .select("id, status")
+        .eq("coach_id", user.id)
         .eq("client_id", payload.client_id)
         .eq("session_date", sessionDate)
-        .neq("status", "voided")
         .maybeSingle();
-      if (existingLogError) throw new Error(existingLogError.message);
+      if (existingLogError) throw new Error(normalizeBillingTablesError(existingLogError.message));
       if (existingLog?.id) {
-        throw new Error("Session already logged for this date.");
+        if (existingLog.status === "voided") {
+          const { error: cleanupError } = await supabase
+            .from("payment_logs")
+            .delete()
+            .eq("id", existingLog.id)
+            .eq("coach_id", user.id);
+          if (cleanupError) throw new Error(normalizeBillingTablesError(cleanupError.message));
+        } else {
+          throw new Error("Session already logged for this date.");
+        }
       }
 
       let amount: number | null = null;
@@ -2615,7 +2610,7 @@ export async function logSessionAction(input: z.input<typeof logSessionSchema>) 
           .eq("coach_id", user.id)
           .select("sessions_purchased, sessions_used")
           .single();
-        if (updatePlanError) throw new Error(updatePlanError.message);
+        if (updatePlanError) throw new Error(normalizeBillingTablesError(updatePlanError.message));
         sessionsRemainingAfter = Number(updatedPlan.sessions_purchased || 0) - Number(updatedPlan.sessions_used || 0);
       }
 
@@ -2636,7 +2631,7 @@ export async function logSessionAction(input: z.input<typeof logSessionSchema>) 
         .insert(logInsert)
         .select("*")
         .single();
-      if (createLogError) throw new Error(createLogError.message);
+      if (createLogError) throw new Error(normalizeBillingTablesError(createLogError.message));
 
       revalidateCoachPaths(payload.client_id);
       return {
@@ -2647,10 +2642,10 @@ export async function logSessionAction(input: z.input<typeof logSessionSchema>) 
   });
 }
 
-export async function voidSessionLogAction(input: z.input<typeof voidSessionLogSchema>) {
-  const payload = voidSessionLogSchema.parse(input);
+export async function deleteSessionLogAction(input: z.input<typeof deleteSessionLogSchema>) {
+  const payload = deleteSessionLogSchema.parse(input);
   return runTrackedAction({
-    eventName: "coach.client.session.void",
+    eventName: "coach.client.session.delete",
     payload,
     action: async () => {
       const { supabase, user } = await requireActor();
@@ -2660,18 +2655,18 @@ export async function voidSessionLogAction(input: z.input<typeof voidSessionLogS
         .eq("id", payload.log_id)
         .eq("coach_id", user.id)
         .single();
-      if (logError) throw new Error(logError.message);
+      if (logError) throw new Error(normalizeBillingTablesError(logError.message));
       const log = logRow as PaymentLogRow;
-      if (log.status === "voided") return { success: true };
 
-      const { error: markVoidedError } = await supabase
+      const { error: deleteError } = await supabase
         .from("payment_logs")
-        .update({ status: "voided" })
+        .delete()
         .eq("id", payload.log_id)
         .eq("coach_id", user.id);
-      if (markVoidedError) throw new Error(markVoidedError.message);
+      if (deleteError) throw new Error(normalizeBillingTablesError(deleteError.message));
 
       if (
+        log.status !== "voided" &&
         log.billing_plan_id &&
         (log.billing_type_snapshot === "session_package" || log.billing_type_snapshot === "program")
       ) {
@@ -2681,7 +2676,7 @@ export async function voidSessionLogAction(input: z.input<typeof voidSessionLogS
           .eq("id", log.billing_plan_id)
           .eq("coach_id", user.id)
           .maybeSingle();
-        if (planError) throw new Error(planError.message);
+        if (planError) throw new Error(normalizeBillingTablesError(planError.message));
         if (plan) {
           const nextUsed = Math.max(0, Number(plan.sessions_used || 0) - 1);
           const { error: updatePlanError } = await supabase
@@ -2689,7 +2684,7 @@ export async function voidSessionLogAction(input: z.input<typeof voidSessionLogS
             .update({ sessions_used: nextUsed })
             .eq("id", log.billing_plan_id)
             .eq("coach_id", user.id);
-          if (updatePlanError) throw new Error(updatePlanError.message);
+          if (updatePlanError) throw new Error(normalizeBillingTablesError(updatePlanError.message));
         }
       }
 
@@ -2715,7 +2710,8 @@ export async function listClientPaymentLogsAction(
         .select("*", { count: "exact" })
         .eq("client_id", payload.client_id)
         .eq("coach_id", user.id)
-        .order("session_date", { ascending: payload.sort_dir === "asc" })
+        .neq("status", "voided")
+        .order(payload.sort_by, { ascending: payload.sort_dir === "asc" })
         .order("created_at", { ascending: payload.sort_dir === "asc" })
         .range(from, to);
 
@@ -2725,7 +2721,18 @@ export async function listClientPaymentLogsAction(
       if (payload.search) query = query.ilike("notes", `%${payload.search.replace(/[%_]/g, "")}%`);
 
       const { data, error, count } = await query;
-      if (error) throw new Error(error.message);
+      if (error) {
+        if (isPaymentLogsTableMissing(error.message)) {
+          return {
+            rows: [],
+            total: 0,
+            page: payload.page,
+            page_size: payload.limit,
+            has_more: false,
+          };
+        }
+        throw new Error(error.message);
+      }
       const rows = (data || []) as PaymentLogRow[];
       const total = count ?? rows.length;
       return {
@@ -2734,6 +2741,81 @@ export async function listClientPaymentLogsAction(
         page: payload.page,
         page_size: payload.limit,
         has_more: from + rows.length < total,
+      };
+    },
+  });
+}
+
+export async function getClientPaymentLogStatsAction(clientId: string): Promise<ClientPaymentLogStats> {
+  return runTrackedAction({
+    eventName: "coach.client.payment_logs.stats",
+    payload: { client_id: clientId },
+    action: async () => {
+      const { supabase, user } = await requireActor();
+      const monthStartIso = startOfMonthIso();
+
+      const [totalRes, monthSessionsRes, monthRevenueRes] = await Promise.all([
+        supabase
+          .from("payment_logs")
+          .select("id", { count: "exact", head: true })
+          .eq("client_id", clientId)
+          .eq("coach_id", user.id)
+          .neq("status", "voided"),
+        supabase
+          .from("payment_logs")
+          .select("id", { count: "exact", head: true })
+          .eq("client_id", clientId)
+          .eq("coach_id", user.id)
+          .gte("session_date", monthStartIso)
+          .neq("status", "voided"),
+        supabase
+          .from("payment_logs")
+          .select("amount, status, session_date")
+          .eq("client_id", clientId)
+          .eq("coach_id", user.id)
+          .gte("session_date", monthStartIso)
+          .neq("status", "voided"),
+      ]);
+
+      if (totalRes.error) {
+        if (isPaymentLogsTableMissing(totalRes.error.message)) {
+          return {
+            sessions_this_month: 0,
+            revenue_this_month: 0,
+            total_sessions: 0,
+          };
+        }
+        throw new Error(totalRes.error.message);
+      }
+      if (monthSessionsRes.error) {
+        if (isPaymentLogsTableMissing(monthSessionsRes.error.message)) {
+          return {
+            sessions_this_month: 0,
+            revenue_this_month: 0,
+            total_sessions: 0,
+          };
+        }
+        throw new Error(monthSessionsRes.error.message);
+      }
+      if (monthRevenueRes.error) {
+        if (isPaymentLogsTableMissing(monthRevenueRes.error.message)) {
+          return {
+            sessions_this_month: 0,
+            revenue_this_month: 0,
+            total_sessions: 0,
+          };
+        }
+        throw new Error(monthRevenueRes.error.message);
+      }
+
+      const revenueThisMonth = ((monthRevenueRes.data || []) as Array<{ amount: number | null; status: string }>)
+        .filter((row) => row.status !== "voided")
+        .reduce((sum, row) => sum + Number(row.amount || 0), 0);
+
+      return {
+        sessions_this_month: monthSessionsRes.count ?? 0,
+        revenue_this_month: revenueThisMonth,
+        total_sessions: totalRes.count ?? 0,
       };
     },
   });
@@ -2798,13 +2880,6 @@ export async function listClientPaymentsAction(clientId: string) {
   });
 }
 
-function derivePaymentType(row: Database["public"]["Tables"]["client_payments"]["Row"]): "subscription" | "package" | "one_time" {
-  if (row.period_start || row.period_end) return "subscription";
-  const note = (row.notes || "").toLowerCase();
-  if (note.includes("package")) return "package";
-  return "one_time";
-}
-
 function derivePaymentDescription(row: Database["public"]["Tables"]["client_payments"]["Row"]) {
   const note = (row.notes || "").trim();
   if (!note) return "Client payment";
@@ -2819,11 +2894,33 @@ function addDays(value: string, days: number) {
   return parsed.toISOString().slice(0, 10);
 }
 
+function computeNextMonthlyBillingDate(cycleDay: number | null, todayIso: string) {
+  if (!cycleDay || cycleDay < 1 || cycleDay > 28) return null;
+  const today = new Date(`${todayIso}T00:00:00.000Z`);
+  if (Number.isNaN(today.getTime())) return null;
+
+  const year = today.getUTCFullYear();
+  const month = today.getUTCMonth();
+  const day = today.getUTCDate();
+
+  if (day <= cycleDay) {
+    const due = new Date(Date.UTC(year, month, cycleDay));
+    return due.toISOString().slice(0, 10);
+  }
+
+  const next = new Date(Date.UTC(year, month + 1, cycleDay));
+  return next.toISOString().slice(0, 10);
+}
+
 function paymentIsOverdue(
   row: Pick<Database["public"]["Tables"]["client_payments"]["Row"], "status" | "payment_date">,
   todayIso: string
 ) {
   return row.status === "pending" && row.payment_date < todayIso;
+}
+
+function normalizePaymentStatus(status: DbPaymentStatus): PaymentStatus {
+  return status === "paid" ? "paid" : "pending";
 }
 
 export async function listCoachPaymentsDashboardAction(
@@ -2836,6 +2933,8 @@ export async function listCoachPaymentsDashboardAction(
     action: async () => {
       const { supabase, user } = await requireActor();
       const todayIso = new Date().toISOString().slice(0, 10);
+      const weekStartIso = startOfWeekIso();
+      const monthStartIso = startOfMonthIso();
       const from = payload.page * payload.page_size;
       const to = from + payload.page_size - 1;
       const normalizedSearch = (payload.search || "").trim().toLowerCase();
@@ -2854,17 +2953,27 @@ export async function listCoachPaymentsDashboardAction(
       const clientIds = clients.map((row) => row.id);
       if (clientIds.length === 0) {
         return {
+          features: {
+            billing_plans_available: true,
+            payment_logs_available: true,
+          },
           kpis: {
             total_collected: 0,
             pending_amount: 0,
             overdue_amount: 0,
             active_billing: 0,
+            sessions_logged_today: 0,
+            sessions_logged_this_week: 0,
+            sessions_logged_this_month: 0,
+            packages_expiring_soon: 0,
+            clients_due_today: 0,
           },
           transactions: [],
           transactions_total: 0,
           page: payload.page,
           page_size: payload.page_size,
           has_more: false,
+          todays_board: [],
           client_billing: [],
         };
       }
@@ -2893,7 +3002,7 @@ export async function listCoachPaymentsDashboardAction(
       let transactionsQuery = supabase
         .from("client_payments")
         .select(
-          "id, client_id, amount, currency, status, payment_date, method, notes, period_start, period_end, created_at, updated_at",
+          "id, client_id, amount, currency, status, payment_date, method, notes, created_at, updated_at",
           { count: "exact" }
         )
         .in("client_id", transactionClientIds)
@@ -2914,7 +3023,14 @@ export async function listCoachPaymentsDashboardAction(
         transactionsQuery = transactionsQuery.ilike("notes", `%${escapedSearch}%`);
       }
 
-      const [transactionsRes, metricsRes] = await Promise.all([
+      const [
+        transactionsRes,
+        metricsRes,
+        plansRes,
+        todayLogsRes,
+        weekLogsCountRes,
+        monthLogsCountRes,
+      ] = await Promise.all([
         transactionsQuery.range(from, to),
         supabase
           .from("client_payments")
@@ -2922,21 +3038,67 @@ export async function listCoachPaymentsDashboardAction(
           .in("client_id", clientIds)
           .order("payment_date", { ascending: false })
           .limit(payload.limit),
+        supabase
+          .from("client_billing_plans")
+          .select("*")
+          .in("client_id", clientIds)
+          .eq("coach_id", user.id)
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("payment_logs")
+          .select("*")
+          .eq("coach_id", user.id)
+          .in("client_id", clientIds)
+          .eq("session_date", todayIso)
+          .neq("status", "voided"),
+        supabase
+          .from("payment_logs")
+          .select("id", { count: "exact", head: true })
+          .eq("coach_id", user.id)
+          .gte("session_date", weekStartIso)
+          .neq("status", "voided"),
+        supabase
+          .from("payment_logs")
+          .select("id", { count: "exact", head: true })
+          .eq("coach_id", user.id)
+          .gte("session_date", monthStartIso)
+          .neq("status", "voided"),
       ]);
 
       if (transactionsRes.error) throw new Error(transactionsRes.error.message);
       if (metricsRes.error) throw new Error(metricsRes.error.message);
 
+      const billingPlansMissing = Boolean(
+        plansRes.error && isClientBillingPlansTableMissing(plansRes.error.message)
+      );
+      const paymentLogsMissing = Boolean(
+        (todayLogsRes.error && isPaymentLogsTableMissing(todayLogsRes.error.message)) ||
+          (weekLogsCountRes.error && isPaymentLogsTableMissing(weekLogsCountRes.error.message)) ||
+          (monthLogsCountRes.error && isPaymentLogsTableMissing(monthLogsCountRes.error.message))
+      );
+
+      if (plansRes.error && !billingPlansMissing) throw new Error(plansRes.error.message);
+      if (todayLogsRes.error && !paymentLogsMissing) throw new Error(todayLogsRes.error.message);
+      if (weekLogsCountRes.error && !paymentLogsMissing) throw new Error(weekLogsCountRes.error.message);
+      if (monthLogsCountRes.error && !paymentLogsMissing) throw new Error(monthLogsCountRes.error.message);
+
       const transactionRows =
         (transactionsRes.data || []) as Array<Database["public"]["Tables"]["client_payments"]["Row"]>;
+      const allPayments = (metricsRes.data || []) as Array<
+        Pick<
+          Database["public"]["Tables"]["client_payments"]["Row"],
+          "client_id" | "amount" | "status" | "payment_date" | "period_end"
+        >
+      >;
       const transactionsRaw: CoachPaymentTransactionRow[] = transactionRows.map((row) => {
-        const computedStatus: PaymentStatus | "overdue" = paymentIsOverdue(row, todayIso) ? "overdue" : row.status;
+        const computedStatus: PaymentStatus | "overdue" = paymentIsOverdue(row, todayIso)
+          ? "overdue"
+          : normalizePaymentStatus(row.status);
         return {
           ...row,
           client_name: clientNameById.get(row.client_id) || "Client",
           client_status: clientStatusById.get(row.client_id) || "active",
           description: derivePaymentDescription(row),
-          type: derivePaymentType(row),
           status: computedStatus,
         };
       });
@@ -2948,12 +3110,8 @@ export async function listCoachPaymentsDashboardAction(
           })
         : transactionsRaw;
 
-      const allPayments = (metricsRes.data || []) as Array<
-        Pick<
-          Database["public"]["Tables"]["client_payments"]["Row"],
-          "client_id" | "amount" | "status" | "payment_date" | "period_end"
-        >
-      >;
+      const planRows = billingPlansMissing ? [] : ((plansRes.data || []) as BillingPlanRow[]);
+      const todayLogRows = paymentLogsMissing ? [] : ((todayLogsRes.data || []) as PaymentLogRow[]);
       const activePayments = allPayments;
 
       const totalCollected = activePayments.reduce((sum, row) => (row.status === "paid" ? sum + Number(row.amount || 0) : sum), 0);
@@ -2968,51 +3126,143 @@ export async function listCoachPaymentsDashboardAction(
           .map((row) => row.client_id)
       ).size;
 
-      const billingByClient = new Map<string, CoachPaymentClientBillingRow>();
-      for (const payment of activePayments) {
-        let existing = billingByClient.get(payment.client_id);
-        if (!existing) {
-          existing = {
-            client_id: payment.client_id,
-            client_name: clientNameById.get(payment.client_id) || "Client",
-            client_status: clientStatusById.get(payment.client_id) || "active",
-            monthly_amount: Number(payment.amount || 0),
-            total_paid: 0,
-            outstanding: 0,
-            next_billing_date: null,
-          };
+      const latestPlanByClient = new Map<string, BillingPlanRow>();
+      const activePlanByClient = new Map<string, BillingPlanRow>();
+      for (const plan of planRows) {
+        if (!latestPlanByClient.has(plan.client_id)) {
+          latestPlanByClient.set(plan.client_id, plan);
         }
+        if (plan.is_active && !activePlanByClient.has(plan.client_id)) {
+          activePlanByClient.set(plan.client_id, plan);
+        }
+      }
 
+      const todayLogByClient = new Map<string, PaymentLogRow>();
+      for (const log of todayLogRows) {
+        if (!todayLogByClient.has(log.client_id)) {
+          todayLogByClient.set(log.client_id, log);
+        }
+      }
+
+      const paymentMetricsByClient = new Map<
+        string,
+        {
+          total_paid: number;
+          outstanding: number;
+          next_billing_date: string | null;
+        }
+      >();
+      for (const payment of activePayments) {
+        const existing = paymentMetricsByClient.get(payment.client_id) || {
+          total_paid: 0,
+          outstanding: 0,
+          next_billing_date: null,
+        };
         if (payment.status === "paid") {
           existing.total_paid += Number(payment.amount || 0);
         }
-        if (payment.status === "pending" || payment.status === "failed") {
+        if (payment.status === "pending") {
           existing.outstanding += Number(payment.amount || 0);
         }
-
         if (!existing.next_billing_date && payment.period_end) {
           existing.next_billing_date = addDays(payment.period_end, 1);
         }
-        billingByClient.set(payment.client_id, existing);
+        paymentMetricsByClient.set(payment.client_id, existing);
       }
 
-      const clientBilling = Array.from(billingByClient.values()).sort((a, b) =>
-        a.client_name.localeCompare(b.client_name)
-      );
+      const todaysBoard: CoachPaymentsTodayBoardRow[] = [];
+      for (const client of clients) {
+        if (client.status !== "active") continue;
+        const activePlan = activePlanByClient.get(client.id);
+        if (!activePlan) continue;
+        const clientName = `${client.first_name} ${client.last_name || ""}`.trim() || "Client";
+        todaysBoard.push({
+          client_id: client.id,
+          client_name: clientName,
+          client_status: client.status,
+          billing_plan: billingPlanWithRemaining(activePlan),
+          today_log: todayLogByClient.get(client.id) || null,
+        });
+      }
+
+      const packagesExpiringSoon = Array.from(activePlanByClient.values()).reduce((count, plan) => {
+        if (plan.billing_type !== "session_package") return count;
+        const remaining = Math.max(0, Number(plan.sessions_purchased || 0) - Number(plan.sessions_used || 0));
+        return remaining <= 2 ? count + 1 : count;
+      }, 0);
+
+      const clientsDueToday = todaysBoard.reduce((count, row) => {
+        if (row.today_log) return count;
+        return count + 1;
+      }, 0);
+
+      const clientBilling: CoachPaymentClientBillingRow[] = clients.map((client) => {
+        const clientName = `${client.first_name} ${client.last_name || ""}`.trim() || "Client";
+        const latestPlan = latestPlanByClient.get(client.id) || null;
+        const metrics = paymentMetricsByClient.get(client.id) || {
+          total_paid: 0,
+          outstanding: 0,
+          next_billing_date: null,
+        };
+        const sessionsPurchased = Number(latestPlan?.sessions_purchased || 0);
+        const sessionsUsed = Number(latestPlan?.sessions_used || 0);
+        const sessionsRemaining = Math.max(0, sessionsPurchased - sessionsUsed);
+
+        const nextBillingDate =
+          latestPlan?.billing_type === "monthly"
+            ? computeNextMonthlyBillingDate(latestPlan.billing_cycle_day, todayIso)
+            : metrics.next_billing_date;
+
+        return {
+          client_id: client.id,
+          client_name: clientName,
+          client_status: client.status,
+          billing_plan_id: latestPlan?.id ?? null,
+          billing_type: latestPlan?.billing_type ?? null,
+          session_rate: latestPlan ? Number(latestPlan.session_rate || 0) : null,
+          currency: latestPlan?.currency ?? null,
+          payment_method: latestPlan?.payment_method ?? null,
+          sessions_purchased: sessionsPurchased,
+          sessions_used: sessionsUsed,
+          sessions_remaining: sessionsRemaining,
+          is_active_plan: latestPlan?.is_active ?? false,
+          monthly_amount: latestPlan?.monthly_amount ? Number(latestPlan.monthly_amount) : null,
+          billing_cycle_day: latestPlan?.billing_cycle_day ?? null,
+          program_start_date: latestPlan?.program_start_date ?? null,
+          program_end_date: latestPlan?.program_end_date ?? null,
+          plan_notes: latestPlan?.notes ?? null,
+          total_paid: metrics.total_paid,
+          outstanding: metrics.outstanding,
+          next_billing_date: nextBillingDate,
+        };
+      });
+      clientBilling.sort((a, b) => a.client_name.localeCompare(b.client_name));
+
+      todaysBoard.sort((a, b) => a.client_name.localeCompare(b.client_name));
       const transactionsTotal = transactionsRes.count ?? transactions.length;
 
       return {
+        features: {
+          billing_plans_available: !billingPlansMissing,
+          payment_logs_available: !paymentLogsMissing,
+        },
         kpis: {
           total_collected: totalCollected,
           pending_amount: pendingAmount,
           overdue_amount: overdueAmount,
           active_billing: activeBilling,
+          sessions_logged_today: todayLogRows.length,
+          sessions_logged_this_week: paymentLogsMissing ? 0 : weekLogsCountRes.count ?? 0,
+          sessions_logged_this_month: paymentLogsMissing ? 0 : monthLogsCountRes.count ?? 0,
+          packages_expiring_soon: packagesExpiringSoon,
+          clients_due_today: clientsDueToday,
         },
         transactions,
         transactions_total: transactionsTotal,
         page: payload.page,
         page_size: payload.page_size,
         has_more: from + transactionRows.length < transactionsTotal,
+        todays_board: todaysBoard,
         client_billing: clientBilling,
       };
     },

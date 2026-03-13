@@ -208,6 +208,7 @@ function isTrainingPath(pathname: string) {
 }
 
 function isCoachToolsPath(pathname: string) {
+  // Includes coach tools hubs and nested routes like /clients/:clientId/payments.
   return isPrefixMatch(pathname, "/clients");
 }
 

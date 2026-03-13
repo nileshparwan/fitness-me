@@ -108,5 +108,5 @@ export function getMealUnitOptions(legacyUnit?: string | null) {
   if (!legacyUnit) return options;
   const normalizedLegacy = legacyUnit.trim();
   if (!normalizedLegacy || normalizeMealUnit(normalizedLegacy)) return options;
-  return [{ value: normalizedLegacy, label: `${normalizedLegacy} (legacy)` }, ...options];
+  return [{ value: normalizedLegacy, label: normalizedLegacy }, ...options];
 }

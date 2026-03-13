@@ -86,7 +86,6 @@ function sessionDotClass(status: ClientsDashboardSessionStatus) {
 
 function paymentBadgeClass(status: string) {
   const safeStatus = status.toLowerCase();
-  if (safeStatus === "failed") return "border-destructive/40 bg-destructive/10 text-destructive";
   if (safeStatus === "pending") return "border-chart-4/40 bg-chart-4/10 text-chart-4";
   return "border-chart-2/40 bg-chart-2/10 text-chart-2";
 }

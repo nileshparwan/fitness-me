@@ -67,7 +67,7 @@ drop trigger if exists trg_client_billing_plans_set_updated_at on public.client_
 create trigger trg_client_billing_plans_set_updated_at
 before update on public.client_billing_plans
 for each row
-execute function public.set_updated_at();
+execute function public.trigger_set_updated_at();
 
 -- ---------------------------------------------------------------------------
 -- payment_logs
@@ -107,7 +107,7 @@ drop trigger if exists trg_payment_logs_set_updated_at on public.payment_logs;
 create trigger trg_payment_logs_set_updated_at
 before update on public.payment_logs
 for each row
-execute function public.set_updated_at();
+execute function public.trigger_set_updated_at();
 
 -- ---------------------------------------------------------------------------
 -- RLS

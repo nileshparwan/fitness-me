@@ -93,7 +93,7 @@ test("goal progress calculation handles numeric and weight-based goals", () => {
 
   assert.equal(
     computeGoalProgressPercent({
-      goal_type: "weight_loss",
+      goal_type: "weight",
       current_value: 60,
       target_value: 75,
       current_weight: 60,

@@ -58,7 +58,7 @@ import { cn } from "@/utils";
 
 const GOAL_STATUSES: GoalStatus[] = ["active", "on_track", "at_risk", "completed", "paused", "archived"];
 const GOAL_CATEGORIES = ["weight", "muscle_gain", "strength", "performance", "nutrition", "custom"] as const;
-const WEIGHT_FOCUSED_CATEGORIES = new Set(["weight", "weight_loss", "weight_gain", "weight_maintenance", "fat_loss", "body_recomp"]);
+const WEIGHT_FOCUSED_CATEGORIES = new Set(["weight", "weight_gain", "weight_maintenance", "fat_loss", "body_recomp"]);
 const STRENGTH_FOCUSED_CATEGORIES = new Set(["strength", "performance", "muscle_gain"]);
 const TABLE_STORAGE_VERSION = "v4";
 const DEFAULT_TABLE_SORTING: SortingState = [{ id: "updated_at", desc: true }];
@@ -339,12 +339,7 @@ export function ClientGoalsMedicalTab({
 
   const categories = useMemo(() => {
     const custom = query.data?.categories || [];
-    const normalizedCustom = custom.map((category) => {
-      const normalized = normalizeCategoryKey(category);
-      if (normalized === "weight_loss") return "weight";
-      if (normalized === "habit") return "custom";
-      return normalized || "custom";
-    });
+    const normalizedCustom = custom.map((category) => normalizeCategoryKey(category) || "custom");
     return Array.from(new Set([...GOAL_CATEGORIES, ...normalizedCustom])).sort((a, b) => a.localeCompare(b));
   }, [query.data?.categories]);
 

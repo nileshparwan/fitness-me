@@ -22,8 +22,7 @@ const inferGoalType = (currentWeight: number, targetWeight: number): AllowedGoal
 
 const normalizeGoalType = (value: string | null | undefined, fallback: AllowedGoalType): AllowedGoalType => {
   const normalized = (value || "").toLowerCase().replace(/\s+/g, "_");
-  const mapped = normalized === "weight_loss" ? "weight" : normalized;
-  return ALLOWED_GOAL_TYPES.includes(mapped as AllowedGoalType) ? (mapped as AllowedGoalType) : fallback;
+  return ALLOWED_GOAL_TYPES.includes(normalized as AllowedGoalType) ? (normalized as AllowedGoalType) : fallback;
 };
 
 const normalizeGoalStatus = (value: string | null | undefined): AllowedGoalStatus =>

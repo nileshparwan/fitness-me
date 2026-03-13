@@ -7,10 +7,10 @@ export default async function ClientsPaymentsPage() {
     initialData = await listCoachPaymentsDashboardAction({
       status: "all",
       search: "",
-      limit: 1500,
+      limit: 300,
       page: 0,
       page_size: 10,
-      sort_by: "payment_date",
+      sort_by: "created_at",
       sort_dir: "desc",
     });
   } catch {

@@ -5,8 +5,25 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { formatDistanceToNowStrict } from "date-fns";
 import {
+  flexRender,
+  getCoreRowModel,
+  getFilteredRowModel,
+  getPaginationRowModel,
+  getSortedRowModel,
+  useReactTable,
+  type ColumnDef,
+  type PaginationState,
+  type SortingState,
+  type VisibilityState,
+} from "@tanstack/react-table";
+import {
   AlertCircle,
   ArrowLeft,
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
+  ChevronLeft,
+  ChevronRight,
   Copy,
   Clock3,
   CreditCard,
@@ -17,6 +34,8 @@ import {
   Mail,
   Pencil,
   Plus,
+  Search,
+  Settings2,
   Shield,
   Target,
   Trash2,
@@ -27,6 +46,7 @@ import { toast } from "sonner";
 import type { CoachNoteTag, PaymentMethod, PaymentStatus, SessionLocationType, SessionSlot } from "@/app/actions/coach-tools";
 import { ClientGoalsMedicalTab } from "@/components/coach-tools/client-goals-medical-tab";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -38,6 +58,14 @@ import {
 } from "@/components/ui/responsive-modal";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
@@ -52,6 +80,7 @@ import {
   useClientTodaySessions,
   useCoachToolMutations,
 } from "@/hooks/use-coach-tools";
+import { useDebounce } from "@/hooks/use-debounce";
 import { useCoachClientPortalMutations, useCoachClientPortalSettings } from "@/hooks/use-client-portal";
 import { CLIENT_MODULE_KEYS, type ClientModuleKey } from "@/lib/client-portal/constants";
 import { Database } from "@/types/database";
@@ -69,9 +98,23 @@ const PROFILE_TABS: Array<{ key: ProfileTab; label: string; icon: React.Componen
 ];
 
 const NOTE_TAGS: CoachNoteTag[] = ["general", "injury", "nutrition", "psychology", "milestone"];
-const PAYMENT_STATUSES: PaymentStatus[] = ["paid", "pending", "failed", "refunded"];
+const PAYMENT_STATUSES: PaymentStatus[] = ["paid", "pending"];
 type ClientPaymentRow = Database["public"]["Tables"]["client_payments"]["Row"];
-type RecordInvoiceType = "one_time" | "subscription" | "package";
+type ClientPaymentStatusFilter = "all" | PaymentStatus;
+type PaymentTableSortId = "created_at" | "amount" | "status";
+const PAYMENT_TABLE_STORAGE_KEY = "client-profile-payments-table:v1";
+const PAYMENT_PAGE_SIZE_OPTIONS = [10, 20, 50] as const;
+const PAYMENT_DESCRIPTION_WORD_LIMIT = 20;
+const PAYMENT_NOTES_WORD_LIMIT = 60;
+const PAYMENT_TABLE_TEXT_WORD_LIMIT = 24;
+const PAYMENT_COLUMN_LABELS: Record<string, string> = {
+  created_at: "Created",
+  description: "Description",
+  notes: "Notes",
+  amount: "Amount",
+  status: "Status",
+  actions: "Actions",
+};
 
 const MODULE_LABELS: Record<ClientModuleKey, string> = {
   workouts: "Workouts",
@@ -88,11 +131,14 @@ const MODULE_LABELS: Record<ClientModuleKey, string> = {
 function statusPill(status: string) {
   if (status === "active") return "border-chart-2/40 bg-chart-2/10 text-chart-2";
   if (status === "paused") return "border-chart-4/40 bg-chart-4/10 text-chart-4";
-  if (status === "blocked" || status === "failed") return "border-destructive/40 bg-destructive/10 text-destructive";
+  if (status === "blocked") return "border-destructive/40 bg-destructive/10 text-destructive";
   if (status === "completed" || status === "paid") return "border-chart-2/40 bg-chart-2/10 text-chart-2";
   if (status === "pending") return "border-chart-4/40 bg-chart-4/10 text-chart-4";
-  if (status === "refunded") return "border-chart-5/40 bg-chart-5/10 text-chart-5";
   return "border-border/60 bg-muted/40 text-muted-foreground";
+}
+
+function normalizeEditablePaymentStatus(status: string): PaymentStatus {
+  return status === "paid" ? "paid" : "pending";
 }
 
 function formatCurrency(amount: number, currency = "USD") {
@@ -133,6 +179,33 @@ function relativeTimeLabel(value: string | null) {
   return formatDistanceToNowStrict(parsed, { addSuffix: true });
 }
 
+function paymentSortIndicator(sorted: false | "asc" | "desc") {
+  if (sorted === "asc") return <ArrowUp className="h-3.5 w-3.5" />;
+  if (sorted === "desc") return <ArrowDown className="h-3.5 w-3.5" />;
+  return <ArrowUpDown className="h-3.5 w-3.5 opacity-50" />;
+}
+
+function PaymentSortHeader({
+  label,
+  sorted,
+  onClick,
+}: {
+  label: string;
+  sorted: false | "asc" | "desc";
+  onClick: (event: React.MouseEvent<HTMLButtonElement>) => void;
+}) {
+  return (
+    <button
+      type="button"
+      className="inline-flex items-center gap-1 text-left text-xs font-semibold uppercase tracking-[0.08em]"
+      onClick={onClick}
+    >
+      {label}
+      {paymentSortIndicator(sorted)}
+    </button>
+  );
+}
+
 function paymentDescriptionLabel(value: string | null) {
   if (!value) return "Client payment";
   const [firstLine] = value
@@ -142,19 +215,36 @@ function paymentDescriptionLabel(value: string | null) {
   return firstLine || "Client payment";
 }
 
-function derivePaymentType(row: ClientPaymentRow): RecordInvoiceType {
-  if (row.period_start || row.period_end) return "subscription";
-  if ((row.notes || "").toLowerCase().includes("package")) return "package";
-  return "one_time";
+function paymentNotesLabel(value: string | null) {
+  if (!value) return "";
+  const lines = value
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (lines.length <= 1) return "";
+  return lines.slice(1).join(" ");
 }
 
-function computeSubscriptionEndDate(startDateIso: string) {
-  const start = new Date(`${startDateIso}T00:00:00.000Z`);
-  if (Number.isNaN(start.getTime())) return null;
-  const end = new Date(start);
-  end.setUTCMonth(end.getUTCMonth() + 1);
-  end.setUTCDate(end.getUTCDate() - 1);
-  return end.toISOString().slice(0, 10);
+function countWords(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return 0;
+  return trimmed.split(/\s+/).length;
+}
+
+function clampToWordLimit(value: string, maxWords: number) {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  const words = trimmed.split(/\s+/);
+  if (words.length <= maxWords) return trimmed;
+  return words.slice(0, maxWords).join(" ");
+}
+
+function truncateWords(value: string, maxWords: number) {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  const words = trimmed.split(/\s+/);
+  if (words.length <= maxWords) return trimmed;
+  return `${words.slice(0, maxWords).join(" ")}...`;
 }
 
 function assignmentMeta(name: string) {
@@ -238,17 +328,23 @@ export function ClientProfileHub({ clientId, initialTab = "overview" }: { client
 
   const [paymentDescription, setPaymentDescription] = useState("");
   const [paymentNotes, setPaymentNotes] = useState("");
-  const [paymentAmount, setPaymentAmount] = useState("200");
-  const [paymentDate, setPaymentDate] = useState(new Date().toISOString().slice(0, 10));
-  const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>("paid");
   const [selectedPayment, setSelectedPayment] = useState<ClientPaymentRow | null>(null);
   const [selectedPaymentDescription, setSelectedPaymentDescription] = useState("");
   const [selectedPaymentNotes, setSelectedPaymentNotes] = useState("");
-  const [selectedPaymentType, setSelectedPaymentType] = useState<RecordInvoiceType>("one_time");
-  const [selectedPaymentAmount, setSelectedPaymentAmount] = useState("0");
-  const [selectedPaymentDate, setSelectedPaymentDate] = useState("");
   const [selectedPaymentStatus, setSelectedPaymentStatus] = useState<PaymentStatus>("paid");
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethod>("card");
+  const [paymentsSearch, setPaymentsSearch] = useState("");
+  const [paymentsStatusFilter, setPaymentsStatusFilter] = useState<ClientPaymentStatusFilter>("all");
+  const [paymentsSorting, setPaymentsSorting] = useState<SortingState>([{ id: "created_at", desc: true }]);
+  const [paymentsPagination, setPaymentsPagination] = useState<PaginationState>({ pageIndex: 0, pageSize: 10 });
+  const [paymentsVisibility, setPaymentsVisibility] = useState<VisibilityState>({
+    created_at: true,
+    description: false,
+    notes: false,
+    amount: true,
+    status: true,
+  });
+  const [paymentsHydrated, setPaymentsHydrated] = useState(false);
 
   const [portalUsername, setPortalUsername] = useState("");
   const [portalResetPassword, setPortalResetPassword] = useState("");
@@ -264,14 +360,56 @@ export function ClientProfileHub({ clientId, initialTab = "overview" }: { client
   useEffect(() => {
     if (!selectedPayment) return;
     const lines = (selectedPayment.notes || "").split("\n");
-    setSelectedPaymentDescription((lines[0] || "").trim());
-    setSelectedPaymentNotes(lines.slice(1).join("\n").trim());
-    setSelectedPaymentType(derivePaymentType(selectedPayment));
-    setSelectedPaymentAmount(String(selectedPayment.amount || 0));
-    setSelectedPaymentDate(selectedPayment.payment_date);
-    setSelectedPaymentStatus(selectedPayment.status);
+    setSelectedPaymentDescription(clampToWordLimit((lines[0] || "").trim(), PAYMENT_DESCRIPTION_WORD_LIMIT));
+    setSelectedPaymentNotes(clampToWordLimit(lines.slice(1).join(" ").trim(), PAYMENT_NOTES_WORD_LIMIT));
+    setSelectedPaymentStatus(normalizeEditablePaymentStatus(selectedPayment.status));
     setSelectedPaymentMethod(selectedPayment.method);
   }, [selectedPayment]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const raw = window.localStorage.getItem(PAYMENT_TABLE_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as {
+          sorting?: SortingState;
+          visibility?: VisibilityState;
+          pagination?: PaginationState;
+          status?: ClientPaymentStatusFilter;
+        };
+        if (Array.isArray(parsed.sorting)) setPaymentsSorting(parsed.sorting);
+        if (parsed.visibility && typeof parsed.visibility === "object") {
+          setPaymentsVisibility((current) => ({ ...current, ...parsed.visibility }));
+        }
+        if (parsed.pagination && typeof parsed.pagination.pageIndex === "number" && typeof parsed.pagination.pageSize === "number") {
+          setPaymentsPagination(parsed.pagination);
+        }
+        if (
+          parsed.status === "all" ||
+          parsed.status === "paid" ||
+          parsed.status === "pending"
+        ) {
+          setPaymentsStatusFilter(parsed.status);
+        }
+      }
+    } catch {
+      // noop
+    }
+    setPaymentsHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!paymentsHydrated || typeof window === "undefined") return;
+    window.localStorage.setItem(
+      PAYMENT_TABLE_STORAGE_KEY,
+      JSON.stringify({
+        sorting: paymentsSorting,
+        visibility: paymentsVisibility,
+        pagination: paymentsPagination,
+        status: paymentsStatusFilter,
+      })
+    );
+  }, [paymentsHydrated, paymentsPagination, paymentsSorting, paymentsStatusFilter, paymentsVisibility]);
 
   const loading = detailQuery.isLoading && !detailQuery.data;
   const client = detailQuery.data?.client;
@@ -337,6 +475,123 @@ export function ClientProfileHub({ clientId, initialTab = "overview" }: { client
     }
     return map;
   }, [settingsQuery.data?.module_access]);
+  const debouncedPaymentsSearch = useDebounce(paymentsSearch, 220);
+  const filteredPaymentsRows = useMemo(() => {
+    const normalized = debouncedPaymentsSearch.trim().toLowerCase();
+    return (paymentsQuery.data?.rows || []).filter((row) => {
+      if (paymentsStatusFilter !== "all" && row.status !== paymentsStatusFilter) return false;
+      if (!normalized) return true;
+      const haystack = `${paymentDescriptionLabel(row.notes)} ${row.notes || ""}`.toLowerCase();
+      return haystack.includes(normalized);
+    });
+  }, [debouncedPaymentsSearch, paymentsQuery.data?.rows, paymentsStatusFilter]);
+
+  const paymentColumns = useMemo<ColumnDef<ClientPaymentRow>[]>(
+    () => [
+      {
+        accessorKey: "created_at",
+        header: ({ column }) => (
+          <PaymentSortHeader
+            label="Created"
+            sorted={column.getIsSorted()}
+            onClick={(event) => column.toggleSorting(column.getIsSorted() === "asc", event.shiftKey)}
+          />
+        ),
+        cell: ({ row }) => datetimeLabel(row.original.created_at),
+      },
+      {
+        id: "description",
+        accessorFn: (row) => paymentDescriptionLabel(row.notes),
+        header: "Description",
+        cell: ({ row }) => truncateWords(paymentDescriptionLabel(row.original.notes), PAYMENT_TABLE_TEXT_WORD_LIMIT),
+      },
+      {
+        id: "notes",
+        accessorFn: (row) => paymentNotesLabel(row.notes),
+        header: "Notes",
+        cell: ({ row }) => {
+          const notes = paymentNotesLabel(row.original.notes);
+          return notes ? truncateWords(notes, PAYMENT_TABLE_TEXT_WORD_LIMIT) : "—";
+        },
+      },
+      {
+        accessorKey: "amount",
+        header: ({ column }) => (
+          <PaymentSortHeader
+            label="Amount"
+            sorted={column.getIsSorted()}
+            onClick={(event) => column.toggleSorting(column.getIsSorted() === "asc", event.shiftKey)}
+          />
+        ),
+        cell: ({ row }) => formatCurrency(Number(row.original.amount || 0), row.original.currency),
+      },
+      {
+        accessorKey: "status",
+        header: ({ column }) => (
+          <PaymentSortHeader
+            label="Status"
+            sorted={column.getIsSorted()}
+            onClick={(event) => column.toggleSorting(column.getIsSorted() === "asc", event.shiftKey)}
+          />
+        ),
+        cell: ({ row }) => (
+          <span className={cn("inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs uppercase tracking-[0.12em]", statusPill(row.original.status))}>
+            <span className="h-1.5 w-1.5 rounded-full bg-current" />
+            {row.original.status}
+          </span>
+        ),
+      },
+      {
+        id: "actions",
+        enableSorting: false,
+        enableHiding: false,
+        header: () => <span className="sr-only">Actions</span>,
+        cell: ({ row }) => (
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 rounded-lg border-border/60 px-2 text-xs"
+            onClick={() => setSelectedPayment(row.original)}
+          >
+            Details
+          </Button>
+        ),
+      },
+    ],
+    []
+  );
+
+  const paymentsTable = useReactTable({
+    data: filteredPaymentsRows,
+    columns: paymentColumns,
+    state: {
+      sorting: paymentsSorting,
+      pagination: paymentsPagination,
+      columnVisibility: paymentsVisibility,
+    },
+    onSortingChange: (updater) => {
+      setPaymentsSorting((current) => (typeof updater === "function" ? updater(current) : updater));
+      setPaymentsPagination((current) => ({ ...current, pageIndex: 0 }));
+    },
+    onPaginationChange: (updater) => {
+      setPaymentsPagination((current) => (typeof updater === "function" ? updater(current) : updater));
+    },
+    onColumnVisibilityChange: (updater) => {
+      setPaymentsVisibility((current) => (typeof updater === "function" ? updater(current) : updater));
+    },
+    enableColumnResizing: true,
+    columnResizeMode: "onChange",
+    getCoreRowModel: getCoreRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
+  });
+
+  useEffect(() => {
+    const pages = Math.max(1, Math.ceil(filteredPaymentsRows.length / Math.max(1, paymentsPagination.pageSize)));
+    if (paymentsPagination.pageIndex < pages) return;
+    setPaymentsPagination((current) => ({ ...current, pageIndex: Math.max(0, pages - 1) }));
+  }, [filteredPaymentsRows.length, paymentsPagination.pageIndex, paymentsPagination.pageSize]);
 
   const onRemoveClient = async () => {
     try {
@@ -428,27 +683,23 @@ export function ClientProfileHub({ clientId, initialTab = "overview" }: { client
   };
 
   const onRecordPayment = async () => {
-    const amount = Number(paymentAmount);
-    if (!Number.isFinite(amount) || amount <= 0) {
-      toast.error("Enter a valid amount.");
-      return;
-    }
+    const latestAmount = Number(paymentsQuery.data?.rows?.[0]?.amount || 0);
+    const amount = Number.isFinite(latestAmount) && latestAmount > 0 ? latestAmount : 200;
+    const normalizedDescription = clampToWordLimit(paymentDescription, PAYMENT_DESCRIPTION_WORD_LIMIT);
+    const normalizedNotes = clampToWordLimit(paymentNotes, PAYMENT_NOTES_WORD_LIMIT);
 
     try {
       await mutations.recordPayment.mutateAsync({
         client_id: clientId,
         amount,
-        payment_date: paymentDate,
+        payment_date: new Date().toISOString().slice(0, 10),
         method: "card",
-        status: paymentStatus,
-        notes: [paymentDescription.trim(), paymentNotes.trim()].filter(Boolean).join("\n") || null,
+        status: "paid",
+        notes: [normalizedDescription, normalizedNotes].filter(Boolean).join("\n") || null,
       });
       setPaymentOpen(false);
       setPaymentDescription("");
       setPaymentNotes("");
-      setPaymentAmount("200");
-      setPaymentDate(new Date().toISOString().slice(0, 10));
-      setPaymentStatus("paid");
       toast.success("Payment recorded");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to record payment");
@@ -472,52 +723,24 @@ export function ClientProfileHub({ clientId, initialTab = "overview" }: { client
   const onSavePaymentDetails = async () => {
     if (!selectedPayment) return;
 
-    const amount = Number(selectedPaymentAmount);
-    if (!Number.isFinite(amount) || amount <= 0) {
-      toast.error("Enter a valid amount.");
-      return;
-    }
-    if (!selectedPaymentDate) {
-      toast.error("Date is required.");
-      return;
-    }
-
-    const description = selectedPaymentDescription.trim();
-    const normalizedDescription =
-      selectedPaymentType === "package"
-        ? description
-          ? /package/i.test(description)
-            ? description
-            : `Package - ${description}`
-          : "Package"
-        : selectedPaymentType === "subscription"
-          ? description || "Subscription"
-          : description || "Client payment";
-    const mergedNotes = [normalizedDescription, selectedPaymentNotes.trim()].filter(Boolean).join("\n") || null;
-    const periodStart = selectedPaymentType === "subscription" ? selectedPaymentDate : null;
-    const periodEnd = selectedPaymentType === "subscription" ? computeSubscriptionEndDate(selectedPaymentDate) : null;
+    const description = clampToWordLimit(selectedPaymentDescription, PAYMENT_DESCRIPTION_WORD_LIMIT);
+    const normalizedDescription = description || "Client payment";
+    const normalizedNotes = clampToWordLimit(selectedPaymentNotes, PAYMENT_NOTES_WORD_LIMIT);
+    const mergedNotes = [normalizedDescription, normalizedNotes].filter(Boolean).join("\n") || null;
 
     try {
       await mutations.updatePaymentDetails.mutateAsync({
         id: selectedPayment.id,
-        amount,
-        payment_date: selectedPaymentDate,
         status: selectedPaymentStatus,
         method: selectedPaymentMethod,
-        period_start: periodStart,
-        period_end: periodEnd,
         notes: mergedNotes,
       });
       setSelectedPayment((current) =>
         current
           ? {
               ...current,
-              amount,
-              payment_date: selectedPaymentDate,
               status: selectedPaymentStatus,
               method: selectedPaymentMethod,
-              period_start: periodStart,
-              period_end: periodEnd,
               notes: mergedNotes,
             }
           : current
@@ -889,13 +1112,11 @@ export function ClientProfileHub({ clientId, initialTab = "overview" }: { client
                 <p className="text-sm text-muted-foreground">No sessions logged today.</p>
               ) : (
                 (todaySessionsQuery.data || []).map((row) => {
-                  const status = row.completed_at || row.status === "completed" ? "completed" : row.status === "failed" ? "failed" : "pending";
+                  const status = row.completed_at || row.status === "completed" ? "completed" : "pending";
                   const statusClass =
                     status === "completed"
                       ? "border-chart-2/40 bg-chart-2/10 text-chart-2"
-                      : status === "pending"
-                        ? "border-chart-4/40 bg-chart-4/10 text-chart-4"
-                        : "border-destructive/40 bg-destructive/10 text-destructive";
+                      : "border-chart-4/40 bg-chart-4/10 text-chart-4";
                   const sessionTitle = row.name || row.session_label || "Session";
                   const sessionTime = row.started_at
                     ? new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(new Date(row.started_at))
@@ -1108,58 +1329,33 @@ export function ClientProfileHub({ clientId, initialTab = "overview" }: { client
                     <Label className="text-muted-foreground">Description</Label>
                     <Input
                       value={paymentDescription}
-                      onChange={(event) => setPaymentDescription(event.target.value)}
+                      onChange={(event) =>
+                        setPaymentDescription(clampToWordLimit(event.target.value, PAYMENT_DESCRIPTION_WORD_LIMIT))
+                      }
                       className="h-12 rounded-2xl border-border/60 bg-muted/20"
                       placeholder="e.g. Monthly coaching - April"
                     />
+                    <p className="text-xs text-muted-foreground">
+                      {countWords(paymentDescription)}/{PAYMENT_DESCRIPTION_WORD_LIMIT} words
+                    </p>
                   </div>
 
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <div className="space-y-2">
-                      <Label className="text-muted-foreground">Amount ($)</Label>
-                      <Input
-                        type="number"
-                        value={paymentAmount}
-                        onChange={(event) => setPaymentAmount(event.target.value)}
-                        className="h-12 rounded-2xl border-border/60 bg-muted/20"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label className="text-muted-foreground">Status</Label>
-                      <Select value={paymentStatus} onValueChange={(value) => setPaymentStatus(value as PaymentStatus)}>
-                        <SelectTrigger className="h-12 rounded-2xl border-border/60 bg-muted/20">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {PAYMENT_STATUSES.map((status) => (
-                            <SelectItem key={status} value={status}>
-                              {status.charAt(0).toUpperCase() + status.slice(1)}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label className="text-muted-foreground">Date</Label>
-                    <Input
-                      type="date"
-                      value={paymentDate}
-                      onChange={(event) => setPaymentDate(event.target.value)}
-                      className="h-12 rounded-2xl border-border/60 bg-muted/20"
-                    />
+                  <div className="rounded-2xl border border-border/60 bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+                    Amount, status, and date are auto-filled from the latest client payment pattern and current date.
                   </div>
 
                   <div className="space-y-2">
                     <Label className="text-muted-foreground">Notes (optional)</Label>
                     <Textarea
                       value={paymentNotes}
-                      onChange={(event) => setPaymentNotes(event.target.value)}
+                      onChange={(event) => setPaymentNotes(clampToWordLimit(event.target.value, PAYMENT_NOTES_WORD_LIMIT))}
                       rows={3}
                       className="rounded-2xl border-border/60 bg-muted/20"
                       placeholder="Any additional details..."
                     />
+                    <p className="text-xs text-muted-foreground">
+                      {countWords(paymentNotes)}/{PAYMENT_NOTES_WORD_LIMIT} words
+                    </p>
                   </div>
                 </div>
 
@@ -1192,53 +1388,185 @@ export function ClientProfileHub({ clientId, initialTab = "overview" }: { client
             </section>
           ) : null}
 
-          <section className="glass-surface overflow-hidden rounded-2xl border border-border/60">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="text-sm font-medium text-muted-foreground">Date</TableHead>
-                  <TableHead className="text-sm font-medium text-muted-foreground">Description</TableHead>
-                  <TableHead className="text-sm font-medium text-muted-foreground">Amount</TableHead>
-                  <TableHead className="text-sm font-medium text-muted-foreground">Status</TableHead>
-                  <TableHead className="w-[70px]" />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {(paymentsQuery.data?.rows || []).length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={5} className="py-10 text-center text-sm text-muted-foreground">No payments yet.</TableCell>
-                  </TableRow>
-                ) : (
-                  (paymentsQuery.data?.rows || []).map((row) => (
-                    <TableRow key={row.id} className="cursor-pointer border-border/40" onClick={() => setSelectedPayment(row)}>
-                      <TableCell className="py-4 text-base text-muted-foreground">{dateLabel(row.payment_date)}</TableCell>
-                      <TableCell className="py-4 text-base font-medium leading-tight text-foreground">
-                        {paymentDescriptionLabel(row.notes)}
-                      </TableCell>
-                      <TableCell className="py-4 text-base font-semibold text-foreground">{formatCurrency(Number(row.amount || 0), row.currency)}</TableCell>
-                      <TableCell className="py-4">
-                        <span className={cn("inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs uppercase tracking-[0.12em]", statusPill(row.status))}>
-                          <span className="h-1.5 w-1.5 rounded-full bg-current" />
-                          {row.status}
-                        </span>
-                      </TableCell>
-                      <TableCell className="py-4 text-right">
-                        <div className="flex items-center justify-end gap-2" onClick={(event) => event.stopPropagation()}>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-8 rounded-lg border-border/60 px-2 text-xs"
-                            onClick={() => setSelectedPayment(row)}
-                          >
-                            Details
-                          </Button>
-                        </div>
+          <section className="glass-surface rounded-2xl border border-border/60 p-3 md:p-4">
+            <div className="mb-3 flex flex-col gap-2 md:flex-row md:items-center">
+              <div className="relative flex-1">
+                <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  value={paymentsSearch}
+                  onChange={(event) => {
+                    setPaymentsSearch(event.target.value);
+                    setPaymentsPagination((current) => ({ ...current, pageIndex: 0 }));
+                  }}
+                  className="rounded-xl border-border/60 bg-muted/20 pl-9"
+                  placeholder="Search payments..."
+                />
+              </div>
+              <Select
+                value={paymentsStatusFilter}
+                onValueChange={(value) => {
+                  setPaymentsStatusFilter(value as ClientPaymentStatusFilter);
+                  setPaymentsPagination((current) => ({ ...current, pageIndex: 0 }));
+                }}
+              >
+                <SelectTrigger className="h-10 w-full rounded-xl border-border/60 bg-muted/20 md:w-[170px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  {PAYMENT_STATUSES.map((status) => (
+                    <SelectItem key={status} value={status}>
+                      {status.charAt(0).toUpperCase() + status.slice(1)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" className="rounded-xl border-border/60">
+                    <Settings2 className="mr-2 h-4 w-4" />
+                    Columns
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-52 rounded-xl border-border/70 bg-card/95">
+                  <DropdownMenuLabel>Toggle Columns</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  {paymentsTable
+                    .getAllLeafColumns()
+                    .filter((column) => column.getCanHide())
+                    .map((column) => (
+                      <DropdownMenuItem
+                        key={column.id}
+                        onSelect={(event) => {
+                          event.preventDefault();
+                          column.toggleVisibility(!column.getIsVisible());
+                        }}
+                        className="flex items-center gap-2"
+                      >
+                        <Checkbox
+                          checked={column.getIsVisible()}
+                          aria-label={`Toggle ${PAYMENT_COLUMN_LABELS[column.id] || column.id}`}
+                        />
+                        <span>{PAYMENT_COLUMN_LABELS[column.id] || column.id}</span>
+                      </DropdownMenuItem>
+                    ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+
+            <div className="hidden overflow-hidden rounded-2xl border border-border/60 md:block">
+              <Table>
+                <TableHeader>
+                  {paymentsTable.getHeaderGroups().map((headerGroup) => (
+                    <TableRow key={headerGroup.id}>
+                      {headerGroup.headers.map((header) => (
+                        <TableHead key={header.id} style={{ width: header.getSize() }} className="relative">
+                          {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
+                          {header.column.getCanResize() ? (
+                            <div
+                              onMouseDown={header.getResizeHandler()}
+                              onTouchStart={header.getResizeHandler()}
+                              className={cn(
+                                "absolute right-0 top-0 h-full w-1 cursor-col-resize touch-none select-none bg-transparent",
+                                header.column.getIsResizing() ? "bg-chart-3/60" : "hover:bg-chart-3/40"
+                              )}
+                            />
+                          ) : null}
+                        </TableHead>
+                      ))}
+                    </TableRow>
+                  ))}
+                </TableHeader>
+                <TableBody>
+                  {paymentsTable.getRowModel().rows.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={paymentsTable.getVisibleLeafColumns().length} className="py-10 text-center text-sm text-muted-foreground">
+                        No payments match this filter.
                       </TableCell>
                     </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
+                  ) : (
+                    paymentsTable.getRowModel().rows.map((row) => (
+                      <TableRow key={row.id} className="cursor-pointer border-border/40" onClick={() => setSelectedPayment(row.original)}>
+                        {row.getVisibleCells().map((cell) => (
+                          <TableCell key={cell.id}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</TableCell>
+                        ))}
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+
+            <div className="space-y-2 md:hidden">
+              {paymentsTable.getRowModel().rows.map((row) => (
+                <button
+                  key={row.id}
+                  type="button"
+                  onClick={() => setSelectedPayment(row.original)}
+                  className="w-full rounded-xl border border-border/60 bg-background/30 p-3 text-left"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="truncate text-sm font-medium">{paymentDescriptionLabel(row.original.notes)}</p>
+                    <span className={cn("rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-[0.12em]", statusPill(row.original.status))}>
+                      {row.original.status}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">{datetimeLabel(row.original.created_at)}</p>
+                  <p className="mt-2 text-sm font-semibold">{formatCurrency(Number(row.original.amount || 0), row.original.currency)}</p>
+                </button>
+              ))}
+            </div>
+
+            <section className="mt-3 flex flex-col gap-2 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+              <span>
+                Showing{" "}
+                {filteredPaymentsRows.length === 0 ? 0 : paymentsPagination.pageIndex * paymentsPagination.pageSize + 1}
+                {" "}to{" "}
+                {Math.min(filteredPaymentsRows.length, (paymentsPagination.pageIndex + 1) * paymentsPagination.pageSize)}
+                {" "}of {filteredPaymentsRows.length}
+              </span>
+              <div className="flex items-center gap-2">
+                <Select
+                  value={String(paymentsPagination.pageSize)}
+                  onValueChange={(value) => {
+                    const parsed = Number(value);
+                    if (!Number.isFinite(parsed) || parsed <= 0) return;
+                    setPaymentsPagination({ pageIndex: 0, pageSize: parsed });
+                  }}
+                >
+                  <SelectTrigger className="h-9 w-[120px] rounded-xl border-border/60 bg-muted/20">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PAYMENT_PAGE_SIZE_OPTIONS.map((size) => (
+                      <SelectItem key={size} value={String(size)}>
+                        {size} / page
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  size="icon"
+                  variant="outline"
+                  className="h-9 w-9 rounded-xl border-border/60"
+                  onClick={() => paymentsTable.setPageIndex(Math.max(0, paymentsPagination.pageIndex - 1))}
+                  disabled={paymentsPagination.pageIndex === 0}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                  <span className="sr-only">Previous page</span>
+                </Button>
+                <Button
+                  size="icon"
+                  variant="outline"
+                  className="h-9 w-9 rounded-xl border-border/60"
+                  onClick={() => paymentsTable.setPageIndex(paymentsPagination.pageIndex + 1)}
+                  disabled={!paymentsTable.getCanNextPage()}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                  <span className="sr-only">Next page</span>
+                </Button>
+              </div>
+            </section>
           </section>
 
           <Dialog
@@ -1264,60 +1592,32 @@ export function ClientProfileHub({ clientId, initialTab = "overview" }: { client
                       <Label>Description</Label>
                       <Input
                         value={selectedPaymentDescription}
-                        onChange={(event) => setSelectedPaymentDescription(event.target.value)}
+                        onChange={(event) =>
+                          setSelectedPaymentDescription(
+                            clampToWordLimit(event.target.value, PAYMENT_DESCRIPTION_WORD_LIMIT)
+                          )
+                        }
                         className="h-11 rounded-xl border-border/60 bg-background/40"
                         placeholder="e.g. Monthly coaching - April"
                       />
+                      <p className="text-xs text-muted-foreground">
+                        {countWords(selectedPaymentDescription)}/{PAYMENT_DESCRIPTION_WORD_LIMIT} words
+                      </p>
                     </div>
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <div className="space-y-1.5">
-                        <Label>Amount ($)</Label>
-                        <Input
-                          type="number"
-                          value={selectedPaymentAmount}
-                          onChange={(event) => setSelectedPaymentAmount(event.target.value)}
-                          className="h-11 rounded-xl border-border/60 bg-background/40"
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label>Status</Label>
-                        <Select value={selectedPaymentStatus} onValueChange={(value) => setSelectedPaymentStatus(value as PaymentStatus)}>
-                          <SelectTrigger className="h-11 w-full rounded-xl border-border/60 bg-background/40">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {PAYMENT_STATUSES.map((status) => (
-                              <SelectItem key={status} value={status}>
-                                {status.charAt(0).toUpperCase() + status.slice(1)}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <div className="space-y-1.5">
-                        <Label>Date</Label>
-                        <Input
-                          type="date"
-                          value={selectedPaymentDate}
-                          onChange={(event) => setSelectedPaymentDate(event.target.value)}
-                          className="h-11 rounded-xl border-border/60 bg-background/40"
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label>Type</Label>
-                        <Select value={selectedPaymentType} onValueChange={(value) => setSelectedPaymentType(value as RecordInvoiceType)}>
-                          <SelectTrigger className="h-11 w-full rounded-xl border-border/60 bg-background/40">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="one_time">One-Time</SelectItem>
-                            <SelectItem value="subscription">Subscription</SelectItem>
-                            <SelectItem value="package">Package</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
+                    <div className="space-y-1.5">
+                      <Label>Status</Label>
+                      <Select value={selectedPaymentStatus} onValueChange={(value) => setSelectedPaymentStatus(value as PaymentStatus)}>
+                        <SelectTrigger className="h-11 w-full rounded-xl border-border/60 bg-background/40">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {PAYMENT_STATUSES.map((status) => (
+                            <SelectItem key={status} value={status}>
+                              {status.charAt(0).toUpperCase() + status.slice(1)}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                     <div className="space-y-1.5">
                       <Label>Method</Label>
@@ -1337,11 +1637,16 @@ export function ClientProfileHub({ clientId, initialTab = "overview" }: { client
                       <Label>Notes (optional)</Label>
                       <Textarea
                         value={selectedPaymentNotes}
-                        onChange={(event) => setSelectedPaymentNotes(event.target.value)}
+                        onChange={(event) =>
+                          setSelectedPaymentNotes(clampToWordLimit(event.target.value, PAYMENT_NOTES_WORD_LIMIT))
+                        }
                         rows={3}
                         className="rounded-xl border-border/60 bg-background/40"
                         placeholder="Any additional details..."
                       />
+                      <p className="text-xs text-muted-foreground">
+                        {countWords(selectedPaymentNotes)}/{PAYMENT_NOTES_WORD_LIMIT} words
+                      </p>
                     </div>
                   </div>
                 </div>
