@@ -641,7 +641,6 @@ export type Database = {
           created_at: string
           currency: string
           id: string
-          is_archived: boolean
           method: Database["public"]["Enums"]["payment_method"]
           notes: string | null
           payment_date: string
@@ -657,7 +656,6 @@ export type Database = {
           created_at?: string
           currency?: string
           id?: string
-          is_archived?: boolean
           method?: Database["public"]["Enums"]["payment_method"]
           notes?: string | null
           payment_date?: string
@@ -673,7 +671,6 @@ export type Database = {
           created_at?: string
           currency?: string
           id?: string
-          is_archived?: boolean
           method?: Database["public"]["Enums"]["payment_method"]
           notes?: string | null
           payment_date?: string
@@ -1024,7 +1021,6 @@ export type Database = {
           primary_coach_id: string
           sex: string | null
           status: Database["public"]["Enums"]["client_status"]
-          timezone: string
           updated_at: string
           weight_kg: number | null
         }
@@ -1047,7 +1043,6 @@ export type Database = {
           primary_coach_id: string
           sex?: string | null
           status?: Database["public"]["Enums"]["client_status"]
-          timezone?: string
           updated_at?: string
           weight_kg?: number | null
         }
@@ -1070,7 +1065,6 @@ export type Database = {
           primary_coach_id?: string
           sex?: string | null
           status?: Database["public"]["Enums"]["client_status"]
-          timezone?: string
           updated_at?: string
           weight_kg?: number | null
         }
@@ -1092,64 +1086,6 @@ export type Database = {
           {
             foreignKeyName: "clients_primary_coach_id_fkey"
             columns: ["primary_coach_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      coach_client_assignments: {
-        Row: {
-          client_id: string
-          coach_id: string
-          created_at: string
-          created_by_user_id: string
-          id: string
-          is_active: boolean
-          permissions: string[]
-          role: Database["public"]["Enums"]["coach_assignment_role"]
-          updated_at: string
-        }
-        Insert: {
-          client_id: string
-          coach_id: string
-          created_at?: string
-          created_by_user_id: string
-          id?: string
-          is_active?: boolean
-          permissions?: string[]
-          role?: Database["public"]["Enums"]["coach_assignment_role"]
-          updated_at?: string
-        }
-        Update: {
-          client_id?: string
-          coach_id?: string
-          created_at?: string
-          created_by_user_id?: string
-          id?: string
-          is_active?: boolean
-          permissions?: string[]
-          role?: Database["public"]["Enums"]["coach_assignment_role"]
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "coach_client_assignments_client_id_fkey"
-            columns: ["client_id"]
-            isOneToOne: false
-            referencedRelation: "clients"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "coach_client_assignments_coach_id_fkey"
-            columns: ["coach_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "coach_client_assignments_created_by_user_id_fkey"
-            columns: ["created_by_user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -1385,11 +1321,17 @@ export type Database = {
           custom_description: string | null
           daily_calories: number | null
           fat_target: number | null
+          goal_direction: string
           goal_type: string
+          check_in_interval_days: number | null
           id: string
+          notes: string | null
           priority: number
           protein_target: number | null
           review_date: string | null
+          start_date: string
+          start_value: number | null
+          start_weight: number | null
           sport_specific_goal: string | null
           status: string | null
           target_body_fat_percent: number | null
@@ -1410,11 +1352,17 @@ export type Database = {
           custom_description?: string | null
           daily_calories?: number | null
           fat_target?: number | null
+          goal_direction?: string
           goal_type: string
+          check_in_interval_days?: number | null
           id?: string
+          notes?: string | null
           priority?: number
           protein_target?: number | null
           review_date?: string | null
+          start_date?: string
+          start_value?: number | null
+          start_weight?: number | null
           sport_specific_goal?: string | null
           status?: string | null
           target_body_fat_percent?: number | null
@@ -1435,11 +1383,17 @@ export type Database = {
           custom_description?: string | null
           daily_calories?: number | null
           fat_target?: number | null
+          goal_direction?: string
           goal_type?: string
+          check_in_interval_days?: number | null
           id?: string
+          notes?: string | null
           priority?: number
           protein_target?: number | null
           review_date?: string | null
+          start_date?: string
+          start_value?: number | null
+          start_weight?: number | null
           sport_specific_goal?: string | null
           status?: string | null
           target_body_fat_percent?: number | null
@@ -1461,6 +1415,70 @@ export type Database = {
           },
           {
             foreignKeyName: "fitness_goals_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      goal_progress_history: {
+        Row: {
+          current_value: number | null
+          current_weight: number | null
+          goal_id: string
+          id: string
+          progress_percent: number
+          recorded_by_user_id: string | null
+          snapshot_at: string
+          status: string
+          target_value: number | null
+          target_weight: number | null
+          user_id: string
+        }
+        Insert: {
+          current_value?: number | null
+          current_weight?: number | null
+          goal_id: string
+          id?: string
+          progress_percent: number
+          recorded_by_user_id?: string | null
+          snapshot_at?: string
+          status?: string
+          target_value?: number | null
+          target_weight?: number | null
+          user_id: string
+        }
+        Update: {
+          current_value?: number | null
+          current_weight?: number | null
+          goal_id?: string
+          id?: string
+          progress_percent?: number
+          recorded_by_user_id?: string | null
+          snapshot_at?: string
+          status?: string
+          target_value?: number | null
+          target_weight?: number | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "goal_progress_history_goal_id_fkey"
+            columns: ["goal_id"]
+            isOneToOne: false
+            referencedRelation: "fitness_goals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "goal_progress_history_recorded_by_user_id_fkey"
+            columns: ["recorded_by_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "goal_progress_history_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
@@ -2007,7 +2025,6 @@ export type Database = {
           performed_on: string
           subject_client_id: string | null
           subject_user_id: string | null
-          timezone: string
           total_calories: number
           total_carbs_g: number
           total_fat_g: number
@@ -2026,7 +2043,6 @@ export type Database = {
           performed_on: string
           subject_client_id?: string | null
           subject_user_id?: string | null
-          timezone?: string
           total_calories?: number
           total_carbs_g?: number
           total_fat_g?: number
@@ -2045,7 +2061,6 @@ export type Database = {
           performed_on?: string
           subject_client_id?: string | null
           subject_user_id?: string | null
-          timezone?: string
           total_calories?: number
           total_carbs_g?: number
           total_fat_g?: number
@@ -2172,7 +2187,6 @@ export type Database = {
           status: Database["public"]["Enums"]["meal_assignment_status"]
           subject_client_id: string | null
           subject_user_id: string | null
-          timezone: string
           updated_at: string
         }
         Insert: {
@@ -2193,7 +2207,6 @@ export type Database = {
           status?: Database["public"]["Enums"]["meal_assignment_status"]
           subject_client_id?: string | null
           subject_user_id?: string | null
-          timezone?: string
           updated_at?: string
         }
         Update: {
@@ -2214,7 +2227,6 @@ export type Database = {
           status?: Database["public"]["Enums"]["meal_assignment_status"]
           subject_client_id?: string | null
           subject_user_id?: string | null
-          timezone?: string
           updated_at?: string
         }
         Relationships: [
@@ -2326,7 +2338,6 @@ export type Database = {
           status: string
           subject_client_id: string | null
           subject_user_id: string | null
-          timezone: string
           updated_at: string | null
           user_id: string
         }
@@ -2348,7 +2359,6 @@ export type Database = {
           status?: string
           subject_client_id?: string | null
           subject_user_id?: string | null
-          timezone?: string
           updated_at?: string | null
           user_id: string
         }
@@ -2370,7 +2380,6 @@ export type Database = {
           status?: string
           subject_client_id?: string | null
           subject_user_id?: string | null
-          timezone?: string
           updated_at?: string | null
           user_id?: string
         }
@@ -2987,10 +2996,6 @@ export type Database = {
         }
         Returns: boolean
       }
-      is_client_primary_coach: {
-        Args: { target_client_id: string }
-        Returns: boolean
-      }
       is_linked_client_user: {
         Args: { target_client_id: string }
         Returns: boolean
@@ -3019,14 +3024,12 @@ export type Database = {
       client_portal_auth_status: "active" | "blocked" | "removed"
       client_status: "active" | "paused" | "blocked" | "archived"
       client_task_status: "pending" | "completed" | "overdue"
-      coach_assignment_role: "primary" | "assistant"
       coach_note_tag:
+        | "general"
         | "injury"
         | "nutrition"
         | "psychology"
-        | "form"
         | "milestone"
-        | "programming"
       injury_severity: "mild" | "moderate" | "severe"
       meal_assignment_status: "draft" | "active" | "archived"
       meal_day_of_week: "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun"
@@ -3223,14 +3226,12 @@ export const Constants = {
       client_portal_auth_status: ["active", "blocked", "removed"],
       client_status: ["active", "paused", "blocked", "archived"],
       client_task_status: ["pending", "completed", "overdue"],
-      coach_assignment_role: ["primary", "assistant"],
       coach_note_tag: [
+        "general",
         "injury",
         "nutrition",
         "psychology",
-        "form",
         "milestone",
-        "programming",
       ],
       injury_severity: ["mild", "moderate", "severe"],
       meal_assignment_status: ["draft", "active", "archived"],

@@ -149,7 +149,6 @@ function withOptimisticItemAdd(
       meal_group_id: payload.meal_group_id ?? null,
       performed_on: current.performed_on,
       meal_type: targetMealType,
-      timezone: current.timezone,
       notes: null,
       total_calories: Number(optimisticItem.calories || 0),
       total_protein_g: Number(optimisticItem.protein_g || 0),
@@ -165,14 +164,13 @@ function withOptimisticItemAdd(
   queryClient.setQueryData(key, recomputeDiary(next));
 }
 
-export function useNutritionDiary(performedOn: string, subject?: NutritionSubject, timezone?: string, mealGroupId?: string | null) {
+export function useNutritionDiary(performedOn: string, subject?: NutritionSubject, mealGroupId?: string | null) {
   return useQuery({
     queryKey: nutritionKeys.diaryDay(performedOn, subject, mealGroupId) as QueryKey,
     queryFn: () =>
       getNutritionDiaryDayAction({
         performed_on: performedOn,
         subject,
-        timezone,
         meal_group_id: mealGroupId ?? undefined,
       }),
     enabled: Boolean(performedOn && mealGroupId),

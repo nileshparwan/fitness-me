@@ -79,7 +79,6 @@ export type ActiveNutritionPlan = {
   name: string;
   start_date: string;
   end_date: string;
-  timezone: string;
   daily_calorie_target: number | null;
   daily_protein_target_g: number | null;
   daily_carbs_target_g: number | null;
@@ -99,7 +98,6 @@ export type NutritionDiaryDay = {
   subject: SubjectRef;
   subject_client: Pick<ClientRow, "id" | "first_name" | "last_name" | "display_name" | "linked_user_id"> | null;
   performed_on: string;
-  timezone: string;
   meal_sections: Array<{
     meal_type: MealType;
     position: number;
@@ -150,7 +148,6 @@ const upsertPlanSchema = z.object({
   notes: z.string().trim().max(5000).nullable().optional(),
   start_date: isoDate,
   end_date: isoDate,
-  timezone: z.string().trim().min(1).max(64).default("UTC"),
   status: z.enum(PLAN_STATUSES).default("draft"),
   is_public: z.boolean().default(false),
   subject: subjectSchema,
@@ -170,7 +167,6 @@ const assignPlanSchema = z.object({
 
 const diaryDaySchema = z.object({
   performed_on: isoDate,
-  timezone: z.string().trim().min(1).max(64).optional(),
   subject: subjectSchema,
   meal_group_id: z.string().uuid().optional(),
 });
@@ -197,7 +193,6 @@ const mealItemBaseSchema = z.object({
 const addMealItemSchema = z.object({
   performed_on: isoDate,
   meal_type: z.enum(MEAL_TYPES),
-  timezone: z.string().trim().min(1).max(64).default("UTC"),
   subject: subjectSchema,
   meal_group_id: z.string().uuid().optional(),
   item: mealItemBaseSchema,
@@ -494,7 +489,6 @@ async function getActiveNutritionPlanForDate(
       name: assignment.name,
       start_date: assignment.start_date,
       end_date: assignment.end_date,
-      timezone: assignment.timezone,
       daily_calorie_target: assignment.daily_calorie_target,
       daily_protein_target_g: assignment.daily_protein_target_g,
       daily_carbs_target_g: assignment.daily_carbs_target_g,
@@ -526,7 +520,6 @@ async function getActiveNutritionPlanForDate(
     name: plan.name,
     start_date: plan.start_date,
     end_date: plan.end_date,
-    timezone: plan.timezone,
     daily_calorie_target: plan.daily_calorie_target,
     daily_protein_target_g: plan.daily_protein_target_g,
     daily_carbs_target_g: plan.daily_carbs_target_g,
@@ -541,10 +534,9 @@ async function getOrCreateMealLog(args: {
   subject: SubjectRef;
   performed_on: string;
   meal_type: MealType;
-  timezone: string;
   meal_group_id?: string | null;
 }): Promise<MealLogRow> {
-  const { supabase, actorUserId, subject, performed_on, meal_type, timezone, meal_group_id } = args;
+  const { supabase, actorUserId, subject, performed_on, meal_type, meal_group_id } = args;
 
   let query = supabase
     .from("meal_logs")
@@ -567,7 +559,6 @@ async function getOrCreateMealLog(args: {
     created_by_user_id: actorUserId,
     performed_on,
     meal_type,
-    timezone,
     meal_group_id: meal_group_id ?? null,
   };
 
@@ -710,7 +701,6 @@ export async function getNutritionDiaryDayAction(input: z.input<typeof diaryDayS
         subject,
         subject_client: (clientSubjectRes.data as NutritionDiaryDay["subject_client"]) || null,
         performed_on: payload.performed_on,
-        timezone: payload.timezone || logsWithItems[0]?.timezone || activePlan?.timezone || "UTC",
         meal_sections,
         logs: logsWithItems,
         totals,
@@ -767,7 +757,6 @@ export async function upsertMealPlanAction(input: z.input<typeof upsertPlanSchem
         notes: payload.notes || null,
         start_date: payload.start_date,
         end_date: payload.end_date,
-        timezone: payload.timezone,
         status: payload.status,
         is_public: payload.is_public,
         daily_calorie_target: payload.targets?.daily_calorie_target ?? null,
@@ -784,7 +773,6 @@ export async function upsertMealPlanAction(input: z.input<typeof upsertPlanSchem
           notes: base.notes,
           start_date: base.start_date,
           end_date: base.end_date,
-          timezone: base.timezone,
           status: base.status,
           is_public: base.is_public,
           subject_user_id: base.subject_user_id,
@@ -866,7 +854,6 @@ export async function duplicateMealPlanAction(input: z.input<typeof duplicatePla
         notes: original.notes,
         start_date: original.start_date,
         end_date: original.end_date,
-        timezone: original.timezone,
         status: "draft",
         is_public: false,
         daily_calorie_target: original.daily_calorie_target,
@@ -944,7 +931,6 @@ export async function assignMealPlanToSubjectAction(input: z.input<typeof assign
         subject_client_id: subject.subject_client_id,
         name: plan.name,
         notes: payload.notes || plan.notes,
-        timezone: plan.timezone,
         start_date: payload.start_date || plan.start_date,
         end_date: payload.end_date || plan.end_date,
         status: "active",
@@ -1092,7 +1078,6 @@ export async function addMealItemAction(input: z.input<typeof addMealItemSchema>
         subject,
         performed_on: payload.performed_on,
         meal_type: normalizedMealType,
-        timezone: payload.timezone,
         meal_group_id: payload.meal_group_id ?? null,
       });
 
@@ -1348,7 +1333,6 @@ export async function copyMealsFromDateAction(input: z.input<typeof copyFromDate
           subject,
           performed_on: payload.target_date,
           meal_type: mealType,
-          timezone: sourceRows[0]?.timezone || "UTC",
           meal_group_id: payload.meal_group_id ?? null,
         });
 

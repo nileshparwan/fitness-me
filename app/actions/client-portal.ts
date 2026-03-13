@@ -43,6 +43,22 @@ type CoachNoteTag = Database["public"]["Enums"]["coach_note_tag"];
 type ClientNoteVisibility = Database["public"]["Enums"]["client_note_visibility"];
 type MealType = Database["public"]["Enums"]["meal_log_type"];
 
+const COACH_NOTE_TAG_INPUTS = [
+  "general",
+  "injury",
+  "nutrition",
+  "psychology",
+  "milestone",
+  // Legacy tags kept for backward-compatible input handling.
+  "form",
+  "programming",
+] as const;
+
+function normalizeCoachNoteTag(tag: (typeof COACH_NOTE_TAG_INPUTS)[number]): CoachNoteTag {
+  if (tag === "form" || tag === "programming") return "general";
+  return tag as CoachNoteTag;
+}
+
 const CLIENT_PORTAL_MEAL_TYPES = [
   "breakfast",
   "snack",
@@ -83,9 +99,7 @@ const markTaskSchema = z.object({
 
 const coachNoteSchema = z.object({
   client_id: z.string().uuid(),
-  tag: z
-    .enum(["injury", "nutrition", "psychology", "form", "milestone", "programming"])
-    .default("programming"),
+  tag: z.enum(COACH_NOTE_TAG_INPUTS).default("general"),
   title: z.string().trim().max(180).nullable().optional(),
   content: z.string().trim().min(1).max(5000),
   visibility: z.enum(["private", "visible_to_client"]).default("private"),
@@ -157,7 +171,6 @@ const mealItemSchema = z.object({
 const addMealItemSchema = z.object({
   performed_on: isoDateSchema,
   meal_type: z.enum(CLIENT_PORTAL_MEAL_TYPES),
-  timezone: z.string().trim().min(1).max(64).default("UTC"),
   item: mealItemSchema,
 });
 
@@ -195,14 +208,11 @@ const goalsSchema = z.object({
   goals: z.string().trim().max(4000),
 });
 
-function dateInTimeZone(timezone: string, when = new Date()) {
-  const formatter = new Intl.DateTimeFormat("en-CA", {
-    timeZone: timezone || "UTC",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  });
-  return formatter.format(when);
+function todayIso(when = new Date()) {
+  const year = when.getFullYear();
+  const month = `${when.getMonth() + 1}`.padStart(2, "0");
+  const day = `${when.getDate()}`.padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function safeNumber(value: number | null | undefined) {
@@ -228,10 +238,9 @@ async function getOrCreateMealLog(args: {
   client: ClientRow;
   performed_on: string;
   meal_type: MealType;
-  timezone: string;
 }): Promise<MealLogRow> {
   const admin = createAdminClient();
-  const { client, meal_type, performed_on, timezone } = args;
+  const { client, meal_type, performed_on } = args;
 
   const { data: existing, error: existingError } = await admin
     .from("meal_logs")
@@ -251,7 +260,6 @@ async function getOrCreateMealLog(args: {
     created_by_client_id: client.id,
     performed_on,
     meal_type,
-    timezone,
   };
   const { data: inserted, error: insertError } = await admin
     .from("meal_logs")
@@ -279,7 +287,6 @@ function revalidateClientPortalPaths(clientId: string) {
 type ClientPortalDashboard = {
   client_id: string;
   display_name: string;
-  timezone: string;
   today: string;
   today_sessions: number;
   pending_tasks: number;
@@ -300,7 +307,7 @@ export async function getClientPortalDashboardAction(): Promise<ClientPortalDash
       const context = await getClientPortalContext();
       if (!context) throw new Error("Unauthorized");
       const admin = createAdminClient();
-      const today = dateInTimeZone(context.client.timezone || "UTC");
+      const today = todayIso();
 
       const [{ count: todaySessionsCount, error: sessionsError }, { count: pendingTasksCount, error: tasksError }] =
         await Promise.all([
@@ -357,7 +364,6 @@ export async function getClientPortalDashboardAction(): Promise<ClientPortalDash
           context.client.display_name ||
           `${context.client.first_name} ${context.client.last_name || ""}`.trim() ||
           "Client",
-        timezone: context.client.timezone,
         today,
         today_sessions: todaySessionsCount ?? 0,
         pending_tasks: pendingTasksCount ?? 0,
@@ -534,7 +540,7 @@ export async function createCoachNoteForClientAction(
       const insertPayload: CoachNoteInsert = {
         client_id: payload.client_id,
         coach_id: scope.actorId,
-        tag: payload.tag as CoachNoteTag,
+        tag: normalizeCoachNoteTag(payload.tag),
         title: payload.title || null,
         content: payload.content,
         visibility: payload.visibility as ClientNoteVisibility,
@@ -588,7 +594,7 @@ export async function listClientPortalWorkoutsAction(
     action: async () => {
       const { context } = await requirePortalAccess("workouts");
       const admin = createAdminClient();
-      const performedOn = safeDate || dateInTimeZone(context.client.timezone || "UTC");
+      const performedOn = safeDate || todayIso();
 
       const { data, error } = await admin
         .from("training_sessions")
@@ -620,7 +626,7 @@ export async function createClientWorkoutLogAction(
       if (!canRead) throw new Error("Access denied for workouts.");
       if (!canWrite) throw new Error("Workouts are read-only.");
       const admin = createAdminClient();
-      const performedOn = payload.performed_on || dateInTimeZone(context.client.timezone || "UTC");
+      const performedOn = payload.performed_on || todayIso();
 
       const insertSession: SessionInsert = {
         user_id: context.client.primary_coach_id,
@@ -744,7 +750,7 @@ export async function getClientPortalMealPlanAction(performedOn?: string) {
     action: async () => {
       const { context } = await requirePortalAccess("meal_plan");
       const admin = createAdminClient();
-      const date = safeDate || dateInTimeZone(context.client.timezone || "UTC");
+      const date = safeDate || todayIso();
 
       const { data: assignment, error: assignmentError } = await admin
         .from("meal_plan_assignments")
@@ -784,7 +790,7 @@ export async function getClientPortalMealDiaryAction(performedOn?: string) {
     action: async () => {
       const { context } = await requirePortalAccess("meal_logging");
       const admin = createAdminClient();
-      const date = safeDate || dateInTimeZone(context.client.timezone || "UTC");
+      const date = safeDate || todayIso();
 
       const { data: logs, error: logsError } = await admin
         .from("meal_logs")
@@ -832,7 +838,6 @@ export async function getClientPortalMealDiaryAction(performedOn?: string) {
 
       return {
         performed_on: date,
-        timezone: context.client.timezone || "UTC",
         logs: logsWithItems,
         totals,
       };
@@ -852,7 +857,6 @@ export async function addClientMealItemAction(input: z.input<typeof addMealItemS
         client: context.client,
         performed_on: payload.performed_on,
         meal_type: payload.meal_type as MealType,
-        timezone: payload.timezone,
       });
 
       const { data: lastRow, error: lastRowError } = await admin
@@ -1105,7 +1109,6 @@ export async function copyClientMealsFromDateAction(input: z.input<typeof copyMe
           client: context.client,
           performed_on: payload.target_date,
           meal_type: mealType,
-          timezone: context.client.timezone || "UTC",
         });
 
         const { error: clearError } = await admin
@@ -1151,7 +1154,7 @@ export async function getClientStepsLogAction(performedOn?: string): Promise<Cli
     action: async () => {
       const { context } = await requirePortalAccess("steps_tracking");
       const admin = createAdminClient();
-      const date = safeDate || dateInTimeZone(context.client.timezone || "UTC");
+      const date = safeDate || todayIso();
       const { data, error } = await admin
         .from("client_steps_logs")
         .select("*")

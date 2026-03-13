@@ -108,7 +108,9 @@ const USER_WORKSPACE_SECTIONS: SidebarSectionConfig[] = [
   {
     label: "Coach Tools",
     items: [
+      { title: "Dashboard", href: "/clients/dashboard", icon: "home" },
       { title: "Clients", href: "/clients", icon: "users" },
+      { title: "Payments", href: "/clients/payments", icon: "book" },
     ],
   },
   {
@@ -187,7 +189,9 @@ const MOBILE_TABS_TRAINING: MobileNavTabConfig[] = [
 ];
 
 const MOBILE_TABS_COACH_TOOLS: MobileNavTabConfig[] = [
-  { key: "clients", label: "Clients", href: "/clients", icon: "users" },
+  { key: "clients-dashboard", label: "Dashboard", href: "/clients/dashboard", icon: "home" },
+  { key: "clients-roster", label: "Clients", href: "/clients", icon: "users" },
+  { key: "clients-payments", label: "Payments", href: "/clients/payments", icon: "book" },
   MOBILE_MENU_TAB,
 ];
 

@@ -7,7 +7,6 @@
 - If a platform user is later linked, `linked_user_id` can be set without recreating the client record.
 - Access is controlled by:
   - `primary_coach_id`
-  - active `coach_client_assignments`
   - `sysadmin` override
 
 ## Today’s sessions computation
@@ -28,4 +27,3 @@
 - Progression only advances from assignment-session state, typically updated when logs are linked via:
   - `training_sessions.plan_assignment_id`
   - `training_sessions.plan_session_id`
-

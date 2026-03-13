@@ -718,7 +718,7 @@ export function MealPlannerPage() {
                   onValueChange={(value) => setItemForm((prev) => ({ ...prev, type: value as MealItemType }))}
                   disabled={itemForm.mode === "edit"}
                 >
-                  <SelectTrigger className="w-full rounded-xl border-border/60 bg-muted/20">
+                  <SelectTrigger className="h-10 w-full rounded-xl border-border/60 bg-muted/20">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -775,7 +775,7 @@ export function MealPlannerPage() {
                     }))
                   }
                 >
-                  <SelectTrigger className="w-full rounded-xl border-border/60 bg-muted/20">
+                  <SelectTrigger className="h-10 w-full rounded-xl border-border/60 bg-muted/20">
                     <SelectValue placeholder="Select unit" />
                   </SelectTrigger>
                   <SelectContent>
@@ -878,7 +878,7 @@ export function MealPlannerPage() {
               <Label className="shrink-0">Meal Type</Label>
               <div className="min-w-0 flex-1">
                 <Select value={mealTypeForm.type} onValueChange={(value) => setMealTypeForm((prev) => ({ ...prev, type: value as MealItemType }))}>
-                  <SelectTrigger className="w-full border-border/70 bg-muted/20">
+                  <SelectTrigger className="h-10 w-full border-border/70 bg-muted/20">
                     <SelectValue placeholder="Select unit" />
                   </SelectTrigger>
                   <SelectContent>

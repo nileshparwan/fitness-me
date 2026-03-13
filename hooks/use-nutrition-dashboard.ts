@@ -46,7 +46,7 @@ export function useNutritionDashboard() {
   const subject = useMemo(() => resolveNutritionSubject(activeSubjectType, activeSubjectId), [activeSubjectId, activeSubjectType]);
   const today = useMemo(() => toDateInput(new Date()), []);
 
-  const diaryQuery = useNutritionDiary(today, subject, undefined, selectedMealGroupId || null);
+  const diaryQuery = useNutritionDiary(today, subject, selectedMealGroupId || null);
   const activityQuery = useQuery({
     queryKey: nutritionKeys.dashboardActivity(subject, 10, selectedMealGroupId || null),
     queryFn: () =>

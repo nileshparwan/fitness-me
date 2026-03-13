@@ -21,7 +21,6 @@ export const profileSchema = z.object({
   ]).default('moderately_active'),
 
   preferred_units: z.enum(['metric', 'imperial']).default('metric'),
-  timezone: z.string().default('UTC'),
 });
 
 

@@ -1,9 +1,22 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 
 import { runTrackedAction } from "@/lib/events/dispatcher";
+import {
+  computeDaysBetween,
+  computeGoalProgressPercent,
+  computeGoalTrendFromHistory,
+  computePaceDelta,
+  computeReviewDue,
+  daysUntilDate,
+  formatGoalSubtitle,
+  normalizeClientGoalStatus,
+  type ClientGoalStatus,
+  type ClientGoalTrend,
+} from "@/lib/clients/dashboard";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { Database, Json } from "@/types/database";
@@ -19,7 +32,9 @@ type CardioSessionInsert = Database["public"]["Tables"]["cardio_sessions"]["Inse
 type CheckinInsert = Database["public"]["Tables"]["client_checkins"]["Insert"];
 type CoachNoteInsert = Database["public"]["Tables"]["coach_notes"]["Insert"];
 type PaymentInsert = Database["public"]["Tables"]["client_payments"]["Insert"];
-type CoachAssignmentInsert = Database["public"]["Tables"]["coach_client_assignments"]["Insert"];
+type GoalInsert = Database["public"]["Tables"]["fitness_goals"]["Insert"];
+type GoalUpdate = Database["public"]["Tables"]["fitness_goals"]["Update"];
+type GoalProgressHistoryInsert = Database["public"]["Tables"]["goal_progress_history"]["Insert"];
 type ClientInsert = Database["public"]["Tables"]["clients"]["Insert"];
 type ClientUpdate = Database["public"]["Tables"]["clients"]["Update"];
 
@@ -30,12 +45,60 @@ export type ClientCheckinStatus = Database["public"]["Enums"]["client_checkin_st
 export type CoachNoteTag = Database["public"]["Enums"]["coach_note_tag"];
 export type PaymentMethod = Database["public"]["Enums"]["payment_method"];
 export type PaymentStatus = Database["public"]["Enums"]["payment_status"];
+export type GoalStatus = ClientGoalStatus;
+export type GoalTrend = ClientGoalTrend;
+
+const GOAL_STATUS_VALUES = [
+  "active",
+  "on_track",
+  "at_risk",
+  "completed",
+  "paused",
+  "archived",
+] as const;
+
+const GOAL_CATEGORY_VALUES = [
+  "weight",
+  "muscle_gain",
+  "strength",
+  "performance",
+  "nutrition",
+  "custom",
+] as const;
+
+const COACH_NOTE_TAG_INPUTS = [
+  "general",
+  "injury",
+  "nutrition",
+  "psychology",
+  "milestone",
+  // Legacy tags kept for backward-compatible input handling.
+  "form",
+  "programming",
+] as const;
+
+function normalizeCoachNoteTag(tag: (typeof COACH_NOTE_TAG_INPUTS)[number]): CoachNoteTag {
+  if (tag === "form" || tag === "programming") return "general";
+  return tag as CoachNoteTag;
+}
 
 const listClientsSchema = z.object({
   page: z.number().int().min(0).default(0),
-  page_size: z.number().int().min(1).max(50).default(12),
+  page_size: z.number().int().min(1).max(100).default(12),
   search: z.string().trim().max(100).optional(),
   status: z.enum(["active", "paused", "blocked", "archived"]).optional(),
+  sort_by: z.enum(["updated_at", "created_at", "first_name", "status", "email"]).default("updated_at"),
+  sort_dir: z.enum(["asc", "desc"]).default("desc"),
+});
+
+const listCoachPaymentsSchema = z.object({
+  search: z.string().trim().max(120).optional(),
+  status: z.enum(["all", "paid", "pending", "failed", "refunded", "overdue"]).default("all"),
+  limit: z.number().int().min(1).max(2000).default(1000),
+  page: z.number().int().min(0).default(0),
+  page_size: z.number().int().min(5).max(100).default(10),
+  sort_by: z.enum(["payment_date", "amount", "status", "updated_at", "created_at"]).default("payment_date"),
+  sort_dir: z.enum(["asc", "desc"]).default("desc"),
 });
 
 const upsertClientSchema = z.object({
@@ -45,13 +108,15 @@ const upsertClientSchema = z.object({
   display_name: z.string().trim().max(180).nullable().optional(),
   email: z.string().trim().email().nullable().optional(),
   phone: z.string().trim().max(40).nullable().optional(),
-  timezone: z.string().trim().min(1).max(64).default("UTC"),
   status: z.enum(["active", "paused", "blocked", "archived"]).default("active"),
   linked_user_id: z.string().uuid().nullable().optional(),
   goals: z.string().trim().max(3000).nullable().optional(),
   notes: z.string().trim().max(3000).nullable().optional(),
   medical_flags: z.string().trim().max(3000).nullable().optional(),
-  assistant_coach_ids: z.array(z.string().uuid()).optional(),
+});
+
+const removeClientSchema = z.object({
+  client_id: z.string().uuid(),
 });
 
 const templateSessionSchema = z.object({
@@ -123,6 +188,12 @@ const logWorkoutSchema = z.object({
     .optional(),
 });
 
+const listSessionsByRangeSchema = z.object({
+  client_id: z.string().uuid(),
+  start_date: z.string().date(),
+  end_date: z.string().date(),
+});
+
 const createCheckinSchema = z.object({
   subject_client_id: z.string().uuid().nullable().optional(),
   subject_user_id: z.string().uuid().nullable().optional(),
@@ -140,12 +211,30 @@ const updateCheckinSchema = z.object({
 
 const createNoteSchema = z.object({
   client_id: z.string().uuid(),
-  tag: z.enum(["injury", "nutrition", "psychology", "form", "milestone", "programming"]).default("programming"),
+  tag: z.enum(COACH_NOTE_TAG_INPUTS).default("general"),
   title: z.string().trim().max(180).nullable().optional(),
   content: z.string().trim().min(1).max(5000),
   is_shared_with_linked_user: z.boolean().default(false),
   visibility: z.enum(["private", "visible_to_client"]).optional(),
 });
+
+const updateNoteSchema = z
+  .object({
+    note_id: z.string().uuid(),
+    client_id: z.string().uuid(),
+    tag: z.enum(COACH_NOTE_TAG_INPUTS).optional(),
+    title: z.string().trim().max(180).nullable().optional(),
+    content: z.string().trim().min(1).max(5000).optional(),
+    visibility: z.enum(["private", "visible_to_client"]).optional(),
+  })
+  .refine(
+    (value) =>
+      value.tag !== undefined ||
+      value.title !== undefined ||
+      value.content !== undefined ||
+      value.visibility !== undefined,
+    "At least one field must be provided."
+  );
 
 const recordPaymentSchema = z.object({
   client_id: z.string().uuid(),
@@ -159,18 +248,123 @@ const recordPaymentSchema = z.object({
   notes: z.string().trim().max(5000).nullable().optional(),
 });
 
-const archivePaymentSchema = z.object({
+const deletePaymentSchema = z.object({
   id: z.string().uuid(),
-  is_archived: z.boolean().default(true),
 });
 
-const addAssistantSchema = z.object({
+const updatePaymentStatusSchema = z.object({
+  id: z.string().uuid(),
+  status: z.enum(["pending", "paid", "failed", "refunded"]),
+});
+
+const updatePaymentDetailsSchema = z
+  .object({
+    id: z.string().uuid(),
+    amount: z.number().positive().optional(),
+    payment_date: z.string().date().optional(),
+    method: z.enum(["cash", "bank_transfer", "card", "other"]).optional(),
+    status: z.enum(["pending", "paid", "failed", "refunded"]).optional(),
+    notes: z.string().trim().max(5000).nullable().optional(),
+    period_start: z.string().date().nullable().optional(),
+    period_end: z.string().date().nullable().optional(),
+  })
+  .refine(
+    (value) =>
+      value.amount !== undefined ||
+      value.payment_date !== undefined ||
+      value.method !== undefined ||
+      value.status !== undefined ||
+      value.notes !== undefined ||
+      value.period_start !== undefined ||
+      value.period_end !== undefined,
+    "At least one field must be provided."
+  );
+
+const listClientGoalsSchema = z.object({
   client_id: z.string().uuid(),
-  coach_id: z.string().uuid(),
+  status: z.enum([...GOAL_STATUS_VALUES, "all"]).default("all"),
+  limit: z.number().int().min(1).max(120).default(50),
 });
 
-const disableAssistantSchema = z.object({
-  assignment_id: z.string().uuid(),
+const createGoalSchema = z
+  .object({
+    client_id: z.string().uuid(),
+    goal: z.string().trim().min(1).max(240),
+    category: z.string().trim().min(1).max(120),
+    start_value: z.number().min(0).nullable().optional(),
+    current_value: z.number().min(0).nullable().optional(),
+    target_value: z.number().positive().nullable().optional(),
+    unit: z.string().trim().max(32).nullable().optional(),
+    status: z.enum(GOAL_STATUS_VALUES).default("active"),
+    start_date: z.string().date().optional(),
+    target_date: z.string().date().nullable().optional(),
+    notes: z.string().trim().max(2500).nullable().optional(),
+    priority: z.number().int().min(1).max(5).default(1),
+    start_weight: z.number().min(0).nullable().optional(),
+    current_weight: z.number().min(0).nullable().optional(),
+    target_weight: z.number().min(0).nullable().optional(),
+    goal_direction: z.enum(["increase", "decrease"]).default("increase"),
+    check_in_interval_days: z.number().int().min(1).max(365).nullable().optional(),
+  })
+  .refine(
+    (value) =>
+      (typeof value.target_value === "number" && value.target_value > 0) ||
+      (typeof value.target_weight === "number" && value.target_weight > 0),
+    "A target value or target weight is required."
+  );
+
+const updateGoalSchema = z
+  .object({
+    client_id: z.string().uuid(),
+    goal_id: z.string().uuid(),
+    goal: z.string().trim().min(1).max(240).optional(),
+    category: z.string().trim().min(1).max(120).optional(),
+    start_value: z.number().min(0).nullable().optional(),
+    current_value: z.number().min(0).nullable().optional(),
+    target_value: z.number().positive().nullable().optional(),
+    unit: z.string().trim().max(32).nullable().optional(),
+    status: z.enum(GOAL_STATUS_VALUES).optional(),
+    start_date: z.string().date().optional(),
+    target_date: z.string().date().nullable().optional(),
+    notes: z.string().trim().max(2500).nullable().optional(),
+    priority: z.number().int().min(1).max(5).optional(),
+    start_weight: z.number().min(0).nullable().optional(),
+    current_weight: z.number().min(0).nullable().optional(),
+    target_weight: z.number().min(0).nullable().optional(),
+    goal_direction: z.enum(["increase", "decrease"]).optional(),
+    check_in_interval_days: z.number().int().min(1).max(365).nullable().optional(),
+  })
+  .refine(
+    (value) =>
+      value.goal !== undefined ||
+      value.category !== undefined ||
+      value.start_value !== undefined ||
+      value.current_value !== undefined ||
+      value.target_value !== undefined ||
+      value.unit !== undefined ||
+      value.status !== undefined ||
+      value.start_date !== undefined ||
+      value.target_date !== undefined ||
+      value.notes !== undefined ||
+      value.priority !== undefined ||
+      value.start_weight !== undefined ||
+      value.current_weight !== undefined ||
+      value.target_weight !== undefined ||
+      value.goal_direction !== undefined ||
+      value.check_in_interval_days !== undefined,
+    "At least one field must be provided."
+  );
+
+const updateGoalStatusSchema = z.object({
+  client_id: z.string().uuid(),
+  goal_id: z.string().uuid(),
+  status: z.enum(GOAL_STATUS_VALUES),
+});
+
+const deleteGoalSchema = z.object({
+  client_id: z.string().uuid(),
+  goal_id: z.string().uuid(),
+  goal_title: z.string().trim().max(240).optional(),
 });
 
 async function requireActor() {
@@ -190,9 +384,449 @@ function revalidateCoachPaths(clientId?: string) {
 
 type ClientRosterRow = ClientRow & {
   active_assignment: AssignmentRow | null;
+  active_plans_count: number;
   next_session: AssignmentSessionRow | null;
   today_sessions_count: number;
 };
+
+type ClientStatusCounts = {
+  all: number;
+  active: number;
+  paused: number;
+  blocked: number;
+  archived: number;
+};
+
+export type CoachPaymentTransactionRow = {
+  id: string;
+  client_id: string;
+  client_name: string;
+  client_status: ClientStatus;
+  description: string;
+  type: "subscription" | "package" | "one_time";
+  amount: number;
+  currency: string;
+  status: PaymentStatus | "overdue";
+  payment_date: string;
+  method: PaymentMethod;
+  notes: string | null;
+  period_start: string | null;
+  period_end: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CoachPaymentClientBillingRow = {
+  client_id: string;
+  client_name: string;
+  client_status: ClientStatus;
+  monthly_amount: number;
+  total_paid: number;
+  outstanding: number;
+  next_billing_date: string | null;
+};
+
+export type CoachPaymentsDashboard = {
+  kpis: {
+    total_collected: number;
+    pending_amount: number;
+    overdue_amount: number;
+    active_billing: number;
+  };
+  transactions: CoachPaymentTransactionRow[];
+  transactions_total: number;
+  page: number;
+  page_size: number;
+  has_more: boolean;
+  client_billing: CoachPaymentClientBillingRow[];
+};
+
+type GoalRow = Database["public"]["Tables"]["fitness_goals"]["Row"];
+type GoalProgressHistoryRow = Database["public"]["Tables"]["goal_progress_history"]["Row"];
+type GoalProgressHistorySlice = Pick<
+  GoalProgressHistoryRow,
+  | "goal_id"
+  | "progress_percent"
+  | "status"
+  | "snapshot_at"
+  | "current_value"
+  | "target_value"
+  | "current_weight"
+  | "target_weight"
+>;
+type DbClient = SupabaseClient<Database>;
+
+export type ClientGoalItem = {
+  id: string;
+  client_id: string;
+  user_id: string;
+  goal: string;
+  category: string;
+  start_value: number | null;
+  current_value: number | null;
+  target_value: number | null;
+  unit: string | null;
+  progress_percent: number;
+  previous_progress_percent: number | null;
+  status: GoalStatus;
+  trend: GoalTrend;
+  remaining: number | null;
+  value_delta: number | null;
+  days_remaining: number | null;
+  exceeded_days: number;
+  duration_days: number | null;
+  elapsed_days: number | null;
+  pace_delta: number | null;
+  trend_delta: number | null;
+  priority: number;
+  goal_direction: string;
+  check_in_interval_days: number | null;
+  review_due: boolean;
+  start_date: string;
+  target_date: string | null;
+  updated_at: string | null;
+  notes: string | null;
+};
+
+export type ClientGoalsPayload = {
+  linked_user_id: string | null;
+  categories: string[];
+  goals: ClientGoalItem[];
+};
+
+function normalizeGoalCategory(value: string) {
+  let normalized = value.trim().toLowerCase().replace(/\s+/g, "_");
+  if (normalized === "weight_loss") normalized = "weight";
+  if (normalized === "habit") normalized = "custom";
+  if ((GOAL_CATEGORY_VALUES as readonly string[]).includes(normalized)) return normalized;
+  return normalized.slice(0, 120) || "custom";
+}
+
+function isGoalHistoryTableMissing(message: string) {
+  return /(goal_progress_history|relation .* does not exist|schema cache)/i.test(message);
+}
+
+type FallbackColumn = "notes" | "start_date" | "start_value" | "start_weight" | "goal_direction" | "check_in_interval_days";
+
+function missingFitnessGoalsColumn(message: string): FallbackColumn | null {
+  const checks: Array<[FallbackColumn, RegExp[]]> = [
+    ["notes", [/['"]notes['"] column of ['"]fitness_goals['"] in the schema cache/i, /column\s+fitness_goals\.notes\s+does not exist/i]],
+    ["start_date", [/['"]start_date['"] column of ['"]fitness_goals['"] in the schema cache/i, /column\s+fitness_goals\.start_date\s+does not exist/i]],
+    ["start_value", [/['"]start_value['"] column of ['"]fitness_goals['"] in the schema cache/i, /column\s+fitness_goals\.start_value\s+does not exist/i]],
+    ["start_weight", [/['"]start_weight['"] column of ['"]fitness_goals['"] in the schema cache/i, /column\s+fitness_goals\.start_weight\s+does not exist/i]],
+    ["goal_direction", [/['"]goal_direction['"] column of ['"]fitness_goals['"] in the schema cache/i, /column\s+fitness_goals\.goal_direction\s+does not exist/i]],
+    ["check_in_interval_days", [/['"]check_in_interval_days['"] column of ['"]fitness_goals['"] in the schema cache/i, /column\s+fitness_goals\.check_in_interval_days\s+does not exist/i]],
+  ];
+  for (const [col, patterns] of checks) {
+    if (patterns.some((p) => p.test(message))) return col;
+  }
+  return null;
+}
+
+function isFitnessGoalStatusConstraintError(message: string) {
+  const lower = message.toLowerCase();
+  return lower.includes("fitness_goals") && lower.includes("status") && lower.includes("check constraint");
+}
+
+function isFitnessGoalTypeConstraintError(message: string) {
+  const lower = message.toLowerCase();
+  return (
+    lower.includes("goals_goal_type_check") ||
+    (lower.includes("fitness_goals") && lower.includes("goal_type") && lower.includes("check constraint"))
+  );
+}
+
+function maybeLegacyGoalType(value: unknown) {
+  return value === "weight" ? "weight_loss" : null;
+}
+
+function isRlsViolationError(error: { code?: string | null; message: string } | null | undefined) {
+  if (!error) return false;
+  if (error.code === "42501") return true;
+  return /row-level security|violates row-level security policy/i.test(error.message);
+}
+
+function titleFromGoalRow(row: GoalRow) {
+  return formatGoalSubtitle({
+    custom_description: row.custom_description,
+    goal_type: row.goal_type,
+  });
+}
+
+function previousProgressPercent(progressPercent: number, historyRows: GoalProgressHistorySlice[]) {
+  if (historyRows.length >= 2) return historyRows[1].progress_percent;
+  if (historyRows.length === 1) {
+    const first = historyRows[0].progress_percent;
+    return first === progressPercent ? null : first;
+  }
+  return null;
+}
+
+function isWeightGoalCategory(value: string | null | undefined) {
+  const normalized = (value || "").toLowerCase().replace(/\s+/g, "_");
+  return normalized.includes("weight") || normalized.includes("fat") || normalized.includes("body");
+}
+
+function isLegacyDecreaseGoalCategory(value: string | null | undefined) {
+  const normalized = (value || "").toLowerCase();
+  return normalized.includes("lose") || normalized.includes("loss") || normalized.includes("cut") || normalized.includes("fat");
+}
+
+function resolveGoalDirection(row: GoalRow): "increase" | "decrease" {
+  const inferDirection = (start: number | null, target: number | null): "increase" | "decrease" | null => {
+    if (
+      typeof start !== "number" ||
+      !Number.isFinite(start) ||
+      typeof target !== "number" ||
+      !Number.isFinite(target)
+    ) {
+      return null;
+    }
+    if (start > target) return "decrease";
+    if (start < target) return "increase";
+    return null;
+  };
+
+  const inferredFromStart =
+    inferDirection(row.start_weight, row.target_weight) ??
+    inferDirection(row.start_value, row.target_value);
+
+  const explicit = (row as Record<string, unknown>).goal_direction;
+  if (explicit === "increase" || explicit === "decrease") {
+    if (inferredFromStart && inferredFromStart !== explicit) return inferredFromStart;
+    return explicit;
+  }
+  if (inferredFromStart) return inferredFromStart;
+
+  if (
+    typeof row.current_weight === "number" &&
+    Number.isFinite(row.current_weight) &&
+    typeof row.target_weight === "number" &&
+    Number.isFinite(row.target_weight)
+  ) {
+    if (row.current_weight > row.target_weight) return "decrease";
+    if (row.current_weight < row.target_weight) return "increase";
+  }
+
+  if (
+    typeof row.current_value === "number" &&
+    Number.isFinite(row.current_value) &&
+    typeof row.target_value === "number" &&
+    Number.isFinite(row.target_value)
+  ) {
+    if (row.current_value > row.target_value) return "decrease";
+    if (row.current_value < row.target_value) return "increase";
+  }
+
+  if (isLegacyDecreaseGoalCategory(row.goal_type)) return "decrease";
+  return "increase";
+}
+
+function resolveGoalMetricValues(row: GoalRow) {
+  const hasWeightMetrics = row.start_weight !== null || row.current_weight !== null || row.target_weight !== null;
+  const hasNumericMetrics = row.start_value !== null || row.current_value !== null || row.target_value !== null;
+  const shouldUseWeightMetrics =
+    isWeightGoalCategory(row.goal_type) ||
+    (hasWeightMetrics && !hasNumericMetrics) ||
+    ((row.unit || "").toLowerCase() === "kg" && hasWeightMetrics);
+
+  if (shouldUseWeightMetrics) {
+    return {
+      start: row.start_weight ?? row.current_weight,
+      current: row.current_weight,
+      target: row.target_weight,
+      unit: row.unit || "kg",
+    };
+  }
+  return {
+    start: row.start_value ?? row.current_value,
+    current: row.current_value,
+    target: row.target_value,
+    unit: row.unit,
+  };
+}
+
+function computeExceededDays(targetDate: string | null, progressPercent: number): number {
+  if (!targetDate || progressPercent >= 100) return 0;
+  const end = new Date(`${targetDate}T23:59:59.999Z`);
+  if (Number.isNaN(end.getTime())) return 0;
+  const diff = Date.now() - end.getTime();
+  if (diff <= 0) return 0;
+  return Math.ceil(diff / (1000 * 60 * 60 * 24));
+}
+
+function mapGoalRowToClientItem(input: {
+  row: GoalRow;
+  clientId: string;
+  historyRows: GoalProgressHistorySlice[];
+}): ClientGoalItem {
+  const goalDirection = resolveGoalDirection(input.row);
+  const checkInDays = (input.row as Record<string, unknown>).check_in_interval_days as number | null | undefined;
+  const progressPercent = computeGoalProgressPercent({
+    goal_type: input.row.goal_type,
+    goal_direction: goalDirection,
+    start_value: input.row.start_value,
+    start_weight: input.row.start_weight,
+    current_value: input.row.current_value,
+    target_value: input.row.target_value,
+    current_weight: input.row.current_weight,
+    target_weight: input.row.target_weight,
+  });
+  const trend = computeGoalTrendFromHistory(progressPercent, input.historyRows);
+  const metrics = resolveGoalMetricValues(input.row);
+  const prevProgress = previousProgressPercent(progressPercent, input.historyRows);
+  const startDate = input.row.start_date || (input.row.created_at ? input.row.created_at.slice(0, 10) : new Date().toISOString().slice(0, 10));
+  const targetDate = input.row.target_date || null;
+  const updatedAt = input.row.updated_at || input.row.created_at || null;
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const elapsedDays = computeDaysBetween(startDate, todayIso);
+  const durationDays = computeDaysBetween(startDate, targetDate);
+
+  return {
+    id: input.row.id,
+    client_id: input.clientId,
+    user_id: input.row.user_id,
+    goal: titleFromGoalRow(input.row),
+    category: normalizeGoalCategory(input.row.goal_type || "custom"),
+    start_value: metrics.start,
+    current_value: metrics.current,
+    target_value: metrics.target,
+    unit: metrics.unit,
+    progress_percent: progressPercent,
+    previous_progress_percent: prevProgress,
+    status: normalizeClientGoalStatus(input.row.status),
+    trend,
+    remaining: metrics.target !== null && metrics.current !== null ? metrics.target - metrics.current : null,
+    value_delta: metrics.current !== null && metrics.start !== null ? metrics.current - metrics.start : null,
+    days_remaining: daysUntilDate(targetDate),
+    exceeded_days: computeExceededDays(targetDate, progressPercent),
+    duration_days: durationDays,
+    elapsed_days: elapsedDays,
+    pace_delta: computePaceDelta({ elapsed_days: elapsedDays, duration_days: durationDays, progress_percent: progressPercent }),
+    trend_delta: prevProgress !== null ? progressPercent - prevProgress : null,
+    priority: input.row.priority ?? 1,
+    goal_direction: goalDirection,
+    check_in_interval_days: checkInDays ?? null,
+    review_due: computeReviewDue({ updated_at: updatedAt, check_in_interval_days: checkInDays ?? null }),
+    start_date: startDate,
+    target_date: targetDate,
+    updated_at: updatedAt,
+    notes: input.row.notes || null,
+  };
+}
+
+async function resolveClientGoalSubject(
+  supabase: DbClient,
+  clientId: string
+) {
+  const { data: client, error } = await supabase
+    .from("clients")
+    .select("id, linked_user_id")
+    .eq("id", clientId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!client) throw new Error("Client not found.");
+  return client;
+}
+
+async function listGoalHistoryByGoalIds(
+  supabase: DbClient,
+  goalIds: string[],
+  maxSnapshotsPerGoal?: number
+) {
+  if (goalIds.length === 0) return new Map<string, GoalProgressHistorySlice[]>();
+
+  const selectFields = "goal_id, progress_percent, status, snapshot_at, current_value, target_value, current_weight, target_weight";
+  const query =
+    goalIds.length === 1
+      ? supabase
+          .from("goal_progress_history")
+          .select(selectFields)
+          .eq("goal_id", goalIds[0])
+          .order("snapshot_at", { ascending: false })
+          .limit(maxSnapshotsPerGoal ? Math.max(maxSnapshotsPerGoal, 1) : 200)
+      : supabase
+          .from("goal_progress_history")
+          .select(selectFields)
+          .in("goal_id", goalIds)
+          .order("snapshot_at", { ascending: false });
+
+  const { data, error } = await query;
+  if (error) {
+    if (isGoalHistoryTableMissing(error.message)) return new Map<string, GoalProgressHistorySlice[]>();
+    throw new Error(error.message);
+  }
+
+  const historyByGoal = new Map<string, GoalProgressHistorySlice[]>();
+  for (const row of (data || []) as GoalProgressHistorySlice[]) {
+    const rows = historyByGoal.get(row.goal_id) || [];
+    if (maxSnapshotsPerGoal && rows.length >= maxSnapshotsPerGoal) continue;
+    rows.push(row);
+    historyByGoal.set(row.goal_id, rows);
+  }
+  return historyByGoal;
+}
+
+async function writeGoalProgressSnapshot(input: {
+  supabase: DbClient;
+  goal: GoalRow;
+  actorId: string;
+}) {
+  const goalDirection = resolveGoalDirection(input.goal);
+  const progressPercent = computeGoalProgressPercent({
+    goal_type: input.goal.goal_type,
+    goal_direction: goalDirection,
+    start_value: input.goal.start_value,
+    start_weight: input.goal.start_weight,
+    current_value: input.goal.current_value,
+    target_value: input.goal.target_value,
+    current_weight: input.goal.current_weight,
+    target_weight: input.goal.target_weight,
+  });
+  const status = normalizeClientGoalStatus(input.goal.status);
+
+  const { data: latestRows, error: latestError } = await input.supabase
+    .from("goal_progress_history")
+    .select(
+      "id, progress_percent, current_value, target_value, current_weight, target_weight, status"
+    )
+    .eq("goal_id", input.goal.id)
+    .order("snapshot_at", { ascending: false })
+    .limit(1);
+  if (latestError) {
+    if (isGoalHistoryTableMissing(latestError.message)) return;
+    throw new Error(latestError.message);
+  }
+
+  const latest = latestRows?.[0];
+  const unchanged =
+    latest &&
+    latest.progress_percent === progressPercent &&
+    latest.current_value === input.goal.current_value &&
+    latest.target_value === input.goal.target_value &&
+    latest.current_weight === input.goal.current_weight &&
+    latest.target_weight === input.goal.target_weight &&
+    normalizeClientGoalStatus(latest.status) === status;
+
+  if (unchanged) return;
+
+  const historyPayload: GoalProgressHistoryInsert = {
+    goal_id: input.goal.id,
+    user_id: input.goal.user_id,
+    progress_percent: progressPercent,
+    current_value: input.goal.current_value,
+    target_value: input.goal.target_value,
+    current_weight: input.goal.current_weight,
+    target_weight: input.goal.target_weight,
+    status,
+    recorded_by_user_id: input.actorId,
+  };
+  const { error: insertError } = await input.supabase.from("goal_progress_history").insert(historyPayload);
+  if (insertError) {
+    if (isGoalHistoryTableMissing(insertError.message)) return;
+    throw new Error(insertError.message);
+  }
+}
 
 export async function listCoachClientsAction(input: z.input<typeof listClientsSchema>) {
   const payload = listClientsSchema.parse(input);
@@ -203,78 +837,105 @@ export async function listCoachClientsAction(input: z.input<typeof listClientsSc
       const { supabase } = await requireActor();
       const from = payload.page * payload.page_size;
       const to = from + payload.page_size - 1;
+      const searchFilter = payload.search
+        ? `first_name.ilike.%${payload.search}%,last_name.ilike.%${payload.search}%,display_name.ilike.%${payload.search}%,email.ilike.%${payload.search}%`
+        : null;
 
-      let query = supabase.from("clients").select("*", { count: "exact" }).order("updated_at", { ascending: false });
-
-      if (payload.search) {
-        query = query.or(
-          `first_name.ilike.%${payload.search}%,last_name.ilike.%${payload.search}%,display_name.ilike.%${payload.search}%,email.ilike.%${payload.search}%`
-        );
+      let query = supabase.from("clients").select("*", { count: "exact" });
+      if (payload.sort_by === "first_name") {
+        query = query
+          .order("first_name", { ascending: payload.sort_dir === "asc", nullsFirst: payload.sort_dir === "asc" })
+          .order("last_name", { ascending: payload.sort_dir === "asc", nullsFirst: payload.sort_dir === "asc" });
+      } else {
+        query = query.order(payload.sort_by, {
+          ascending: payload.sort_dir === "asc",
+          nullsFirst: payload.sort_dir === "asc",
+        });
       }
+
+      if (searchFilter) query = query.or(searchFilter);
       if (payload.status) query = query.eq("status", payload.status);
 
-      const { data, error, count } = await query.range(from, to);
+      const [listRes, allCountRes, activeCountRes, pausedCountRes, blockedCountRes, archivedCountRes] = await Promise.all([
+        query.range(from, to),
+        (() => {
+          let countQuery = supabase.from("clients").select("id", { count: "exact", head: true });
+          if (searchFilter) countQuery = countQuery.or(searchFilter);
+          return countQuery;
+        })(),
+        (() => {
+          let countQuery = supabase.from("clients").select("id", { count: "exact", head: true }).eq("status", "active");
+          if (searchFilter) countQuery = countQuery.or(searchFilter);
+          return countQuery;
+        })(),
+        (() => {
+          let countQuery = supabase.from("clients").select("id", { count: "exact", head: true }).eq("status", "paused");
+          if (searchFilter) countQuery = countQuery.or(searchFilter);
+          return countQuery;
+        })(),
+        (() => {
+          let countQuery = supabase.from("clients").select("id", { count: "exact", head: true }).eq("status", "blocked");
+          if (searchFilter) countQuery = countQuery.or(searchFilter);
+          return countQuery;
+        })(),
+        (() => {
+          let countQuery = supabase.from("clients").select("id", { count: "exact", head: true }).eq("status", "archived");
+          if (searchFilter) countQuery = countQuery.or(searchFilter);
+          return countQuery;
+        })(),
+      ]);
+
+      const { data, error, count } = listRes;
       if (error) throw new Error(error.message);
+      if (allCountRes.error) throw new Error(allCountRes.error.message);
+      if (activeCountRes.error) throw new Error(activeCountRes.error.message);
+      if (pausedCountRes.error) throw new Error(pausedCountRes.error.message);
+      if (blockedCountRes.error) throw new Error(blockedCountRes.error.message);
+      if (archivedCountRes.error) throw new Error(archivedCountRes.error.message);
+
+      const counts: ClientStatusCounts = {
+        all: allCountRes.count ?? 0,
+        active: activeCountRes.count ?? 0,
+        paused: pausedCountRes.count ?? 0,
+        blocked: blockedCountRes.count ?? 0,
+        archived: archivedCountRes.count ?? 0,
+      };
 
       const rows = (data || []) as ClientRow[];
       const clientIds = rows.map((row) => row.id);
       if (clientIds.length === 0) {
-        return { rows: [] as ClientRosterRow[], total: count ?? 0, page: payload.page, page_size: payload.page_size, has_more: false };
+        return {
+          rows: [] as ClientRosterRow[],
+          total: count ?? 0,
+          counts,
+          page: payload.page,
+          page_size: payload.page_size,
+          has_more: false,
+        };
       }
 
-      const todayIso = new Date().toISOString().slice(0, 10);
-      const [assignmentsRes, todaySessionsRes] = await Promise.all([
-        supabase
-          .from("client_plan_assignments")
-          .select("*")
-          .in("client_id", clientIds)
-          .eq("status", "active")
-          .order("assigned_at", { ascending: false }),
-        supabase
-          .from("training_sessions")
-          .select("id, subject_client_id")
-          .in("subject_client_id", clientIds)
-          .eq("performed_on", todayIso),
-      ]);
+      const { data: assignmentsData, error: assignmentsError } = await supabase
+        .from("client_plan_assignments")
+        .select("id, client_id")
+        .in("client_id", clientIds)
+        .eq("status", "active")
+        .order("assigned_at", { ascending: false });
 
-      if (assignmentsRes.error) throw new Error(assignmentsRes.error.message);
-      if (todaySessionsRes.error) throw new Error(todaySessionsRes.error.message);
+      if (assignmentsError) throw new Error(assignmentsError.message);
 
-      const assignmentRows = (assignmentsRes.data || []) as AssignmentRow[];
-      const activeAssignmentByClient = new Map<string, AssignmentRow>();
+      const assignmentRows = (assignmentsData || []) as Pick<AssignmentRow, "id" | "client_id">[];
+      const activePlansCountByClient = new Map<string, number>();
       for (const row of assignmentRows) {
-        if (!activeAssignmentByClient.has(row.client_id)) activeAssignmentByClient.set(row.client_id, row);
-      }
-
-      const assignmentIds = Array.from(new Set(Array.from(activeAssignmentByClient.values()).map((row) => row.id)));
-      const nextSessionByAssignment = new Map<string, AssignmentSessionRow>();
-      if (assignmentIds.length > 0) {
-        const { data: assignmentSessions, error: assignmentSessionsError } = await supabase
-          .from("client_plan_assignment_sessions")
-          .select("*")
-          .in("assignment_id", assignmentIds)
-          .order("sequence_no", { ascending: true });
-        if (assignmentSessionsError) throw new Error(assignmentSessionsError.message);
-        for (const row of (assignmentSessions || []) as AssignmentSessionRow[]) {
-          if (row.completed_at || row.is_skipped) continue;
-          if (!nextSessionByAssignment.has(row.assignment_id)) nextSessionByAssignment.set(row.assignment_id, row);
-        }
-      }
-
-      const todayCountByClient = new Map<string, number>();
-      for (const row of (todaySessionsRes.data || []) as Pick<WorkoutInsert, "subject_client_id">[]) {
-        const clientId = row.subject_client_id;
-        if (!clientId) continue;
-        todayCountByClient.set(clientId, (todayCountByClient.get(clientId) || 0) + 1);
+        activePlansCountByClient.set(row.client_id, (activePlansCountByClient.get(row.client_id) || 0) + 1);
       }
 
       const enriched: ClientRosterRow[] = rows.map((row) => {
-        const activeAssignment = activeAssignmentByClient.get(row.id) || null;
         return {
           ...row,
-          active_assignment: activeAssignment,
-          next_session: activeAssignment ? nextSessionByAssignment.get(activeAssignment.id) || null : null,
-          today_sessions_count: todayCountByClient.get(row.id) || 0,
+          active_assignment: null,
+          active_plans_count: activePlansCountByClient.get(row.id) || 0,
+          next_session: null,
+          today_sessions_count: 0,
         };
       });
 
@@ -282,6 +943,7 @@ export async function listCoachClientsAction(input: z.input<typeof listClientsSc
       return {
         rows: enriched,
         total,
+        counts,
         page: payload.page,
         page_size: payload.page_size,
         has_more: from + enriched.length < total,
@@ -294,7 +956,13 @@ export async function upsertClientAction(input: z.input<typeof upsertClientSchem
   const payload = upsertClientSchema.parse(input);
   return runTrackedAction({
     eventName: payload.id ? "coach.client.update" : "coach.client.create",
-    payload: { id: payload.id || null },
+    payload: {
+      id: payload.id || null,
+      client_name: payload.display_name || `${payload.first_name} ${payload.last_name || ""}`.trim() || payload.first_name,
+      first_name: payload.first_name,
+      last_name: payload.last_name || null,
+      email: payload.email || null,
+    },
     action: async () => {
       const { supabase, user } = await requireActor();
       const admin = createAdminClient();
@@ -305,7 +973,6 @@ export async function upsertClientAction(input: z.input<typeof upsertClientSchem
         display_name: payload.display_name || null,
         email: payload.email || null,
         phone: payload.phone || null,
-        timezone: payload.timezone,
         status: payload.status,
         linked_user_id: payload.linked_user_id || null,
         goals: payload.goals || null,
@@ -314,9 +981,8 @@ export async function upsertClientAction(input: z.input<typeof upsertClientSchem
       };
 
       let clientId = payload.id;
-      let canManageAssistants = true;
       if (payload.id) {
-        const [{ data: existingClient, error: existingClientError }, { data: roleRow, error: roleError }, { data: assistantAssignment, error: assignmentError }] =
+        const [{ data: existingClient, error: existingClientError }, { data: roleRow, error: roleError }] =
           await Promise.all([
             supabase
               .from("clients")
@@ -328,27 +994,17 @@ export async function upsertClientAction(input: z.input<typeof upsertClientSchem
               .select("role")
               .eq("id", user.id)
               .maybeSingle(),
-            supabase
-              .from("coach_client_assignments")
-              .select("id")
-              .eq("client_id", payload.id)
-              .eq("coach_id", user.id)
-              .eq("is_active", true)
-              .maybeSingle(),
           ]);
 
         if (existingClientError) throw new Error(existingClientError.message);
         if (roleError) throw new Error(roleError.message);
-        if (assignmentError) throw new Error(assignmentError.message);
         if (!existingClient) throw new Error("Client not found.");
 
         const isSysadmin = roleRow?.role === "sysadmin";
         const isPrimaryCoach = existingClient.primary_coach_id === user.id;
-        const isAssignedAssistant = Boolean(assistantAssignment);
-        if (!isSysadmin && !isPrimaryCoach && !isAssignedAssistant) {
+        if (!isSysadmin && !isPrimaryCoach) {
           throw new Error("Forbidden");
         }
-        canManageAssistants = isSysadmin || isPrimaryCoach;
 
         const { data, error } = await supabase
           .from("clients")
@@ -377,7 +1033,6 @@ export async function upsertClientAction(input: z.input<typeof upsertClientSchem
           display_name: payload.display_name || null,
           email: payload.email || null,
           phone: payload.phone || null,
-          timezone: payload.timezone,
           status: payload.status,
           linked_user_id: payload.linked_user_id || null,
           goals: payload.goals || null,
@@ -411,71 +1066,61 @@ export async function upsertClientAction(input: z.input<typeof upsertClientSchem
         }
       }
 
-      const assistantCoachIds = Array.from(new Set((payload.assistant_coach_ids || []).filter((id) => id !== user.id)));
-      if (assistantCoachIds.length > 0 && clientId) {
-        if (!canManageAssistants) {
-          throw new Error("Only the primary coach can manage assistant coaches.");
-        }
-        const rows: CoachAssignmentInsert[] = assistantCoachIds.map((coachId) => ({
-          client_id: clientId!,
-          coach_id: coachId,
-          role: "assistant",
-          is_active: true,
-          created_by_user_id: user.id,
-        }));
-        const { error: assistantError } = await supabase
-          .from("coach_client_assignments")
-          .upsert(rows, { onConflict: "client_id,coach_id" });
-        if (assistantError) throw new Error(assistantError.message);
-      }
-
       revalidateCoachPaths(clientId || undefined);
       return { success: true, id: clientId };
     },
   });
 }
 
-export async function addAssistantCoachAction(input: z.input<typeof addAssistantSchema>) {
-  const payload = addAssistantSchema.parse(input);
+export async function removeClientAction(input: z.input<typeof removeClientSchema>) {
+  const payload = removeClientSchema.parse(input);
   return runTrackedAction({
-    eventName: "coach.client.assistant.add",
-    payload,
+    eventName: "coach.client.remove",
+    payload: { client_id: payload.client_id },
     action: async () => {
       const { supabase, user } = await requireActor();
-      const row: CoachAssignmentInsert = {
-        client_id: payload.client_id,
-        coach_id: payload.coach_id,
-        role: "assistant",
-        is_active: true,
-        created_by_user_id: user.id,
-      };
-      const { error } = await supabase
-        .from("coach_client_assignments")
-        .upsert(row, { onConflict: "client_id,coach_id" });
-      if (error) throw new Error(error.message);
-      revalidateCoachPaths(payload.client_id);
-      return { success: true };
-    },
-  });
-}
 
-export async function disableAssistantCoachAction(input: z.input<typeof disableAssistantSchema>) {
-  const payload = disableAssistantSchema.parse(input);
-  return runTrackedAction({
-    eventName: "coach.client.assistant.disable",
-    payload,
-    action: async () => {
-      const { supabase } = await requireActor();
-      const { data, error } = await supabase
-        .from("coach_client_assignments")
-        .update({ is_active: false })
-        .eq("id", payload.assignment_id)
-        .select("client_id")
-        .single();
-      if (error) throw new Error(error.message);
-      revalidateCoachPaths(data.client_id);
-      return { success: true };
+      const [{ data: clientRow, error: clientError }, { data: roleRow, error: roleError }] =
+        await Promise.all([
+          supabase
+            .from("clients")
+            .select("id, primary_coach_id, display_name, first_name, last_name")
+            .eq("id", payload.client_id)
+            .maybeSingle(),
+          supabase.from("profiles").select("role").eq("id", user.id).maybeSingle(),
+        ]);
+
+      if (clientError) throw new Error(clientError.message);
+      if (roleError) throw new Error(roleError.message);
+      if (!clientRow) throw new Error("Client not found.");
+
+      const isSysadmin = roleRow?.role === "sysadmin";
+      const isPrimaryCoach = clientRow.primary_coach_id === user.id;
+      if (!isSysadmin && !isPrimaryCoach) {
+        throw new Error("Forbidden");
+      }
+
+      const { error: updateError } = await supabase
+        .from("clients")
+        .update({
+          status: "archived",
+          is_archived: true,
+        })
+        .eq("id", payload.client_id);
+      if (updateError) throw new Error(updateError.message);
+
+      revalidateCoachPaths(payload.client_id);
+      return {
+        success: true,
+        id: payload.client_id,
+        client_name:
+          clientRow.display_name || `${clientRow.first_name} ${clientRow.last_name || ""}`.trim() || "client",
+      };
     },
+    getSuccessPayload: (result) => ({
+      client_id: result.id,
+      client_name: result.client_name,
+    }),
   });
 }
 
@@ -485,23 +1130,398 @@ export async function listClientDetailAction(clientId: string) {
     payload: { client_id: clientId },
     action: async () => {
       const { supabase } = await requireActor();
-      const [{ data: client, error: clientError }, { data: assistants, error: assistantsError }] =
-        await Promise.all([
-          supabase.from("clients").select("*").eq("id", clientId).single(),
-          supabase
-            .from("coach_client_assignments")
-            .select("*")
-            .eq("client_id", clientId)
-            .eq("is_active", true)
-            .order("created_at", { ascending: true }),
-        ]);
+      const { data: client, error: clientError } = await supabase.from("clients").select("*").eq("id", clientId).single();
 
       if (clientError) throw new Error(clientError.message);
-      if (assistantsError) throw new Error(assistantsError.message);
 
       return {
         client: client as ClientRow,
-        assistants: (assistants || []) as Database["public"]["Tables"]["coach_client_assignments"]["Row"][],
+      };
+    },
+  });
+}
+
+export async function listClientGoalsAction(input: z.input<typeof listClientGoalsSchema>): Promise<ClientGoalsPayload> {
+  const payload = listClientGoalsSchema.parse(input);
+  return runTrackedAction({
+    eventName: "coach.client.goals.list",
+    payload,
+    action: async () => {
+      const { supabase } = await requireActor();
+      const admin = createAdminClient();
+      const client = await resolveClientGoalSubject(supabase, payload.client_id);
+
+      if (!client.linked_user_id) {
+        return {
+          linked_user_id: null,
+          categories: [],
+          goals: [],
+        };
+      }
+      const linkedUserId = client.linked_user_id;
+
+      const selectedColumns = [
+        "id",
+        "user_id",
+        "goal_type",
+        "custom_description",
+        "start_value",
+        "current_value",
+        "target_value",
+        "start_weight",
+        "current_weight",
+        "target_weight",
+        "unit",
+        "status",
+        "start_date",
+        "target_date",
+        "updated_at",
+        "created_at",
+        "notes",
+        "priority",
+        "goal_direction",
+        "check_in_interval_days",
+      ];
+
+      const runGoalsQuery = async (
+        columns: string[]
+      ): Promise<{ data: GoalRow[] | null; error: { message: string } | null }> => {
+        let query = (admin.from("fitness_goals") as any)
+          .select(columns.join(", "))
+          .eq("user_id", linkedUserId)
+          .order("updated_at", { ascending: false })
+          .order("priority", { ascending: true })
+          .limit(payload.limit);
+        if (payload.status !== "all") {
+          query = query.eq("status", payload.status);
+        }
+        const { data, error } = await query;
+        return {
+          data: (data || null) as GoalRow[] | null,
+          error: error ? { message: error.message } : null,
+        };
+      };
+
+      let activeColumns = [...selectedColumns];
+      let { data, error } = await runGoalsQuery(activeColumns);
+      for (let attempt = 0; attempt < 6 && error; attempt += 1) {
+        const missingColumn = missingFitnessGoalsColumn(error.message);
+        if (!missingColumn || !activeColumns.includes(missingColumn)) break;
+        activeColumns = activeColumns.filter((column) => column !== missingColumn);
+        ({ data, error } = await runGoalsQuery(activeColumns));
+      }
+      if (error) throw new Error(error.message);
+
+      const goalRows = (data || []) as GoalRow[];
+      const historyByGoal = await listGoalHistoryByGoalIds(
+        supabase,
+        goalRows.map((row) => row.id),
+        2
+      );
+
+      const goals = goalRows.map((row) =>
+        mapGoalRowToClientItem({
+          row,
+          clientId: payload.client_id,
+          historyRows: historyByGoal.get(row.id) || [],
+        })
+      );
+
+      const categories = Array.from(new Set(goalRows.map((row) => normalizeGoalCategory(row.goal_type || "custom")))).sort((a, b) =>
+        a.localeCompare(b)
+      );
+
+      return {
+        linked_user_id: client.linked_user_id,
+        categories,
+        goals,
+      };
+    },
+  });
+}
+
+export async function createClientGoalAction(input: z.input<typeof createGoalSchema>): Promise<ClientGoalItem> {
+  const payload = createGoalSchema.parse(input);
+  return runTrackedAction({
+    eventName: "coach.client.goal.create",
+    payload: {
+      client_id: payload.client_id,
+      goal_title: payload.goal,
+      category: normalizeGoalCategory(payload.category),
+      status: payload.status,
+      target_date: payload.target_date || null,
+    },
+    action: async () => {
+      const { supabase, user } = await requireActor();
+      const admin = createAdminClient();
+      const client = await resolveClientGoalSubject(supabase, payload.client_id);
+      if (!client.linked_user_id) {
+        throw new Error("Link this client to a user account before creating measurable goals.");
+      }
+
+      const normalizedCategory = normalizeGoalCategory(payload.category);
+      const isWeightCategory = isWeightGoalCategory(normalizedCategory);
+      const resolvedCurrentValue =
+        payload.current_value ?? payload.start_value ?? payload.current_weight ?? payload.start_weight ?? null;
+      const resolvedStartValue = payload.start_value ?? resolvedCurrentValue;
+      const resolvedTargetValue = payload.target_value ?? payload.target_weight ?? null;
+      const resolvedCurrentWeight = isWeightCategory ? resolvedCurrentValue : payload.current_weight ?? payload.start_weight ?? null;
+      const resolvedStartWeight = isWeightCategory ? resolvedStartValue : payload.start_weight ?? resolvedCurrentWeight;
+      const resolvedTargetWeight = isWeightCategory ? resolvedTargetValue : payload.target_weight ?? null;
+
+      const insertPayload: GoalInsert = {
+        user_id: client.linked_user_id,
+        assigned_by_id: user.id,
+        goal_type: normalizedCategory,
+        custom_description: payload.goal,
+        start_value: resolvedStartValue,
+        current_value: resolvedCurrentValue,
+        target_value: resolvedTargetValue,
+        start_weight: resolvedStartWeight,
+        current_weight: resolvedCurrentWeight,
+        target_weight: resolvedTargetWeight,
+        unit: payload.unit || (isWeightCategory ? "kg" : null),
+        status: payload.status,
+        start_date: payload.start_date || new Date().toISOString().slice(0, 10),
+        target_date: payload.target_date || null,
+        notes: payload.notes || null,
+        priority: payload.priority,
+        goal_direction: payload.goal_direction,
+        check_in_interval_days: payload.check_in_interval_days ?? null,
+      };
+
+      let attemptedInsert: GoalInsert = { ...insertPayload };
+      let insertResult = await admin.from("fitness_goals").insert(attemptedInsert).select("*").single();
+
+      for (let attempt = 0; attempt < 6 && insertResult.error; attempt += 1) {
+        const missingColumn = missingFitnessGoalsColumn(insertResult.error.message);
+        if (!missingColumn || !(missingColumn in attemptedInsert)) break;
+        const fallbackPayload = { ...attemptedInsert } as Record<string, unknown>;
+        delete fallbackPayload[missingColumn];
+        attemptedInsert = fallbackPayload as GoalInsert;
+        insertResult = await admin.from("fitness_goals").insert(attemptedInsert).select("*").single();
+      }
+
+      if (insertResult.error && isFitnessGoalTypeConstraintError(insertResult.error.message)) {
+        const legacyGoalType = maybeLegacyGoalType((attemptedInsert as Record<string, unknown>).goal_type);
+        if (legacyGoalType) {
+          attemptedInsert = {
+            ...attemptedInsert,
+            goal_type: legacyGoalType,
+          };
+          insertResult = await admin.from("fitness_goals").insert(attemptedInsert).select("*").single();
+        }
+      }
+
+      if (insertResult.error && isFitnessGoalStatusConstraintError(insertResult.error.message)) {
+        throw new Error(
+          "Goal status values are not fully supported in this database. Apply the latest goal-status migration and retry."
+        );
+      }
+
+      if (insertResult.error && isRlsViolationError(insertResult.error)) {
+        insertResult = await admin.from("fitness_goals").insert(attemptedInsert).select("*").single();
+      }
+
+      if (insertResult.error) throw new Error(insertResult.error.message);
+
+      const goalRow = insertResult.data as GoalRow;
+      await writeGoalProgressSnapshot({
+        supabase: admin,
+        goal: goalRow,
+        actorId: user.id,
+      });
+      const historyByGoal = await listGoalHistoryByGoalIds(admin, [goalRow.id], 2);
+
+      revalidateCoachPaths(payload.client_id);
+      return mapGoalRowToClientItem({
+        row: goalRow,
+        clientId: payload.client_id,
+        historyRows: historyByGoal.get(goalRow.id) || [],
+      });
+    },
+  });
+}
+
+export async function updateClientGoalAction(input: z.input<typeof updateGoalSchema>): Promise<ClientGoalItem> {
+  const payload = updateGoalSchema.parse(input);
+  return runTrackedAction({
+    eventName: "coach.client.goal.update",
+    payload: {
+      client_id: payload.client_id,
+      goal_id: payload.goal_id,
+      goal_title: payload.goal || null,
+      status: payload.status || null,
+    },
+    action: async () => {
+      const { supabase, user } = await requireActor();
+      const admin = createAdminClient();
+      const client = await resolveClientGoalSubject(supabase, payload.client_id);
+      if (!client.linked_user_id) {
+        throw new Error("Link this client to a user account before updating goals.");
+      }
+
+      const { data: existing, error: existingError } = await admin
+        .from("fitness_goals")
+        .select("*")
+        .eq("id", payload.goal_id)
+        .eq("user_id", client.linked_user_id)
+        .maybeSingle();
+      if (existingError) throw new Error(existingError.message);
+      if (!existing) throw new Error("Goal not found.");
+
+      const nextCategory = payload.category !== undefined ? normalizeGoalCategory(payload.category) : normalizeGoalCategory(existing.goal_type || "custom");
+      const shouldMirrorToWeight = isWeightGoalCategory(nextCategory);
+      const updates: GoalUpdate = {};
+      if (payload.goal !== undefined) updates.custom_description = payload.goal;
+      if (payload.category !== undefined) updates.goal_type = nextCategory;
+      if (payload.start_value !== undefined) {
+        updates.start_value = payload.start_value;
+        if (shouldMirrorToWeight && payload.start_weight === undefined) updates.start_weight = payload.start_value;
+      }
+      if (payload.current_value !== undefined) {
+        updates.current_value = payload.current_value;
+        if (shouldMirrorToWeight && payload.current_weight === undefined) updates.current_weight = payload.current_value;
+      }
+      if (payload.target_value !== undefined) {
+        updates.target_value = payload.target_value;
+        if (shouldMirrorToWeight && payload.target_weight === undefined) updates.target_weight = payload.target_value;
+      }
+      if (payload.start_weight !== undefined) updates.start_weight = payload.start_weight;
+      if (payload.current_weight !== undefined) updates.current_weight = payload.current_weight;
+      if (payload.target_weight !== undefined) updates.target_weight = payload.target_weight;
+      if (payload.category !== undefined && shouldMirrorToWeight && payload.unit === undefined && !existing.unit) {
+        updates.unit = "kg";
+      }
+      if (payload.unit !== undefined) updates.unit = payload.unit;
+      if (payload.status !== undefined) updates.status = payload.status;
+      if (payload.start_date !== undefined) updates.start_date = payload.start_date;
+      if (payload.target_date !== undefined) updates.target_date = payload.target_date;
+      if (payload.notes !== undefined) updates.notes = payload.notes;
+      if (payload.priority !== undefined) updates.priority = payload.priority;
+      if (payload.goal_direction !== undefined) updates.goal_direction = payload.goal_direction;
+      if (payload.check_in_interval_days !== undefined) updates.check_in_interval_days = payload.check_in_interval_days;
+
+      let attemptedUpdates: GoalUpdate = { ...updates };
+      let updateResult =
+        Object.keys(attemptedUpdates).length === 0
+          ? { data: existing as GoalRow, error: null as null | { message: string } }
+          : await admin
+              .from("fitness_goals")
+              .update(attemptedUpdates)
+              .eq("id", payload.goal_id)
+              .eq("user_id", client.linked_user_id)
+              .select("*")
+              .single();
+
+      for (let attempt = 0; attempt < 6 && updateResult.error; attempt += 1) {
+        const missingColumn = missingFitnessGoalsColumn(updateResult.error.message);
+        if (!missingColumn || !(missingColumn in attemptedUpdates)) break;
+        const fallbackPayload = { ...attemptedUpdates } as Record<string, unknown>;
+        delete fallbackPayload[missingColumn];
+        attemptedUpdates = fallbackPayload as GoalUpdate;
+        if (Object.keys(attemptedUpdates).length === 0) {
+          updateResult = { data: existing as GoalRow, error: null };
+          break;
+        }
+        updateResult = await admin
+          .from("fitness_goals")
+          .update(attemptedUpdates)
+          .eq("id", payload.goal_id)
+          .eq("user_id", client.linked_user_id)
+          .select("*")
+          .single();
+      }
+
+      if (updateResult.error && isFitnessGoalTypeConstraintError(updateResult.error.message)) {
+        const legacyGoalType = maybeLegacyGoalType((attemptedUpdates as Record<string, unknown>).goal_type);
+        if (legacyGoalType) {
+          attemptedUpdates = {
+            ...attemptedUpdates,
+            goal_type: legacyGoalType,
+          };
+          updateResult = await admin
+            .from("fitness_goals")
+            .update(attemptedUpdates)
+            .eq("id", payload.goal_id)
+            .eq("user_id", client.linked_user_id)
+            .select("*")
+            .single();
+        }
+      }
+
+      if (updateResult.error && isFitnessGoalStatusConstraintError(updateResult.error.message) && attemptedUpdates.status) {
+        throw new Error(
+          "Goal status values are not fully supported in this database. Apply the latest goal-status migration and retry."
+        );
+      }
+
+      if (updateResult.error) throw new Error(updateResult.error.message);
+
+      const goalRow = updateResult.data as GoalRow;
+      await writeGoalProgressSnapshot({
+        supabase: admin,
+        goal: goalRow,
+        actorId: user.id,
+      });
+      const historyByGoal = await listGoalHistoryByGoalIds(admin, [goalRow.id], 2);
+
+      revalidateCoachPaths(payload.client_id);
+      return mapGoalRowToClientItem({
+        row: goalRow,
+        clientId: payload.client_id,
+        historyRows: historyByGoal.get(goalRow.id) || [],
+      });
+    },
+  });
+}
+
+export async function updateClientGoalStatusAction(input: z.input<typeof updateGoalStatusSchema>) {
+  const payload = updateGoalStatusSchema.parse(input);
+  return updateClientGoalAction({
+    client_id: payload.client_id,
+    goal_id: payload.goal_id,
+    status: payload.status,
+  });
+}
+
+export async function deleteClientGoalAction(input: z.input<typeof deleteGoalSchema>) {
+  const payload = deleteGoalSchema.parse(input);
+  return runTrackedAction({
+    eventName: "coach.client.goal.delete",
+    payload: {
+      client_id: payload.client_id,
+      goal_id: payload.goal_id,
+      goal_title: payload.goal_title || null,
+    },
+    action: async () => {
+      const { supabase } = await requireActor();
+      const admin = createAdminClient();
+      const client = await resolveClientGoalSubject(supabase, payload.client_id);
+      if (!client.linked_user_id) {
+        throw new Error("Link this client to a user account before deleting goals.");
+      }
+
+      const { data: existingGoal, error: existingGoalError } = await admin
+        .from("fitness_goals")
+        .select("id")
+        .eq("id", payload.goal_id)
+        .eq("user_id", client.linked_user_id)
+        .maybeSingle();
+      if (existingGoalError) throw new Error(existingGoalError.message);
+      if (!existingGoal) throw new Error("Goal not found.");
+
+      const { error: deleteError } = await admin
+        .from("fitness_goals")
+        .delete()
+        .eq("id", payload.goal_id)
+        .eq("user_id", client.linked_user_id);
+      if (deleteError) throw new Error(deleteError.message);
+
+      revalidateCoachPaths(payload.client_id);
+      return {
+        client_id: payload.client_id,
+        goal_id: payload.goal_id,
       };
     },
   });
@@ -732,6 +1752,7 @@ export async function logClientWorkoutAction(input: z.input<typeof logWorkoutSch
     eventName: "coach.client.workout.log",
     payload: {
       client_id: payload.client_id,
+      session_name: payload.name,
       has_strength_sets: Boolean(payload.strength_sets?.length),
       has_cardio_sessions: Boolean(payload.cardio_sessions?.length),
     },
@@ -834,6 +1855,27 @@ export async function listClientTodaySessionsAction(clientId: string) {
   });
 }
 
+export async function listClientSessionsByRangeAction(input: z.input<typeof listSessionsByRangeSchema>) {
+  const payload = listSessionsByRangeSchema.parse(input);
+  return runTrackedAction({
+    eventName: "coach.client.sessions.range",
+    payload,
+    action: async () => {
+      const { supabase } = await requireActor();
+      const { data, error } = await supabase
+        .from("training_sessions")
+        .select("*")
+        .eq("subject_client_id", payload.client_id)
+        .gte("performed_on", payload.start_date)
+        .lte("performed_on", payload.end_date)
+        .order("performed_on", { ascending: true })
+        .order("started_at", { ascending: true, nullsFirst: true });
+      if (error) throw new Error(error.message);
+      return data || [];
+    },
+  });
+}
+
 export async function createClientCheckinAction(input: z.input<typeof createCheckinSchema>) {
   const payload = createCheckinSchema.parse(input);
   if (!payload.subject_client_id && !payload.subject_user_id) {
@@ -913,13 +1955,17 @@ export async function createCoachNoteAction(input: z.input<typeof createNoteSche
   const payload = createNoteSchema.parse(input);
   return runTrackedAction({
     eventName: "coach.client.note.create",
-    payload: { client_id: payload.client_id, tag: payload.tag },
+    payload: {
+      client_id: payload.client_id,
+      tag: normalizeCoachNoteTag(payload.tag),
+      title: payload.title || null,
+    },
     action: async () => {
       const { supabase, user } = await requireActor();
       const insertPayload: CoachNoteInsert = {
         client_id: payload.client_id,
         coach_id: user.id,
-        tag: payload.tag,
+        tag: normalizeCoachNoteTag(payload.tag),
         title: payload.title || null,
         content: payload.content,
         is_shared_with_linked_user:
@@ -934,6 +1980,41 @@ export async function createCoachNoteAction(input: z.input<typeof createNoteSche
               : "private",
       };
       const { data, error } = await supabase.from("coach_notes").insert(insertPayload).select("*").single();
+      if (error) throw new Error(error.message);
+      revalidateCoachPaths(payload.client_id);
+      return data;
+    },
+  });
+}
+
+export async function updateCoachNoteAction(input: z.input<typeof updateNoteSchema>) {
+  const payload = updateNoteSchema.parse(input);
+  return runTrackedAction({
+    eventName: "coach.client.note.update",
+    payload: {
+      note_id: payload.note_id,
+      client_id: payload.client_id,
+      tag: payload.tag ? normalizeCoachNoteTag(payload.tag) : null,
+    },
+    action: async () => {
+      const { supabase } = await requireActor();
+      const updates: Database["public"]["Tables"]["coach_notes"]["Update"] = {};
+
+      if (payload.tag !== undefined) updates.tag = normalizeCoachNoteTag(payload.tag);
+      if (payload.title !== undefined) updates.title = payload.title || null;
+      if (payload.content !== undefined) updates.content = payload.content;
+      if (payload.visibility !== undefined) {
+        updates.visibility = payload.visibility;
+        updates.is_shared_with_linked_user = payload.visibility === "visible_to_client";
+      }
+
+      const { data, error } = await supabase
+        .from("coach_notes")
+        .update(updates)
+        .eq("id", payload.note_id)
+        .eq("client_id", payload.client_id)
+        .select("*")
+        .single();
       if (error) throw new Error(error.message);
       revalidateCoachPaths(payload.client_id);
       return data;
@@ -968,7 +2049,12 @@ export async function recordClientPaymentAction(input: z.input<typeof recordPaym
   const payload = recordPaymentSchema.parse(input);
   return runTrackedAction({
     eventName: "coach.client.payment.record",
-    payload: { client_id: payload.client_id, amount: payload.amount, status: payload.status },
+    payload: {
+      client_id: payload.client_id,
+      amount: payload.amount,
+      currency: payload.currency.toUpperCase(),
+      status: payload.status,
+    },
     action: async () => {
       const { supabase, user } = await requireActor();
       const insertPayload: PaymentInsert = {
@@ -991,20 +2077,70 @@ export async function recordClientPaymentAction(input: z.input<typeof recordPaym
   });
 }
 
-export async function archiveClientPaymentAction(input: z.input<typeof archivePaymentSchema>) {
-  const payload = archivePaymentSchema.parse(input);
+export async function deleteClientPaymentAction(input: z.input<typeof deletePaymentSchema>) {
+  const payload = deletePaymentSchema.parse(input);
   return runTrackedAction({
-    eventName: "coach.client.payment.archive",
+    eventName: "coach.client.payment.delete",
     payload,
     action: async () => {
       const { supabase } = await requireActor();
       const { data, error } = await supabase
         .from("client_payments")
-        .update({ is_archived: payload.is_archived })
+        .delete()
         .eq("id", payload.id)
         .select("id, client_id")
         .single();
       if (error) throw new Error(error.message);
+      revalidateCoachPaths(data.client_id);
+      return { success: true };
+    },
+  });
+}
+
+export async function updateClientPaymentStatusAction(input: z.input<typeof updatePaymentStatusSchema>) {
+  const payload = updatePaymentStatusSchema.parse(input);
+  return runTrackedAction({
+    eventName: "coach.client.payment.status.update",
+    payload,
+    action: async () => {
+      const { supabase } = await requireActor();
+      const { data, error } = await supabase
+        .from("client_payments")
+        .update({ status: payload.status })
+        .eq("id", payload.id)
+        .select("id, client_id")
+        .single();
+      if (error) throw new Error(error.message);
+      revalidateCoachPaths(data.client_id);
+      return { success: true };
+    },
+  });
+}
+
+export async function updateClientPaymentDetailsAction(input: z.input<typeof updatePaymentDetailsSchema>) {
+  const payload = updatePaymentDetailsSchema.parse(input);
+  return runTrackedAction({
+    eventName: "coach.client.payment.update",
+    payload: { id: payload.id },
+    action: async () => {
+      const { supabase } = await requireActor();
+      const changes: Database["public"]["Tables"]["client_payments"]["Update"] = {};
+      if (payload.amount !== undefined) changes.amount = payload.amount;
+      if (payload.payment_date !== undefined) changes.payment_date = payload.payment_date;
+      if (payload.method !== undefined) changes.method = payload.method;
+      if (payload.status !== undefined) changes.status = payload.status;
+      if (payload.notes !== undefined) changes.notes = payload.notes;
+      if (payload.period_start !== undefined) changes.period_start = payload.period_start;
+      if (payload.period_end !== undefined) changes.period_end = payload.period_end;
+
+      const { data, error } = await supabase
+        .from("client_payments")
+        .update(changes)
+        .eq("id", payload.id)
+        .select("id, client_id")
+        .single();
+      if (error) throw new Error(error.message);
+
       revalidateCoachPaths(data.client_id);
       return { success: true };
     },
@@ -1017,29 +2153,24 @@ export type PaymentAlert = {
   message: string;
 };
 
-export async function listClientPaymentsAction(clientId: string, includeArchived = false) {
+export async function listClientPaymentsAction(clientId: string) {
   return runTrackedAction({
     eventName: "coach.client.payments.list",
-    payload: { client_id: clientId, include_archived: includeArchived },
+    payload: { client_id: clientId },
     action: async () => {
       const { supabase } = await requireActor();
-      let query = supabase
+      const { data, error } = await supabase
         .from("client_payments")
         .select("*")
         .eq("client_id", clientId)
         .order("payment_date", { ascending: false });
 
-      if (!includeArchived) query = query.eq("is_archived", false);
-
-      const { data, error } = await query;
       if (error) throw new Error(error.message);
 
       const rows = (data || []) as Database["public"]["Tables"]["client_payments"]["Row"][];
       const alerts: PaymentAlert[] = [];
       const now = new Date();
-      const activePeriods = rows.filter(
-        (row) => row.status === "paid" && row.period_start && row.period_end && !row.is_archived
-      );
+      const activePeriods = rows.filter((row) => row.status === "paid" && row.period_start && row.period_end);
 
       if (activePeriods.length === 0) {
         alerts.push({
@@ -1050,7 +2181,6 @@ export async function listClientPaymentsAction(clientId: string, includeArchived
       }
 
       for (const row of rows) {
-        if (row.is_archived) continue;
         if (row.status === "pending" && row.payment_date < now.toISOString().slice(0, 10)) {
           alerts.push({
             type: "overdue",
@@ -1072,6 +2202,227 @@ export async function listClientPaymentsAction(clientId: string, includeArchived
       }
 
       return { rows, alerts };
+    },
+  });
+}
+
+function derivePaymentType(row: Database["public"]["Tables"]["client_payments"]["Row"]): "subscription" | "package" | "one_time" {
+  if (row.period_start || row.period_end) return "subscription";
+  const note = (row.notes || "").toLowerCase();
+  if (note.includes("package")) return "package";
+  return "one_time";
+}
+
+function derivePaymentDescription(row: Database["public"]["Tables"]["client_payments"]["Row"]) {
+  const note = (row.notes || "").trim();
+  if (!note) return "Client payment";
+  const firstLine = note.split("\n").find((line) => line.trim().length > 0);
+  return (firstLine || note).slice(0, 140);
+}
+
+function addDays(value: string, days: number) {
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  if (Number.isNaN(parsed.getTime())) return null;
+  parsed.setUTCDate(parsed.getUTCDate() + days);
+  return parsed.toISOString().slice(0, 10);
+}
+
+function paymentIsOverdue(
+  row: Pick<Database["public"]["Tables"]["client_payments"]["Row"], "status" | "payment_date">,
+  todayIso: string
+) {
+  return row.status === "pending" && row.payment_date < todayIso;
+}
+
+export async function listCoachPaymentsDashboardAction(
+  input: z.input<typeof listCoachPaymentsSchema>
+): Promise<CoachPaymentsDashboard> {
+  const payload = listCoachPaymentsSchema.parse(input);
+  return runTrackedAction({
+    eventName: "coach.payments.dashboard.read",
+    payload,
+    action: async () => {
+      const { supabase, user } = await requireActor();
+      const todayIso = new Date().toISOString().slice(0, 10);
+      const from = payload.page * payload.page_size;
+      const to = from + payload.page_size - 1;
+      const normalizedSearch = (payload.search || "").trim().toLowerCase();
+
+      const ownedClientsRes = await supabase
+        .from("clients")
+        .select("id, first_name, last_name, status, is_archived")
+        .eq("primary_coach_id", user.id);
+
+      if (ownedClientsRes.error) throw new Error(ownedClientsRes.error.message);
+
+      const ownedClients = (ownedClientsRes.data || []) as Array<
+        Pick<ClientRow, "id" | "first_name" | "last_name" | "status" | "is_archived">
+      >;
+      const clients = ownedClients;
+      const clientIds = clients.map((row) => row.id);
+      if (clientIds.length === 0) {
+        return {
+          kpis: {
+            total_collected: 0,
+            pending_amount: 0,
+            overdue_amount: 0,
+            active_billing: 0,
+          },
+          transactions: [],
+          transactions_total: 0,
+          page: payload.page,
+          page_size: payload.page_size,
+          has_more: false,
+          client_billing: [],
+        };
+      }
+
+      const clientNameById = new Map<string, string>();
+      const clientStatusById = new Map<string, ClientStatus>();
+      for (const row of clients) {
+        clientNameById.set(row.id, `${row.first_name} ${row.last_name || ""}`.trim() || "Client");
+        clientStatusById.set(row.id, row.status);
+      }
+
+      let transactionClientIds = clientIds;
+      if (normalizedSearch) {
+        const matchedClientIds = clients
+          .filter((row) => {
+            const name = `${row.first_name} ${row.last_name || ""}`.trim().toLowerCase();
+            return name.includes(normalizedSearch);
+          })
+          .map((row) => row.id);
+        if (matchedClientIds.length > 0) {
+          transactionClientIds = matchedClientIds;
+        }
+      }
+
+      const escapedSearch = (payload.search || "").trim().replace(/[%_]/g, "").slice(0, 120);
+      let transactionsQuery = supabase
+        .from("client_payments")
+        .select(
+          "id, client_id, amount, currency, status, payment_date, method, notes, period_start, period_end, created_at, updated_at",
+          { count: "exact" }
+        )
+        .in("client_id", transactionClientIds)
+        .limit(payload.limit)
+        .order(payload.sort_by, { ascending: payload.sort_dir === "asc" });
+
+      if (payload.sort_by !== "payment_date") {
+        transactionsQuery = transactionsQuery.order("payment_date", { ascending: false });
+      }
+
+      if (payload.status === "overdue") {
+        transactionsQuery = transactionsQuery.eq("status", "pending").lt("payment_date", todayIso);
+      } else if (payload.status !== "all") {
+        transactionsQuery = transactionsQuery.eq("status", payload.status);
+      }
+
+      if (normalizedSearch && transactionClientIds.length === clientIds.length && escapedSearch) {
+        transactionsQuery = transactionsQuery.ilike("notes", `%${escapedSearch}%`);
+      }
+
+      const [transactionsRes, metricsRes] = await Promise.all([
+        transactionsQuery.range(from, to),
+        supabase
+          .from("client_payments")
+          .select("client_id, amount, status, payment_date, period_end")
+          .in("client_id", clientIds)
+          .order("payment_date", { ascending: false })
+          .limit(payload.limit),
+      ]);
+
+      if (transactionsRes.error) throw new Error(transactionsRes.error.message);
+      if (metricsRes.error) throw new Error(metricsRes.error.message);
+
+      const transactionRows =
+        (transactionsRes.data || []) as Array<Database["public"]["Tables"]["client_payments"]["Row"]>;
+      const transactionsRaw: CoachPaymentTransactionRow[] = transactionRows.map((row) => {
+        const computedStatus: PaymentStatus | "overdue" = paymentIsOverdue(row, todayIso) ? "overdue" : row.status;
+        return {
+          ...row,
+          client_name: clientNameById.get(row.client_id) || "Client",
+          client_status: clientStatusById.get(row.client_id) || "active",
+          description: derivePaymentDescription(row),
+          type: derivePaymentType(row),
+          status: computedStatus,
+        };
+      });
+
+      const transactions = normalizedSearch
+        ? transactionsRaw.filter((row) => {
+            const searchable = `${row.client_name} ${row.description} ${row.notes || ""}`.toLowerCase();
+            return searchable.includes(normalizedSearch);
+          })
+        : transactionsRaw;
+
+      const allPayments = (metricsRes.data || []) as Array<
+        Pick<
+          Database["public"]["Tables"]["client_payments"]["Row"],
+          "client_id" | "amount" | "status" | "payment_date" | "period_end"
+        >
+      >;
+      const activePayments = allPayments;
+
+      const totalCollected = activePayments.reduce((sum, row) => (row.status === "paid" ? sum + Number(row.amount || 0) : sum), 0);
+      const pendingAmount = activePayments.reduce((sum, row) => (row.status === "pending" ? sum + Number(row.amount || 0) : sum), 0);
+      const overdueAmount = activePayments.reduce(
+        (sum, row) => (paymentIsOverdue(row, todayIso) ? sum + Number(row.amount || 0) : sum),
+        0
+      );
+      const activeBilling = new Set(
+        activePayments
+          .filter((row) => row.status === "paid" || row.status === "pending")
+          .map((row) => row.client_id)
+      ).size;
+
+      const billingByClient = new Map<string, CoachPaymentClientBillingRow>();
+      for (const payment of activePayments) {
+        let existing = billingByClient.get(payment.client_id);
+        if (!existing) {
+          existing = {
+            client_id: payment.client_id,
+            client_name: clientNameById.get(payment.client_id) || "Client",
+            client_status: clientStatusById.get(payment.client_id) || "active",
+            monthly_amount: Number(payment.amount || 0),
+            total_paid: 0,
+            outstanding: 0,
+            next_billing_date: null,
+          };
+        }
+
+        if (payment.status === "paid") {
+          existing.total_paid += Number(payment.amount || 0);
+        }
+        if (payment.status === "pending" || payment.status === "failed") {
+          existing.outstanding += Number(payment.amount || 0);
+        }
+
+        if (!existing.next_billing_date && payment.period_end) {
+          existing.next_billing_date = addDays(payment.period_end, 1);
+        }
+        billingByClient.set(payment.client_id, existing);
+      }
+
+      const clientBilling = Array.from(billingByClient.values()).sort((a, b) =>
+        a.client_name.localeCompare(b.client_name)
+      );
+      const transactionsTotal = transactionsRes.count ?? transactions.length;
+
+      return {
+        kpis: {
+          total_collected: totalCollected,
+          pending_amount: pendingAmount,
+          overdue_amount: overdueAmount,
+          active_billing: activeBilling,
+        },
+        transactions,
+        transactions_total: transactionsTotal,
+        page: payload.page,
+        page_size: payload.page_size,
+        has_more: from + transactionRows.length < transactionsTotal,
+        client_billing: clientBilling,
+      };
     },
   });
 }

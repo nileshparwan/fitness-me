@@ -240,7 +240,6 @@ function ProgressBar({
 
 type ManualNutritionDiaryProps = {
   subject?: NutritionSubject;
-  timezone?: string;
   showAssignmentTools?: boolean;
   clientIdForSummary?: string;
   title?: string;
@@ -248,7 +247,6 @@ type ManualNutritionDiaryProps = {
 
 export function ManualNutritionDiary({
   subject,
-  timezone,
   showAssignmentTools = false,
   clientIdForSummary,
 }: ManualNutritionDiaryProps) {
@@ -313,7 +311,7 @@ export function ManualNutritionDiary({
   const recentItems = useNutritionRecentDiaryItems();
   const pushRecentDiaryItem = usePushNutritionRecentDiaryItem();
 
-  const diaryQuery = useNutritionDiary(performedOn, resolvedSubject, timezone, selectedMealGroupId || null);
+  const diaryQuery = useNutritionDiary(performedOn, resolvedSubject, selectedMealGroupId || null);
   const allFavoritesQuery = useFavoriteMealItems(200, null);
   const favoritesQuery = useFavoriteMealItems(40, selectedFavoriteMealType);
   const templatesQuery = useMealPlanTemplates();
@@ -587,7 +585,6 @@ export function ManualNutritionDiary({
         await mutations.addItem.mutateAsync({
           performed_on: performedOn,
           meal_type: toActionMealType(selectedSection),
-          timezone: timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
           subject: resolvedSubject,
           meal_group_id: selectedMealGroupId,
           item: {
@@ -653,7 +650,6 @@ export function ManualNutritionDiary({
       await mutations.addItem.mutateAsync({
         performed_on: performedOn,
         meal_type: toActionMealType(selectedSection),
-        timezone: timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
         subject: resolvedSubject,
         meal_group_id: selectedMealGroupId,
         item: {
@@ -730,7 +726,6 @@ export function ManualNutritionDiary({
       await mutations.addItem.mutateAsync({
         performed_on: performedOn,
         meal_type: toActionMealType(section),
-        timezone: timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
         subject: resolvedSubject,
         meal_group_id: selectedMealGroupId,
         item: {
@@ -1324,7 +1319,7 @@ export function ManualNutritionDiary({
               <div className="space-y-2">
                 <Label>Meal Section</Label>
                 <Select value={selectedSection} onValueChange={(value) => setSelectedSection(value as DiaryMealSection)} disabled={Boolean(editingItemId)}>
-                  <SelectTrigger className="rounded-xl border-border/60 bg-muted/20">
+                  <SelectTrigger className="h-10 w-full rounded-xl border-border/60 bg-muted/20">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -1374,7 +1369,7 @@ export function ManualNutritionDiary({
                   value={unit || NO_UNIT_SELECT_VALUE}
                   onValueChange={(value) => setUnit(value === NO_UNIT_SELECT_VALUE ? "" : value)}
                 >
-                  <SelectTrigger className="rounded-xl border-border/60 bg-muted/20">
+                  <SelectTrigger className="h-10 w-full rounded-xl border-border/60 bg-muted/20">
                     <SelectValue placeholder="Select unit" />
                   </SelectTrigger>
                   <SelectContent>
@@ -1460,7 +1455,7 @@ export function ManualNutritionDiary({
             <div className="space-y-2">
               <Label>Meal Section</Label>
               <Select value={selectedSection} onValueChange={(value) => setSelectedSection(value as DiaryMealSection)}>
-                <SelectTrigger className="rounded-xl border-border/60 bg-muted/20">
+                <SelectTrigger className="h-10 w-full rounded-xl border-border/60 bg-muted/20">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>

@@ -6,7 +6,6 @@
 
 ## 1) Relationship model
 - Primary Coach owns the client relationship (`clients.primary_coach_id`).
-- Assistant Coach can be delegated to a client (`coach_client_assignments`, `is_active = true`).
 - Client is a first-class record (`clients`) and may exist with or without linked platform user (`linked_user_id` optional).
 - Client Portal Account is separate from app user auth (`client_auth`, `client_sessions`) and can be blocked/removed independently.
 
@@ -21,7 +20,6 @@
 | Entity | Main relationship | Why it matters |
 | --- | --- | --- |
 | `clients` | 1 primary coach -> many clients | Source of truth for each coached client |
-| `coach_client_assignments` | many assistants <-> many clients | Delegation model for coaching team |
 | `client_auth`, `client_sessions` | 1 client -> many sessions | Client portal authentication and session lifecycle |
 | `client_feature_access` | 1 client -> many module permissions | Module-level `disabled/read_only/enabled` controls |
 | `client_plan_assignments`, `client_plan_assignment_sessions` | 1 client -> many plan cycles | Active plan and next-session progression |
@@ -34,7 +32,7 @@
 | `client_payments` | 1 client -> many payments | Revenue operations and overdue/period-end alerts |
 
 ## 4) Access and control model
-- Coach-side access is enforced by ownership/delegation (`has_client_coach_access`).
+- Coach-side access is enforced by ownership (`has_client_coach_access`).
 - Client portal module permissions are controlled per module:
   - `disabled`: no read/write
   - `read_only`: read only

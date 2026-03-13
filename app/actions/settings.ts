@@ -9,19 +9,22 @@ import { Database } from "@/types/database";
 type GoalsInsert = Database["public"]["Tables"]["fitness_goals"]["Insert"];
 type GoalsUpdate = Database["public"]["Tables"]["fitness_goals"]["Update"];
 
-const ALLOWED_GOAL_TYPES = ["weight_loss", "muscle_gain", "strength", "endurance"] as const;
+const ALLOWED_GOAL_TYPES = ["weight", "muscle_gain", "strength", "endurance"] as const;
 const ALLOWED_GOAL_STATUSES = ["active", "completed"] as const;
 type AllowedGoalType = (typeof ALLOWED_GOAL_TYPES)[number];
 type AllowedGoalStatus = (typeof ALLOWED_GOAL_STATUSES)[number];
 
 const inferGoalType = (currentWeight: number, targetWeight: number): AllowedGoalType => {
-  if (targetWeight < currentWeight) return "weight_loss";
+  if (targetWeight < currentWeight) return "weight";
   if (targetWeight > currentWeight) return "muscle_gain";
   return "strength";
 };
 
-const normalizeGoalType = (value: string | null | undefined, fallback: AllowedGoalType): AllowedGoalType =>
-  ALLOWED_GOAL_TYPES.includes((value || "") as AllowedGoalType) ? (value as AllowedGoalType) : fallback;
+const normalizeGoalType = (value: string | null | undefined, fallback: AllowedGoalType): AllowedGoalType => {
+  const normalized = (value || "").toLowerCase().replace(/\s+/g, "_");
+  const mapped = normalized === "weight_loss" ? "weight" : normalized;
+  return ALLOWED_GOAL_TYPES.includes(mapped as AllowedGoalType) ? (mapped as AllowedGoalType) : fallback;
+};
 
 const normalizeGoalStatus = (value: string | null | undefined): AllowedGoalStatus =>
   ALLOWED_GOAL_STATUSES.includes((value || "") as AllowedGoalStatus) ? (value as AllowedGoalStatus) : "active";
@@ -48,7 +51,6 @@ export async function updateProfile(data: ProfileFormValues) {
           gender: parsed.gender,
           activity_level: parsed.activity_level,
           preferred_units: parsed.preferred_units,
-          timezone: parsed.timezone,
           updatedAt: new Date().toISOString(),
         }
       });

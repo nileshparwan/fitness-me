@@ -134,7 +134,7 @@ export function MealItemEditorDialog({
           <div className="grid gap-2">
             <Label>Meal Type</Label>
             <Select value={type} onValueChange={(value) => setType(value as MealItemType)}>
-              <SelectTrigger className="rounded-xl border-border/60 bg-muted/20">
+              <SelectTrigger className="h-10 w-full rounded-xl border-border/60 bg-muted/20">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>

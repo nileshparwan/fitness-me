@@ -25,7 +25,6 @@ export default async function ProfilePage() {
     // We provide fallbacks here so the form always has a valid string
     activity_level: meta.activity_level ?? "moderately_active",
     preferred_units: meta.preferred_units ?? "metric",
-    timezone: meta.timezone ?? "UTC",
 
     // Optional Fields (Can be undefined)
     height: meta.height ? Number(meta.height) : undefined,

@@ -46,8 +46,7 @@ export function ClientPortalDashboardView() {
 
   if (query.isLoading && !query.data) {
     return (
-      <div className="grid gap-3 md:grid-cols-3">
-        <Skeleton className="h-24 w-full" />
+      <div className="grid gap-3 md:grid-cols-2">
         <Skeleton className="h-24 w-full" />
         <Skeleton className="h-24 w-full" />
       </div>
@@ -66,7 +65,7 @@ export function ClientPortalDashboardView() {
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-3 md:grid-cols-3">
+      <div className="grid gap-3 md:grid-cols-2">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm">Today&apos;s Sessions</CardTitle>
@@ -78,12 +77,6 @@ export function ClientPortalDashboardView() {
             <CardTitle className="text-sm">Pending Tasks</CardTitle>
           </CardHeader>
           <CardContent className="text-2xl font-semibold">{dashboard.pending_tasks}</CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Timezone</CardTitle>
-          </CardHeader>
-          <CardContent className="text-lg font-medium">{dashboard.timezone}</CardContent>
         </Card>
       </div>
 
@@ -197,7 +190,7 @@ export function ClientPortalWorkoutsView({ readOnly }: { readOnly: boolean }) {
             <div className="grid gap-2">
               <Label>Slot</Label>
               <Select value={slot} onValueChange={(value) => setSlot(value as typeof slot)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger className="h-10 w-full"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="morning">morning</SelectItem>
                   <SelectItem value="afternoon">afternoon</SelectItem>
@@ -209,7 +202,7 @@ export function ClientPortalWorkoutsView({ readOnly }: { readOnly: boolean }) {
             <div className="grid gap-2">
               <Label>Location Type</Label>
               <Select value={locationType} onValueChange={(value) => setLocationType(value as typeof locationType)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger className="h-10 w-full"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="gym">gym</SelectItem>
                   <SelectItem value="home">home</SelectItem>
@@ -445,7 +438,6 @@ export function ClientPortalNutritionView({ readOnly }: { readOnly: boolean }) {
     await mutations.addMealItem.mutateAsync({
       performed_on: performedOn,
       meal_type: mealType,
-      timezone: diaryQuery.data?.timezone || "UTC",
       item: {
         item_name: itemName.trim() || "Quick Add",
         unit: null,
@@ -505,7 +497,7 @@ export function ClientPortalNutritionView({ readOnly }: { readOnly: boolean }) {
           <div className="rounded-md border p-3">
             <div className="grid gap-2 md:grid-cols-6">
               <Select value={mealType} onValueChange={(value) => setMealType(value as MealType)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger className="h-10 w-full"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {MEAL_TYPES.map((type) => (
                     <SelectItem key={type} value={type}>{type}</SelectItem>
@@ -630,7 +622,6 @@ export function ClientPortalNutritionView({ readOnly }: { readOnly: boolean }) {
                       .mutateAsync({
                         performed_on: performedOn,
                         meal_type: mealType,
-                        timezone: diaryQuery.data?.timezone || "UTC",
                         item: {
                           item_name: item.item_name,
                           quantity: item.quantity,
@@ -680,7 +671,6 @@ export function ClientPortalNutritionView({ readOnly }: { readOnly: boolean }) {
                       .mutateAsync({
                         performed_on: performedOn,
                         meal_type: mealType,
-                        timezone: diaryQuery.data?.timezone || "UTC",
                         item: {
                           item_name: item.item_name,
                           quantity: item.quantity,

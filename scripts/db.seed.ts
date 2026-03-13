@@ -80,8 +80,6 @@ const IDS = {
   mealFavB: "f5a19412-516f-40f8-b4af-52a25f4db8b5",
   clientA: "f260c59e-7272-49b3-9d88-0e55b374f727",
   clientB: "dad4a098-7587-4ccf-af53-923deebf2ea0",
-  coachAssignA: "e48fd9f2-738f-4f38-b35f-26d58f2d7a78",
-  coachAssignB: "00ea8ad6-4ff7-4250-a6ee-2b97afff353f",
   coachTemplateA: "970e210a-380f-45c5-8952-a1652659ca95",
   coachTemplateSessionA: "7d5ab4f3-02a7-4dfa-b93c-8f1fa2bd4ff4",
   coachTemplateSessionB: "05f58eb5-0313-4d48-98af-89fd76ef4471",
@@ -146,7 +144,6 @@ const MODULE_KEYS = [
 
 const now = new Date();
 const nowIso = now.toISOString();
-const tz = "Indian/Mauritius";
 
 function dateOffset(days: number) {
   const d = new Date(now);
@@ -321,7 +318,6 @@ async function run() {
         linked_user_id: MEMBER_USER.id,
         email: "demo.client+seed@gmail.com",
         phone: "+2300000000",
-        timezone: tz,
         status: "active",
         goals: "Improve strength and body composition",
         medical_flags: "None",
@@ -343,7 +339,6 @@ async function run() {
         linked_user_id: null,
         email: null,
         phone: "+2300000001",
-        timezone: tz,
         status: "paused",
         goals: "Return to regular training consistency",
         medical_flags: "Lower-back sensitivity",
@@ -352,35 +347,6 @@ async function run() {
         weight_kg: 69.2,
         date_of_birth: "2001-10-10",
         sex: "female",
-        created_at: nowIso,
-        updated_at: nowIso,
-      },
-    ],
-    "id"
-  );
-
-  await upsertMany(
-    "coach_client_assignments",
-    [
-      {
-        id: IDS.coachAssignA,
-        client_id: IDS.clientA,
-        coach_id: PRIMARY_USER.id,
-        role: "primary",
-        is_active: true,
-        permissions: ["profile", "goals", "plans", "checkins", "logs", "notes", "payments"],
-        created_by_user_id: PRIMARY_USER.id,
-        created_at: nowIso,
-        updated_at: nowIso,
-      },
-      {
-        id: IDS.coachAssignB,
-        client_id: IDS.clientB,
-        coach_id: PRIMARY_USER.id,
-        role: "assistant",
-        is_active: true,
-        permissions: ["profile", "logs", "notes", "payments"],
-        created_by_user_id: PRIMARY_USER.id,
         created_at: nowIso,
         updated_at: nowIso,
       },
@@ -798,7 +764,7 @@ async function run() {
       {
         id: IDS.goalA,
         user_id: PRIMARY_USER.id,
-        goal_type: "weight_loss",
+        goal_type: "weight",
         status: "active",
         priority: 1,
         target_weight: 79,
@@ -815,7 +781,7 @@ async function run() {
       {
         id: IDS.goalB,
         user_id: PRIMARY_USER.id,
-        goal_type: "weight_loss",
+        goal_type: "weight",
         status: "active",
         priority: 2,
         target_weight: 77,
@@ -923,7 +889,6 @@ async function run() {
         name: "User Nutrition Plan - Performance",
         description: "Main tracked plan",
         notes: "Primary active plan",
-        timezone: tz,
         start_date: dateOffset(-7),
         end_date: dateOffset(21),
         status: "active",
@@ -943,7 +908,6 @@ async function run() {
         name: "User Nutrition Plan - Draft Copy",
         description: "Draft variation of macros",
         notes: "Alternative setup",
-        timezone: tz,
         start_date: dateOffset(22),
         end_date: dateOffset(52),
         status: "draft",
@@ -963,7 +927,6 @@ async function run() {
         name: "Client Nutrition Plan",
         description: "Assigned intake baseline",
         notes: "Client-focused targets",
-        timezone: tz,
         start_date: dateOffset(-5),
         end_date: dateOffset(30),
         status: "active",
@@ -1061,7 +1024,6 @@ async function run() {
         subject_user_id: PRIMARY_USER.id,
         name: "User Meal Assignment",
         notes: "Snapshot for user tracking",
-        timezone: tz,
         start_date: dateOffset(-3),
         end_date: dateOffset(21),
         status: "active",
@@ -1080,7 +1042,6 @@ async function run() {
         subject_client_id: IDS.clientA,
         name: "Client Meal Assignment",
         notes: "Client nutrition assignment",
-        timezone: tz,
         start_date: dateOffset(-2),
         end_date: dateOffset(28),
         status: "active",
@@ -1146,7 +1107,6 @@ async function run() {
         created_by_user_id: PRIMARY_USER.id,
         performed_on: dateOffset(0),
         meal_type: "breakfast",
-        timezone: tz,
         notes: "Pre-workout breakfast",
         created_at: nowIso,
         updated_at: nowIso,
@@ -1157,7 +1117,6 @@ async function run() {
         created_by_user_id: PRIMARY_USER.id,
         performed_on: dateOffset(0),
         meal_type: "dinner",
-        timezone: tz,
         notes: "Evening recovery meal",
         created_at: nowIso,
         updated_at: nowIso,
@@ -1168,7 +1127,6 @@ async function run() {
         created_by_user_id: PRIMARY_USER.id,
         performed_on: dateOffset(0),
         meal_type: "lunch",
-        timezone: tz,
         notes: "Coach logged client lunch",
         created_at: nowIso,
         updated_at: nowIso,
@@ -1575,7 +1533,6 @@ async function run() {
         period_end: dateOffset(20),
         status: "paid",
         notes: "Seed payment record",
-        is_archived: false,
         created_at: nowIso,
         updated_at: nowIso,
       },
@@ -1591,7 +1548,6 @@ async function run() {
         period_end: dateOffset(28),
         status: "pending",
         notes: "Awaiting settlement",
-        is_archived: false,
         created_at: nowIso,
         updated_at: nowIso,
       },
