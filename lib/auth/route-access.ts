@@ -15,6 +15,7 @@ const AUTH_ONLY_PREFIXES = [
   "/exercises",
   "/nutrition",
   "/progress",
+  "/goals",
   "/settings",
   "/support",
   "/admin",
@@ -29,6 +30,7 @@ const USER_PREFIXES = [
   "/exercises",
   "/nutrition",
   "/progress",
+  "/goals",
   "/support",
   "/settings",
 ] as const;
@@ -54,7 +56,7 @@ export function isProtectedAppPath(pathname: string) {
 }
 
 export function canAccessPathForRole(pathname: string, context: RoleNavContext) {
-  if (isPrefixMatch(pathname, "/settings/account")) {
+  if (isPrefixMatch(pathname, "/settings/security")) {
     return true;
   }
 
@@ -132,7 +134,7 @@ const USER_WORKSPACE_SECTIONS: SidebarSectionConfig[] = [
   },
   {
     label: "Settings",
-    items: [{ title: "Goals", href: "/settings/goals", icon: "target" }],
+    items: [{ title: "Goals", href: "/goals", icon: "target" }],
   },
 ];
 
@@ -177,7 +179,7 @@ const MOBILE_TABS_DEFAULT: MobileNavTabConfig[] = [
   { key: "dashboard", label: "Home", href: "/dashboard", icon: "home" },
   { key: "progress", label: "Progress", href: "/progress", icon: "trend" },
   { key: "tickets", label: "Tickets", href: "/support", icon: "book" },
-  { key: "goals", label: "Goals", href: "/settings/goals", icon: "target" },
+  { key: "goals", label: "Goals", href: "/goals", icon: "target" },
   MOBILE_MENU_TAB,
 ];
 

@@ -158,7 +158,7 @@ export async function createDeleteAccountChallenge() {
       "account.deletion.challenge.create",
       {
         user_id: user.id,
-        page_path: "/settings/account",
+        page_path: "/settings/security",
       },
       "success"
     );
@@ -173,7 +173,7 @@ export async function createDeleteAccountChallenge() {
       "account.deletion.challenge.create",
       {
         user_id: actorUserId,
-        page_path: "/settings/account",
+        page_path: "/settings/security",
         error_message: error instanceof Error ? error.message : "unknown_error",
       },
       "error"
@@ -307,7 +307,7 @@ export async function requestSoftDeleteAccount(challengeToken: string, challenge
       AppEventName.ACCOUNT_DELETION_REQUESTED,
       {
         user_id: user.id,
-        page_path: "/settings/account",
+        page_path: "/settings/security",
         recoverable_until: toDateIso(recoverableUntil),
         reason: reason || null,
       },
@@ -322,7 +322,7 @@ export async function requestSoftDeleteAccount(challengeToken: string, challenge
       AppEventName.ACCOUNT_DELETION_REQUESTED,
       {
         user_id: actorUserId,
-        page_path: "/settings/account",
+        page_path: "/settings/security",
         reason: reason || null,
         error_message: error instanceof Error ? error.message : "unknown_error",
       },

@@ -19,9 +19,9 @@ export default function DashboardLayout({
       
       <SidebarInset>
         <header className="sticky top-0 z-40 pt-safe border-b border-border bg-background">
-          <div className="flex h-14 items-center gap-3 px-safe px-3 md:h-16 md:px-5 lg:px-6">
-            <SidebarTrigger className="hidden h-9 w-9 rounded-xl border bg-background/80 md:inline-flex" />
-            <Separator orientation="vertical" className="mr-1 hidden h-5 md:block" />
+          <div className="flex h-14 items-center gap-3 px-safe px-4 md:h-16 md:px-6 lg:px-8">
+            <SidebarTrigger className="inline-flex h-9 w-9 shrink-0 rounded-xl border bg-background/80" />
+            <Separator orientation="vertical" className="h-5 shrink-0" />
             <div className="flex flex-col">
               <span className="text-sm font-semibold leading-none tracking-tight">FitTrack.ai</span>
               <span className="text-[11px] text-muted-foreground leading-none mt-1">Performance Workspace</span>

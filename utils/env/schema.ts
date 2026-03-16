@@ -15,6 +15,8 @@ export const envSchema = z.object({
     OPENAI_AI_KEY: z.string().min(1),
 
     OPENAI_AI_URL: z.url(),
+
+    INNGEST_EVENT_KEY: z.string().min(1),
 });
 
 type Env = z.infer<typeof envSchema>;

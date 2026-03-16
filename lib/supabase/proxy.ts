@@ -1,6 +1,7 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 import { canAccessPathForRole, getRoleHomePath, isProtectedAppPath } from "@/lib/auth/route-access";
+import { rateLimit } from "@/lib/rate-limit";
 
 const redirectMap: Record<string, string> = {
   "/signin": "/login",
@@ -11,6 +12,26 @@ const redirectMap: Record<string, string> = {
 
 
 export async function updateSession(request: NextRequest) {
+  const ip =
+    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
+    request.headers.get("x-real-ip") ??
+    "unknown";
+  const pathname = request.nextUrl.pathname.toLowerCase();
+  const isAuthRoute =
+    pathname.startsWith("/api/auth") ||
+    pathname.startsWith("/client-portal/login") ||
+    pathname === "/login" ||
+    pathname === "/register";
+  const limit = isAuthRoute ? 10 : 60;
+  const windowMs = 60_000;
+  const { success } = rateLimit(`${isAuthRoute ? "auth" : "api"}:${ip}`, limit, windowMs);
+  if (!success) {
+    return new NextResponse("Too Many Requests", {
+      status: 429,
+      headers: { "Retry-After": "60" },
+    });
+  }
+
   // 1. Create an unmodified response
   let supabaseResponse = NextResponse.next({
     request,
@@ -39,7 +60,6 @@ export async function updateSession(request: NextRequest) {
   // 3. Refresh Session
   // This will call 'setAll' above if the token needs refreshing
   const { data: { user } } = await supabase.auth.getUser()
-  const pathname = request.nextUrl.pathname.toLowerCase()
   const isDeleted = Boolean(user?.user_metadata?.is_deleted)
   const isBlocked = Boolean(user?.user_metadata?.is_blocked)
   const providers = Array.isArray(user?.app_metadata?.providers)
@@ -134,11 +154,11 @@ export async function updateSession(request: NextRequest) {
 
   // Social-only accounts must set a password before accessing the app.
   if (user && !isDeleted && !isBlocked && isSocialOnly && !hasPassword) {
-    const allowedPasswordSetupPaths = ['/settings/account', '/api/auth/callback'];
+    const allowedPasswordSetupPaths = ['/settings/security', '/api/auth/callback'];
     const isAllowed = allowedPasswordSetupPaths.some((path) => request.nextUrl.pathname.startsWith(path));
     if (!isAllowed) {
       const url = request.nextUrl.clone()
-      url.pathname = '/settings/account'
+      url.pathname = '/settings/security'
       return NextResponse.redirect(url)
     }
   }

@@ -69,7 +69,7 @@ export function UserAuthForm({ className, type, ...props }: UserAuthFormProps) {
               has_password: true,
               password_configured_at: new Date().toISOString(),
             },
-            emailRedirectTo: `${window.location.origin}/api/auth/callback?intent=register&next=/settings/account`,
+            emailRedirectTo: `${window.location.origin}/api/auth/callback?intent=register&next=/settings/security`,
           },
         });
 
@@ -83,7 +83,7 @@ export function UserAuthForm({ className, type, ...props }: UserAuthFormProps) {
         }
 
         toast.success("Registration successful. Continue to account security.");
-        router.push("/settings/account");
+        router.push("/settings/security");
         router.refresh();
       } else {
         const parsed = loginSchema.parse(data);
