@@ -17,7 +17,8 @@ import {
   type ClientGoalStatus,
   type ClientGoalTrend,
 } from "@/lib/clients/dashboard";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { decodeCursor, encodeCursor } from "@/lib/utils/pagination";
+import { escapeLikePattern } from "@/lib/utils/search";
 import { createClient } from "@/lib/supabase/server";
 import { Database, Json } from "@/types/database";
 
@@ -88,7 +89,7 @@ function normalizeCoachNoteTag(tag: (typeof COACH_NOTE_TAG_INPUTS)[number]): Coa
 }
 
 const listClientsSchema = z.object({
-  page: z.number().int().min(0).default(0),
+  cursor: z.string().nullish(),
   page_size: z.number().int().min(1).max(100).default(12),
   search: z.string().trim().max(100).optional(),
   status: z.enum(["active", "paused", "blocked", "archived"]).optional(),
@@ -100,6 +101,7 @@ const listCoachPaymentsSchema = z.object({
   search: z.string().trim().max(120).optional(),
   status: z.enum(["all", "paid", "pending", "overdue"]).default("all"),
   limit: z.number().int().min(1).max(2000).default(1000),
+  cursor: z.string().nullish(),
   page: z.number().int().min(0).default(0),
   page_size: z.number().int().min(5).max(100).default(10),
   sort_by: z.enum(["payment_date", "amount", "status", "updated_at", "created_at"]).default("created_at"),
@@ -351,6 +353,10 @@ const listClientGoalsSchema = z.object({
   status: z.enum([...GOAL_STATUS_VALUES, "all"]).default("all"),
   limit: z.number().int().min(1).max(120).default(50),
 });
+const listMyGoalsSchema = z.object({
+  status: z.enum([...GOAL_STATUS_VALUES, "all"]).default("all"),
+  limit: z.number().int().min(1).max(120).default(50),
+});
 
 const createGoalSchema = z
   .object({
@@ -433,6 +439,81 @@ const deleteGoalSchema = z.object({
   goal_title: z.string().trim().max(240).optional(),
 });
 
+const createMyGoalSchema = z
+  .object({
+    goal: z.string().trim().min(1).max(240),
+    category: z.string().trim().min(1).max(120),
+    start_value: z.number().min(0).nullable().optional(),
+    current_value: z.number().min(0).nullable().optional(),
+    target_value: z.number().positive().nullable().optional(),
+    unit: z.string().trim().max(32).nullable().optional(),
+    status: z.enum(GOAL_STATUS_VALUES).default("active"),
+    start_date: z.string().date().optional(),
+    target_date: z.string().date().nullable().optional(),
+    notes: z.string().trim().max(2500).nullable().optional(),
+    priority: z.number().int().min(1).max(5).default(1),
+    start_weight: z.number().min(0).nullable().optional(),
+    current_weight: z.number().min(0).nullable().optional(),
+    target_weight: z.number().min(0).nullable().optional(),
+    goal_direction: z.enum(["increase", "decrease"]).default("increase"),
+    check_in_interval_days: z.number().int().min(1).max(365).nullable().optional(),
+  })
+  .refine(
+    (value) =>
+      (typeof value.target_value === "number" && value.target_value > 0) ||
+      (typeof value.target_weight === "number" && value.target_weight > 0),
+    "A target value or target weight is required."
+  );
+
+const updateMyGoalSchema = z
+  .object({
+    goal_id: z.string().uuid(),
+    goal: z.string().trim().min(1).max(240).optional(),
+    category: z.string().trim().min(1).max(120).optional(),
+    start_value: z.number().min(0).nullable().optional(),
+    current_value: z.number().min(0).nullable().optional(),
+    target_value: z.number().positive().nullable().optional(),
+    unit: z.string().trim().max(32).nullable().optional(),
+    status: z.enum(GOAL_STATUS_VALUES).optional(),
+    start_date: z.string().date().optional(),
+    target_date: z.string().date().nullable().optional(),
+    notes: z.string().trim().max(2500).nullable().optional(),
+    priority: z.number().int().min(1).max(5).optional(),
+    start_weight: z.number().min(0).nullable().optional(),
+    current_weight: z.number().min(0).nullable().optional(),
+    target_weight: z.number().min(0).nullable().optional(),
+    goal_direction: z.enum(["increase", "decrease"]).optional(),
+    check_in_interval_days: z.number().int().min(1).max(365).nullable().optional(),
+  })
+  .refine(
+    (value) =>
+      value.goal !== undefined ||
+      value.category !== undefined ||
+      value.start_value !== undefined ||
+      value.current_value !== undefined ||
+      value.target_value !== undefined ||
+      value.unit !== undefined ||
+      value.status !== undefined ||
+      value.start_date !== undefined ||
+      value.target_date !== undefined ||
+      value.notes !== undefined ||
+      value.priority !== undefined ||
+      value.start_weight !== undefined ||
+      value.current_weight !== undefined ||
+      value.target_weight !== undefined ||
+      value.goal_direction !== undefined ||
+      value.check_in_interval_days !== undefined,
+    "At least one field must be provided."
+  );
+const updateMyGoalStatusSchema = z.object({
+  goal_id: z.string().uuid(),
+  status: z.enum(GOAL_STATUS_VALUES),
+});
+const deleteMyGoalSchema = z.object({
+  goal_id: z.string().uuid(),
+  goal_title: z.string().trim().max(240).optional(),
+});
+
 async function requireActor() {
   const supabase = await createClient();
   const {
@@ -440,6 +521,15 @@ async function requireActor() {
   } = await supabase.auth.getUser();
   if (!user) throw new Error("Unauthorized");
   return { supabase, user };
+}
+
+function chunkArray<T>(input: T[], size = 20) {
+  if (input.length === 0) return [] as T[][];
+  const chunks: T[][] = [];
+  for (let index = 0; index < input.length; index += size) {
+    chunks.push(input.slice(index, index + size));
+  }
+  return chunks;
 }
 
 function revalidateCoachPaths(clientId?: string) {
@@ -542,6 +632,7 @@ export type CoachPaymentsDashboard = {
   };
   transactions: CoachPaymentTransactionRow[];
   transactions_total: number;
+  nextCursor: string | null;
   page: number;
   page_size: number;
   has_more: boolean;
@@ -555,6 +646,13 @@ export type ClientPaymentLogsPayload = {
   page: number;
   page_size: number;
   has_more: boolean;
+};
+
+export type CoachClientsPayload = {
+  data: ClientRosterRow[];
+  totalCount: number;
+  counts: ClientStatusCounts;
+  nextCursor: string | null;
 };
 
 export type ClientPaymentLogStats = {
@@ -644,7 +742,14 @@ function normalizeBillingTablesError(message: string) {
   return message;
 }
 
-type FallbackColumn = "notes" | "start_date" | "start_value" | "start_weight" | "goal_direction" | "check_in_interval_days";
+type FallbackColumn =
+  | "notes"
+  | "start_date"
+  | "start_value"
+  | "start_weight"
+  | "goal_direction"
+  | "check_in_interval_days"
+  | "is_personal_goal";
 
 function missingFitnessGoalsColumn(message: string): FallbackColumn | null {
   const checks: Array<[FallbackColumn, RegExp[]]> = [
@@ -654,6 +759,10 @@ function missingFitnessGoalsColumn(message: string): FallbackColumn | null {
     ["start_weight", [/['"]start_weight['"] column of ['"]fitness_goals['"] in the schema cache/i, /column\s+fitness_goals\.start_weight\s+does not exist/i]],
     ["goal_direction", [/['"]goal_direction['"] column of ['"]fitness_goals['"] in the schema cache/i, /column\s+fitness_goals\.goal_direction\s+does not exist/i]],
     ["check_in_interval_days", [/['"]check_in_interval_days['"] column of ['"]fitness_goals['"] in the schema cache/i, /column\s+fitness_goals\.check_in_interval_days\s+does not exist/i]],
+    [
+      "is_personal_goal",
+      [/['"]is_personal_goal['"] column of ['"]fitness_goals['"] in the schema cache/i, /column\s+fitness_goals\.is_personal_goal\s+does not exist/i],
+    ],
   ];
   for (const [col, patterns] of checks) {
     if (patterns.some((p) => p.test(message))) return col;
@@ -843,15 +952,58 @@ function mapGoalRowToClientItem(input: {
 
 async function resolveClientGoalSubject(
   supabase: DbClient,
-  clientId: string
+  clientId: string,
+  actorUserId?: string
 ) {
   const { data: client, error } = await supabase
     .from("clients")
-    .select("id, linked_user_id")
+    .select("id, linked_user_id, created_by_user_id, primary_coach_id")
     .eq("id", clientId)
     .maybeSingle();
   if (error) throw new Error(error.message);
   if (!client) throw new Error("Client not found.");
+
+  if (
+    !client.linked_user_id &&
+    actorUserId &&
+    (client.created_by_user_id === actorUserId || client.primary_coach_id === actorUserId)
+  ) {
+    const nextLinkedUserId = client.created_by_user_id || actorUserId;
+    const selectFields = "id, linked_user_id, created_by_user_id, primary_coach_id";
+
+    const { data: existingLinkedClient, error: existingLinkedClientError } = await supabase
+      .from("clients")
+      .select("id")
+      .eq("linked_user_id", nextLinkedUserId)
+      .neq("id", clientId)
+      .limit(1)
+      .maybeSingle();
+
+    if (existingLinkedClientError) throw new Error(existingLinkedClientError.message);
+    if (existingLinkedClient) {
+      return client;
+    }
+
+    const { data: updatedClient, error: updateError } = await supabase
+      .from("clients")
+      .update({ linked_user_id: nextLinkedUserId })
+      .eq("id", clientId)
+      .is("linked_user_id", null)
+      .select(selectFields)
+      .maybeSingle();
+
+    if (updateError) {
+      if ((updateError as { code?: string }).code === "23505") {
+        return client;
+      }
+      throw new Error(updateError.message);
+    } else if (updatedClient) {
+      return updatedClient;
+    }
+
+    return client;
+  }
+
   return client;
 }
 
@@ -863,28 +1015,29 @@ async function listGoalHistoryByGoalIds(
   if (goalIds.length === 0) return new Map<string, GoalProgressHistorySlice[]>();
 
   const selectFields = "goal_id, progress_percent, status, snapshot_at, current_value, target_value, current_weight, target_weight";
-  const query =
-    goalIds.length === 1
-      ? supabase
-          .from("goal_progress_history")
-          .select(selectFields)
-          .eq("goal_id", goalIds[0])
-          .order("snapshot_at", { ascending: false })
-          .limit(maxSnapshotsPerGoal ? Math.max(maxSnapshotsPerGoal, 1) : 200)
-      : supabase
-          .from("goal_progress_history")
-          .select(selectFields)
-          .in("goal_id", goalIds)
-          .order("snapshot_at", { ascending: false });
+  const rows: GoalProgressHistorySlice[] = [];
+  for (const chunk of chunkArray(goalIds, 20)) {
+    const orFilter = chunk.map((goalId) => `goal_id.eq.${goalId}`).join(",");
+    let query = supabase
+      .from("goal_progress_history")
+      .select(selectFields)
+      .or(orFilter)
+      .order("snapshot_at", { ascending: false });
 
-  const { data, error } = await query;
-  if (error) {
-    if (isGoalHistoryTableMissing(error.message)) return new Map<string, GoalProgressHistorySlice[]>();
-    throw new Error(error.message);
+    if (chunk.length === 1 && maxSnapshotsPerGoal) {
+      query = query.limit(Math.max(maxSnapshotsPerGoal, 1));
+    }
+
+    const { data, error } = await query;
+    if (error) {
+      if (isGoalHistoryTableMissing(error.message)) return new Map<string, GoalProgressHistorySlice[]>();
+      throw new Error(error.message);
+    }
+    rows.push(...((data || []) as GoalProgressHistorySlice[]));
   }
 
   const historyByGoal = new Map<string, GoalProgressHistorySlice[]>();
-  for (const row of (data || []) as GoalProgressHistorySlice[]) {
+  for (const row of rows) {
     const rows = historyByGoal.get(row.goal_id) || [];
     if (maxSnapshotsPerGoal && rows.length >= maxSnapshotsPerGoal) continue;
     rows.push(row);
@@ -954,61 +1107,60 @@ async function writeGoalProgressSnapshot(input: {
   }
 }
 
-export async function listCoachClientsAction(input: z.input<typeof listClientsSchema>) {
+export async function listCoachClientsAction(input: z.input<typeof listClientsSchema>): Promise<CoachClientsPayload> {
   const payload = listClientsSchema.parse(input);
   return runTrackedAction({
     eventName: "coach.clients.list",
     payload,
     action: async () => {
-      const { supabase } = await requireActor();
-      const from = payload.page * payload.page_size;
-      const to = from + payload.page_size - 1;
-      const searchFilter = payload.search
-        ? `first_name.ilike.%${payload.search}%,last_name.ilike.%${payload.search}%,display_name.ilike.%${payload.search}%,email.ilike.%${payload.search}%`
+      const { supabase, user } = await requireActor();
+      const escapedSearch = payload.search ? escapeLikePattern(payload.search) : null;
+      const searchFilter = escapedSearch
+        ? `first_name.ilike.%${escapedSearch}%,last_name.ilike.%${escapedSearch}%,display_name.ilike.%${escapedSearch}%,email.ilike.%${escapedSearch}%`
         : null;
+      const ascending = payload.sort_dir === "asc";
 
-      let query = supabase.from("clients").select("*", { count: "exact" });
+      let query = supabase
+        .from("clients")
+        .select("*", { count: "exact" })
+        .eq("primary_coach_id", user.id)
+        .limit(payload.page_size);
+
       if (payload.sort_by === "first_name") {
         query = query
-          .order("first_name", { ascending: payload.sort_dir === "asc", nullsFirst: payload.sort_dir === "asc" })
-          .order("last_name", { ascending: payload.sort_dir === "asc", nullsFirst: payload.sort_dir === "asc" });
+          .order("first_name", { ascending, nullsFirst: ascending })
+          .order("last_name", { ascending, nullsFirst: ascending });
       } else {
-        query = query.order(payload.sort_by, {
-          ascending: payload.sort_dir === "asc",
-          nullsFirst: payload.sort_dir === "asc",
-        });
+        query = query.order(payload.sort_by, { ascending, nullsFirst: ascending });
       }
+      query = query.order("id", { ascending: true });
 
       if (searchFilter) query = query.or(searchFilter);
       if (payload.status) query = query.eq("status", payload.status);
+      if (payload.cursor) {
+        const { sortValue, id } = decodeCursor(payload.cursor);
+        if (id) {
+          const comparator = ascending ? "gt" : "lt";
+          query = query.or(
+            `${payload.sort_by}.${comparator}.${sortValue},and(${payload.sort_by}.eq.${sortValue},id.gt.${id})`
+          );
+        }
+      }
+
+      const buildCountQuery = (status?: ClientStatus) => {
+        let countQuery = supabase.from("clients").select("id", { count: "exact", head: true }).eq("primary_coach_id", user.id);
+        if (status) countQuery = countQuery.eq("status", status);
+        if (searchFilter) countQuery = countQuery.or(searchFilter);
+        return countQuery;
+      };
 
       const [listRes, allCountRes, activeCountRes, pausedCountRes, blockedCountRes, archivedCountRes] = await Promise.all([
-        query.range(from, to),
-        (() => {
-          let countQuery = supabase.from("clients").select("id", { count: "exact", head: true });
-          if (searchFilter) countQuery = countQuery.or(searchFilter);
-          return countQuery;
-        })(),
-        (() => {
-          let countQuery = supabase.from("clients").select("id", { count: "exact", head: true }).eq("status", "active");
-          if (searchFilter) countQuery = countQuery.or(searchFilter);
-          return countQuery;
-        })(),
-        (() => {
-          let countQuery = supabase.from("clients").select("id", { count: "exact", head: true }).eq("status", "paused");
-          if (searchFilter) countQuery = countQuery.or(searchFilter);
-          return countQuery;
-        })(),
-        (() => {
-          let countQuery = supabase.from("clients").select("id", { count: "exact", head: true }).eq("status", "blocked");
-          if (searchFilter) countQuery = countQuery.or(searchFilter);
-          return countQuery;
-        })(),
-        (() => {
-          let countQuery = supabase.from("clients").select("id", { count: "exact", head: true }).eq("status", "archived");
-          if (searchFilter) countQuery = countQuery.or(searchFilter);
-          return countQuery;
-        })(),
+        query,
+        buildCountQuery(),
+        buildCountQuery("active"),
+        buildCountQuery("paused"),
+        buildCountQuery("blocked"),
+        buildCountQuery("archived"),
       ]);
 
       const { data, error, count } = listRes;
@@ -1031,48 +1183,52 @@ export async function listCoachClientsAction(input: z.input<typeof listClientsSc
       const clientIds = rows.map((row) => row.id);
       if (clientIds.length === 0) {
         return {
-          rows: [] as ClientRosterRow[],
-          total: count ?? 0,
+          data: [] as ClientRosterRow[],
+          totalCount: count ?? 0,
           counts,
-          page: payload.page,
-          page_size: payload.page_size,
-          has_more: false,
+          nextCursor: null,
         };
       }
 
-      const { data: assignmentsData, error: assignmentsError } = await supabase
-        .from("client_plan_assignments")
-        .select("id, client_id")
-        .in("client_id", clientIds)
-        .eq("status", "active")
-        .order("assigned_at", { ascending: false });
+      const assignmentRows: Array<Pick<AssignmentRow, "id" | "client_id">> = [];
+      for (const clientIdChunk of chunkArray(clientIds, 20)) {
+        const { data: assignmentsData, error: assignmentsError } = await supabase
+          .from("client_plan_assignments")
+          .select("id, client_id")
+          .in("client_id", clientIdChunk)
+          .eq("coach_id", user.id)
+          .eq("status", "active")
+          .order("assigned_at", { ascending: false });
+        if (assignmentsError) throw new Error(assignmentsError.message);
+        assignmentRows.push(...((assignmentsData || []) as Pick<AssignmentRow, "id" | "client_id">[]));
+      }
 
-      if (assignmentsError) throw new Error(assignmentsError.message);
-
-      const assignmentRows = (assignmentsData || []) as Pick<AssignmentRow, "id" | "client_id">[];
       const activePlansCountByClient = new Map<string, number>();
       for (const row of assignmentRows) {
         activePlansCountByClient.set(row.client_id, (activePlansCountByClient.get(row.client_id) || 0) + 1);
       }
 
-      const enriched: ClientRosterRow[] = rows.map((row) => {
-        return {
-          ...row,
-          active_assignment: null,
-          active_plans_count: activePlansCountByClient.get(row.id) || 0,
-          next_session: null,
-          today_sessions_count: 0,
-        };
-      });
+      const enriched: ClientRosterRow[] = rows.map((row) => ({
+        ...row,
+        active_assignment: null,
+        active_plans_count: activePlansCountByClient.get(row.id) || 0,
+        next_session: null,
+        today_sessions_count: 0,
+      }));
 
-      const total = count ?? 0;
+      const lastRow = enriched[enriched.length - 1];
+      const lastSortValueRaw =
+        payload.sort_by === "first_name" ? lastRow.first_name : ((lastRow as Record<string, unknown>)[payload.sort_by] ?? "");
+      const nextCursor =
+        enriched.length === payload.page_size
+          ? encodeCursor(String(lastSortValueRaw ?? ""), lastRow.id)
+          : null;
+
       return {
-        rows: enriched,
-        total,
+        data: enriched,
+        totalCount: count ?? 0,
         counts,
-        page: payload.page,
-        page_size: payload.page_size,
-        has_more: from + enriched.length < total,
+        nextCursor,
       };
     },
   });
@@ -1091,7 +1247,6 @@ export async function upsertClientAction(input: z.input<typeof upsertClientSchem
     },
     action: async () => {
       const { supabase, user } = await requireActor();
-      const admin = createAdminClient();
 
       const normalized: ClientUpdate = {
         first_name: payload.first_name,
@@ -1100,7 +1255,7 @@ export async function upsertClientAction(input: z.input<typeof upsertClientSchem
         email: payload.email || null,
         phone: payload.phone || null,
         status: payload.status,
-        linked_user_id: payload.linked_user_id || null,
+        linked_user_id: payload.linked_user_id === undefined ? undefined : payload.linked_user_id,
         goals: payload.goals || null,
         notes: payload.notes || null,
         medical_flags: payload.medical_flags || null,
@@ -1112,7 +1267,7 @@ export async function upsertClientAction(input: z.input<typeof upsertClientSchem
           await Promise.all([
             supabase
               .from("clients")
-              .select("id, primary_coach_id")
+              .select("id, primary_coach_id, created_by_user_id, linked_user_id")
               .eq("id", payload.id)
               .maybeSingle(),
             supabase
@@ -1132,10 +1287,16 @@ export async function upsertClientAction(input: z.input<typeof upsertClientSchem
           throw new Error("Forbidden");
         }
 
+        const resolvedLinkedUserId =
+          payload.linked_user_id !== undefined
+            ? payload.linked_user_id
+            : existingClient.linked_user_id ?? null;
+
         const { data, error } = await supabase
           .from("clients")
           .update({
             ...normalized,
+            linked_user_id: resolvedLinkedUserId,
             // Keep ownership immutable after creation.
             primary_coach_id: undefined,
             created_by_user_id: undefined,
@@ -1151,6 +1312,20 @@ export async function upsertClientAction(input: z.input<typeof upsertClientSchem
           .upsert({ id: user.id }, { onConflict: "id", ignoreDuplicates: true });
         if (profileEnsureError) throw new Error(profileEnsureError.message);
 
+        let resolvedLinkedUserId: string | null;
+        if (payload.linked_user_id !== undefined) {
+          resolvedLinkedUserId = payload.linked_user_id;
+        } else {
+          const { data: linkedClient, error: linkedClientError } = await supabase
+            .from("clients")
+            .select("id")
+            .eq("linked_user_id", user.id)
+            .limit(1)
+            .maybeSingle();
+          if (linkedClientError) throw new Error(linkedClientError.message);
+          resolvedLinkedUserId = linkedClient ? null : user.id;
+        }
+
         const insertPayload: ClientInsert = {
           primary_coach_id: user.id,
           created_by_user_id: user.id,
@@ -1160,7 +1335,9 @@ export async function upsertClientAction(input: z.input<typeof upsertClientSchem
           email: payload.email || null,
           phone: payload.phone || null,
           status: payload.status,
-          linked_user_id: payload.linked_user_id || null,
+          // Keep one-to-one mapping: auto-link to creator only when the creator
+          // profile is not already linked to another client.
+          linked_user_id: resolvedLinkedUserId,
           goals: payload.goals || null,
           notes: payload.notes || null,
           medical_flags: payload.medical_flags || null,
@@ -1171,25 +1348,8 @@ export async function upsertClientAction(input: z.input<typeof upsertClientSchem
           .insert(insertPayload)
           .select("*")
           .single();
-        if (!error) {
-          clientId = data.id;
-        } else {
-          const isRlsError =
-            error.code === "42501" ||
-            error.code === "PGRST116" ||
-            /row-level security/i.test(error.message);
-          if (!isRlsError) throw new Error(error.message);
-
-          // Fallback for environments where the auth DB role context is inconsistent.
-          // Ownership remains pinned to the authenticated actor.
-          const { data: adminData, error: adminError } = await admin
-            .from("clients")
-            .insert(insertPayload)
-            .select("*")
-            .single();
-          if (adminError) throw new Error(adminError.message);
-          clientId = adminData.id;
-        }
+        if (error) throw new Error(error.message);
+        clientId = data.id;
       }
 
       revalidateCoachPaths(clientId || undefined);
@@ -1273,9 +1433,8 @@ export async function listClientGoalsAction(input: z.input<typeof listClientGoal
     eventName: "coach.client.goals.list",
     payload,
     action: async () => {
-      const { supabase } = await requireActor();
-      const admin = createAdminClient();
-      const client = await resolveClientGoalSubject(supabase, payload.client_id);
+      const { supabase, user } = await requireActor();
+      const client = await resolveClientGoalSubject(supabase, payload.client_id, user.id);
 
       if (!client.linked_user_id) {
         return {
@@ -1310,14 +1469,18 @@ export async function listClientGoalsAction(input: z.input<typeof listClientGoal
       ];
 
       const runGoalsQuery = async (
-        columns: string[]
+        columns: string[],
+        withPersonalFlagFilter: boolean
       ): Promise<{ data: GoalRow[] | null; error: { message: string } | null }> => {
-        let query = (admin.from("fitness_goals") as any)
+        let query = (supabase.from("fitness_goals") as any)
           .select(columns.join(", "))
           .eq("user_id", linkedUserId)
           .order("updated_at", { ascending: false })
           .order("priority", { ascending: true })
           .limit(payload.limit);
+        if (withPersonalFlagFilter) {
+          query = query.eq("is_personal_goal", false);
+        }
         if (payload.status !== "all") {
           query = query.eq("status", payload.status);
         }
@@ -1329,12 +1492,18 @@ export async function listClientGoalsAction(input: z.input<typeof listClientGoal
       };
 
       let activeColumns = [...selectedColumns];
-      let { data, error } = await runGoalsQuery(activeColumns);
-      for (let attempt = 0; attempt < 6 && error; attempt += 1) {
+      let usePersonalFlagFilter = true;
+      let { data, error } = await runGoalsQuery(activeColumns, usePersonalFlagFilter);
+      for (let attempt = 0; attempt < 8 && error; attempt += 1) {
         const missingColumn = missingFitnessGoalsColumn(error.message);
+        if (missingColumn === "is_personal_goal" && usePersonalFlagFilter) {
+          usePersonalFlagFilter = false;
+          ({ data, error } = await runGoalsQuery(activeColumns, usePersonalFlagFilter));
+          continue;
+        }
         if (!missingColumn || !activeColumns.includes(missingColumn)) break;
         activeColumns = activeColumns.filter((column) => column !== missingColumn);
-        ({ data, error } = await runGoalsQuery(activeColumns));
+        ({ data, error } = await runGoalsQuery(activeColumns, usePersonalFlagFilter));
       }
       if (error) throw new Error(error.message);
 
@@ -1379,8 +1548,7 @@ export async function createClientGoalAction(input: z.input<typeof createGoalSch
     },
     action: async () => {
       const { supabase, user } = await requireActor();
-      const admin = createAdminClient();
-      const client = await resolveClientGoalSubject(supabase, payload.client_id);
+      const client = await resolveClientGoalSubject(supabase, payload.client_id, user.id);
       if (!client.linked_user_id) {
         throw new Error("Link this client to a user account before creating measurable goals.");
       }
@@ -1417,7 +1585,7 @@ export async function createClientGoalAction(input: z.input<typeof createGoalSch
       };
 
       let attemptedInsert: GoalInsert = { ...insertPayload };
-      let insertResult = await admin.from("fitness_goals").insert(attemptedInsert).select("*").single();
+      let insertResult = await supabase.from("fitness_goals").insert(attemptedInsert).select("*").single();
 
       for (let attempt = 0; attempt < 6 && insertResult.error; attempt += 1) {
         const missingColumn = missingFitnessGoalsColumn(insertResult.error.message);
@@ -1425,7 +1593,7 @@ export async function createClientGoalAction(input: z.input<typeof createGoalSch
         const fallbackPayload = { ...attemptedInsert } as Record<string, unknown>;
         delete fallbackPayload[missingColumn];
         attemptedInsert = fallbackPayload as GoalInsert;
-        insertResult = await admin.from("fitness_goals").insert(attemptedInsert).select("*").single();
+        insertResult = await supabase.from("fitness_goals").insert(attemptedInsert).select("*").single();
       }
 
       if (insertResult.error && isFitnessGoalStatusConstraintError(insertResult.error.message)) {
@@ -1435,18 +1603,18 @@ export async function createClientGoalAction(input: z.input<typeof createGoalSch
       }
 
       if (insertResult.error && isRlsViolationError(insertResult.error)) {
-        insertResult = await admin.from("fitness_goals").insert(attemptedInsert).select("*").single();
+        insertResult = await supabase.from("fitness_goals").insert(attemptedInsert).select("*").single();
       }
 
       if (insertResult.error) throw new Error(insertResult.error.message);
 
       const goalRow = insertResult.data as GoalRow;
       await writeGoalProgressSnapshot({
-        supabase: admin,
+        supabase,
         goal: goalRow,
         actorId: user.id,
       });
-      const historyByGoal = await listGoalHistoryByGoalIds(admin, [goalRow.id], 2);
+      const historyByGoal = await listGoalHistoryByGoalIds(supabase, [goalRow.id], 2);
 
       revalidateCoachPaths(payload.client_id);
       return mapGoalRowToClientItem({
@@ -1470,13 +1638,12 @@ export async function updateClientGoalAction(input: z.input<typeof updateGoalSch
     },
     action: async () => {
       const { supabase, user } = await requireActor();
-      const admin = createAdminClient();
-      const client = await resolveClientGoalSubject(supabase, payload.client_id);
+      const client = await resolveClientGoalSubject(supabase, payload.client_id, user.id);
       if (!client.linked_user_id) {
         throw new Error("Link this client to a user account before updating goals.");
       }
 
-      const { data: existing, error: existingError } = await admin
+      const { data: existing, error: existingError } = await supabase
         .from("fitness_goals")
         .select("*")
         .eq("id", payload.goal_id)
@@ -1521,7 +1688,7 @@ export async function updateClientGoalAction(input: z.input<typeof updateGoalSch
       let updateResult =
         Object.keys(attemptedUpdates).length === 0
           ? { data: existing as GoalRow, error: null as null | { message: string } }
-          : await admin
+          : await supabase
               .from("fitness_goals")
               .update(attemptedUpdates)
               .eq("id", payload.goal_id)
@@ -1539,7 +1706,7 @@ export async function updateClientGoalAction(input: z.input<typeof updateGoalSch
           updateResult = { data: existing as GoalRow, error: null };
           break;
         }
-        updateResult = await admin
+        updateResult = await supabase
           .from("fitness_goals")
           .update(attemptedUpdates)
           .eq("id", payload.goal_id)
@@ -1558,11 +1725,11 @@ export async function updateClientGoalAction(input: z.input<typeof updateGoalSch
 
       const goalRow = updateResult.data as GoalRow;
       await writeGoalProgressSnapshot({
-        supabase: admin,
+        supabase,
         goal: goalRow,
         actorId: user.id,
       });
-      const historyByGoal = await listGoalHistoryByGoalIds(admin, [goalRow.id], 2);
+      const historyByGoal = await listGoalHistoryByGoalIds(supabase, [goalRow.id], 2);
 
       revalidateCoachPaths(payload.client_id);
       return mapGoalRowToClientItem({
@@ -1593,14 +1760,13 @@ export async function deleteClientGoalAction(input: z.input<typeof deleteGoalSch
       goal_title: payload.goal_title || null,
     },
     action: async () => {
-      const { supabase } = await requireActor();
-      const admin = createAdminClient();
-      const client = await resolveClientGoalSubject(supabase, payload.client_id);
+      const { supabase, user } = await requireActor();
+      const client = await resolveClientGoalSubject(supabase, payload.client_id, user.id);
       if (!client.linked_user_id) {
         throw new Error("Link this client to a user account before deleting goals.");
       }
 
-      const { data: existingGoal, error: existingGoalError } = await admin
+      const { data: existingGoal, error: existingGoalError } = await supabase
         .from("fitness_goals")
         .select("id")
         .eq("id", payload.goal_id)
@@ -1609,7 +1775,7 @@ export async function deleteClientGoalAction(input: z.input<typeof deleteGoalSch
       if (existingGoalError) throw new Error(existingGoalError.message);
       if (!existingGoal) throw new Error("Goal not found.");
 
-      const { error: deleteError } = await admin
+      const { error: deleteError } = await supabase
         .from("fitness_goals")
         .delete()
         .eq("id", payload.goal_id)
@@ -1619,6 +1785,352 @@ export async function deleteClientGoalAction(input: z.input<typeof deleteGoalSch
       revalidateCoachPaths(payload.client_id);
       return {
         client_id: payload.client_id,
+        goal_id: payload.goal_id,
+      };
+    },
+  });
+}
+
+export async function listMyGoalsAction(
+  input?: z.input<typeof listMyGoalsSchema>
+): Promise<ClientGoalsPayload> {
+  const payload = listMyGoalsSchema.parse(input ?? {});
+  return runTrackedAction({
+    eventName: "goal.self.list",
+    payload,
+    action: async () => {
+      const { supabase, user } = await requireActor();
+
+      const selectedColumns = [
+        "id",
+        "user_id",
+        "goal_type",
+        "custom_description",
+        "start_value",
+        "current_value",
+        "target_value",
+        "start_weight",
+        "current_weight",
+        "target_weight",
+        "unit",
+        "status",
+        "start_date",
+        "target_date",
+        "updated_at",
+        "created_at",
+        "notes",
+        "priority",
+        "goal_direction",
+        "check_in_interval_days",
+      ];
+
+      const runGoalsQuery = async (
+        columns: string[],
+        withPersonalFlagFilter: boolean
+      ): Promise<{ data: GoalRow[] | null; error: { message: string } | null }> => {
+        let query = (supabase.from("fitness_goals") as any)
+          .select(columns.join(", "))
+          .eq("user_id", user.id)
+          .order("updated_at", { ascending: false })
+          .order("priority", { ascending: true })
+          .limit(payload.limit);
+        if (withPersonalFlagFilter) {
+          query = query.eq("is_personal_goal", true);
+        } else {
+          // Legacy fallback before is_personal_goal existed.
+          query = query.eq("assigned_by_id", user.id);
+        }
+        if (payload.status !== "all") {
+          query = query.eq("status", payload.status);
+        }
+        const { data, error } = await query;
+        return {
+          data: (data || null) as GoalRow[] | null,
+          error: error ? { message: error.message } : null,
+        };
+      };
+
+      let activeColumns = [...selectedColumns];
+      let usePersonalFlagFilter = true;
+      let { data, error } = await runGoalsQuery(activeColumns, usePersonalFlagFilter);
+      for (let attempt = 0; attempt < 8 && error; attempt += 1) {
+        const missingColumn = missingFitnessGoalsColumn(error.message);
+        if (missingColumn === "is_personal_goal" && usePersonalFlagFilter) {
+          usePersonalFlagFilter = false;
+          ({ data, error } = await runGoalsQuery(activeColumns, usePersonalFlagFilter));
+          continue;
+        }
+        if (!missingColumn || !activeColumns.includes(missingColumn)) break;
+        activeColumns = activeColumns.filter((column) => column !== missingColumn);
+        ({ data, error } = await runGoalsQuery(activeColumns, usePersonalFlagFilter));
+      }
+      if (error) throw new Error(error.message);
+
+      const goalRows = (data || []) as GoalRow[];
+      const historyByGoal = await listGoalHistoryByGoalIds(
+        supabase,
+        goalRows.map((row) => row.id),
+        2
+      );
+
+      const goals = goalRows.map((row) =>
+        mapGoalRowToClientItem({
+          row,
+          clientId: user.id,
+          historyRows: historyByGoal.get(row.id) || [],
+        })
+      );
+
+      const categories = Array.from(new Set(goalRows.map((row) => normalizeGoalCategory(row.goal_type || "custom")))).sort(
+        (a, b) => a.localeCompare(b)
+      );
+
+      return {
+        linked_user_id: user.id,
+        categories,
+        goals,
+      };
+    },
+  });
+}
+
+export async function createMyGoalAction(input: z.input<typeof createMyGoalSchema>): Promise<ClientGoalItem> {
+  const payload = createMyGoalSchema.parse(input);
+  return runTrackedAction({
+    eventName: "goal.self.create",
+    payload: {
+      goal_title: payload.goal,
+      category: normalizeGoalCategory(payload.category),
+      status: payload.status,
+      target_date: payload.target_date || null,
+    },
+    action: async () => {
+      const { supabase, user } = await requireActor();
+
+      const normalizedCategory = normalizeGoalCategory(payload.category);
+      const isWeightCategory = isWeightGoalCategory(normalizedCategory);
+      const resolvedCurrentValue =
+        payload.current_value ?? payload.start_value ?? payload.current_weight ?? payload.start_weight ?? null;
+      const resolvedStartValue = payload.start_value ?? resolvedCurrentValue;
+      const resolvedTargetValue = payload.target_value ?? payload.target_weight ?? null;
+      const resolvedCurrentWeight = isWeightCategory ? resolvedCurrentValue : payload.current_weight ?? payload.start_weight ?? null;
+      const resolvedStartWeight = isWeightCategory ? resolvedStartValue : payload.start_weight ?? resolvedCurrentWeight;
+      const resolvedTargetWeight = isWeightCategory ? resolvedTargetValue : payload.target_weight ?? null;
+
+      const insertPayload: GoalInsert = {
+        user_id: user.id,
+        assigned_by_id: user.id,
+        is_personal_goal: true,
+        goal_type: normalizedCategory,
+        custom_description: payload.goal,
+        start_value: resolvedStartValue,
+        current_value: resolvedCurrentValue,
+        target_value: resolvedTargetValue,
+        start_weight: resolvedStartWeight,
+        current_weight: resolvedCurrentWeight,
+        target_weight: resolvedTargetWeight,
+        unit: payload.unit || (isWeightCategory ? "kg" : null),
+        status: payload.status,
+        start_date: payload.start_date || new Date().toISOString().slice(0, 10),
+        target_date: payload.target_date || null,
+        notes: payload.notes || null,
+        priority: payload.priority,
+        goal_direction: payload.goal_direction,
+        check_in_interval_days: payload.check_in_interval_days ?? null,
+      };
+
+      let attemptedInsert: GoalInsert = { ...insertPayload };
+      let insertResult = await supabase.from("fitness_goals").insert(attemptedInsert).select("*").single();
+
+      for (let attempt = 0; attempt < 6 && insertResult.error; attempt += 1) {
+        const missingColumn = missingFitnessGoalsColumn(insertResult.error.message);
+        if (!missingColumn || !(missingColumn in attemptedInsert)) break;
+        const fallbackPayload = { ...attemptedInsert } as Record<string, unknown>;
+        delete fallbackPayload[missingColumn];
+        attemptedInsert = fallbackPayload as GoalInsert;
+        insertResult = await supabase.from("fitness_goals").insert(attemptedInsert).select("*").single();
+      }
+
+      if (insertResult.error && isFitnessGoalStatusConstraintError(insertResult.error.message)) {
+        throw new Error(
+          "Goal status values are not fully supported in this database. Apply the latest goal-status migration and retry."
+        );
+      }
+      if (insertResult.error) throw new Error(insertResult.error.message);
+
+      const goalRow = insertResult.data as GoalRow;
+      await writeGoalProgressSnapshot({
+        supabase,
+        goal: goalRow,
+        actorId: user.id,
+      });
+      const historyByGoal = await listGoalHistoryByGoalIds(supabase, [goalRow.id], 2);
+
+      revalidatePath("/goals");
+      revalidatePath("/clients/dashboard");
+
+      return mapGoalRowToClientItem({
+        row: goalRow,
+        clientId: user.id,
+        historyRows: historyByGoal.get(goalRow.id) || [],
+      });
+    },
+  });
+}
+
+export async function updateMyGoalAction(input: z.input<typeof updateMyGoalSchema>): Promise<ClientGoalItem> {
+  const payload = updateMyGoalSchema.parse(input);
+  return runTrackedAction({
+    eventName: "goal.self.update",
+    payload: {
+      goal_id: payload.goal_id,
+      goal_title: payload.goal || null,
+      status: payload.status || null,
+    },
+    action: async () => {
+      const { supabase, user } = await requireActor();
+
+      const { data: existing, error: existingError } = await supabase
+        .from("fitness_goals")
+        .select("*")
+        .eq("id", payload.goal_id)
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (existingError) throw new Error(existingError.message);
+      if (!existing) throw new Error("Goal not found.");
+
+      const nextCategory =
+        payload.category !== undefined
+          ? normalizeGoalCategory(payload.category)
+          : normalizeGoalCategory(existing.goal_type || "custom");
+      const shouldMirrorToWeight = isWeightGoalCategory(nextCategory);
+      const updates: GoalUpdate = {};
+      if (payload.goal !== undefined) updates.custom_description = payload.goal;
+      if (payload.category !== undefined) updates.goal_type = nextCategory;
+      if (payload.start_value !== undefined) {
+        updates.start_value = payload.start_value;
+        if (shouldMirrorToWeight && payload.start_weight === undefined) updates.start_weight = payload.start_value;
+      }
+      if (payload.current_value !== undefined) {
+        updates.current_value = payload.current_value;
+        if (shouldMirrorToWeight && payload.current_weight === undefined) updates.current_weight = payload.current_value;
+      }
+      if (payload.target_value !== undefined) {
+        updates.target_value = payload.target_value;
+        if (shouldMirrorToWeight && payload.target_weight === undefined) updates.target_weight = payload.target_value;
+      }
+      if (payload.start_weight !== undefined) updates.start_weight = payload.start_weight;
+      if (payload.current_weight !== undefined) updates.current_weight = payload.current_weight;
+      if (payload.target_weight !== undefined) updates.target_weight = payload.target_weight;
+      if (payload.category !== undefined && shouldMirrorToWeight && payload.unit === undefined && !existing.unit) {
+        updates.unit = "kg";
+      }
+      if (payload.unit !== undefined) updates.unit = payload.unit;
+      if (payload.status !== undefined) updates.status = payload.status;
+      if (payload.start_date !== undefined) updates.start_date = payload.start_date;
+      if (payload.target_date !== undefined) updates.target_date = payload.target_date;
+      if (payload.notes !== undefined) updates.notes = payload.notes;
+      if (payload.priority !== undefined) updates.priority = payload.priority;
+      if (payload.goal_direction !== undefined) updates.goal_direction = payload.goal_direction;
+      if (payload.check_in_interval_days !== undefined) updates.check_in_interval_days = payload.check_in_interval_days;
+
+      let attemptedUpdates: GoalUpdate = { ...updates };
+      let updateResult =
+        Object.keys(attemptedUpdates).length === 0
+          ? { data: existing as GoalRow, error: null as null | { message: string } }
+          : await supabase
+              .from("fitness_goals")
+              .update(attemptedUpdates)
+              .eq("id", payload.goal_id)
+              .eq("user_id", user.id)
+              .select("*")
+              .single();
+
+      for (let attempt = 0; attempt < 6 && updateResult.error; attempt += 1) {
+        const missingColumn = missingFitnessGoalsColumn(updateResult.error.message);
+        if (!missingColumn || !(missingColumn in attemptedUpdates)) break;
+        const fallbackPayload = { ...attemptedUpdates } as Record<string, unknown>;
+        delete fallbackPayload[missingColumn];
+        attemptedUpdates = fallbackPayload as GoalUpdate;
+        if (Object.keys(attemptedUpdates).length === 0) {
+          updateResult = { data: existing as GoalRow, error: null };
+          break;
+        }
+        updateResult = await supabase
+          .from("fitness_goals")
+          .update(attemptedUpdates)
+          .eq("id", payload.goal_id)
+          .eq("user_id", user.id)
+          .select("*")
+          .single();
+      }
+
+      if (updateResult.error && isFitnessGoalStatusConstraintError(updateResult.error.message) && attemptedUpdates.status) {
+        throw new Error(
+          "Goal status values are not fully supported in this database. Apply the latest goal-status migration and retry."
+        );
+      }
+      if (updateResult.error) throw new Error(updateResult.error.message);
+
+      const goalRow = updateResult.data as GoalRow;
+      await writeGoalProgressSnapshot({
+        supabase,
+        goal: goalRow,
+        actorId: user.id,
+      });
+      const historyByGoal = await listGoalHistoryByGoalIds(supabase, [goalRow.id], 2);
+
+      revalidatePath("/goals");
+      revalidatePath("/clients/dashboard");
+
+      return mapGoalRowToClientItem({
+        row: goalRow,
+        clientId: user.id,
+        historyRows: historyByGoal.get(goalRow.id) || [],
+      });
+    },
+  });
+}
+
+export async function updateMyGoalStatusAction(input: z.input<typeof updateMyGoalStatusSchema>) {
+  const payload = updateMyGoalStatusSchema.parse(input);
+  return updateMyGoalAction({
+    goal_id: payload.goal_id,
+    status: payload.status,
+  });
+}
+
+export async function deleteMyGoalAction(input: z.input<typeof deleteMyGoalSchema>) {
+  const payload = deleteMyGoalSchema.parse(input);
+  return runTrackedAction({
+    eventName: "goal.self.delete",
+    payload: {
+      goal_id: payload.goal_id,
+      goal_title: payload.goal_title || null,
+    },
+    action: async () => {
+      const { supabase, user } = await requireActor();
+
+      const { data: existingGoal, error: existingGoalError } = await supabase
+        .from("fitness_goals")
+        .select("id")
+        .eq("id", payload.goal_id)
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (existingGoalError) throw new Error(existingGoalError.message);
+      if (!existingGoal) throw new Error("Goal not found.");
+
+      const { error: deleteError } = await supabase
+        .from("fitness_goals")
+        .delete()
+        .eq("id", payload.goal_id)
+        .eq("user_id", user.id);
+      if (deleteError) throw new Error(deleteError.message);
+
+      revalidatePath("/goals");
+      revalidatePath("/clients/dashboard");
+
+      return {
         goal_id: payload.goal_id,
       };
     },
@@ -1641,15 +2153,19 @@ export async function listCoachPlanTemplatesAction() {
         return [] as Array<{ template: TemplateRow; sessions: TemplateSessionRow[] }>;
       }
 
-      const { data: sessions, error: sessionsError } = await supabase
-        .from("coach_plan_template_sessions")
-        .select("*")
-        .in("template_id", templateIds)
-        .order("sequence_no", { ascending: true });
-      if (sessionsError) throw new Error(sessionsError.message);
+      const sessions: TemplateSessionRow[] = [];
+      for (const templateIdChunk of chunkArray(templateIds, 20)) {
+        const { data: sessionsChunk, error: sessionsError } = await supabase
+          .from("coach_plan_template_sessions")
+          .select("*")
+          .in("template_id", templateIdChunk)
+          .order("sequence_no", { ascending: true });
+        if (sessionsError) throw new Error(sessionsError.message);
+        sessions.push(...((sessionsChunk || []) as TemplateSessionRow[]));
+      }
 
       const sessionMap = new Map<string, TemplateSessionRow[]>();
-      for (const row of (sessions || []) as TemplateSessionRow[]) {
+      for (const row of sessions) {
         const existing = sessionMap.get(row.template_id) || [];
         existing.push(row);
         sessionMap.set(row.template_id, existing);
@@ -1787,16 +2303,18 @@ export async function listClientAssignmentsAction(clientId: string) {
       const assignmentIds = (assignments || []).map((item) => item.id);
       const sessionsByAssignment = new Map<string, AssignmentSessionRow[]>();
       if (assignmentIds.length > 0) {
-        const { data: sessions, error: sessionsError } = await supabase
-          .from("client_plan_assignment_sessions")
-          .select("*")
-          .in("assignment_id", assignmentIds)
-          .order("sequence_no", { ascending: true });
-        if (sessionsError) throw new Error(sessionsError.message);
-        for (const row of (sessions || []) as AssignmentSessionRow[]) {
-          const existing = sessionsByAssignment.get(row.assignment_id) || [];
-          existing.push(row);
-          sessionsByAssignment.set(row.assignment_id, existing);
+        for (const assignmentIdChunk of chunkArray(assignmentIds, 20)) {
+          const { data: sessionsChunk, error: sessionsError } = await supabase
+            .from("client_plan_assignment_sessions")
+            .select("*")
+            .in("assignment_id", assignmentIdChunk)
+            .order("sequence_no", { ascending: true });
+          if (sessionsError) throw new Error(sessionsError.message);
+          for (const row of (sessionsChunk || []) as AssignmentSessionRow[]) {
+            const existing = sessionsByAssignment.get(row.assignment_id) || [];
+            existing.push(row);
+            sessionsByAssignment.set(row.assignment_id, existing);
+          }
         }
       }
 
@@ -2718,7 +3236,10 @@ export async function listClientPaymentLogsAction(
       if (payload.date_from) query = query.gte("session_date", payload.date_from);
       if (payload.date_to) query = query.lte("session_date", payload.date_to);
       if (payload.status !== "all") query = query.eq("status", payload.status);
-      if (payload.search) query = query.ilike("notes", `%${payload.search.replace(/[%_]/g, "")}%`);
+      if (payload.search) {
+        const escapedSearch = escapeLikePattern(payload.search);
+        query = query.ilike("notes", `%${escapedSearch}%`);
+      }
 
       const { data, error, count } = await query;
       if (error) {
@@ -2935,9 +3456,8 @@ export async function listCoachPaymentsDashboardAction(
       const todayIso = new Date().toISOString().slice(0, 10);
       const weekStartIso = startOfWeekIso();
       const monthStartIso = startOfMonthIso();
-      const from = payload.page * payload.page_size;
-      const to = from + payload.page_size - 1;
       const normalizedSearch = (payload.search || "").trim().toLowerCase();
+      const ascending = payload.sort_dir === "asc";
 
       const ownedClientsRes = await supabase
         .from("clients")
@@ -2970,6 +3490,7 @@ export async function listCoachPaymentsDashboardAction(
           },
           transactions: [],
           transactions_total: 0,
+          nextCursor: null,
           page: payload.page,
           page_size: payload.page_size,
           has_more: false,
@@ -2985,32 +3506,31 @@ export async function listCoachPaymentsDashboardAction(
         clientStatusById.set(row.id, row.status);
       }
 
-      let transactionClientIds = clientIds;
+      let matchedClientIds: string[] = [];
       if (normalizedSearch) {
-        const matchedClientIds = clients
+        matchedClientIds = clients
           .filter((row) => {
             const name = `${row.first_name} ${row.last_name || ""}`.trim().toLowerCase();
             return name.includes(normalizedSearch);
           })
           .map((row) => row.id);
-        if (matchedClientIds.length > 0) {
-          transactionClientIds = matchedClientIds;
-        }
       }
+      const shouldScopeTransactionsByClientIds = matchedClientIds.length > 0 && matchedClientIds.length <= 20;
 
-      const escapedSearch = (payload.search || "").trim().replace(/[%_]/g, "").slice(0, 120);
+      const escapedSearch = escapeLikePattern((payload.search || "").trim()).slice(0, 120);
       let transactionsQuery = supabase
         .from("client_payments")
         .select(
           "id, client_id, amount, currency, status, payment_date, method, notes, created_at, updated_at",
           { count: "exact" }
         )
-        .in("client_id", transactionClientIds)
-        .limit(payload.limit)
-        .order(payload.sort_by, { ascending: payload.sort_dir === "asc" });
+        .eq("coach_id", user.id)
+        .limit(payload.page_size)
+        .order(payload.sort_by, { ascending })
+        .order("id", { ascending: true });
 
-      if (payload.sort_by !== "payment_date") {
-        transactionsQuery = transactionsQuery.order("payment_date", { ascending: false });
+      if (shouldScopeTransactionsByClientIds) {
+        transactionsQuery = transactionsQuery.in("client_id", matchedClientIds);
       }
 
       if (payload.status === "overdue") {
@@ -3019,8 +3539,17 @@ export async function listCoachPaymentsDashboardAction(
         transactionsQuery = transactionsQuery.eq("status", payload.status);
       }
 
-      if (normalizedSearch && transactionClientIds.length === clientIds.length && escapedSearch) {
+      if (normalizedSearch && !shouldScopeTransactionsByClientIds && escapedSearch) {
         transactionsQuery = transactionsQuery.ilike("notes", `%${escapedSearch}%`);
+      }
+      if (payload.cursor) {
+        const { sortValue, id } = decodeCursor(payload.cursor);
+        if (id) {
+          const comparator = ascending ? "gt" : "lt";
+          transactionsQuery = transactionsQuery.or(
+            `${payload.sort_by}.${comparator}.${sortValue},and(${payload.sort_by}.eq.${sortValue},id.gt.${id})`
+          );
+        }
       }
 
       const [
@@ -3031,24 +3560,22 @@ export async function listCoachPaymentsDashboardAction(
         weekLogsCountRes,
         monthLogsCountRes,
       ] = await Promise.all([
-        transactionsQuery.range(from, to),
+        transactionsQuery,
         supabase
           .from("client_payments")
           .select("client_id, amount, status, payment_date, period_end")
-          .in("client_id", clientIds)
+          .eq("coach_id", user.id)
           .order("payment_date", { ascending: false })
           .limit(payload.limit),
         supabase
           .from("client_billing_plans")
           .select("*")
-          .in("client_id", clientIds)
           .eq("coach_id", user.id)
           .order("created_at", { ascending: false }),
         supabase
           .from("payment_logs")
           .select("*")
           .eq("coach_id", user.id)
-          .in("client_id", clientIds)
           .eq("session_date", todayIso)
           .neq("status", "voided"),
         supabase
@@ -3240,6 +3767,14 @@ export async function listCoachPaymentsDashboardAction(
 
       todaysBoard.sort((a, b) => a.client_name.localeCompare(b.client_name));
       const transactionsTotal = transactionsRes.count ?? transactions.length;
+      const lastTransaction = transactionRows[transactionRows.length - 1];
+      const lastSortValueRaw = lastTransaction
+        ? ((lastTransaction as Record<string, unknown>)[payload.sort_by] ?? "")
+        : "";
+      const nextCursor =
+        transactionRows.length === payload.page_size && lastTransaction
+          ? encodeCursor(String(lastSortValueRaw), lastTransaction.id)
+          : null;
 
       return {
         features: {
@@ -3259,9 +3794,10 @@ export async function listCoachPaymentsDashboardAction(
         },
         transactions,
         transactions_total: transactionsTotal,
+        nextCursor,
         page: payload.page,
         page_size: payload.page_size,
-        has_more: from + transactionRows.length < transactionsTotal,
+        has_more: Boolean(nextCursor),
         todays_board: todaysBoard,
         client_billing: clientBilling,
       };

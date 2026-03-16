@@ -1,5 +1,4 @@
 export type CoachClientsKeyParams = {
-  page: number;
   pageSize?: number;
   search?: string;
   status?: "active" | "paused" | "blocked" | "archived" | "all";
@@ -20,6 +19,7 @@ export type CoachPaymentsKeyParams = {
   search?: string;
   status?: "all" | "paid" | "pending" | "overdue";
   limit?: number;
+  cursor?: string | null;
   page?: number;
   pageSize?: number;
   sortBy?: "payment_date" | "amount" | "status" | "updated_at" | "created_at";
@@ -80,6 +80,9 @@ export const coachKeys = {
     clientId: string,
     status: "all" | "active" | "on_track" | "at_risk" | "completed" | "paused" | "archived" = "all"
   ) => [...coachKeys.clients(), "goals", clientId, status] as const,
+  myGoals: (
+    status: "all" | "active" | "on_track" | "at_risk" | "completed" | "paused" | "archived" = "all"
+  ) => [...coachKeys.all, "my-goals", status] as const,
   clientPayments: (clientId: string) => [...coachKeys.clients(), "payments", clientId] as const,
   billingPlan: (clientId: string) => [...coachKeys.clients(), "billing-plan", clientId] as const,
   billingPlanHistory: (clientId: string) => [...coachKeys.clients(), "billing-plan-history", clientId] as const,

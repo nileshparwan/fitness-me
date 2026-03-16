@@ -27,6 +27,12 @@ begin
   alter table public.client_payments
     drop constraint if exists client_payments_status_paid_pending_check;
 
+  -- The old default is typed as public.payment_status and cannot be auto-cast
+  -- to the new enum type during ALTER COLUMN TYPE.
+  alter table public.client_payments
+    alter column status drop default;
+
+  drop type if exists public.payment_status_new;
   create type public.payment_status_new as enum ('pending', 'paid');
 
   alter table public.client_payments

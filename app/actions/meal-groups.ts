@@ -8,6 +8,7 @@ import { nextSequentialPosition } from "@/lib/nutrition/meal-ui";
 import { mealUnitInputSchema } from "@/lib/nutrition/meal-units";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { escapeLikePattern } from "@/lib/utils/search";
 import { Database } from "@/types/database";
 
 type MealGroupRow = Database["public"]["Tables"]["meal_groups"]["Row"];
@@ -445,7 +446,7 @@ export async function listMealGroupsAction(input: z.input<typeof listMealGroupsS
 
       if (!payload.include_snapshots) query = query.eq("is_snapshot", false);
       if (payload.status !== "all") query = query.eq("status", payload.status);
-      if (payload.search) query = query.ilike("name", `%${payload.search}%`);
+      if (payload.search) query = query.ilike("name", `%${escapeLikePattern(payload.search)}%`);
 
       const { data, error, count } = await query.range(from, to);
       if (error) throw new Error(error.message);

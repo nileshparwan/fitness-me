@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { runTrackedAction } from "@/lib/events/dispatcher";
+import { escapeLikePattern } from "@/lib/utils/search";
 import { ExerciseFormValues } from "@/lib/validations/exercise";
 import { revalidatePath } from "next/cache";
 import { Database } from "@/types/database";
@@ -123,10 +124,10 @@ export async function getExercises({
         .range(pageParam * PAGE_SIZE, (pageParam + 1) * PAGE_SIZE - 1);
 
     if (search) {
-        query = query.ilike("name", `%${search}%`);
+        query = query.ilike("name", `%${escapeLikePattern(search)}%`);
     }
     if (category) {
-        query = query.ilike("category", `%${category}%`);
+        query = query.ilike("category", `%${escapeLikePattern(category)}%`);
     }
 
     const { data, error, count } = await query;

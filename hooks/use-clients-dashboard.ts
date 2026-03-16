@@ -44,8 +44,8 @@ export function useClientsDashboard(params?: CoachDashboardKeyParams) {
   return useQuery({
     queryKey: coachKeys.dashboardSnapshot(normalizedParams),
     queryFn: () => getClientsDashboardAction(normalizedParams),
-    staleTime: 20_000,
-    gcTime: 5 * 60_000,
+    staleTime: 5 * 60_000,
+    gcTime: 15 * 60_000,
     placeholderData: keepPreviousData,
     refetchOnWindowFocus: false,
   });

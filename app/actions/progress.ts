@@ -177,14 +177,23 @@ export async function getUserProfile() {
   return runTrackedAction({
     eventName: "progress.user_profile.read",
     action: async () => {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    
-    if (!user) return null;
-  
-    return {
-      birth_date: user.user_metadata.birth_date
-    };
+      const supabase = await createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) return null;
+
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("date_of_birth")
+        .eq("id", user.id)
+        .maybeSingle();
+      if (profileError) throw new Error(profileError.message);
+
+      return {
+        birth_date: profile?.date_of_birth ?? null,
+      };
     },
   });
 }

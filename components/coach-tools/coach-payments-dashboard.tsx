@@ -294,6 +294,7 @@ export function CoachPaymentsDashboard({ initialData }: { initialData?: CoachPay
 
   const [sorting, setSorting] = useState<SortingState>(DEFAULT_SORTING);
   const [pagination, setPagination] = useState<PaginationState>(DEFAULT_PAGINATION);
+  const [paymentCursorByPage, setPaymentCursorByPage] = useState<Record<number, string | null>>({ 0: null });
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(DEFAULT_VISIBILITY);
   const [tableStateHydrated, setTableStateHydrated] = useState(false);
   const [billingSearch, setBillingSearch] = useState("");
@@ -330,7 +331,7 @@ export function CoachPaymentsDashboard({ initialData }: { initialData?: CoachPay
         ...DEFAULT_VISIBILITY,
         ...parsed.columnVisibility,
       });
-      setPagination(parsed.pagination);
+      setPagination({ ...parsed.pagination, pageIndex: 0 });
     }
     setTableStateHydrated(true);
   }, []);
@@ -405,7 +406,8 @@ export function CoachPaymentsDashboard({ initialData }: { initialData?: CoachPay
       status: "all",
       search: debouncedSearch,
       limit: mode === "transactions" ? 1500 : 300,
-      page: pagination.pageIndex,
+      cursor: paymentCursorByPage[pagination.pageIndex] ?? null,
+      page: 0,
       pageSize: pagination.pageSize,
       sortBy,
       sortDir,
@@ -415,7 +417,6 @@ export function CoachPaymentsDashboard({ initialData }: { initialData?: CoachPay
     }
   );
   const clientsQuery = useCoachClients({
-    page: 0,
     pageSize: 100,
     search: "",
     status: "all",
@@ -440,11 +441,12 @@ export function CoachPaymentsDashboard({ initialData }: { initialData?: CoachPay
   }, [selectedTransaction]);
 
   const clientOptions = useMemo(() => {
-    return (clientsQuery.data?.rows || []).map((row) => ({
+    const rows = clientsQuery.data?.pages.flatMap((page) => page.data) || [];
+    return rows.map((row) => ({
       id: row.id,
       name: `${row.first_name} ${row.last_name || ""}`.trim(),
     }));
-  }, [clientsQuery.data?.rows]);
+  }, [clientsQuery.data?.pages]);
   const billingByClientId = useMemo(() => {
     const map = new Map<string, CoachPaymentsDashboardData["client_billing"][number]>();
     for (const row of paymentsQuery.data?.client_billing || []) {
@@ -462,6 +464,7 @@ export function CoachPaymentsDashboard({ initialData }: { initialData?: CoachPay
 
   const resetPage = useCallback(() => {
     setPagination((current) => ({ ...current, pageIndex: 0 }));
+    setPaymentCursorByPage({ 0: null });
   }, []);
 
   const onRecordPayment = async () => {
@@ -699,6 +702,17 @@ export function CoachPaymentsDashboard({ initialData }: { initialData?: CoachPay
 
   const canPrevious = pagination.pageIndex > 0 && !paymentsQuery.isFetching;
   const canNext = Boolean(paymentsQuery.data?.has_more) && !paymentsQuery.isFetching;
+
+  const goToNextPage = useCallback(() => {
+    const targetPage = pagination.pageIndex + 1;
+    const nextCursor = paymentsQuery.data?.nextCursor;
+    if (!nextCursor) return;
+    setPaymentCursorByPage((current) => ({
+      ...current,
+      [targetPage]: nextCursor,
+    }));
+    table.setPageIndex(targetPage);
+  }, [pagination.pageIndex, paymentsQuery.data?.nextCursor, table]);
 
   const filteredBillingRows = useMemo(() => {
     const normalizedSearch = billingSearch.trim().toLowerCase();
@@ -1172,6 +1186,7 @@ export function CoachPaymentsDashboard({ initialData }: { initialData?: CoachPay
                   onValueChange={(value) => {
                     const parsed = Number(value);
                     if (!Number.isFinite(parsed) || parsed <= 0) return;
+                    setPaymentCursorByPage({ 0: null });
                     setPagination({ pageIndex: 0, pageSize: parsed });
                   }}
                 >
@@ -1200,7 +1215,7 @@ export function CoachPaymentsDashboard({ initialData }: { initialData?: CoachPay
                   size="icon"
                   variant="outline"
                   className="h-9 w-9 rounded-xl border-border/60"
-                  onClick={() => table.setPageIndex(pagination.pageIndex + 1)}
+                  onClick={goToNextPage}
                   disabled={!canNext}
                 >
                   <ChevronRight className="h-4 w-4" />

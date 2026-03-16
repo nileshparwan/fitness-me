@@ -2,6 +2,7 @@
 
 import {
   keepPreviousData,
+  useInfiniteQuery,
   useMutation,
   useQuery,
   useQueryClient,
@@ -12,11 +13,13 @@ import {
   assignTemplateToClientAction,
   createBillingPlanAction,
   createClientGoalAction,
+  createMyGoalAction,
   createClientCheckinAction,
   createCoachNoteAction,
   createCoachPlanTemplateAction,
   deleteClientPaymentAction,
   deleteClientGoalAction,
+  deleteMyGoalAction,
   getClientBillingPlanAction,
   getClientPaymentLogStatsAction,
   getTodayLogsAction,
@@ -24,6 +27,7 @@ import {
   listClientBillingPlanHistoryAction,
   listClientPaymentLogsAction,
   listClientGoalsAction,
+  listMyGoalsAction,
   listCoachPaymentsDashboardAction,
   listClientAssignmentsAction,
   listClientCheckinsAction,
@@ -43,6 +47,8 @@ import {
   updateClientPaymentDetailsAction,
   updateClientGoalAction,
   updateClientGoalStatusAction,
+  updateMyGoalAction,
+  updateMyGoalStatusAction,
   updateClientPaymentStatusAction,
   updateClientCheckinAction,
   updateCoachNoteAction,
@@ -79,7 +85,7 @@ const GOAL_STATUS_FILTER_VALUES: GoalStatusFilter[] = [
 ];
 
 function statusFilterFromGoalQueryKey(queryKey: QueryKey): GoalStatusFilter {
-  const statusSegment = queryKey[4];
+  const statusSegment = queryKey[queryKey.length - 1];
   if (typeof statusSegment === "string" && GOAL_STATUS_FILTER_VALUES.includes(statusSegment as GoalStatusFilter)) {
     return statusSegment as GoalStatusFilter;
   }
@@ -88,21 +94,22 @@ function statusFilterFromGoalQueryKey(queryKey: QueryKey): GoalStatusFilter {
 
 export function useCoachClients(params: CoachClientsKeyParams & { enabled?: boolean }) {
   const { enabled = true, ...keyParams } = params;
-  return useQuery({
+  return useInfiniteQuery({
     queryKey: coachKeys.clientList(keyParams) as QueryKey,
-    queryFn: () =>
+    queryFn: ({ pageParam }) =>
       listCoachClientsAction({
-        page: keyParams.page,
+        cursor: (pageParam as string | null) ?? null,
         page_size: keyParams.pageSize ?? 12,
         search: keyParams.search?.trim() || undefined,
         status: keyParams.status && keyParams.status !== "all" ? keyParams.status : undefined,
         sort_by: keyParams.sortBy ?? "updated_at",
         sort_dir: keyParams.sortDir ?? "desc",
       }),
+    initialPageParam: null as string | null,
+    getNextPageParam: (lastPage) => lastPage.nextCursor,
     enabled,
     staleTime: 60_000,
     gcTime: 10 * 60_000,
-    placeholderData: keepPreviousData,
     refetchOnWindowFocus: false,
   });
 }
@@ -118,7 +125,8 @@ export function useClientDetail(
     queryFn: () => listClientDetailAction(clientId),
     initialData: options?.initialData,
     enabled: Boolean(clientId),
-    staleTime: 30_000,
+    staleTime: 60_000,
+    gcTime: 10 * 60_000,
     refetchOnWindowFocus: false,
   });
 }
@@ -127,7 +135,8 @@ export function useCoachPlanTemplates() {
   return useQuery({
     queryKey: coachKeys.templates(),
     queryFn: () => listCoachPlanTemplatesAction(),
-    staleTime: 30_000,
+    staleTime: 60_000,
+    gcTime: 10 * 60_000,
     refetchOnWindowFocus: false,
   });
 }
@@ -137,7 +146,8 @@ export function useClientAssignments(clientId: string) {
     queryKey: coachKeys.clientAssignments(clientId),
     queryFn: () => listClientAssignmentsAction(clientId),
     enabled: Boolean(clientId),
-    staleTime: 30_000,
+    staleTime: 60_000,
+    gcTime: 10 * 60_000,
     refetchOnWindowFocus: false,
   });
 }
@@ -147,7 +157,8 @@ export function useClientNextSession(clientId: string) {
     queryKey: coachKeys.clientNextSession(clientId),
     queryFn: () => getClientNextSessionAction(clientId),
     enabled: Boolean(clientId),
-    staleTime: 20_000,
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
     refetchOnWindowFocus: false,
   });
 }
@@ -157,7 +168,8 @@ export function useClientTodaySessions(clientId: string) {
     queryKey: coachKeys.clientTodaySessions(clientId),
     queryFn: () => listClientTodaySessionsAction(clientId),
     enabled: Boolean(clientId),
-    staleTime: 20_000,
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
     refetchOnWindowFocus: false,
   });
 }
@@ -172,7 +184,8 @@ export function useClientSessionsRange(clientId: string, startDate: string, endD
         end_date: endDate,
       }),
     enabled: Boolean(clientId && startDate && endDate),
-    staleTime: 20_000,
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
     refetchOnWindowFocus: false,
   });
 }
@@ -182,7 +195,8 @@ export function useClientCheckins(clientId: string) {
     queryKey: coachKeys.clientCheckins(clientId),
     queryFn: () => listClientCheckinsAction(clientId),
     enabled: Boolean(clientId),
-    staleTime: 20_000,
+    staleTime: 60_000,
+    gcTime: 10 * 60_000,
     refetchOnWindowFocus: false,
   });
 }
@@ -192,7 +206,8 @@ export function useClientNotes(clientId: string) {
     queryKey: coachKeys.clientNotes(clientId),
     queryFn: () => listClientNotesAction(clientId),
     enabled: Boolean(clientId),
-    staleTime: 20_000,
+    staleTime: 60_000,
+    gcTime: 10 * 60_000,
     refetchOnWindowFocus: false,
   });
 }
@@ -214,12 +229,28 @@ export function useClientGoals(clientId: string, status: GoalStatusFilter = "all
   });
 }
 
+export function useMyGoals(status: GoalStatusFilter = "all", limit = 80) {
+  return useQuery<ClientGoalsPayload>({
+    queryKey: coachKeys.myGoals(status),
+    queryFn: () =>
+      listMyGoalsAction({
+        status,
+        limit,
+      }),
+    staleTime: 60_000,
+    gcTime: 10 * 60_000,
+    placeholderData: keepPreviousData,
+    refetchOnWindowFocus: false,
+  });
+}
+
 export function useClientPayments(clientId: string) {
   return useQuery<{ rows: ClientPaymentRow[]; alerts: PaymentAlert[] }>({
     queryKey: coachKeys.clientPayments(clientId),
     queryFn: () => listClientPaymentsAction(clientId),
     enabled: Boolean(clientId),
-    staleTime: 20_000,
+    staleTime: 60_000,
+    gcTime: 10 * 60_000,
     refetchOnWindowFocus: false,
   });
 }
@@ -331,6 +362,7 @@ export function useCoachPaymentsDashboard(
         search: params?.search?.trim() || undefined,
         status: params?.status || "all",
         limit: params?.limit ?? 1000,
+        cursor: params?.cursor ?? null,
         page: params?.page ?? 0,
         page_size: params?.pageSize ?? 10,
         sort_by: params?.sortBy ?? "created_at",
@@ -347,9 +379,12 @@ export function useCoachPaymentsDashboard(
 export function useCoachToolMutations() {
   const queryClient = useQueryClient();
   const goalsQueryPrefix = (clientId: string): QueryKey => [...coachKeys.clients(), "goals", clientId];
+  const myGoalsQueryPrefix = (): QueryKey => [...coachKeys.all, "my-goals"];
 
   const listGoalQuerySnapshots = (clientId: string) =>
     queryClient.getQueriesData<ClientGoalsPayload>({ queryKey: goalsQueryPrefix(clientId) });
+  const listMyGoalQuerySnapshots = () =>
+    queryClient.getQueriesData<ClientGoalsPayload>({ queryKey: myGoalsQueryPrefix() });
 
   const upsertGoalCaches = (clientId: string, nextGoal: ClientGoalItem) => {
     const snapshots = listGoalQuerySnapshots(clientId);
@@ -386,6 +421,41 @@ export function useCoachToolMutations() {
     }
   };
 
+  const upsertMyGoalCaches = (nextGoal: ClientGoalItem) => {
+    const snapshots = listMyGoalQuerySnapshots();
+    for (const [queryKey, payload] of snapshots) {
+      if (!payload) continue;
+      const statusFilter = statusFilterFromGoalQueryKey(queryKey);
+      const nextCategories = payload.categories.includes(nextGoal.category)
+        ? payload.categories
+        : [...payload.categories, nextGoal.category].sort((a, b) => a.localeCompare(b));
+      const nextGoalsBase = payload.goals.filter((goal) => goal.id !== nextGoal.id);
+      const shouldIncludeGoal = statusFilter === "all" || nextGoal.status === statusFilter;
+      const nextGoals = shouldIncludeGoal ? [nextGoal, ...nextGoalsBase] : nextGoalsBase;
+      queryClient.setQueryData<ClientGoalsPayload>(queryKey, {
+        ...payload,
+        categories: nextCategories,
+        goals: nextGoals,
+      });
+    }
+  };
+
+  const removeMyGoalCaches = (goalId: string) => {
+    const snapshots = listMyGoalQuerySnapshots();
+    for (const [queryKey, payload] of snapshots) {
+      if (!payload) continue;
+      const nextGoals = payload.goals.filter((goal) => goal.id !== goalId);
+      const nextCategories = Array.from(new Set(nextGoals.map((goal) => goal.category))).sort((a, b) =>
+        a.localeCompare(b)
+      );
+      queryClient.setQueryData<ClientGoalsPayload>(queryKey, {
+        ...payload,
+        categories: nextCategories,
+        goals: nextGoals,
+      });
+    }
+  };
+
   const invalidateClient = async (clientId?: string) => {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: coachKeys.clients() }),
@@ -404,6 +474,7 @@ export function useCoachToolMutations() {
       clientId
         ? queryClient.invalidateQueries({ queryKey: [...coachKeys.clients(), "goals", clientId] })
         : Promise.resolve(),
+      queryClient.invalidateQueries({ queryKey: myGoalsQueryPrefix() }),
       clientId
         ? queryClient.invalidateQueries({ queryKey: coachKeys.clientPayments(clientId) })
         : Promise.resolve(),
@@ -727,6 +798,91 @@ export function useCoachToolMutations() {
     },
   });
 
+  const createOwnGoal = useMutation({
+    mutationFn: createMyGoalAction,
+    onSuccess: (result) => {
+      upsertMyGoalCaches(result);
+      void queryClient.invalidateQueries({ queryKey: myGoalsQueryPrefix(), refetchType: "inactive" });
+      void queryClient.invalidateQueries({ queryKey: coachKeys.dashboard(), refetchType: "inactive" });
+    },
+  });
+
+  const updateOwnGoal = useMutation({
+    mutationFn: updateMyGoalAction,
+    onSuccess: (result) => {
+      upsertMyGoalCaches(result);
+      void queryClient.invalidateQueries({ queryKey: myGoalsQueryPrefix(), refetchType: "inactive" });
+      void queryClient.invalidateQueries({ queryKey: coachKeys.dashboard(), refetchType: "inactive" });
+    },
+  });
+
+  const updateOwnGoalStatus = useMutation({
+    mutationFn: updateMyGoalStatusAction,
+    onMutate: async (payload) => {
+      await queryClient.cancelQueries({ queryKey: myGoalsQueryPrefix() });
+      const previous = listMyGoalQuerySnapshots();
+      const optimisticUpdatedAt = new Date().toISOString();
+
+      for (const [queryKey, goalPayload] of previous) {
+        if (!goalPayload) continue;
+        const statusFilter = statusFilterFromGoalQueryKey(queryKey);
+        const nextGoals = goalPayload.goals
+          .map((goal) =>
+            goal.id === payload.goal_id
+              ? {
+                  ...goal,
+                  status: payload.status,
+                  updated_at: optimisticUpdatedAt,
+                }
+              : goal
+          )
+          .filter((goal) => (statusFilter === "all" ? true : goal.status === statusFilter));
+        queryClient.setQueryData<ClientGoalsPayload>(queryKey, {
+          ...goalPayload,
+          goals: nextGoals,
+        });
+      }
+
+      return { previous };
+    },
+    onError: (_error, _payload, context) => {
+      if (!context) return;
+      for (const [queryKey, snapshot] of context.previous) {
+        queryClient.setQueryData(queryKey, snapshot);
+      }
+    },
+    onSuccess: (result) => {
+      upsertMyGoalCaches(result);
+      void queryClient.invalidateQueries({ queryKey: coachKeys.dashboard(), refetchType: "inactive" });
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: myGoalsQueryPrefix(), refetchType: "inactive" });
+    },
+  });
+
+  const deleteOwnGoal = useMutation({
+    mutationFn: deleteMyGoalAction,
+    onMutate: async (payload) => {
+      await queryClient.cancelQueries({ queryKey: myGoalsQueryPrefix() });
+      const previous = listMyGoalQuerySnapshots();
+      removeMyGoalCaches(payload.goal_id);
+      return { previous };
+    },
+    onError: (_error, _payload, context) => {
+      if (!context) return;
+      for (const [queryKey, snapshot] of context.previous) {
+        queryClient.setQueryData(queryKey, snapshot);
+      }
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: myGoalsQueryPrefix(), refetchType: "inactive" });
+      void queryClient.invalidateQueries({ queryKey: coachKeys.dashboard(), refetchType: "inactive" });
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: myGoalsQueryPrefix(), refetchType: "inactive" });
+    },
+  });
+
   return {
     upsertClient,
     removeClient,
@@ -741,6 +897,10 @@ export function useCoachToolMutations() {
     updateGoal,
     updateGoalStatus,
     deleteGoal,
+    createOwnGoal,
+    updateOwnGoal,
+    updateOwnGoalStatus,
+    deleteOwnGoal,
     recordPayment,
     deletePayment,
     updatePaymentStatus,

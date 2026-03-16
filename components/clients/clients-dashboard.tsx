@@ -622,7 +622,7 @@ export function ClientsDashboard() {
                   </Link>
                 </Button>
                 <Button asChild variant="outline" className="h-20 rounded-2xl border-border/60 bg-background/30 hover:bg-accent/35">
-                  <Link href="/settings/goals" className="flex flex-col items-center justify-center gap-2 text-sm">
+                  <Link href="/goals" className="flex flex-col items-center justify-center gap-2 text-sm">
                     <Settings className="h-4 w-4 text-chart-5" />
                     Settings
                   </Link>

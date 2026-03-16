@@ -178,7 +178,6 @@ export function ClientRoster() {
   const sortDir = primarySort ? (primarySort.desc ? "desc" : "asc") : "desc";
 
   const clientsQuery = useCoachClients({
-    page: pagination.pageIndex,
     pageSize: pagination.pageSize,
     search: debouncedSearch,
     status,
@@ -187,15 +186,17 @@ export function ClientRoster() {
   });
   const mutations = useCoachToolMutations();
 
-  const rows = useMemo(() => (clientsQuery.data?.rows || []) as ClientRowItem[], [clientsQuery.data?.rows]);
-  const counts = clientsQuery.data?.counts || {
-    all: clientsQuery.data?.total || 0,
+  const clientPages = clientsQuery.data?.pages || [];
+  const currentPage = clientPages[pagination.pageIndex];
+  const rows = useMemo(() => (currentPage?.data || []) as ClientRowItem[], [currentPage?.data]);
+  const counts = clientPages[0]?.counts || {
+    all: clientPages[0]?.totalCount || 0,
     active: 0,
     paused: 0,
     blocked: 0,
     archived: 0,
   };
-  const totalRows = clientsQuery.data?.total ?? 0;
+  const totalRows = clientPages[0]?.totalCount ?? 0;
   const totalPages = Math.max(1, Math.ceil(totalRows / Math.max(1, pagination.pageSize)));
 
   const resetPage = useCallback(() => {
@@ -415,7 +416,20 @@ export function ClientRoster() {
   });
 
   const canPrevious = pagination.pageIndex > 0 && !clientsQuery.isFetching;
-  const canNext = Boolean(clientsQuery.data?.has_more) && !clientsQuery.isFetching;
+  const canNext =
+    !clientsQuery.isFetching &&
+    (pagination.pageIndex < clientPages.length - 1 || Boolean(clientsQuery.hasNextPage));
+
+  const goToNextPage = useCallback(async () => {
+    const targetPage = pagination.pageIndex + 1;
+    if (targetPage < clientPages.length) {
+      table.setPageIndex(targetPage);
+      return;
+    }
+    if (!clientsQuery.hasNextPage || clientsQuery.isFetchingNextPage) return;
+    await clientsQuery.fetchNextPage();
+    table.setPageIndex(targetPage);
+  }, [clientPages.length, clientsQuery, pagination.pageIndex, table]);
 
   return (
     <div className="space-y-4 md:space-y-5">
@@ -637,7 +651,7 @@ export function ClientRoster() {
             size="icon"
             variant="outline"
             className="h-9 w-9 rounded-xl border-border/60"
-            onClick={() => table.setPageIndex(pagination.pageIndex + 1)}
+            onClick={() => void goToNextPage()}
             disabled={!canNext}
           >
             <ChevronRight className="h-4 w-4" />

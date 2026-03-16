@@ -1470,6 +1470,7 @@ export type Database = {
           goal_type: string
           check_in_interval_days: number | null
           id: string
+          is_personal_goal: boolean
           notes: string | null
           priority: number
           protein_target: number | null
@@ -1501,6 +1502,7 @@ export type Database = {
           goal_type: string
           check_in_interval_days?: number | null
           id?: string
+          is_personal_goal?: boolean
           notes?: string | null
           priority?: number
           protein_target?: number | null
@@ -1532,6 +1534,7 @@ export type Database = {
           goal_type?: string
           check_in_interval_days?: number | null
           id?: string
+          is_personal_goal?: boolean
           notes?: string | null
           priority?: number
           protein_target?: number | null
@@ -2556,7 +2559,12 @@ export type Database = {
         Row: {
           avatar_url: string | null
           bio: string | null
+          compact_mode: boolean
           created_at: string
+          default_calories: number | null
+          default_carbs: number | null
+          default_fat: number | null
+          default_protein: number | null
           date_of_birth: string | null
           full_name: string | null
           gender: string | null
@@ -2564,6 +2572,7 @@ export type Database = {
           id: string
           is_active: boolean
           onboarding_completed: boolean
+          phone: string | null
           preferred_units: string
           role: Database["public"]["Enums"]["user_role"]
           sport_focus: string[] | null
@@ -2572,7 +2581,12 @@ export type Database = {
         Insert: {
           avatar_url?: string | null
           bio?: string | null
+          compact_mode?: boolean
           created_at?: string
+          default_calories?: number | null
+          default_carbs?: number | null
+          default_fat?: number | null
+          default_protein?: number | null
           date_of_birth?: string | null
           full_name?: string | null
           gender?: string | null
@@ -2580,6 +2594,7 @@ export type Database = {
           id: string
           is_active?: boolean
           onboarding_completed?: boolean
+          phone?: string | null
           preferred_units?: string
           role?: Database["public"]["Enums"]["user_role"]
           sport_focus?: string[] | null
@@ -2588,7 +2603,12 @@ export type Database = {
         Update: {
           avatar_url?: string | null
           bio?: string | null
+          compact_mode?: boolean
           created_at?: string
+          default_calories?: number | null
+          default_carbs?: number | null
+          default_fat?: number | null
+          default_protein?: number | null
           date_of_birth?: string | null
           full_name?: string | null
           gender?: string | null
@@ -2596,6 +2616,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           onboarding_completed?: boolean
+          phone?: string | null
           preferred_units?: string
           role?: Database["public"]["Enums"]["user_role"]
           sport_focus?: string[] | null
@@ -3090,23 +3111,35 @@ export type Database = {
       }
     }
     Views: {
-      weekly_training_volume: {
+      coach_client_summary: {
         Row: {
-          sessions_count: number | null
-          total_sets: number | null
-          total_volume_kg: number | null
-          user_id: string | null
-          week_start: string | null
+          active_goals_count: number | null
+          at_risk_goals_count: number | null
+          checkins_last_30d: number | null
+          client_id: string | null
+          client_since: string | null
+          client_status: Database["public"]["Enums"]["client_status"] | null
+          coach_id: string | null
+          completed_goals_count: number | null
+          email: string | null
+          full_name: string | null
+          last_goal_update: string | null
+          last_note_at: string | null
+          last_payment_date: string | null
+          last_pending_payment_date: string | null
+          last_session_date: string | null
+          linked_user_id: string | null
+          mtd_revenue: number | null
+          notes_last_30d: number | null
+          pending_checkins: number | null
+          pending_payments_count: number | null
+          sessions_last_30d: number | null
+          sessions_today_count: number | null
+          sessions_today_pending_count: number | null
+          urgent_checkins: number | null
+          avatar_url: string | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "training_sessions_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
     }
     Functions: {
@@ -3129,6 +3162,14 @@ export type Database = {
       get_user_role: {
         Args: never
         Returns: Database["public"]["Enums"]["user_role"]
+      }
+      get_coach_goal_history: {
+        Args: { p_coach_id: string; p_limit?: number }
+        Returns: {
+          goal_id: string
+          progress_percent: number
+          snapshot_at: string
+        }[]
       }
       has_client_coach_access: {
         Args: { target_client_id: string }
