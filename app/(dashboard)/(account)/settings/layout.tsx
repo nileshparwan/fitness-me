@@ -1,31 +1,26 @@
-import { Metadata } from "next";
-import { SidebarNav } from "@/components/settings/sidebar-nav";
-import { Separator } from "@/components/ui/separator";
+import type { Metadata } from "next";
+
+import { SettingsTabNav } from "@/components/settings/settings-tab-nav";
 
 export const metadata: Metadata = {
   title: "Settings",
-  description: "Manage your account settings and fitness goals.",
+  description: "Manage profile, coaching defaults, display preferences, and security.",
 };
 
-interface SettingsLayoutProps {
+type SettingsLayoutProps = {
   children: React.ReactNode;
-}
+};
 
 export default function SettingsLayout({ children }: SettingsLayoutProps) {
   return (
-    <div className="page-shell section-gap pb-16 md:block">
-      <div className="space-y-0.5">
-        <h2 className="text-2xl font-bold tracking-tight">Settings</h2>
-        <p className="text-muted-foreground">
-          Manage your account settings and set your fitness preferences.
-        </p>
-      </div>
-      <Separator className="my-6" />
-      <div className="flex flex-col space-y-8 lg:flex-row lg:space-x-12 lg:space-y-0">
-        <aside className="-mx-4 lg:w-1/5 lg:mx-0"> {/* <--- FIX: added lg:mx-0 */}
-          <SidebarNav />
-        </aside>
-        <div className="flex-1 lg:max-w-2xl">{children}</div>
+    <div className="page-shell section-gap pb-16">
+      <div className="mx-auto w-full max-w-[800px] space-y-5">
+        <div className="space-y-1">
+          <h2 className="text-2xl font-bold tracking-tight">Settings</h2>
+          <p className="text-sm text-muted-foreground">Manage your account and coaching workspace preferences.</p>
+        </div>
+        <SettingsTabNav />
+        <div>{children}</div>
       </div>
     </div>
   );

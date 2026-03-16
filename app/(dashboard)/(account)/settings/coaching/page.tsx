@@ -2,10 +2,10 @@ import { Suspense } from "react";
 import { redirect } from "next/navigation";
 
 import { getSettingsProfile } from "@/app/actions/settings";
-import { ProfileSettingsForm } from "@/components/settings/profile-settings-form";
+import { CoachingSettingsForm } from "@/components/settings/coaching-settings-form";
 import { SettingsSectionSkeleton } from "@/components/settings/settings-section-skeleton";
 
-async function ProfileSettingsSection() {
+async function CoachingSettingsSection() {
   let profile;
   try {
     profile = await getSettingsProfile();
@@ -13,13 +13,13 @@ async function ProfileSettingsSection() {
     redirect("/login");
   }
 
-  return <ProfileSettingsForm profile={profile} />;
+  return <CoachingSettingsForm profile={profile} />;
 }
 
-export default function SettingsProfilePage() {
+export default function SettingsCoachingPage() {
   return (
     <Suspense fallback={<SettingsSectionSkeleton />}>
-      <ProfileSettingsSection />
+      <CoachingSettingsSection />
     </Suspense>
   );
 }

@@ -1,4 +1,5 @@
-function page() {
-  return <div className="page-shell">Select a settings section.</div>
+import { redirect } from "next/navigation";
+
+export default function SettingsRootRedirectPage() {
+  redirect("/settings/profile");
 }
-export default page

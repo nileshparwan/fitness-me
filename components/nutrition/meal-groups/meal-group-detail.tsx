@@ -15,6 +15,7 @@ import {
   useSetNutritionSelectedMealGroupId,
   useSetNutritionViewMode,
 } from "@/stores/use-nutrition-ui-store";
+import { useUnitLabels } from "@/stores/use-settings-store";
 import { AssignMealGroupDialog } from "@/components/nutrition/meal-groups/assign-meal-group-dialog";
 import { MealItemEditorDialog } from "@/components/nutrition/meal-groups/meal-item-editor-dialog";
 import {
@@ -78,6 +79,7 @@ function MacroTotalCard({ label, value, unit, accent }: { label: string; value: 
 }
 
 export function MealGroupDetail({ mealGroupId }: { mealGroupId: string }) {
+  const units = useUnitLabels();
   const detailQuery = useNutritionMealGroup(mealGroupId);
   const mutations = useNutritionGroupMutations();
   const setViewMode = useSetNutritionViewMode();
@@ -359,9 +361,9 @@ export function MealGroupDetail({ mealGroupId }: { mealGroupId: string }) {
           <div className="space-y-4">
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <MacroTotalCard label="Calories" value={dayPlan.totals.calories} accent="text-chart-1" />
-              <MacroTotalCard label="Protein" value={dayPlan.totals.protein_g} accent="text-chart-2" unit="g" />
-              <MacroTotalCard label="Carbs" value={dayPlan.totals.carbs_g} accent="text-chart-3" unit="g" />
-              <MacroTotalCard label="Fat" value={dayPlan.totals.fat_g} accent="text-chart-4" unit="g" />
+              <MacroTotalCard label="Protein" value={dayPlan.totals.protein_g} accent="text-chart-2" unit={units.macro} />
+              <MacroTotalCard label="Carbs" value={dayPlan.totals.carbs_g} accent="text-chart-3" unit={units.macro} />
+              <MacroTotalCard label="Fat" value={dayPlan.totals.fat_g} accent="text-chart-4" unit={units.macro} />
             </div>
 
             <div className="glass-subtle p-3">

@@ -1,123 +1,227 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
-import { runTrackedAction } from "@/lib/events/dispatcher";
 import { revalidatePath } from "next/cache";
-import { profileSchema, goalsSchema, ProfileFormValues, GoalsFormValues } from "@/lib/validations/settings";
-import { Database } from "@/types/database";
 
-type GoalsInsert = Database["public"]["Tables"]["fitness_goals"]["Insert"];
-type GoalsUpdate = Database["public"]["Tables"]["fitness_goals"]["Update"];
+import { runTrackedAction } from "@/lib/events/dispatcher";
+import { createClient } from "@/lib/supabase/server";
+import {
+  coachingDefaultsSchema,
+  displayPreferencesSchema,
+  profileSchema,
+  type CoachingDefaultsPayload,
+  type DisplayPreferencesPayload,
+  type ProfileFormValues,
+} from "@/lib/validations/settings";
+import type { Database } from "@/types/database";
 
-const ALLOWED_GOAL_TYPES = ["weight", "muscle_gain", "strength", "endurance"] as const;
-const ALLOWED_GOAL_STATUSES = ["active", "completed"] as const;
-type AllowedGoalType = (typeof ALLOWED_GOAL_TYPES)[number];
-type AllowedGoalStatus = (typeof ALLOWED_GOAL_STATUSES)[number];
+type ProfileInsert = Database["public"]["Tables"]["profiles"]["Insert"];
 
-const inferGoalType = (currentWeight: number, targetWeight: number): AllowedGoalType => {
-  if (targetWeight < currentWeight) return "weight";
-  if (targetWeight > currentWeight) return "muscle_gain";
-  return "strength";
+export type SettingsProfilePayload = {
+  full_name: string | null;
+  email: string | null;
+  phone: string | null;
+  bio: string | null;
+  avatar_url: string | null;
+  preferred_units: "metric" | "imperial";
+  default_calories: number | null;
+  default_protein: number | null;
+  default_carbs: number | null;
+  default_fat: number | null;
+  compact_mode: boolean;
+  has_email_identity: boolean;
 };
 
-const normalizeGoalType = (value: string | null | undefined, fallback: AllowedGoalType): AllowedGoalType => {
-  const normalized = (value || "").toLowerCase().replace(/\s+/g, "_");
-  return ALLOWED_GOAL_TYPES.includes(normalized as AllowedGoalType) ? (normalized as AllowedGoalType) : fallback;
-};
+function normalizeUnit(value: unknown): "metric" | "imperial" {
+  return value === "imperial" ? "imperial" : "metric";
+}
 
-const normalizeGoalStatus = (value: string | null | undefined): AllowedGoalStatus =>
-  ALLOWED_GOAL_STATUSES.includes((value || "") as AllowedGoalStatus) ? (value as AllowedGoalStatus) : "active";
+function toNullableText(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function toNullableInt(value: unknown): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  return Math.round(value);
+}
+
+function toBoolean(value: unknown): boolean {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") return value.toLowerCase() === "true";
+  if (typeof value === "number") return value !== 0;
+  return false;
+}
+
+async function requireSettingsActor() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    throw new Error("Unauthorized");
+  }
+
+  return { supabase, user };
+}
+
+function hasEmailIdentity(user: { identities?: Array<{ provider?: string | null }> | null }) {
+  return Boolean(
+    user.identities?.some((identity) => {
+      const provider = (identity?.provider || "").toLowerCase();
+      return provider === "email";
+    })
+  );
+}
+
+export async function getSettingsProfile(): Promise<SettingsProfilePayload> {
+  return runTrackedAction({
+    eventName: "settings.profile.read",
+    action: async () => {
+      const { supabase, user } = await requireSettingsActor();
+
+      const { data: profileData, error: profileError } = await supabase
+        .from("profiles")
+        .select("id, full_name, bio, avatar_url, preferred_units")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (profileError) throw profileError;
+
+      const metadata = user.user_metadata && typeof user.user_metadata === "object" ? user.user_metadata : {};
+
+      const fullName =
+        toNullableText(profileData?.full_name) ||
+        toNullableText((metadata as Record<string, unknown>).full_name) ||
+        toNullableText((metadata as Record<string, unknown>).display_name);
+      const bio = toNullableText(profileData?.bio) || toNullableText((metadata as Record<string, unknown>).bio);
+      const avatarUrl =
+        toNullableText(profileData?.avatar_url) || toNullableText((metadata as Record<string, unknown>).avatar_url);
+      const phone = toNullableText((metadata as Record<string, unknown>).phone);
+
+      const preferredUnits = normalizeUnit(
+        profileData?.preferred_units ?? (metadata as Record<string, unknown>).preferred_units
+      );
+
+      return {
+        full_name: fullName,
+        email: user.email ?? null,
+        phone,
+        bio,
+        avatar_url: avatarUrl,
+        preferred_units: preferredUnits,
+        default_calories: toNullableInt((metadata as Record<string, unknown>).default_calories),
+        default_protein: toNullableInt((metadata as Record<string, unknown>).default_protein),
+        default_carbs: toNullableInt((metadata as Record<string, unknown>).default_carbs),
+        default_fat: toNullableInt((metadata as Record<string, unknown>).default_fat),
+        compact_mode: toBoolean((metadata as Record<string, unknown>).compact_mode),
+        has_email_identity: hasEmailIdentity(user),
+      };
+    },
+  });
+}
 
 export async function updateProfile(data: ProfileFormValues) {
   return runTrackedAction({
     eventName: "settings.profile.update",
     action: async () => {
-      const supabase = await createClient();
-      
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Unauthorized");
-
+      const { supabase, user } = await requireSettingsActor();
       const parsed = profileSchema.parse(data);
 
-      const { error } = await supabase.auth.updateUser({
-        data: {
-          full_name: parsed.full_name,
-          username: parsed.username,
-          bio: parsed.bio,
-          avatar_url: parsed.avatar_url,
-          height: parsed.height,
-          birth_date: parsed.birth_date,
-          gender: parsed.gender,
-          activity_level: parsed.activity_level,
-          preferred_units: parsed.preferred_units,
-          updatedAt: new Date().toISOString(),
-        }
-      });
+      const profilePayload: ProfileInsert = {
+        id: user.id,
+        full_name: parsed.full_name.trim(),
+        bio: toNullableText(parsed.bio),
+        avatar_url: toNullableText(parsed.avatar_url),
+      };
 
-      if (error) throw error;
-      
+      const { error: profileError } = await supabase.from("profiles").upsert(profilePayload, { onConflict: "id" });
+      if (profileError) throw profileError;
+
+      const nextMetadata = {
+        ...(user.user_metadata && typeof user.user_metadata === "object" ? user.user_metadata : {}),
+        full_name: profilePayload.full_name,
+        bio: profilePayload.bio,
+        avatar_url: profilePayload.avatar_url,
+        phone: toNullableText(parsed.phone),
+        updatedAt: new Date().toISOString(),
+      };
+
+      const { error: metadataError } = await supabase.auth.updateUser({ data: nextMetadata });
+      if (metadataError) throw metadataError;
+
       revalidatePath("/settings/profile");
+      revalidatePath("/settings");
+
       return { success: true };
     },
   });
 }
-export async function updateGoals(data: GoalsFormValues) {
+
+export async function updateCoachingDefaults(payload: CoachingDefaultsPayload) {
   return runTrackedAction({
-    eventName: "settings.goals.update",
+    eventName: "settings.coaching.update",
     action: async () => {
-      const supabase = await createClient();
-      const { data: { user } } = await supabase.auth.getUser();
+      const { supabase, user } = await requireSettingsActor();
+      const parsed = coachingDefaultsSchema.parse(payload);
 
-      if (!user) throw new Error("Unauthorized");
-
-      const parsed = goalsSchema.parse(data);
-      const { data: existingGoalRows, error: existingGoalError } = await supabase
-        .from("fitness_goals")
-        .select("id, goal_type")
-        .eq("user_id", user.id)
-        .order("updated_at", { ascending: false })
-        .limit(1);
-      if (existingGoalError) throw existingGoalError;
-      const existingGoal = existingGoalRows?.[0] ?? null;
-
-      const inferredGoalType = inferGoalType(parsed.current_weight, parsed.target_weight);
-      const goal_type = normalizeGoalType(existingGoal?.goal_type, inferredGoalType);
-      const status = normalizeGoalStatus(parsed.status);
-
-      const payload: GoalsUpdate = {
-        goal_type,
-        target_weight: parsed.target_weight,
-        current_weight: parsed.current_weight,
-        target_body_fat_percent: parsed.target_body_fat_percent ?? null,
-        target_date: parsed.target_date ?? null,
-        custom_description: parsed.custom_description ?? null,
-        status,
-        weekly_workouts: parsed.weekly_workouts,
-        daily_calories: parsed.daily_calories,
-        protein_target: parsed.protein_target,
-        carbs_target: parsed.carbs_target,
-        fat_target: parsed.fat_target,
-        updated_at: new Date().toISOString(),
+      const profilePayload: ProfileInsert = {
+        id: user.id,
+        preferred_units: parsed.preferred_units,
       };
 
-      let error: Error | null = null;
-      if (existingGoal?.id) {
-        const updateRes = await supabase.from("fitness_goals").update(payload).eq("id", existingGoal.id);
-        error = updateRes.error;
-      } else {
-        const insertPayload: GoalsInsert = {
-          ...payload,
-          user_id: user.id,
-          goal_type,
-          status,
-        };
-        const insertRes = await supabase.from("fitness_goals").insert(insertPayload);
-        error = insertRes.error;
-      }
+      const { error: profileError } = await supabase.from("profiles").upsert(profilePayload, { onConflict: "id" });
+      if (profileError) throw profileError;
 
-      if (error) throw error;
-      revalidatePath("/settings/goals");
-      return { success: true };
+      const nextMetadata = {
+        ...(user.user_metadata && typeof user.user_metadata === "object" ? user.user_metadata : {}),
+        default_calories: parsed.default_calories ?? null,
+        default_protein: parsed.default_protein ?? null,
+        default_carbs: parsed.default_carbs ?? null,
+        default_fat: parsed.default_fat ?? null,
+        updatedAt: new Date().toISOString(),
+      };
+      const { error: metadataError } = await supabase.auth.updateUser({ data: nextMetadata });
+      if (metadataError) throw metadataError;
+
+      revalidatePath("/settings/coaching");
+      revalidatePath("/settings");
+
+      return {
+        success: true,
+        preferred_units: parsed.preferred_units,
+        default_calories: parsed.default_calories ?? null,
+        default_protein: parsed.default_protein ?? null,
+        default_carbs: parsed.default_carbs ?? null,
+        default_fat: parsed.default_fat ?? null,
+      };
+    },
+  });
+}
+
+export async function updateDisplayPreferences(payload: DisplayPreferencesPayload) {
+  return runTrackedAction({
+    eventName: "settings.display.update",
+    action: async () => {
+      const { supabase, user } = await requireSettingsActor();
+      const parsed = displayPreferencesSchema.parse(payload);
+
+      const nextMetadata = {
+        ...(user.user_metadata && typeof user.user_metadata === "object" ? user.user_metadata : {}),
+        compact_mode: parsed.compact_mode,
+        updatedAt: new Date().toISOString(),
+      };
+      const { error: metadataError } = await supabase.auth.updateUser({ data: nextMetadata });
+      if (metadataError) throw metadataError;
+
+      revalidatePath("/settings/display");
+      revalidatePath("/settings");
+
+      return {
+        success: true,
+        compact_mode: parsed.compact_mode,
+      };
     },
   });
 }

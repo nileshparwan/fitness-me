@@ -20,6 +20,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { Textarea } from "@/components/ui/textarea";
+import { useUnitLabels } from "@/stores/use-settings-store";
 import type { Database } from "@/types/database";
 
 type MealItemRow = Database["public"]["Tables"]["meal_group_items"]["Row"];
@@ -89,6 +90,7 @@ export function MealItemEditorDialog({
   onSubmit,
   defaultValue,
 }: Props) {
+  const units = useUnitLabels();
   const [type, setType] = useState<MealItemType>("breakfast");
   const [itemTitle, setItemTitle] = useState("");
   const [calories, setCalories] = useState(0);
@@ -152,26 +154,26 @@ export function MealItemEditorDialog({
             <Input value={itemTitle} onChange={(event) => setItemTitle(event.target.value)} placeholder={suggestedTitle} className="rounded-xl border-border/60 bg-muted/20" />
           </div>
 
-          <MacroSliderField label="Calories (kcal)" value={calories} max={2000} step={5} onChange={setCalories} />
-          <MacroSliderField label="Protein (g)" value={protein} max={300} step={1} onChange={setProtein} />
-          <MacroSliderField label="Carbs (g)" value={carbs} max={300} step={1} onChange={setCarbs} />
-          <MacroSliderField label="Fat (g)" value={fat} max={300} step={1} onChange={setFat} />
+          <MacroSliderField label={`Calories (${units.energy})`} value={calories} max={2000} step={5} onChange={setCalories} />
+          <MacroSliderField label={`Protein (${units.macro})`} value={protein} max={300} step={1} onChange={setProtein} />
+          <MacroSliderField label={`Carbs (${units.macro})`} value={carbs} max={300} step={1} onChange={setCarbs} />
+          <MacroSliderField label={`Fat (${units.macro})`} value={fat} max={300} step={1} onChange={setFat} />
 
           <div className="flex flex-wrap gap-2">
             <Button type="button" size="sm" variant="outline" onClick={() => setCalories((previous) => Math.min(2000, previous + 50))}>
-              +50 kcal
+              +50 {units.energy}
             </Button>
             <Button type="button" size="sm" variant="outline" onClick={() => setCalories((previous) => Math.min(2000, previous + 100))}>
-              +100 kcal
+              +100 {units.energy}
             </Button>
             <Button type="button" size="sm" variant="outline" onClick={() => setProtein((previous) => Math.min(300, previous + 10))}>
-              +10g protein
+              +10{units.macro} protein
             </Button>
             <Button type="button" size="sm" variant="outline" onClick={() => setCarbs((previous) => Math.min(300, previous + 10))}>
-              +10g carbs
+              +10{units.macro} carbs
             </Button>
             <Button type="button" size="sm" variant="outline" onClick={() => setFat((previous) => Math.min(300, previous + 5))}>
-              +5g fat
+              +5{units.macro} fat
             </Button>
           </div>
 

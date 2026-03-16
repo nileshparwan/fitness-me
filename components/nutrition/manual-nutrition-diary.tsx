@@ -52,6 +52,7 @@ import {
   useSetNutritionSelectedDate,
   useSetNutritionViewMode,
 } from "@/stores/use-nutrition-ui-store";
+import { useUnitLabels } from "@/stores/use-settings-store";
 import { getMealUnitOptions, normalizeMealUnit } from "@/lib/nutrition/meal-units";
 import type { NutritionSubject } from "@/lib/query-keys-nutrition";
 import { applyMacroQuickAction, canNavigateDate, isMealGroupSelected, mealTypeOrderRank, type MacroQuickAction } from "@/lib/nutrition/meal-ui";
@@ -250,6 +251,7 @@ export function ManualNutritionDiary({
   showAssignmentTools = false,
   clientIdForSummary,
 }: ManualNutritionDiaryProps) {
+  const units = useUnitLabels();
   const performedOn = useNutritionSelectedDate();
   const setPerformedOn = useSetNutritionSelectedDate();
   const selectedMealGroupId = useNutritionSelectedMealGroupId();
@@ -991,9 +993,9 @@ export function ManualNutritionDiary({
         <>
           <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <DailyMacroCard title="Calories" value={diaryQuery.data.totals.calories} accent="text-chart-2" />
-            <DailyMacroCard title="Protein" value={diaryQuery.data.totals.protein_g} unit="g" accent="text-chart-3" />
-            <DailyMacroCard title="Carbs" value={diaryQuery.data.totals.carbs_g} unit="g" accent="text-chart-4" />
-            <DailyMacroCard title="Fat" value={diaryQuery.data.totals.fat_g} unit="g" accent="text-chart-1" />
+            <DailyMacroCard title="Protein" value={diaryQuery.data.totals.protein_g} unit={units.macro} accent="text-chart-3" />
+            <DailyMacroCard title="Carbs" value={diaryQuery.data.totals.carbs_g} unit={units.macro} accent="text-chart-4" />
+            <DailyMacroCard title="Fat" value={diaryQuery.data.totals.fat_g} unit={units.macro} accent="text-chart-1" />
           </section>
 
           {diaryQuery.data.active_plan ? (
@@ -1015,19 +1017,19 @@ export function ManualNutritionDiary({
                   pct={diaryQuery.data.progress.calories_pct}
                 />
                 <ProgressBar
-                  label="Protein (g)"
+                  label={`Protein (${units.macro})`}
                   value={diaryQuery.data.totals.protein_g}
                   target={diaryQuery.data.active_plan.daily_protein_target_g}
                   pct={diaryQuery.data.progress.protein_pct}
                 />
                 <ProgressBar
-                  label="Carbs (g)"
+                  label={`Carbs (${units.macro})`}
                   value={diaryQuery.data.totals.carbs_g}
                   target={diaryQuery.data.active_plan.daily_carbs_target_g}
                   pct={diaryQuery.data.progress.carbs_pct}
                 />
                 <ProgressBar
-                  label="Fat (g)"
+                  label={`Fat (${units.macro})`}
                   value={diaryQuery.data.totals.fat_g}
                   target={diaryQuery.data.active_plan.daily_fat_target_g}
                   pct={diaryQuery.data.progress.fat_pct}
@@ -1384,29 +1386,37 @@ export function ManualNutritionDiary({
               </div>
             </div>
 
-            <MetricControl label="Calories" value={calories} onChange={setCalories} max={2000} step={5} accent="text-chart-1" />
+            <MetricControl
+              label="Calories"
+              value={calories}
+              onChange={setCalories}
+              max={2000}
+              step={5}
+              unit={units.energy}
+              accent="text-chart-1"
+            />
             <div className="grid gap-3 sm:grid-cols-2">
-              <MetricControl label="Protein" value={protein} onChange={setProtein} max={300} step={1} unit="g" accent="text-chart-2" />
-              <MetricControl label="Carbs" value={carbs} onChange={setCarbs} max={300} step={1} unit="g" accent="text-chart-3" />
-              <MetricControl label="Fat" value={fat} onChange={setFat} max={300} step={1} unit="g" accent="text-chart-4" />
-              <MetricControl label="Fiber" value={fiber} onChange={setFiber} max={120} step={1} unit="g" accent="text-chart-5" />
+              <MetricControl label="Protein" value={protein} onChange={setProtein} max={300} step={1} unit={units.macro} accent="text-chart-2" />
+              <MetricControl label="Carbs" value={carbs} onChange={setCarbs} max={300} step={1} unit={units.macro} accent="text-chart-3" />
+              <MetricControl label="Fat" value={fat} onChange={setFat} max={300} step={1} unit={units.macro} accent="text-chart-4" />
+              <MetricControl label="Fiber" value={fiber} onChange={setFiber} max={120} step={1} unit={units.macro} accent="text-chart-5" />
             </div>
 
             <div className="flex flex-wrap gap-2">
               <Button type="button" size="sm" variant="outline" onClick={() => applyQuickActionToItemForm("plus_50_kcal")}>
-                +50 kcal
+                +50 {units.energy}
               </Button>
               <Button type="button" size="sm" variant="outline" onClick={() => applyQuickActionToItemForm("plus_100_kcal")}>
-                +100 kcal
+                +100 {units.energy}
               </Button>
               <Button type="button" size="sm" variant="outline" onClick={() => applyQuickActionToItemForm("plus_10_protein")}>
-                +10g protein
+                +10{units.macro} protein
               </Button>
               <Button type="button" size="sm" variant="outline" onClick={() => applyQuickActionToItemForm("plus_10_carbs")}>
-                +10g carbs
+                +10{units.macro} carbs
               </Button>
               <Button type="button" size="sm" variant="outline" onClick={() => applyQuickActionToItemForm("plus_5_fat")}>
-                +5g fat
+                +5{units.macro} fat
               </Button>
             </div>
 
@@ -1468,29 +1478,37 @@ export function ManualNutritionDiary({
               </Select>
             </div>
 
-            <MetricControl label="Calories" value={quickCalories} onChange={setQuickCalories} max={2000} step={5} accent="text-chart-1" />
+            <MetricControl
+              label="Calories"
+              value={quickCalories}
+              onChange={setQuickCalories}
+              max={2000}
+              step={5}
+              unit={units.energy}
+              accent="text-chart-1"
+            />
             <div className="grid gap-3 sm:grid-cols-2">
-              <MetricControl label="Protein" value={quickProtein} onChange={setQuickProtein} max={300} step={1} unit="g" accent="text-chart-2" />
-              <MetricControl label="Carbs" value={quickCarbs} onChange={setQuickCarbs} max={300} step={1} unit="g" accent="text-chart-3" />
-              <MetricControl label="Fat" value={quickFat} onChange={setQuickFat} max={300} step={1} unit="g" accent="text-chart-4" />
-              <MetricControl label="Fiber" value={quickFiber} onChange={setQuickFiber} max={120} step={1} unit="g" accent="text-chart-5" />
+              <MetricControl label="Protein" value={quickProtein} onChange={setQuickProtein} max={300} step={1} unit={units.macro} accent="text-chart-2" />
+              <MetricControl label="Carbs" value={quickCarbs} onChange={setQuickCarbs} max={300} step={1} unit={units.macro} accent="text-chart-3" />
+              <MetricControl label="Fat" value={quickFat} onChange={setQuickFat} max={300} step={1} unit={units.macro} accent="text-chart-4" />
+              <MetricControl label="Fiber" value={quickFiber} onChange={setQuickFiber} max={120} step={1} unit={units.macro} accent="text-chart-5" />
             </div>
 
             <div className="flex flex-wrap gap-2">
               <Button type="button" size="sm" variant="outline" onClick={() => applyQuickActionToQuickAdd("plus_50_kcal")}>
-                +50 kcal
+                +50 {units.energy}
               </Button>
               <Button type="button" size="sm" variant="outline" onClick={() => applyQuickActionToQuickAdd("plus_100_kcal")}>
-                +100 kcal
+                +100 {units.energy}
               </Button>
               <Button type="button" size="sm" variant="outline" onClick={() => applyQuickActionToQuickAdd("plus_10_protein")}>
-                +10g protein
+                +10{units.macro} protein
               </Button>
               <Button type="button" size="sm" variant="outline" onClick={() => applyQuickActionToQuickAdd("plus_10_carbs")}>
-                +10g carbs
+                +10{units.macro} carbs
               </Button>
               <Button type="button" size="sm" variant="outline" onClick={() => applyQuickActionToQuickAdd("plus_5_fat")}>
-                +5g fat
+                +5{units.macro} fat
               </Button>
             </div>
           </div>

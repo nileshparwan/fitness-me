@@ -12,6 +12,7 @@ import { addMeal } from "@/app/actions/nutrition";
 import { nutritionProgramKeys } from "@/lib/query-keys-nutrition-program";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
+import { useUnitLabels } from "@/stores/use-settings-store";
 
 interface Props {
   programId: string;
@@ -20,6 +21,7 @@ interface Props {
 export function AddMealDialog({ programId }: Props) {
   const [open, setOpen] = useState(false);
   const queryClient = useQueryClient();
+  const units = useUnitLabels();
 
   async function action(formData: FormData) {
     try {
@@ -63,10 +65,10 @@ export function AddMealDialog({ programId }: Props) {
       <div className="space-y-2">
         <Label>Nutrition Stats</Label>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 bg-muted/30 p-3 rounded-lg border">
-          <div className="space-y-1"><Label className="text-xs text-muted-foreground">Calories</Label><Input name="calories" type="number" placeholder="kcal" required className="bg-background" /></div>
-          <div className="space-y-1"><Label className="text-xs text-muted-foreground">Protein (g)</Label><Input name="protein_g" type="number" className="bg-background" /></div>
-          <div className="space-y-1"><Label className="text-xs text-muted-foreground">Carbs (g)</Label><Input name="carbs_g" type="number" className="bg-background" /></div>
-          <div className="space-y-1"><Label className="text-xs text-muted-foreground">Fats (g)</Label><Input name="fats_g" type="number" className="bg-background" /></div>
+          <div className="space-y-1"><Label className="text-xs text-muted-foreground">Calories</Label><Input name="calories" type="number" placeholder={units.energy} required className="bg-background" /></div>
+          <div className="space-y-1"><Label className="text-xs text-muted-foreground">{`Protein (${units.macro})`}</Label><Input name="protein_g" type="number" className="bg-background" /></div>
+          <div className="space-y-1"><Label className="text-xs text-muted-foreground">{`Carbs (${units.macro})`}</Label><Input name="carbs_g" type="number" className="bg-background" /></div>
+          <div className="space-y-1"><Label className="text-xs text-muted-foreground">{`Fats (${units.macro})`}</Label><Input name="fats_g" type="number" className="bg-background" /></div>
         </div>
       </div>
 

@@ -36,6 +36,7 @@ import {
   useSetNutritionSelectedPlannerDay,
   useSetNutritionViewMode,
 } from "@/stores/use-nutrition-ui-store";
+import { useUnitLabels } from "@/stores/use-settings-store";
 import { applyMacroQuickAction, currentMealDay, isMealGroupSelected, type MacroQuickAction } from "@/lib/nutrition/meal-ui";
 import { cn } from "@/utils";
 
@@ -166,6 +167,7 @@ function SectionIcon({ type, className }: { type: MealItemType; className?: stri
 }
 
 export function MealPlannerPage() {
+  const units = useUnitLabels();
   const groupsQuery = useNutritionMealGroupOptions();
   const mutations = useNutritionGroupMutations();
   const selectedMealGroupId = useNutritionSelectedMealGroupId();
@@ -796,46 +798,46 @@ export function MealPlannerPage() {
                 value={itemForm.calories}
                 onChange={(next) => setItemForm((prev) => ({ ...prev, calories: next }))}
                 max={2000}
-                unit="kcal"
+                unit={units.energy}
               />
               <MetricControl
                 label="Protein"
                 value={itemForm.protein_g}
                 onChange={(next) => setItemForm((prev) => ({ ...prev, protein_g: next }))}
                 max={300}
-                unit="g"
+                unit={units.macro}
               />
               <MetricControl
                 label="Carbs"
                 value={itemForm.carbs_g}
                 onChange={(next) => setItemForm((prev) => ({ ...prev, carbs_g: next }))}
                 max={300}
-                unit="g"
+                unit={units.macro}
               />
               <MetricControl
                 label="Fat"
                 value={itemForm.fat_g}
                 onChange={(next) => setItemForm((prev) => ({ ...prev, fat_g: next }))}
                 max={300}
-                unit="g"
+                unit={units.macro}
               />
             </div>
 
             <div className="flex flex-wrap gap-2">
               <Button type="button" size="sm" variant="outline" onClick={() => applyQuickActionToItemForm("plus_50_kcal")}>
-                +50 kcal
+                +50 {units.energy}
               </Button>
               <Button type="button" size="sm" variant="outline" onClick={() => applyQuickActionToItemForm("plus_100_kcal")}>
-                +100 kcal
+                +100 {units.energy}
               </Button>
               <Button type="button" size="sm" variant="outline" onClick={() => applyQuickActionToItemForm("plus_10_protein")}>
-                +10g protein
+                +10{units.macro} protein
               </Button>
               <Button type="button" size="sm" variant="outline" onClick={() => applyQuickActionToItemForm("plus_10_carbs")}>
-                +10g carbs
+                +10{units.macro} carbs
               </Button>
               <Button type="button" size="sm" variant="outline" onClick={() => applyQuickActionToItemForm("plus_5_fat")}>
-                +5g fat
+                +5{units.macro} fat
               </Button>
             </div>
 
