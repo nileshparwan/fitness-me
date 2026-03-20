@@ -40,3 +40,14 @@ export const commentKeys = {
   lists: () => [...commentKeys.all, "list"] as const,
   list: (ticketId: string) => [...commentKeys.lists(), ticketId] as const,
 };
+
+export const notificationKeys = {
+  all: ["notifications"] as const,
+  count: () => [...notificationKeys.all, "count"] as const,
+  feed: () => [...notificationKeys.all, "feed"] as const,
+};
+
+export const ticketSubscriptionKeys = {
+  all: ["ticket-subscription"] as const,
+  detail: (ticketId: string) => [...ticketSubscriptionKeys.all, ticketId] as const,
+};

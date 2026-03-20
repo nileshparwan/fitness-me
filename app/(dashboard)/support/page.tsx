@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useDebounce } from "@/hooks/use-debounce";
-import { useRealtimeSync } from "@/hooks/use-realtime-sync";
+import { useSupportTicketsRealtimeSync } from "@/hooks/use-support-tickets-realtime-sync";
 import { prefetchTicketsPage, useTicketMutations, useTickets, type TicketSortBy } from "@/hooks/use-tickets";
 
 const STATUS_OPTIONS: TicketStatus[] = ["open", "in_progress", "resolved", "closed"];
@@ -30,7 +30,7 @@ function humanize(value: string) {
 }
 
 export default function SupportDashboardPage() {
-  useRealtimeSync();
+  useSupportTicketsRealtimeSync();
 
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<"community" | "mine">("community");
@@ -50,6 +50,7 @@ export default function SupportDashboardPage() {
   const debouncedMySearch = useDebounce(mySearch, 300);
 
   const publicQuery = useTickets({
+    enabled: activeTab === "community",
     scope: "public",
     page: publicPage,
     pageSize: 12,
@@ -61,6 +62,7 @@ export default function SupportDashboardPage() {
   });
 
   const myQuery = useTickets({
+    enabled: activeTab === "mine",
     scope: "mine",
     page: myPage,
     pageSize: 12,
@@ -73,6 +75,7 @@ export default function SupportDashboardPage() {
   const { toggleUpvote } = useTicketMutations();
 
   useEffect(() => {
+    if (activeTab !== "community") return;
     if (publicPage !== 0 || !publicQuery.data?.has_more) return;
     void prefetchTicketsPage(queryClient, {
       scope: "public",
@@ -92,9 +95,11 @@ export default function SupportDashboardPage() {
     publicStatus,
     publicCategory,
     publicSortBy,
+    activeTab,
   ]);
 
   useEffect(() => {
+    if (activeTab !== "mine") return;
     if (myPage !== 0 || !myQuery.data?.has_more) return;
     void prefetchTicketsPage(queryClient, {
       scope: "mine",
@@ -105,7 +110,7 @@ export default function SupportDashboardPage() {
       sortBy: mySortBy,
       sortOrder: "desc",
     });
-  }, [queryClient, myPage, myQuery.data?.has_more, debouncedMySearch, myStatus, mySortBy]);
+  }, [queryClient, myPage, myQuery.data?.has_more, debouncedMySearch, myStatus, mySortBy, activeTab]);
 
   const onUpvote = async (ticketId: string) => {
     try {

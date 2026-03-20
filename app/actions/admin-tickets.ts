@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { runTrackedAction } from "@/lib/events/dispatcher";
+import { inngest } from "@/lib/inngest/client";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { Database } from "@/types/database";
@@ -175,15 +176,48 @@ export async function updateTicketStatusAction(
     eventName: "admin.tickets.status.update",
     payload: { ticket_id: payload.id, status: payload.status },
     action: async () => {
-  await requireAdminUser();
+  const actorUser = await requireAdminUser();
   const admin = createAdminClient();
+
+  const { data: current, error: currentError } = await admin
+    .from("tickets")
+    .select("id, status")
+    .eq("id", payload.id)
+    .maybeSingle();
+  if (currentError) throw new Error(currentError.message);
+  if (!current) throw new Error("Ticket not found");
+
+  const fromStatus = current.status as TicketStatus;
+  const toStatus = payload.status as TicketStatus;
+  if (fromStatus === toStatus) {
+    return { success: true };
+  }
 
   const { error } = await admin
     .from("tickets")
-    .update({ status: payload.status as TicketStatus })
+    .update({ status: toStatus })
     .eq("id", payload.id);
 
   if (error) throw new Error(error.message);
+
+  const activity =
+    toStatus === "closed"
+      ? "closed"
+      : fromStatus === "closed"
+      ? "reopened"
+      : "status_changed";
+
+  void inngest.send({
+    name: "support/ticket.activity",
+    data: {
+      ticket_id: payload.id,
+      actor_user_id: actorUser.id,
+      activity,
+      from_status: fromStatus,
+      to_status: toStatus,
+      actor_is_admin: true,
+    },
+  });
 
   revalidatePath("/admin/tickets");
   revalidatePath("/support");

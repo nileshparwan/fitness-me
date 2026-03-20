@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { runTrackedAction, trackEvent } from "@/lib/events/dispatcher";
+import { inngest } from "@/lib/inngest/client";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { Database, Json } from "@/types/database";
@@ -83,7 +84,7 @@ function isMissingTicketUpvotesTableError(error: { code?: string; message?: stri
 
 function revalidateSupportPaths(ticketId?: string) {
   revalidatePath("/support");
-  revalidatePath("/support/[id]");
+  revalidatePath("/support/[id]", "page");
   if (ticketId) revalidatePath(`/support/${ticketId}`);
 }
 
@@ -183,6 +184,26 @@ export async function createTicketAction(input: z.input<typeof createTicketSchem
         throw new Error(upvoteInsertError.message);
       }
     }
+
+    const { error: subscriptionInsertError } = await admin
+      .from("ticket_subscriptions")
+      .insert({
+        ticket_id: createdTicket.id,
+        user_id: user.id,
+      });
+    if (subscriptionInsertError && subscriptionInsertError.code !== "23505") {
+      throw new Error(subscriptionInsertError.message);
+    }
+
+    void inngest.send({
+      name: "support/ticket.activity",
+      data: {
+        ticket_id: createdTicket.id,
+        actor_user_id: user.id,
+        activity: "created",
+        actor_is_admin: false,
+      },
+    });
 
     revalidateSupportPaths(createdTicket.id);
     revalidatePath("/admin/tickets");
@@ -290,7 +311,8 @@ async function listMyTicketsAction(input: z.input<typeof listSchema>): Promise<T
 
   if (!user) throw new Error("Unauthorized");
 
-  let query = supabase
+  const admin = createAdminClient();
+  let query = admin
     .from("tickets")
     .select("*", { count: "exact" })
     .eq("user_id", user.id);
@@ -468,24 +490,42 @@ export async function updateTicketContentAction(input: z.input<typeof updateTick
 
   const { data: ticket, error: ticketError } = await supabase
     .from("tickets")
-    .select("id, user_id, status")
+    .select("*")
     .eq("id", payload.ticket_id)
     .single();
   if (ticketError || !ticket) throw new Error(ticketError?.message || "Ticket not found");
   if (ticket.user_id !== user.id) throw new Error("Unauthorized");
   if (ticket.status === "closed") throw new Error("Closed tickets are read-only");
 
+  const nextTitle = payload.title.trim();
+  const nextDescription = payload.description.trim();
+  const titleChanged = nextTitle !== ticket.title;
+  const descriptionChanged = nextDescription !== ticket.description;
+  if (!titleChanged && !descriptionChanged) {
+    return ticket as TicketRow;
+  }
+
   const { data, error } = await supabase
     .from("tickets")
     .update({
-      title: payload.title.trim(),
-      description: payload.description.trim(),
+      title: nextTitle,
+      description: nextDescription,
     })
     .eq("id", payload.ticket_id)
     .select("*")
     .single();
 
   if (error) throw new Error(error.message);
+
+  void inngest.send({
+    name: "support/ticket.activity",
+    data: {
+      ticket_id: payload.ticket_id,
+      actor_user_id: user.id,
+      activity: "content_updated",
+      actor_is_admin: false,
+    },
+  });
 
   revalidateSupportPaths(payload.ticket_id);
   revalidatePath("/admin/tickets");
@@ -588,6 +628,16 @@ export async function createTicketCommentAction(input: z.input<typeof createComm
     content: payload.content.trim(),
   });
   if (error) throw new Error(error.message);
+
+  void inngest.send({
+    name: "support/ticket.activity",
+    data: {
+      ticket_id: payload.ticket_id,
+      actor_user_id: user.id,
+      activity: "comment_added",
+      actor_is_admin: viewerIsAdmin,
+    },
+  });
 
   revalidateSupportPaths(payload.ticket_id);
   return { success: true };

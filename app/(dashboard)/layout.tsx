@@ -1,31 +1,39 @@
 import { SiteFooter } from "@/components/layout/app-footer"
+import { NotificationBell } from "@/components/layout/notification-bell"
 import { AppSidebar } from "@/components/layout/app-sidebar"
 import { MobileBottomNav } from "@/components/layout/mobile-bottom-nav"
 import { Separator } from "@/components/ui/separator"
+import { createClient } from "@/lib/supabase/server"
 import {
   SidebarInset,
   SidebarProvider,
   SidebarTrigger,
 } from "@/components/ui/sidebar"
 
-export default function DashboardLayout({
+export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
   return (
     <SidebarProvider>
       <AppSidebar />
       
       <SidebarInset>
         <header className="sticky top-0 z-40 pt-safe border-b border-border bg-background">
-          <div className="flex h-14 items-center gap-3 px-safe px-4 md:h-16 md:px-6 lg:px-8">
+          <div className="flex h-14 items-center gap-3 px-4 md:h-16 md:px-4 lg:px-2">
             <SidebarTrigger className="inline-flex h-9 w-9 shrink-0 rounded-xl border bg-background/80" />
             <Separator orientation="vertical" className="h-5 shrink-0" />
             <div className="flex flex-col">
               <span className="text-sm font-semibold leading-none tracking-tight">FitTrack.ai</span>
               <span className="text-[11px] text-muted-foreground leading-none mt-1">Performance Workspace</span>
             </div>
+            <NotificationBell userId={user?.id ?? null} className="ml-auto" />
           </div>
         </header>
         

@@ -41,7 +41,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useCommentMutations, useComments } from "@/hooks/use-comments";
-import { useRealtimeSync } from "@/hooks/use-realtime-sync";
+import { useSupportTicketsRealtimeSync } from "@/hooks/use-support-tickets-realtime-sync";
+import { useTicketSubscriptionMutations, useTicketSubscriptionState } from "@/hooks/use-ticket-subscriptions";
 import { useTicketDetail, useTicketMutations } from "@/hooks/use-tickets";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -88,7 +89,7 @@ function initialsFromName(name: string) {
 export default function SupportTicketDetailPage() {
   const params = useParams<{ id: string }>();
   const ticketId = typeof params?.id === "string" ? params.id : "";
-  useRealtimeSync({ ticketId });
+  useSupportTicketsRealtimeSync({ ticketId });
   const [commentText, setCommentText] = useState("");
   const [showComposer, setShowComposer] = useState(false);
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
@@ -106,6 +107,8 @@ export default function SupportTicketDetailPage() {
   const commentsQuery = useComments(ticketId);
   const comments = commentsQuery.data || [];
   const { toggleUpvote } = useTicketMutations();
+  const subscriptionStateQuery = useTicketSubscriptionState(ticketId);
+  const subscriptionMutations = useTicketSubscriptionMutations(ticketId);
   const commentMutations = useCommentMutations(ticketId, {
     id: ticket?.viewer_user_id || "viewer",
     name: "You",
@@ -124,6 +127,18 @@ export default function SupportTicketDetailPage() {
 
   const isClosed = ticket?.status === "closed";
   const canEditTicket = Boolean(ticket && ticket.viewer_user_id === ticket.user_id && !isClosed);
+  const isReporter = Boolean(ticket && ticket.viewer_user_id === ticket.user_id);
+  const viewerIsAdmin = ticket?.viewer_is_admin ?? false;
+  const isSubscribed = subscriptionStateQuery.data?.is_subscribed ?? false;
+  const canSubscribe = subscriptionStateQuery.data?.can_subscribe ?? false;
+  const canShowSubscriptionButton =
+    Boolean(ticket) &&
+    !viewerIsAdmin &&
+    (isSubscribed || canSubscribe);
+  const subscriptionBusy =
+    subscriptionStateQuery.isLoading ||
+    subscriptionMutations.subscribe.isPending ||
+    subscriptionMutations.unsubscribe.isPending;
 
   const onUpvote = async () => {
     if (!ticket) return;
@@ -158,6 +173,22 @@ export default function SupportTicketDetailPage() {
     });
   };
 
+  const onSubscriptionClick = async () => {
+    if (!ticket) return;
+    try {
+      if (isSubscribed) {
+        if (isReporter) return;
+        await subscriptionMutations.unsubscribe.mutateAsync();
+        toast.success("Unsubscribed from ticket");
+        return;
+      }
+      await subscriptionMutations.subscribe.mutateAsync();
+      toast.success("Subscribed to ticket updates");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to update subscription");
+    }
+  };
+
   const onStartEdit = () => {
     if (!ticket) return;
     setEditTitle(ticket.title);
@@ -190,9 +221,13 @@ export default function SupportTicketDetailPage() {
   const onDeleteComment = async () => {
     if (!deleteTarget) return;
     try {
-      await commentMutations.deleteComment.mutateAsync(deleteTarget.id);
+      const result = await commentMutations.deleteComment.mutateAsync(deleteTarget.id);
       setDeleteTarget(null);
-      toast.success("Comment deleted");
+      if (result?.no_op) {
+        toast.info("Comment was already removed");
+      } else {
+        toast.success("Comment deleted");
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to delete comment");
     }
@@ -392,6 +427,19 @@ export default function SupportTicketDetailPage() {
                 </Badge>
               </div>
               <p className="text-sm text-muted-foreground">{ticket.upvotes} upvotes</p>
+              {canShowSubscriptionButton ? (
+                <Button
+                  className="w-full"
+                  variant={isSubscribed ? "secondary" : "outline"}
+                  size="sm"
+                  onClick={() => void onSubscriptionClick()}
+                  disabled={subscriptionBusy || (isSubscribed && isReporter)}
+                  title={isSubscribed && !isReporter ? "Unsubscribe" : undefined}
+                >
+                  {subscriptionBusy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  {isSubscribed ? "Subscribed" : "Subscribe"}
+                </Button>
+              ) : null}
               {ticket.is_public && !isClosed ? (
                 <Button
                   className="w-full"

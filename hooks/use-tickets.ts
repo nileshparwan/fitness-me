@@ -93,10 +93,12 @@ function updateAdminTicketStatusInList(
   }
 }
 
-export function useTickets(params: UseTicketsParams) {
-  const queryOptions = buildTicketsQueryOptions(params);
+export function useTickets(params: UseTicketsParams & { enabled?: boolean }) {
+  const { enabled = true, ...queryParams } = params;
+  const queryOptions = buildTicketsQueryOptions(queryParams);
   return useQuery({
     ...queryOptions,
+    enabled,
     placeholderData: keepPreviousData,
     refetchOnWindowFocus: false,
   });
