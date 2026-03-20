@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { runTrackedAction } from "@/lib/events/dispatcher";
+import { inngest } from "@/lib/inngest/client";
 import { revalidatePath } from "next/cache";
 import { Database } from "@/types/database";
 
@@ -80,6 +81,16 @@ export async function addExerciseToWorkout(workoutId: string, exercise: QuickExe
           console.error("Add Exercise Error:", error.message);
           throw new Error(error.message);
         }
+
+        void inngest.send({
+          name: "training/workout.completed",
+          data: {
+            workout_id: workoutId,
+            user_id: user.id,
+            subject_user_id: null,
+            subject_client_id: null,
+          },
+        });
       }
 
       revalidatePath("/workouts");

@@ -212,7 +212,13 @@ export function useClientNotes(clientId: string) {
   });
 }
 
-export function useClientGoals(clientId: string, status: GoalStatusFilter = "all", limit = 80) {
+export function useClientGoals(
+  clientId: string,
+  status: GoalStatusFilter = "all",
+  limit = 80,
+  options?: { enabled?: boolean }
+) {
+  const enabled = options?.enabled ?? Boolean(clientId);
   return useQuery<ClientGoalsPayload>({
     queryKey: coachKeys.clientGoals(clientId, status),
     queryFn: () =>
@@ -221,7 +227,7 @@ export function useClientGoals(clientId: string, status: GoalStatusFilter = "all
         status,
         limit,
       }),
-    enabled: Boolean(clientId),
+    enabled,
     staleTime: 60_000,
     gcTime: 10 * 60_000,
     placeholderData: keepPreviousData,
@@ -229,7 +235,12 @@ export function useClientGoals(clientId: string, status: GoalStatusFilter = "all
   });
 }
 
-export function useMyGoals(status: GoalStatusFilter = "all", limit = 80) {
+export function useMyGoals(
+  status: GoalStatusFilter = "all",
+  limit = 80,
+  options?: { enabled?: boolean }
+) {
+  const enabled = options?.enabled ?? true;
   return useQuery<ClientGoalsPayload>({
     queryKey: coachKeys.myGoals(status),
     queryFn: () =>
@@ -237,6 +248,7 @@ export function useMyGoals(status: GoalStatusFilter = "all", limit = 80) {
         status,
         limit,
       }),
+    enabled,
     staleTime: 60_000,
     gcTime: 10 * 60_000,
     placeholderData: keepPreviousData,

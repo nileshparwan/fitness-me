@@ -5,6 +5,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 
 import { runTrackedAction } from "@/lib/events/dispatcher";
+import { inngest } from "@/lib/inngest/client";
 import {
   computeDaysBetween,
   computeGoalProgressPercent,
@@ -377,6 +378,8 @@ const createGoalSchema = z
     target_weight: z.number().min(0).nullable().optional(),
     goal_direction: z.enum(["increase", "decrease"]).default("increase"),
     check_in_interval_days: z.number().int().min(1).max(365).nullable().optional(),
+    linked_exercise_id: z.string().uuid().nullable().optional(),
+    linked_program_id: z.string().uuid().nullable().optional(),
   })
   .refine(
     (value) =>
@@ -405,6 +408,8 @@ const updateGoalSchema = z
     target_weight: z.number().min(0).nullable().optional(),
     goal_direction: z.enum(["increase", "decrease"]).optional(),
     check_in_interval_days: z.number().int().min(1).max(365).nullable().optional(),
+    linked_exercise_id: z.string().uuid().nullable().optional(),
+    linked_program_id: z.string().uuid().nullable().optional(),
   })
   .refine(
     (value) =>
@@ -423,7 +428,9 @@ const updateGoalSchema = z
       value.current_weight !== undefined ||
       value.target_weight !== undefined ||
       value.goal_direction !== undefined ||
-      value.check_in_interval_days !== undefined,
+      value.check_in_interval_days !== undefined ||
+      value.linked_exercise_id !== undefined ||
+      value.linked_program_id !== undefined,
     "At least one field must be provided."
   );
 
@@ -457,6 +464,8 @@ const createMyGoalSchema = z
     target_weight: z.number().min(0).nullable().optional(),
     goal_direction: z.enum(["increase", "decrease"]).default("increase"),
     check_in_interval_days: z.number().int().min(1).max(365).nullable().optional(),
+    linked_exercise_id: z.string().uuid().nullable().optional(),
+    linked_program_id: z.string().uuid().nullable().optional(),
   })
   .refine(
     (value) =>
@@ -484,6 +493,8 @@ const updateMyGoalSchema = z
     target_weight: z.number().min(0).nullable().optional(),
     goal_direction: z.enum(["increase", "decrease"]).optional(),
     check_in_interval_days: z.number().int().min(1).max(365).nullable().optional(),
+    linked_exercise_id: z.string().uuid().nullable().optional(),
+    linked_program_id: z.string().uuid().nullable().optional(),
   })
   .refine(
     (value) =>
@@ -502,7 +513,9 @@ const updateMyGoalSchema = z
       value.current_weight !== undefined ||
       value.target_weight !== undefined ||
       value.goal_direction !== undefined ||
-      value.check_in_interval_days !== undefined,
+      value.check_in_interval_days !== undefined ||
+      value.linked_exercise_id !== undefined ||
+      value.linked_program_id !== undefined,
     "At least one field must be provided."
   );
 const updateMyGoalStatusSchema = z.object({
@@ -706,6 +719,10 @@ export type ClientGoalItem = {
   target_date: string | null;
   updated_at: string | null;
   notes: string | null;
+  linked_exercise_id: string | null;
+  linked_exercise_name: string | null;
+  linked_program_id: string | null;
+  linked_program_name: string | null;
 };
 
 export type ClientGoalsPayload = {
@@ -749,7 +766,9 @@ type FallbackColumn =
   | "start_weight"
   | "goal_direction"
   | "check_in_interval_days"
-  | "is_personal_goal";
+  | "is_personal_goal"
+  | "linked_exercise_id"
+  | "linked_program_id";
 
 function missingFitnessGoalsColumn(message: string): FallbackColumn | null {
   const checks: Array<[FallbackColumn, RegExp[]]> = [
@@ -759,6 +778,8 @@ function missingFitnessGoalsColumn(message: string): FallbackColumn | null {
     ["start_weight", [/['"]start_weight['"] column of ['"]fitness_goals['"] in the schema cache/i, /column\s+fitness_goals\.start_weight\s+does not exist/i]],
     ["goal_direction", [/['"]goal_direction['"] column of ['"]fitness_goals['"] in the schema cache/i, /column\s+fitness_goals\.goal_direction\s+does not exist/i]],
     ["check_in_interval_days", [/['"]check_in_interval_days['"] column of ['"]fitness_goals['"] in the schema cache/i, /column\s+fitness_goals\.check_in_interval_days\s+does not exist/i]],
+    ["linked_exercise_id", [/['"]linked_exercise_id['"] column of ['"]fitness_goals['"] in the schema cache/i, /column\s+fitness_goals\.linked_exercise_id\s+does not exist/i]],
+    ["linked_program_id", [/['"]linked_program_id['"] column of ['"]fitness_goals['"] in the schema cache/i, /column\s+fitness_goals\.linked_program_id\s+does not exist/i]],
     [
       "is_personal_goal",
       [/['"]is_personal_goal['"] column of ['"]fitness_goals['"] in the schema cache/i, /column\s+fitness_goals\.is_personal_goal\s+does not exist/i],
@@ -890,10 +911,53 @@ function computeExceededDays(targetDate: string | null, progressPercent: number)
   return Math.ceil(diff / (1000 * 60 * 60 * 24));
 }
 
+type GoalLinkNameMaps = {
+  exerciseNamesById: Map<string, string>;
+  programNamesById: Map<string, string>;
+};
+
+async function listGoalLinkNamesById(supabase: DbClient, rows: GoalRow[]): Promise<GoalLinkNameMaps> {
+  const exerciseNamesById = new Map<string, string>();
+  const programNamesById = new Map<string, string>();
+
+  const exerciseIds = Array.from(
+    new Set(rows.map((row) => row.linked_exercise_id).filter((value): value is string => Boolean(value)))
+  );
+  const programIds = Array.from(
+    new Set(rows.map((row) => row.linked_program_id).filter((value): value is string => Boolean(value)))
+  );
+
+  for (const chunk of chunkArray(exerciseIds, 20)) {
+    const { data, error } = await supabase
+      .from("exercise_catalog")
+      .select("id, name")
+      .in("id", chunk);
+    if (error) throw new Error(error.message);
+    for (const row of data || []) {
+      exerciseNamesById.set(row.id, row.name);
+    }
+  }
+
+  for (const chunk of chunkArray(programIds, 20)) {
+    const { data, error } = await supabase
+      .from("training_plans")
+      .select("id, name")
+      .in("id", chunk);
+    if (error) throw new Error(error.message);
+    for (const row of data || []) {
+      programNamesById.set(row.id, row.name);
+    }
+  }
+
+  return { exerciseNamesById, programNamesById };
+}
+
 function mapGoalRowToClientItem(input: {
   row: GoalRow;
   clientId: string;
   historyRows: GoalProgressHistorySlice[];
+  linkedExerciseName?: string | null;
+  linkedProgramName?: string | null;
 }): ClientGoalItem {
   const goalDirection = resolveGoalDirection(input.row);
   const checkInDays = (input.row as Record<string, unknown>).check_in_interval_days as number | null | undefined;
@@ -947,6 +1011,10 @@ function mapGoalRowToClientItem(input: {
     target_date: targetDate,
     updated_at: updatedAt,
     notes: input.row.notes || null,
+    linked_exercise_id: input.row.linked_exercise_id ?? null,
+    linked_exercise_name: input.linkedExerciseName ?? null,
+    linked_program_id: input.row.linked_program_id ?? null,
+    linked_program_name: input.linkedProgramName ?? null,
   };
 }
 
@@ -1466,6 +1534,8 @@ export async function listClientGoalsAction(input: z.input<typeof listClientGoal
         "priority",
         "goal_direction",
         "check_in_interval_days",
+        "linked_exercise_id",
+        "linked_program_id",
       ];
 
       const runGoalsQuery = async (
@@ -1513,12 +1583,15 @@ export async function listClientGoalsAction(input: z.input<typeof listClientGoal
         goalRows.map((row) => row.id),
         2
       );
+      const linkNames = await listGoalLinkNamesById(supabase, goalRows);
 
       const goals = goalRows.map((row) =>
         mapGoalRowToClientItem({
           row,
           clientId: payload.client_id,
           historyRows: historyByGoal.get(row.id) || [],
+          linkedExerciseName: row.linked_exercise_id ? linkNames.exerciseNamesById.get(row.linked_exercise_id) || null : null,
+          linkedProgramName: row.linked_program_id ? linkNames.programNamesById.get(row.linked_program_id) || null : null,
         })
       );
 
@@ -1582,6 +1655,8 @@ export async function createClientGoalAction(input: z.input<typeof createGoalSch
         priority: payload.priority,
         goal_direction: payload.goal_direction,
         check_in_interval_days: payload.check_in_interval_days ?? null,
+        linked_exercise_id: payload.linked_exercise_id ?? null,
+        linked_program_id: payload.linked_program_id ?? null,
       };
 
       let attemptedInsert: GoalInsert = { ...insertPayload };
@@ -1615,12 +1690,15 @@ export async function createClientGoalAction(input: z.input<typeof createGoalSch
         actorId: user.id,
       });
       const historyByGoal = await listGoalHistoryByGoalIds(supabase, [goalRow.id], 2);
+      const linkNames = await listGoalLinkNamesById(supabase, [goalRow]);
 
       revalidateCoachPaths(payload.client_id);
       return mapGoalRowToClientItem({
         row: goalRow,
         clientId: payload.client_id,
         historyRows: historyByGoal.get(goalRow.id) || [],
+        linkedExerciseName: goalRow.linked_exercise_id ? linkNames.exerciseNamesById.get(goalRow.linked_exercise_id) || null : null,
+        linkedProgramName: goalRow.linked_program_id ? linkNames.programNamesById.get(goalRow.linked_program_id) || null : null,
       });
     },
   });
@@ -1683,6 +1761,8 @@ export async function updateClientGoalAction(input: z.input<typeof updateGoalSch
       if (payload.priority !== undefined) updates.priority = payload.priority;
       if (payload.goal_direction !== undefined) updates.goal_direction = payload.goal_direction;
       if (payload.check_in_interval_days !== undefined) updates.check_in_interval_days = payload.check_in_interval_days;
+      if (payload.linked_exercise_id !== undefined) updates.linked_exercise_id = payload.linked_exercise_id;
+      if (payload.linked_program_id !== undefined) updates.linked_program_id = payload.linked_program_id;
 
       let attemptedUpdates: GoalUpdate = { ...updates };
       let updateResult =
@@ -1730,12 +1810,15 @@ export async function updateClientGoalAction(input: z.input<typeof updateGoalSch
         actorId: user.id,
       });
       const historyByGoal = await listGoalHistoryByGoalIds(supabase, [goalRow.id], 2);
+      const linkNames = await listGoalLinkNamesById(supabase, [goalRow]);
 
       revalidateCoachPaths(payload.client_id);
       return mapGoalRowToClientItem({
         row: goalRow,
         clientId: payload.client_id,
         historyRows: historyByGoal.get(goalRow.id) || [],
+        linkedExerciseName: goalRow.linked_exercise_id ? linkNames.exerciseNamesById.get(goalRow.linked_exercise_id) || null : null,
+        linkedProgramName: goalRow.linked_program_id ? linkNames.programNamesById.get(goalRow.linked_program_id) || null : null,
       });
     },
   });
@@ -1822,6 +1905,8 @@ export async function listMyGoalsAction(
         "priority",
         "goal_direction",
         "check_in_interval_days",
+        "linked_exercise_id",
+        "linked_program_id",
       ];
 
       const runGoalsQuery = async (
@@ -1872,12 +1957,15 @@ export async function listMyGoalsAction(
         goalRows.map((row) => row.id),
         2
       );
+      const linkNames = await listGoalLinkNamesById(supabase, goalRows);
 
       const goals = goalRows.map((row) =>
         mapGoalRowToClientItem({
           row,
           clientId: user.id,
           historyRows: historyByGoal.get(row.id) || [],
+          linkedExerciseName: row.linked_exercise_id ? linkNames.exerciseNamesById.get(row.linked_exercise_id) || null : null,
+          linkedProgramName: row.linked_program_id ? linkNames.programNamesById.get(row.linked_program_id) || null : null,
         })
       );
 
@@ -1937,6 +2025,8 @@ export async function createMyGoalAction(input: z.input<typeof createMyGoalSchem
         priority: payload.priority,
         goal_direction: payload.goal_direction,
         check_in_interval_days: payload.check_in_interval_days ?? null,
+        linked_exercise_id: payload.linked_exercise_id ?? null,
+        linked_program_id: payload.linked_program_id ?? null,
       };
 
       let attemptedInsert: GoalInsert = { ...insertPayload };
@@ -1965,6 +2055,7 @@ export async function createMyGoalAction(input: z.input<typeof createMyGoalSchem
         actorId: user.id,
       });
       const historyByGoal = await listGoalHistoryByGoalIds(supabase, [goalRow.id], 2);
+      const linkNames = await listGoalLinkNamesById(supabase, [goalRow]);
 
       revalidatePath("/goals");
       revalidatePath("/clients/dashboard");
@@ -1973,6 +2064,8 @@ export async function createMyGoalAction(input: z.input<typeof createMyGoalSchem
         row: goalRow,
         clientId: user.id,
         historyRows: historyByGoal.get(goalRow.id) || [],
+        linkedExerciseName: goalRow.linked_exercise_id ? linkNames.exerciseNamesById.get(goalRow.linked_exercise_id) || null : null,
+        linkedProgramName: goalRow.linked_program_id ? linkNames.programNamesById.get(goalRow.linked_program_id) || null : null,
       });
     },
   });
@@ -2033,6 +2126,8 @@ export async function updateMyGoalAction(input: z.input<typeof updateMyGoalSchem
       if (payload.priority !== undefined) updates.priority = payload.priority;
       if (payload.goal_direction !== undefined) updates.goal_direction = payload.goal_direction;
       if (payload.check_in_interval_days !== undefined) updates.check_in_interval_days = payload.check_in_interval_days;
+      if (payload.linked_exercise_id !== undefined) updates.linked_exercise_id = payload.linked_exercise_id;
+      if (payload.linked_program_id !== undefined) updates.linked_program_id = payload.linked_program_id;
 
       let attemptedUpdates: GoalUpdate = { ...updates };
       let updateResult =
@@ -2079,6 +2174,7 @@ export async function updateMyGoalAction(input: z.input<typeof updateMyGoalSchem
         actorId: user.id,
       });
       const historyByGoal = await listGoalHistoryByGoalIds(supabase, [goalRow.id], 2);
+      const linkNames = await listGoalLinkNamesById(supabase, [goalRow]);
 
       revalidatePath("/goals");
       revalidatePath("/clients/dashboard");
@@ -2087,6 +2183,8 @@ export async function updateMyGoalAction(input: z.input<typeof updateMyGoalSchem
         row: goalRow,
         clientId: user.id,
         historyRows: historyByGoal.get(goalRow.id) || [],
+        linkedExerciseName: goalRow.linked_exercise_id ? linkNames.exerciseNamesById.get(goalRow.linked_exercise_id) || null : null,
+        linkedProgramName: goalRow.linked_program_id ? linkNames.programNamesById.get(goalRow.linked_program_id) || null : null,
       });
     },
   });
@@ -2227,24 +2325,26 @@ export async function assignTemplateToClientAction(input: z.input<typeof assignT
     action: async () => {
       const { supabase, user } = await requireActor();
 
-      const [{ data: template, error: templateError }, { data: templateSessions, error: templateSessionsError }] =
+      const [{ data: template, error: templateError }, { data: existingActiveAssignment, error: existingActiveAssignmentError }] =
         await Promise.all([
           supabase.from("coach_plan_templates").select("*").eq("id", payload.template_id).single(),
-          supabase
-            .from("coach_plan_template_sessions")
-            .select("*")
-            .eq("template_id", payload.template_id)
-            .order("sequence_no", { ascending: true }),
+          supabase.from("client_plan_assignments").select("id, client_id").eq("template_id", payload.template_id).eq("status", "active").limit(1).maybeSingle(),
         ]);
       if (templateError) throw new Error(templateError.message);
-      if (templateSessionsError) throw new Error(templateSessionsError.message);
+      if (existingActiveAssignmentError) throw new Error(existingActiveAssignmentError.message);
+      if (existingActiveAssignment) {
+        if (existingActiveAssignment.client_id === payload.client_id) {
+          throw new Error("This workout program is already assigned to this client.");
+        }
+        throw new Error("This workout program is already assigned to another client. Archive or complete it before reassigning.");
+      }
 
-      const { error: archiveError } = await supabase
-        .from("client_plan_assignments")
-        .update({ status: "archived", ended_on: new Date().toISOString().slice(0, 10) })
-        .eq("client_id", payload.client_id)
-        .eq("status", "active");
-      if (archiveError) throw new Error(archiveError.message);
+      const { data: templateSessions, error: templateSessionsError } = await supabase
+        .from("coach_plan_template_sessions")
+        .select("*")
+        .eq("template_id", payload.template_id)
+        .order("sequence_no", { ascending: true });
+      if (templateSessionsError) throw new Error(templateSessionsError.message);
 
       const { data: assignment, error: assignmentError } = await supabase
         .from("client_plan_assignments")
@@ -2259,7 +2359,12 @@ export async function assignTemplateToClientAction(input: z.input<typeof assignT
         })
         .select("*")
         .single();
-      if (assignmentError) throw new Error(assignmentError.message);
+      if (assignmentError) {
+        if ((assignmentError as { code?: string }).code === "23505") {
+          throw new Error("This workout program is already assigned. Archive or complete it before reassigning.");
+        }
+        throw new Error(assignmentError.message);
+      }
 
       const snapshotRows: Database["public"]["Tables"]["client_plan_assignment_sessions"]["Insert"][] =
         ((templateSessions || []) as TemplateSessionRow[]).map((session) => ({
@@ -2374,12 +2479,19 @@ export async function logClientWorkoutAction(input: z.input<typeof logWorkoutSch
     },
     action: async () => {
       const { supabase, user } = await requireActor();
+      const { data: client, error: clientError } = await supabase
+        .from("clients")
+        .select("id, linked_user_id")
+        .eq("id", payload.client_id)
+        .maybeSingle();
+      if (clientError) throw new Error(clientError.message);
+      if (!client) throw new Error("Client not found.");
 
       const workoutPayload: WorkoutInsert = {
         user_id: user.id,
         created_by_user_id: user.id,
         subject_client_id: payload.client_id,
-        subject_user_id: null,
+        subject_user_id: client.linked_user_id ?? null,
         name: payload.name,
         performed_on: payload.performed_on,
         date: payload.started_at || `${payload.performed_on}T00:00:00.000Z`,
@@ -2444,6 +2556,16 @@ export async function logClientWorkoutAction(input: z.input<typeof logWorkoutSch
           .eq("id", payload.plan_session_id);
         if (resolveError) throw new Error(resolveError.message);
       }
+
+      void inngest.send({
+        name: "training/workout.completed",
+        data: {
+          workout_id: workout.id,
+          user_id: user.id,
+          subject_user_id: workout.subject_user_id ?? null,
+          subject_client_id: workout.subject_client_id ?? null,
+        },
+      });
 
       revalidateCoachPaths(payload.client_id);
       revalidatePath("/workouts");
@@ -2516,6 +2638,17 @@ export async function createClientCheckinAction(input: z.input<typeof createChec
       };
       const { data, error } = await supabase.from("client_checkins").insert(insertPayload).select("*").single();
       if (error) throw new Error(error.message);
+
+      void inngest.send({
+        name: "coaching/checkin.submitted",
+        data: {
+          checkin_id: data.id,
+          created_by_user_id: user.id,
+          subject_client_id: payload.subject_client_id ?? null,
+          subject_user_id: payload.subject_user_id ?? null,
+        },
+      });
+
       revalidateCoachPaths(payload.subject_client_id || undefined);
       return data;
     },

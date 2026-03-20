@@ -18,6 +18,7 @@ import {
   Search,
   Settings2,
   Trash2,
+  X,
 } from "lucide-react";
 import {
   flexRender,
@@ -53,6 +54,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
+import { useExerciseSearch, useProgramSearch } from "@/hooks/use-goal-links";
+import { useClientFitnessGoalsRealtimeSync } from "@/hooks/use-fitness-goals-realtime";
 import { useClientGoals, useCoachToolMutations, useMyGoals } from "@/hooks/use-coach-tools";
 import { cn } from "@/utils";
 
@@ -125,6 +128,10 @@ type GoalFormState = {
   priority: string;
   goal_direction: string;
   check_in_interval_days: string;
+  linked_exercise_id: string | null;
+  linked_exercise_name: string | null;
+  linked_program_id: string | null;
+  linked_program_name: string | null;
 };
 
 function formatDateLabel(value: string | null) {
@@ -258,6 +265,10 @@ function defaultFormState(): GoalFormState {
     priority: "1",
     goal_direction: "decrease",
     check_in_interval_days: "",
+    linked_exercise_id: null,
+    linked_exercise_name: null,
+    linked_program_id: null,
+    linked_program_name: null,
   };
 }
 
@@ -276,6 +287,10 @@ function formStateFromGoal(goal: ClientGoalItem): GoalFormState {
     priority: String(goal.priority ?? 1),
     goal_direction: goal.goal_direction || (isWeightFocusedCategory(goal.category) ? "decrease" : "increase"),
     check_in_interval_days: goal.check_in_interval_days ? String(goal.check_in_interval_days) : "",
+    linked_exercise_id: goal.linked_exercise_id || null,
+    linked_exercise_name: goal.linked_exercise_name || null,
+    linked_program_id: goal.linked_program_id || null,
+    linked_program_name: goal.linked_program_name || null,
   };
 }
 
@@ -313,6 +328,141 @@ function sortIndicator(sorted: false | "asc" | "desc") {
   return <ArrowUpDown className="h-3.5 w-3.5 opacity-50" />;
 }
 
+function ExerciseSearchDropdown({
+  selectedId,
+  onSelect,
+  onClose,
+}: {
+  selectedId: string | null;
+  onSelect: (id: string, name: string) => void;
+  onClose: () => void;
+}) {
+  const [search, setSearch] = useState("");
+  const query = useExerciseSearch(search);
+  const items = useMemo(() => query.data?.pages.flatMap((page) => page.items) ?? [], [query.data?.pages]);
+
+  return (
+    <div className="space-y-2 rounded-xl border border-border/60 bg-background/20 p-3">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs font-medium uppercase tracking-[0.08em] text-muted-foreground">Link to Exercise (optional)</p>
+        <Button variant="ghost" size="sm" className="h-7 rounded-lg px-2 text-xs" onClick={onClose}>
+          Close
+        </Button>
+      </div>
+      <Input
+        value={search}
+        onChange={(event) => setSearch(event.target.value)}
+        placeholder="Search exercises..."
+        className="h-10 rounded-xl border-border/60 bg-muted/20"
+      />
+      <div className="max-h-48 overflow-y-auto rounded-lg border border-border/50">
+        {query.isLoading ? (
+          <p className="px-3 py-2 text-sm text-muted-foreground">Loading exercises...</p>
+        ) : items.length === 0 ? (
+          <p className="px-3 py-2 text-sm text-muted-foreground">No exercises found.</p>
+        ) : (
+          <div className="divide-y divide-border/50">
+            {items.map((item) => (
+              <button
+                type="button"
+                key={item.id}
+                onClick={() => {
+                  onSelect(item.id, item.name);
+                  onClose();
+                }}
+                className={cn(
+                  "flex w-full items-center justify-between px-3 py-2 text-left hover:bg-muted/40",
+                  selectedId === item.id ? "bg-muted/40" : ""
+                )}
+              >
+                <span className="text-sm">{item.name}</span>
+                <span className="text-xs text-muted-foreground">{item.category || "General"}</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+      {query.hasNextPage ? (
+        <Button
+          variant="outline"
+          className="h-9 w-full rounded-lg border-border/60 bg-muted/20"
+          onClick={() => void query.fetchNextPage()}
+          disabled={query.isFetchingNextPage}
+        >
+          {query.isFetchingNextPage ? "Loading..." : "Load more"}
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
+function ProgramSearchDropdown({
+  selectedId,
+  onSelect,
+  onClose,
+}: {
+  selectedId: string | null;
+  onSelect: (id: string, name: string) => void;
+  onClose: () => void;
+}) {
+  const [search, setSearch] = useState("");
+  const query = useProgramSearch(search);
+  const items = useMemo(() => query.data?.pages.flatMap((page) => page.items) ?? [], [query.data?.pages]);
+
+  return (
+    <div className="space-y-2 rounded-xl border border-border/60 bg-background/20 p-3">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs font-medium uppercase tracking-[0.08em] text-muted-foreground">Link to Training Program (optional)</p>
+        <Button variant="ghost" size="sm" className="h-7 rounded-lg px-2 text-xs" onClick={onClose}>
+          Close
+        </Button>
+      </div>
+      <Input
+        value={search}
+        onChange={(event) => setSearch(event.target.value)}
+        placeholder="Search programs..."
+        className="h-10 rounded-xl border-border/60 bg-muted/20"
+      />
+      <div className="max-h-48 overflow-y-auto rounded-lg border border-border/50">
+        {query.isLoading ? (
+          <p className="px-3 py-2 text-sm text-muted-foreground">Loading programs...</p>
+        ) : items.length === 0 ? (
+          <p className="px-3 py-2 text-sm text-muted-foreground">No programs found.</p>
+        ) : (
+          <div className="divide-y divide-border/50">
+            {items.map((item) => (
+              <button
+                type="button"
+                key={item.id}
+                onClick={() => {
+                  onSelect(item.id, item.name);
+                  onClose();
+                }}
+                className={cn(
+                  "flex w-full items-center justify-between px-3 py-2 text-left hover:bg-muted/40",
+                  selectedId === item.id ? "bg-muted/40" : ""
+                )}
+              >
+                <span className="text-sm">{item.name}</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+      {query.hasNextPage ? (
+        <Button
+          variant="outline"
+          className="h-9 w-full rounded-lg border-border/60 bg-muted/20"
+          onClick={() => void query.fetchNextPage()}
+          disabled={query.isFetchingNextPage}
+        >
+          {query.isFetchingNextPage ? "Loading..." : "Load more"}
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
 export function ClientGoalsMedicalTab({
   clientId,
   medicalFlags,
@@ -325,9 +475,15 @@ export function ClientGoalsMedicalTab({
   title?: string;
 }) {
   const mutations = useCoachToolMutations();
-  const clientGoalsQuery = useClientGoals(clientId || "", "all", 120);
-  const selfGoalsQuery = useMyGoals("all", 120);
+  const clientGoalsQuery = useClientGoals(clientId || "", "all", 120, {
+    enabled: mode !== "self" && Boolean(clientId),
+  });
+  const selfGoalsQuery = useMyGoals("all", 120, {
+    enabled: mode === "self",
+  });
   const query = mode === "self" ? selfGoalsQuery : clientGoalsQuery;
+  const linkedUserId = mode !== "self" ? (query.data?.linked_user_id ?? null) : null;
+  useClientFitnessGoalsRealtimeSync(linkedUserId, mode !== "self" ? (clientId ?? null) : null);
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingGoal, setEditingGoal] = useState<ClientGoalItem | null>(null);
@@ -342,6 +498,8 @@ export function ClientGoalsMedicalTab({
   const [activeStatusGoalId, setActiveStatusGoalId] = useState<string | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deletingGoal, setDeletingGoal] = useState<ClientGoalItem | null>(null);
+  const [isExerciseDropdownOpen, setIsExerciseDropdownOpen] = useState(false);
+  const [isProgramDropdownOpen, setIsProgramDropdownOpen] = useState(false);
 
   const categories = useMemo(() => {
     const custom = query.data?.categories || [];
@@ -392,6 +550,8 @@ export function ClientGoalsMedicalTab({
     setEditingGoal(null);
     setForm(defaultFormState());
     setModalSections(defaultModalSections("weight"));
+    setIsExerciseDropdownOpen(false);
+    setIsProgramDropdownOpen(false);
     setDialogOpen(true);
   };
 
@@ -399,6 +559,8 @@ export function ClientGoalsMedicalTab({
     setEditingGoal(goal);
     setForm(formStateFromGoal(goal));
     setModalSections(defaultModalSections(goal.category || "custom"));
+    setIsExerciseDropdownOpen(false);
+    setIsProgramDropdownOpen(false);
     setDialogOpen(true);
   }, []);
 
@@ -439,6 +601,8 @@ export function ClientGoalsMedicalTab({
       priority: Number(form.priority) || 1,
       goal_direction: form.goal_direction as "increase" | "decrease",
       check_in_interval_days: form.check_in_interval_days ? Number(form.check_in_interval_days) : null,
+      linked_exercise_id: form.linked_exercise_id,
+      linked_program_id: form.linked_program_id,
     } as const;
 
     try {
@@ -984,7 +1148,16 @@ export function ClientGoalsMedicalTab({
         <div className="mb-4 flex min-w-0 flex-wrap items-center justify-between gap-2">
           <h2 className="text-base font-semibold">{title}</h2>
           <div className="flex items-center gap-2">
-            <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <Dialog
+              open={dialogOpen}
+              onOpenChange={(open) => {
+                setDialogOpen(open);
+                if (!open) {
+                  setIsExerciseDropdownOpen(false);
+                  setIsProgramDropdownOpen(false);
+                }
+              }}
+            >
               <DialogTrigger asChild>
                 <Button className="accent-strong rounded-xl text-black" onClick={openCreate}>
                   <Plus className="mr-2 h-4 w-4" />
@@ -1191,6 +1364,118 @@ export function ClientGoalsMedicalTab({
                       </AccordionContent>
                     </AccordionItem>
                   </Accordion>
+
+                  <div className="space-y-3">
+                    <div className="rounded-xl border border-border/60 bg-background/20 p-3">
+                      <div className="mb-2 flex items-center justify-between gap-2">
+                        <p className="text-xs font-medium uppercase tracking-[0.08em] text-muted-foreground">
+                          Link to Exercise (optional)
+                        </p>
+                        {!isExerciseDropdownOpen ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="h-7 rounded-lg border-border/60 bg-muted/20 px-2 text-xs"
+                            onClick={() => setIsExerciseDropdownOpen(true)}
+                          >
+                            Search exercises
+                          </Button>
+                        ) : null}
+                      </div>
+                      <div className="mb-2 flex flex-wrap items-center gap-2">
+                        {form.linked_exercise_id ? (
+                          <span className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-muted/30 px-2 py-1 text-xs">
+                            {form.linked_exercise_name || "Selected exercise"}
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setForm((prev) => ({
+                                  ...prev,
+                                  linked_exercise_id: null,
+                                  linked_exercise_name: null,
+                                }))
+                              }
+                              className="rounded p-0.5 hover:bg-muted/60"
+                              aria-label="Clear exercise link"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">None selected</span>
+                        )}
+                      </div>
+                      {isExerciseDropdownOpen ? (
+                        <ExerciseSearchDropdown
+                          selectedId={form.linked_exercise_id}
+                          onSelect={(id, name) =>
+                            setForm((prev) => ({
+                              ...prev,
+                              linked_exercise_id: id,
+                              linked_exercise_name: name,
+                            }))
+                          }
+                          onClose={() => setIsExerciseDropdownOpen(false)}
+                        />
+                      ) : null}
+                    </div>
+
+                    <div className="rounded-xl border border-border/60 bg-background/20 p-3">
+                      <div className="mb-2 flex items-center justify-between gap-2">
+                        <p className="text-xs font-medium uppercase tracking-[0.08em] text-muted-foreground">
+                          Link to Training Program (optional)
+                        </p>
+                        {!isProgramDropdownOpen ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="h-7 rounded-lg border-border/60 bg-muted/20 px-2 text-xs"
+                            onClick={() => setIsProgramDropdownOpen(true)}
+                          >
+                            Search programs
+                          </Button>
+                        ) : null}
+                      </div>
+                      <div className="mb-2 flex flex-wrap items-center gap-2">
+                        {form.linked_program_id ? (
+                          <span className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-muted/30 px-2 py-1 text-xs">
+                            {form.linked_program_name || "Selected program"}
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setForm((prev) => ({
+                                  ...prev,
+                                  linked_program_id: null,
+                                  linked_program_name: null,
+                                }))
+                              }
+                              className="rounded p-0.5 hover:bg-muted/60"
+                              aria-label="Clear program link"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">None selected</span>
+                        )}
+                      </div>
+                      {isProgramDropdownOpen ? (
+                        <ProgramSearchDropdown
+                          selectedId={form.linked_program_id}
+                          onSelect={(id, name) =>
+                            setForm((prev) => ({
+                              ...prev,
+                              linked_program_id: id,
+                              linked_program_name: name,
+                            }))
+                          }
+                          onClose={() => setIsProgramDropdownOpen(false)}
+                        />
+                      ) : null}
+                    </div>
+                  </div>
                 </div>
 
                 <DialogFooter>

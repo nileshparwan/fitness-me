@@ -83,6 +83,8 @@ export const coachKeys = {
   myGoals: (
     status: "all" | "active" | "on_track" | "at_risk" | "completed" | "paused" | "archived" = "all"
   ) => [...coachKeys.all, "my-goals", status] as const,
+  exerciseSearch: (search: string) => [...coachKeys.all, "exercise-search", search] as const,
+  programSearch: (search: string) => [...coachKeys.all, "program-search", search] as const,
   clientPayments: (clientId: string) => [...coachKeys.clients(), "payments", clientId] as const,
   billingPlan: (clientId: string) => [...coachKeys.clients(), "billing-plan", clientId] as const,
   billingPlanHistory: (clientId: string) => [...coachKeys.clients(), "billing-plan-history", clientId] as const,

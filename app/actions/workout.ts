@@ -5,6 +5,7 @@ import { runTrackedAction } from "@/lib/events/dispatcher";
 import { revalidatePath } from "next/cache";
 import { Database } from "@/types/database";
 import { CardioSetMeta, serializeCardioNotes } from "@/utils/cardio-notes";
+import { inngest } from "@/lib/inngest/client";
 
 // 1. DERIVED TYPES FROM DATABASE
 type WorkoutInsert = Database['public']['Tables']['training_sessions']['Insert'];
@@ -232,10 +233,27 @@ export async function createWorkoutAction(data: WorkoutActionInput) {
     data.date.toISOString()
   );
 
-  if (strengthLogs.length > 0) await supabase.from("strength_sets").insert(strengthLogs);
-  if (cardioLogs.length > 0) await supabase.from("cardio_sessions").insert(cardioLogs);
+  if (strengthLogs.length > 0) {
+    const { error: strengthInsertError } = await supabase.from("strength_sets").insert(strengthLogs);
+    if (strengthInsertError) throw new Error(strengthInsertError.message);
+  }
+  if (cardioLogs.length > 0) {
+    const { error: cardioInsertError } = await supabase.from("cardio_sessions").insert(cardioLogs);
+    if (cardioInsertError) throw new Error(cardioInsertError.message);
+  }
+
+  void inngest.send({
+    name: "training/workout.completed",
+    data: {
+      workout_id: workout.id,
+      user_id: user.id,
+      subject_user_id: workout.subject_user_id ?? null,
+      subject_client_id: workout.subject_client_id ?? null,
+    },
+  });
 
   revalidatePath("/workouts");
+  revalidatePath("/goals");
   return workout;
     },
   });
@@ -256,7 +274,7 @@ export async function updateWorkoutAction(id: string, data: Partial<WorkoutActio
 
   const { data: ownedWorkout } = await supabase
     .from("training_sessions")
-    .select("id")
+    .select("id, subject_user_id, subject_client_id")
     .eq("id", id)
     .eq("user_id", user.id)
     .maybeSingle();
@@ -290,17 +308,36 @@ export async function updateWorkoutAction(id: string, data: Partial<WorkoutActio
   // B. Wipe & Rewrite Logs
   if (data.exercises) {
     // 1. Delete existing
-    await supabase.from("strength_sets").delete().eq("workout_id", id);
-    await supabase.from("cardio_sessions").delete().eq("workout_id", id);
+    const { error: deleteStrengthError } = await supabase.from("strength_sets").delete().eq("workout_id", id);
+    if (deleteStrengthError) throw new Error(deleteStrengthError.message);
+    const { error: deleteCardioError } = await supabase.from("cardio_sessions").delete().eq("workout_id", id);
+    if (deleteCardioError) throw new Error(deleteCardioError.message);
 
     // 2. Prepare new
     const dateStr = data.date ? data.date.toISOString() : new Date().toISOString();
     const { strengthLogs, cardioLogs } = buildWorkoutLogs(data.exercises, id, user.id, dateStr);
-    if (strengthLogs.length > 0) await supabase.from("strength_sets").insert(strengthLogs);
-    if (cardioLogs.length > 0) await supabase.from("cardio_sessions").insert(cardioLogs);
+    if (strengthLogs.length > 0) {
+      const { error: strengthInsertError } = await supabase.from("strength_sets").insert(strengthLogs);
+      if (strengthInsertError) throw new Error(strengthInsertError.message);
+    }
+    if (cardioLogs.length > 0) {
+      const { error: cardioInsertError } = await supabase.from("cardio_sessions").insert(cardioLogs);
+      if (cardioInsertError) throw new Error(cardioInsertError.message);
+    }
+
+    void inngest.send({
+      name: "training/workout.completed",
+      data: {
+        workout_id: id,
+        user_id: user.id,
+        subject_user_id: ownedWorkout.subject_user_id ?? null,
+        subject_client_id: ownedWorkout.subject_client_id ?? null,
+      },
+    });
   }
 
   revalidatePath("/workouts");
+  revalidatePath("/goals");
   revalidatePath(`/workouts/${id}`);
   revalidatePath("/progress"); 
   return { success: true };
