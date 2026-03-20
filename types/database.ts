@@ -6,6 +6,18 @@ export type Json =
   | { [key: string]: Json | undefined }
   | Json[]
 
+export type NotificationType =
+  | "goal_achieved"
+  | "checkin_submitted"
+  | "support_ticket_created"
+  | "support_ticket_updated"
+  | "support_ticket_comment_added"
+  | "support_ticket_comment_edited"
+  | "support_ticket_comment_deleted"
+  | "support_ticket_status_changed"
+  | "support_ticket_closed"
+  | "support_ticket_reopened"
+
 export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
@@ -771,6 +783,36 @@ export type Database = {
           },
         ]
       }
+      notifications: {
+        Row: {
+          body: string
+          created_at: string
+          data: Json
+          id: string
+          title: string
+          type: NotificationType
+          user_id: string
+        }
+        Insert: {
+          body: string
+          created_at?: string
+          data?: Json
+          id?: string
+          title: string
+          type: NotificationType
+          user_id: string
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          data?: Json
+          id?: string
+          title?: string
+          type?: NotificationType
+          user_id?: string
+        }
+        Relationships: []
+      }
       payment_logs: {
         Row: {
           amount: number | null
@@ -1471,6 +1513,8 @@ export type Database = {
           check_in_interval_days: number | null
           id: string
           is_personal_goal: boolean
+          linked_exercise_id: string | null
+          linked_program_id: string | null
           notes: string | null
           priority: number
           protein_target: number | null
@@ -1503,6 +1547,8 @@ export type Database = {
           check_in_interval_days?: number | null
           id?: string
           is_personal_goal?: boolean
+          linked_exercise_id?: string | null
+          linked_program_id?: string | null
           notes?: string | null
           priority?: number
           protein_target?: number | null
@@ -1535,6 +1581,8 @@ export type Database = {
           check_in_interval_days?: number | null
           id?: string
           is_personal_goal?: boolean
+          linked_exercise_id?: string | null
+          linked_program_id?: string | null
           notes?: string | null
           priority?: number
           protein_target?: number | null
@@ -1562,6 +1610,20 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "fitness_goals_linked_exercise_id_fkey"
+            columns: ["linked_exercise_id"]
+            isOneToOne: false
+            referencedRelation: "exercise_catalog"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fitness_goals_linked_program_id_fkey"
+            columns: ["linked_program_id"]
+            isOneToOne: false
+            referencedRelation: "training_plans"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "fitness_goals_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
@@ -1579,6 +1641,7 @@ export type Database = {
           progress_percent: number
           recorded_by_user_id: string | null
           snapshot_at: string
+          source: "auto_sync" | "manual"
           status: string
           target_value: number | null
           target_weight: number | null
@@ -1592,6 +1655,7 @@ export type Database = {
           progress_percent: number
           recorded_by_user_id?: string | null
           snapshot_at?: string
+          source?: "auto_sync" | "manual"
           status?: string
           target_value?: number | null
           target_weight?: number | null
@@ -1605,6 +1669,7 @@ export type Database = {
           progress_percent?: number
           recorded_by_user_id?: string | null
           snapshot_at?: string
+          source?: "auto_sync" | "manual"
           status?: string
           target_value?: number | null
           target_weight?: number | null
@@ -2759,6 +2824,39 @@ export type Database = {
           },
         ]
       }
+      ticket_subscriptions: {
+        Row: {
+          subscribed_at: string
+          ticket_id: string
+          user_id: string
+        }
+        Insert: {
+          subscribed_at?: string
+          ticket_id: string
+          user_id: string
+        }
+        Update: {
+          subscribed_at?: string
+          ticket_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ticket_subscriptions_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "tickets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ticket_subscriptions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ticket_upvotes: {
         Row: {
           created_at: string
@@ -2895,6 +2993,7 @@ export type Database = {
       }
       training_plans: {
         Row: {
+          assigned_client_id: string | null
           created_at: string | null
           description: string | null
           id: string
@@ -2904,6 +3003,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          assigned_client_id?: string | null
           created_at?: string | null
           description?: string | null
           id?: string
@@ -2913,6 +3013,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          assigned_client_id?: string | null
           created_at?: string | null
           description?: string | null
           id?: string
@@ -2922,6 +3023,13 @@ export type Database = {
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "training_plans_assigned_client_id_fkey"
+            columns: ["assigned_client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "training_plans_user_id_fkey"
             columns: ["user_id"]
