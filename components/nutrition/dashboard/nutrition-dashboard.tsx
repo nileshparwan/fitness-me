@@ -1,29 +1,29 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
-import { CalendarDays, Clock3, Drumstick, Flame, Plus, SlidersHorizontal, TrendingUp, Users, UtensilsCrossed, Wheat } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import { CalendarDays, Clock3, Drumstick, Flame, Layers, Plus, TrendingUp, Users, UtensilsCrossed, Wheat } from "lucide-react";
 
-import {
-  useNutritionDashboardData,
-  useNutritionPrefetch,
-} from "@/hooks/use-nutrition-data";
-import {
-  useSetNutritionNavigationSource,
-  useSetNutritionViewMode,
-} from "@/stores/use-nutrition-ui-store";
-import { NutritionScopeControls } from "@/components/nutrition/nutrition-scope-controls";
-import { NutritionDashboardSkeleton } from "@/components/nutrition/dashboard/nutrition-dashboard-skeleton";
+import { ActivitySectionSkeleton, NutritionHeroSkeleton } from "@/components/nutrition/dashboard/nutrition-dashboard-skeleton";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/responsive-modal";
-import { Separator } from "@/components/ui/separator";
-import type { NutritionDashboardActivity, NutritionDashboardMacro, NutritionDashboardQuickAction } from "@/lib/nutrition/dashboard";
+import { useNutritionDashboardData, useNutritionPrefetch } from "@/hooks/use-nutrition-data";
+import { getGreeting, getTodayLabel } from "@/lib/nutrition/greeting";
+import type { NutritionDashboardActivity, NutritionDashboardData, NutritionDashboardMacro, NutritionDashboardQuickAction } from "@/lib/nutrition/dashboard";
 import { cn } from "@/utils";
+
+function DashboardHeader() {
+  return (
+    <section className="space-y-1">
+      <h1 className="text-3xl font-semibold tracking-tight">{getGreeting()}</h1>
+      <p className="text-sm text-muted-foreground">{getTodayLabel()}</p>
+    </section>
+  );
+}
 
 function CalorieRing({ consumed, target, compact = false }: { consumed: number; target: number; compact?: boolean }) {
   const safeTarget = Math.max(target, 1);
   const progress = Math.max(0, Math.min(100, Math.round((consumed / safeTarget) * 100)));
+  const remaining = Math.max(0, safeTarget - consumed);
   const radius = 70;
   const circumference = 2 * Math.PI * radius;
   const dashOffset = circumference - (progress / 100) * circumference;
@@ -32,7 +32,7 @@ function CalorieRing({ consumed, target, compact = false }: { consumed: number; 
     <div
       className={cn(
         "glass-subtle relative mx-auto",
-        compact ? "h-28 w-28 p-1.5 sm:h-32 sm:w-32" : "h-44 w-44 p-2.5 sm:h-48 sm:w-48 sm:p-3 lg:h-52 lg:w-52"
+        compact ? "h-36 w-36 p-1.5" : "h-44 w-44 p-2.5 sm:h-48 sm:w-48 sm:p-3"
       )}
     >
       <svg className="h-full w-full -rotate-90" viewBox="0 0 180 180" role="img" aria-label={`Calorie progress ${progress}%`}>
@@ -54,10 +54,8 @@ function CalorieRing({ consumed, target, compact = false }: { consumed: number; 
         />
       </svg>
       <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-        <p className={cn("font-semibold leading-none", compact ? "text-xl sm:text-2xl" : "text-3xl sm:text-4xl")}>{consumed}</p>
-        <p className={cn("text-muted-foreground", compact ? "mt-0.5 text-[10px] sm:text-xs" : "mt-1.5 text-xs sm:mt-2 sm:text-sm")}>
-          / {target} kcal
-        </p>
+        <p className={cn("font-semibold leading-none tabular-nums", compact ? "text-3xl" : "text-4xl")}>{remaining}</p>
+        <p className={cn("text-muted-foreground", compact ? "mt-1 text-xs" : "mt-1.5 text-sm")}>kcal left</p>
       </div>
     </div>
   );
@@ -90,29 +88,84 @@ function macroConfig(macro: NutritionDashboardMacro) {
   };
 }
 
-function MacroCard({ macro, compact = false }: { macro: NutritionDashboardMacro; compact?: boolean }) {
+function MacroRow({ macro }: { macro: NutritionDashboardMacro }) {
   const config = macroConfig(macro);
   const percent = Math.max(0, Math.min(100, macro.percent));
 
   return (
-    <Card className="glass-subtle min-w-0 border-border/50">
-      <CardContent className={cn(compact ? "space-y-2 p-2.5" : "space-y-3 p-3 sm:space-y-4 sm:p-4 lg:p-5")}>
-        <div className="flex items-center gap-2">
-          <config.Icon className={cn(compact ? "h-3.5 w-3.5" : "h-4 w-4", config.iconClass)} />
-          <p className={cn("truncate text-muted-foreground", compact ? "text-[11px]" : "text-xs sm:text-sm")}>{macro.label}</p>
+    <div className="flex items-center gap-3">
+      <config.Icon className={cn("h-4 w-4 shrink-0", config.iconClass)} />
+      <p className="w-14 shrink-0 text-sm text-muted-foreground">{macro.label}</p>
+      <div className="flex flex-1 flex-col justify-center gap-1.5">
+        <div className="h-1.5 overflow-hidden rounded-full bg-muted/80">
+          <div className={cn("h-full rounded-full transition-all", config.barClass)} style={{ width: `${percent}%` }} />
         </div>
-        <p className={cn("truncate font-semibold leading-none", compact ? "text-2xl" : "text-2xl sm:text-3xl lg:text-4xl", config.valueClass)}>
-          {macro.grams}
-          <span className={cn("ml-0.5 text-muted-foreground", compact ? "text-base" : "text-base sm:text-lg lg:text-xl")}>g</span>
-        </p>
-        <div className="space-y-1.5">
-          <div className={cn("overflow-hidden rounded-full bg-muted/80", compact ? "h-1.5" : "h-1.5")}>
-            <div className={cn("h-full rounded-full transition-all", config.barClass)} style={{ width: `${percent}%` }} />
-          </div>
-          <p className={cn("text-right text-muted-foreground", compact ? "text-[11px]" : "text-xs")}>{percent}%</p>
+      </div>
+      <p className="w-24 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
+        <span className={cn("font-medium", config.valueClass)}>{macro.grams}g</span>
+        <span className="text-muted-foreground/60"> / {macro.targetGrams}g</span>
+      </p>
+    </div>
+  );
+}
+
+function CalorieStat({
+  label,
+  value,
+  valueClass,
+}: {
+  label: string;
+  value: number;
+  valueClass?: string;
+}) {
+  return (
+    <div className="glass-subtle flex flex-1 flex-col items-center gap-1 rounded-2xl px-3 py-3">
+      <p className={cn("text-lg font-semibold tabular-nums leading-none", valueClass ?? "text-foreground")}>{value}</p>
+      <p className="text-[11px] text-muted-foreground">{label}</p>
+    </div>
+  );
+}
+
+function NutritionHeroCard({ data }: { data: NutritionDashboardData }) {
+  const remaining = Math.max(0, data.targetCalories - data.consumedCalories);
+  const remainingClass =
+    remaining > data.targetCalories * 0.2 ? "text-chart-3" : remaining > 0 ? "text-chart-4" : "text-destructive";
+
+  return (
+    <section className="glass-surface surface-pad space-y-5">
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-2xl font-semibold tracking-tight">Today&apos;s Nutrition</h2>
+        {data.activePlanName ? (
+          <span className="rounded-full border border-border/60 bg-muted/60 px-2.5 py-0.5 text-xs text-muted-foreground">
+            {data.activePlanName}
+          </span>
+        ) : null}
+      </div>
+
+      <div className="hidden gap-6 md:flex md:items-center">
+        <CalorieRing consumed={data.consumedCalories} target={data.targetCalories} />
+        <div className="flex flex-1 flex-col gap-4">
+          {data.macros.map((macro) => (
+            <MacroRow key={macro.key} macro={macro} />
+          ))}
         </div>
-      </CardContent>
-    </Card>
+      </div>
+
+      <div className="flex flex-col items-center gap-5 md:hidden">
+        <CalorieRing consumed={data.consumedCalories} target={data.targetCalories} compact />
+        <div className="w-full space-y-3">
+          {data.macros.map((macro) => (
+            <MacroRow key={macro.key} macro={macro} />
+          ))}
+        </div>
+      </div>
+
+      <div className="flex gap-3">
+        <CalorieStat label="Consumed" value={data.consumedCalories} valueClass="text-chart-2" />
+        <CalorieStat label="Target" value={data.targetCalories} />
+        <CalorieStat label="Remaining" value={remaining} valueClass={remainingClass} />
+      </div>
+    </section>
   );
 }
 
@@ -123,37 +176,59 @@ function quickActionConfig(action: NutritionDashboardQuickAction) {
   return { Icon: TrendingUp };
 }
 
-function QuickActionCard({ action }: { action: NutritionDashboardQuickAction }) {
-  const { Icon } = quickActionConfig(action);
-  const isPrimary = action.id === "log";
+function QuickActionsRow({ actions }: { actions: NutritionDashboardQuickAction[] }) {
+  const primary = actions.find((action) => action.id === "log") || actions[0] || null;
+  const secondary = actions.filter((action) => action.id !== primary?.id).slice(0, 3);
 
   return (
-    <Button
-      asChild
-      variant="outline"
-      className={cn(
-        "h-24 w-full justify-center rounded-2xl text-base",
-        isPrimary
-          ? "accent-strong border-0 text-black hover:brightness-105"
-          : "glass-subtle border-border/60 hover:bg-accent/35"
-      )}
-    >
-      <Link href={action.href}>
-        <span className="flex flex-col items-center gap-2">
-          <Icon className={cn("h-5 w-5", isPrimary ? "text-black" : "text-chart-2")} />
-          <span>{action.label}</span>
-        </span>
-      </Link>
-    </Button>
+    <section>
+      <div className="grid grid-cols-2 gap-2 md:flex md:gap-3">
+        {primary ? (
+          <Button
+            asChild
+            className="accent-strong col-span-2 h-11 rounded-xl text-black hover:brightness-105 md:col-auto md:min-w-[140px] md:flex-none"
+          >
+            <Link href={primary.href}>
+              <Plus className="mr-2 h-4 w-4" />
+              {primary.label}
+            </Link>
+          </Button>
+        ) : null}
+        {secondary.map((action) => {
+          const { Icon } = quickActionConfig(action);
+          return (
+            <Button key={action.id} asChild variant="outline" className="glass-subtle h-11 rounded-xl border-border/60">
+              <Link href={action.href}>
+                <Icon className="mr-2 h-4 w-4 text-chart-2" />
+                {action.label}
+              </Link>
+            </Button>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 
-function activityIcon(type: NutritionDashboardActivity["type"]) {
-  if (type === "assignment") return Users;
-  if (type === "group") return CalendarDays;
-  if (type === "progress") return TrendingUp;
-  if (type === "client") return Users;
-  return UtensilsCrossed;
+function activityStyle(type: NutritionDashboardActivity["type"]): {
+  iconBg: string;
+  iconColor: string;
+  Icon: LucideIcon;
+} {
+  switch (type) {
+    case "meal":
+      return { iconBg: "bg-chart-2/15", iconColor: "text-chart-2", Icon: UtensilsCrossed };
+    case "assignment":
+      return { iconBg: "bg-chart-3/15", iconColor: "text-chart-3", Icon: CalendarDays };
+    case "group":
+      return { iconBg: "bg-chart-4/15", iconColor: "text-chart-4", Icon: Layers };
+    case "progress":
+      return { iconBg: "bg-chart-1/15", iconColor: "text-chart-1", Icon: TrendingUp };
+    case "client":
+      return { iconBg: "bg-primary/10", iconColor: "text-primary", Icon: Users };
+    default:
+      return { iconBg: "bg-muted/60", iconColor: "text-muted-foreground", Icon: UtensilsCrossed };
+  }
 }
 
 function RecentActivityRow({
@@ -163,150 +238,75 @@ function RecentActivityRow({
   activity: NutritionDashboardActivity;
   withSeparator: boolean;
 }) {
-  const Icon = activityIcon(activity.type);
+  const { Icon, iconBg, iconColor } = activityStyle(activity.type);
 
   return (
-    <>
-      <div className="flex items-center justify-between gap-3 py-4">
-        <div className="flex min-w-0 items-center gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-muted/60">
-            <Icon className="h-4 w-4 text-chart-2" />
-          </div>
-          <p className="truncate text-sm sm:text-base">{activity.text}</p>
+    <div className={cn("flex items-center justify-between gap-3 py-4", withSeparator && "border-b border-border/60")}>
+      <div className="flex min-w-0 items-center gap-3">
+        <div className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-xl", iconBg)}>
+          <Icon className={cn("h-4 w-4", iconColor)} />
         </div>
-        <div className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground sm:gap-1.5 sm:text-sm">
-          <Clock3 className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
-          <span className="whitespace-nowrap">{activity.timeLabel}</span>
-        </div>
+        <p className="truncate text-sm sm:text-base">{activity.text}</p>
       </div>
-      {withSeparator ? <Separator className="bg-border/60" /> : null}
-    </>
+      <div className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground sm:gap-1.5 sm:text-sm">
+        <Clock3 className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+        <span className="whitespace-nowrap">{activity.timeLabel}</span>
+      </div>
+    </div>
+  );
+}
+
+function ActivitySection({ activities }: { activities: NutritionDashboardActivity[] }) {
+  return (
+    <section className="glass-surface surface-pad">
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <h2 className="text-xl font-semibold tracking-tight">Recent Activity</h2>
+        <Link href="/nutrition/diary" className="text-xs text-muted-foreground transition-colors hover:text-foreground">
+          View diary →
+        </Link>
+      </div>
+      <div className="rounded-2xl border border-border/60 bg-card/60 px-4">
+        {activities.length === 0 ? (
+          <p className="py-6 text-sm text-muted-foreground">No recent nutrition activity yet.</p>
+        ) : (
+          activities.map((activity, index) => (
+            <RecentActivityRow key={activity.id} activity={activity} withSeparator={index < activities.length - 1} />
+          ))
+        )}
+      </div>
+    </section>
   );
 }
 
 export function NutritionDashboard() {
-  const [scopeDialogOpen, setScopeDialogOpen] = useState(false);
-  const query = useNutritionDashboardData();
-  const setViewMode = useSetNutritionViewMode();
-  const setNavigationSource = useSetNutritionNavigationSource();
-
+  const { data, diaryIsLoading, activityIsLoading, isError, refetch } = useNutritionDashboardData();
   useNutritionPrefetch();
 
-  useEffect(() => {
-    setViewMode("dashboard");
-    setNavigationSource("dashboard");
-  }, [setNavigationSource, setViewMode]);
-
-  if (query.isLoading) {
-    return <NutritionDashboardSkeleton />;
-  }
-
-  if (query.isError || !query.data) {
+  if (isError) {
     return (
-      <section className="glass-surface surface-pad">
-        <div className="flex flex-col items-start gap-3">
-          <h1 className="text-2xl font-semibold tracking-tight">Today&apos;s Nutrition</h1>
-          <p className="text-sm text-muted-foreground">We couldn&apos;t load dashboard data right now.</p>
-          <Button className="accent-strong rounded-xl" onClick={() => void query.refetch()}>
-            Retry
-          </Button>
-        </div>
-      </section>
+      <div className="section-gap">
+        <DashboardHeader />
+        <section className="glass-surface surface-pad">
+          <div className="flex flex-col items-start gap-3">
+            <p className="text-sm text-muted-foreground">We couldn&apos;t load dashboard data right now.</p>
+            <Button className="accent-strong rounded-xl" onClick={() => void refetch()}>
+              Retry
+            </Button>
+          </div>
+        </section>
+      </div>
     );
   }
 
-  const data = query.data;
-
   return (
     <div className="section-gap">
-      <section className="space-y-2">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <h1 className="text-4xl font-semibold tracking-tight">Nutrition Dashboard</h1>
-            <p className="mt-1 text-sm text-muted-foreground">{data.greetingSubtitle}</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              size="icon"
-              variant="outline"
-              className="glass-subtle h-14 w-14 shrink-0 rounded-2xl border-border/60"
-              onClick={() => setScopeDialogOpen(true)}
-            >
-              <SlidersHorizontal className="h-5 w-5 text-chart-2" />
-              <span className="sr-only">Select user and meal group</span>
-            </Button>
-            <Button size="icon" className="accent-strong h-14 w-14 shrink-0 rounded-2xl text-black">
-              <Plus className="h-6 w-6" />
-              <span className="sr-only">Quick add</span>
-            </Button>
-          </div>
-        </div>
-      </section>
+      <DashboardHeader />
 
-      <section className="glass-surface surface-pad">
-        <div className="space-y-4">
-          <div className="flex items-center justify-between gap-3">
-            <h2 className="text-2xl font-semibold tracking-tight">Today&apos;s Nutrition</h2>
-            <p className="text-sm text-muted-foreground">{data.dateLabel}</p>
-          </div>
+      {diaryIsLoading ? <NutritionHeroSkeleton /> : <NutritionHeroCard data={data} />}
 
-          <div className="grid gap-3 md:hidden">
-            <div className="grid grid-cols-[7.5rem_repeat(3,minmax(0,1fr))] items-center gap-2">
-              <CalorieRing consumed={data.consumedCalories} target={data.targetCalories} compact />
-              {data.macros.map((macro) => (
-                <MacroCard key={macro.key} macro={macro} compact />
-              ))}
-            </div>
-          </div>
+      <QuickActionsRow actions={data.quickActions} />
 
-          <div className="hidden gap-3 md:grid xl:grid-cols-[minmax(0,280px)_minmax(0,1fr)] xl:items-stretch">
-            <div className="xl:self-center">
-              <CalorieRing consumed={data.consumedCalories} target={data.targetCalories} />
-            </div>
-            <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-3">
-              {data.macros.map((macro) => (
-                <MacroCard key={macro.key} macro={macro} />
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="space-y-3">
-        <h2 className="text-xl font-semibold tracking-tight">Quick Actions</h2>
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-          {data.quickActions.map((action) => (
-            <QuickActionCard key={action.id} action={action} />
-          ))}
-        </div>
-      </section>
-
-      <section className="glass-surface surface-pad">
-        <h2 className="mb-2 text-xl font-semibold tracking-tight">Recent Activity</h2>
-        <div className="rounded-2xl border border-border/60 bg-card/60 px-4">
-          {data.recentActivity.length === 0 ? (
-            <p className="py-6 text-sm text-muted-foreground">No recent nutrition activity yet.</p>
-          ) : (
-            data.recentActivity.map((activity, index) => (
-              <RecentActivityRow
-                key={activity.id}
-                activity={activity}
-                withSeparator={index < data.recentActivity.length - 1}
-              />
-            ))
-          )}
-        </div>
-      </section>
-
-      <Dialog open={scopeDialogOpen} onOpenChange={setScopeDialogOpen}>
-        <DialogContent className="rounded-2xl border-border/70 bg-card/95 sm:max-w-xl">
-          <DialogHeader>
-            <DialogTitle>User & Meal Group</DialogTitle>
-            <DialogDescription>Select the user and meal group context for nutrition pages.</DialogDescription>
-          </DialogHeader>
-          <NutritionScopeControls showHelperText fullWidthOnMobile />
-        </DialogContent>
-      </Dialog>
+      {activityIsLoading ? <ActivitySectionSkeleton /> : <ActivitySection activities={data.recentActivity} />}
     </div>
   );
 }

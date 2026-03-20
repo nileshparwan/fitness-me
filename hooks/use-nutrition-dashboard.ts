@@ -2,14 +2,14 @@
 
 import { useMemo } from "react";
 import { formatDistanceToNowStrict } from "date-fns";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 
+import { getNutritionDiaryDayAction } from "@/app/actions/nutrition-manual";
 import { listNutritionDashboardActivityAction } from "@/app/actions/nutrition-dashboard";
-import { useNutritionDiary } from "@/hooks/use-nutrition-manual";
 import { NUTRITION_DASHBOARD_QUICK_ACTIONS, type NutritionDashboardData } from "@/lib/nutrition/dashboard";
 import { resolveNutritionSubject } from "@/lib/nutrition/subject";
 import { nutritionKeys } from "@/lib/query-keys-nutrition";
-import { useNutritionActiveSubject, useNutritionSelectedMealGroupId } from "@/stores/use-nutrition-ui-store";
+import { useNutritionActiveSubject } from "@/stores/use-nutrition-ui-store";
 
 function toDateInput(date: Date) {
   const year = date.getFullYear();
@@ -42,20 +42,33 @@ function relativeTimeLabel(value: string) {
 
 export function useNutritionDashboard() {
   const { activeSubjectType, activeSubjectId } = useNutritionActiveSubject();
-  const selectedMealGroupId = useNutritionSelectedMealGroupId();
   const subject = useMemo(() => resolveNutritionSubject(activeSubjectType, activeSubjectId), [activeSubjectId, activeSubjectType]);
   const today = useMemo(() => toDateInput(new Date()), []);
 
-  const diaryQuery = useNutritionDiary(today, subject, selectedMealGroupId || null);
+  const diaryQuery = useQuery({
+    queryKey: nutritionKeys.diaryDay(today, subject, undefined),
+    queryFn: () =>
+      getNutritionDiaryDayAction({
+        performed_on: today,
+        subject,
+        meal_group_id: undefined,
+      }),
+    enabled: Boolean(today),
+    staleTime: 120_000,
+    gcTime: 10 * 60_000,
+    placeholderData: keepPreviousData,
+    refetchOnWindowFocus: false,
+  });
+
   const activityQuery = useQuery({
-    queryKey: nutritionKeys.dashboardActivity(subject, 10, selectedMealGroupId || null),
+    queryKey: nutritionKeys.dashboardActivity(subject, 10, undefined),
     queryFn: () =>
       listNutritionDashboardActivityAction({
         subject,
         limit: 10,
-        meal_group_id: selectedMealGroupId || undefined,
+        meal_group_id: undefined,
       }),
-    staleTime: 20_000,
+    staleTime: 60_000,
     gcTime: 5 * 60_000,
     refetchOnWindowFocus: false,
   });
@@ -75,11 +88,10 @@ export function useNutritionDashboard() {
     const fatTarget = Math.round(Number(targets?.daily_fat_target_g || 0));
 
     return {
-      greetingName: "You",
-      greetingSubtitle: "Track your nutrition and manage your clients",
       dateLabel: formatIsoDateLabel(diary?.performed_on || today),
       consumedCalories: calories,
       targetCalories: Math.round(Number(targets?.daily_calorie_target || Math.max(calories, 1))),
+      activePlanName: targets?.name ?? null,
       macros: [
         {
           key: "protein",
@@ -119,6 +131,8 @@ export function useNutritionDashboard() {
 
   return {
     data,
+    diaryIsLoading: diaryQuery.isLoading,
+    activityIsLoading: activityQuery.isLoading,
     isLoading: diaryQuery.isLoading || activityQuery.isLoading,
     isFetching: diaryQuery.isFetching || activityQuery.isFetching,
     isError: diaryQuery.isError || activityQuery.isError,

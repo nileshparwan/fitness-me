@@ -25,11 +25,10 @@ export type NutritionDashboardActivity = {
 };
 
 export type NutritionDashboardData = {
-  greetingName: string;
-  greetingSubtitle: string;
   dateLabel: string;
   consumedCalories: number;
   targetCalories: number;
+  activePlanName: string | null;
   macros: NutritionDashboardMacro[];
   quickActions: NutritionDashboardQuickAction[];
   recentActivity: NutritionDashboardActivity[];
