@@ -98,6 +98,60 @@ test("recent diary items are deduped and capped at 10 entries", () => {
   assert.equal(keys.size, recent.length);
 });
 
+test("diary meal type order supports functional updates and normalizes persisted values", () => {
+  const store = useNutritionUiStore;
+  store.getState().resetNutritionUiState();
+
+  store.getState().setDiaryMealTypeOrder([" water ", "breakfast", "", "water"]);
+  assert.deepEqual(store.getState().diaryMealTypeOrder, ["water", "breakfast"]);
+
+  store.getState().setDiaryMealTypeOrder((previous) => [...previous, "lunch", "water"]);
+  assert.deepEqual(store.getState().diaryMealTypeOrder, ["water", "breakfast", "lunch"]);
+
+  store.getState().clearDiaryMealTypeOrder();
+  assert.deepEqual(store.getState().diaryMealTypeOrder, []);
+});
+
+test("planner meal type order is day scoped and supports functional updates", () => {
+  const store = useNutritionUiStore;
+  store.getState().resetNutritionUiState();
+
+  store.getState().setPlannerMealTypeOrder("mon", [" breakfast ", "water", "", "water"]);
+  assert.deepEqual(store.getState().plannerMealTypeOrderByDay.mon, ["breakfast", "water"]);
+
+  store.getState().setPlannerMealTypeOrder("mon", (previous) => [...previous, "lunch", "breakfast"]);
+  assert.deepEqual(store.getState().plannerMealTypeOrderByDay.mon, ["breakfast", "water", "lunch"]);
+
+  store.getState().setPlannerMealTypeOrder("tue", ["dinner"]);
+  assert.deepEqual(store.getState().plannerMealTypeOrderByDay.tue, ["dinner"]);
+
+  store.getState().clearPlannerMealTypeOrder("mon");
+  assert.equal(store.getState().plannerMealTypeOrderByDay.mon, undefined);
+  assert.deepEqual(store.getState().plannerMealTypeOrderByDay.tue, ["dinner"]);
+});
+
+test("meal-group meal type order is scoped by group and day", () => {
+  const store = useNutritionUiStore;
+  store.getState().resetNutritionUiState();
+
+  store.getState().setMealGroupMealTypeOrder("group-a", "mon", [" breakfast ", "water", "water"]);
+  store.getState().setMealGroupMealTypeOrder("group-a", "tue", ["lunch"]);
+  store.getState().setMealGroupMealTypeOrder("group-b", "mon", ["dinner"]);
+  store.getState().setMealGroupMealTypeOrder("group-a", "mon", (previous) => [...previous, "snack", "breakfast"]);
+
+  assert.deepEqual(store.getState().mealGroupMealTypeOrderByGroup["group-a"]?.mon, ["breakfast", "water", "snack"]);
+  assert.deepEqual(store.getState().mealGroupMealTypeOrderByGroup["group-a"]?.tue, ["lunch"]);
+  assert.deepEqual(store.getState().mealGroupMealTypeOrderByGroup["group-b"]?.mon, ["dinner"]);
+
+  store.getState().clearMealGroupMealTypeOrder("group-a", "mon");
+  assert.equal(store.getState().mealGroupMealTypeOrderByGroup["group-a"]?.mon, undefined);
+  assert.deepEqual(store.getState().mealGroupMealTypeOrderByGroup["group-a"]?.tue, ["lunch"]);
+
+  store.getState().clearMealGroupMealTypeOrder("group-a", "tue");
+  assert.equal(store.getState().mealGroupMealTypeOrderByGroup["group-a"], undefined);
+  assert.deepEqual(store.getState().mealGroupMealTypeOrderByGroup["group-b"]?.mon, ["dinner"]);
+});
+
 test("legacy query key adapters stay consistent with shared nutrition key factory", () => {
   const dayKey = legacyNutritionKeys.diaryDay("2026-03-08", { subject_user_id: "u-1" }, "g-1");
   const sharedDayKey = nutritionKeys.diaryDay("2026-03-08", { subject_user_id: "u-1" }, "g-1");

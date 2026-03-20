@@ -37,6 +37,28 @@ export const MEAL_TYPE_LABELS: Record<MealItemType, string> = {
   protein_drink: "Protein Drink",
 };
 
+export const MEAL_TYPE_DISPLAY_ORDER: MealItemType[] = [
+  "breakfast",
+  "snack",
+  "lunch",
+  "pre_workout_meal",
+  "post_workout_meal",
+  "dinner",
+  "protein_drink",
+  "water",
+];
+
+export const MEAL_TYPE_ACCENTS: Record<MealItemType, string> = {
+  water: "text-chart-3",
+  breakfast: "text-chart-1",
+  snack: "text-chart-4",
+  lunch: "text-chart-2",
+  pre_workout_meal: "text-chart-3",
+  post_workout_meal: "text-chart-5",
+  dinner: "text-chart-4",
+  protein_drink: "text-chart-1",
+};
+
 export const MEAL_TYPE_ICONS: Record<MealItemType, LucideIcon> = {
   water: Droplets,
   breakfast: Sun,
@@ -53,4 +75,3 @@ export const MEAL_GROUP_STATUS_LABELS: Record<MealGroupStatus, string> = {
   active: "Active",
   archived: "Archived",
 };
-

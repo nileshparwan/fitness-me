@@ -8,11 +8,8 @@ import {
   ChevronRight,
   CirclePlus,
   Copy,
-  Flame,
   Loader2,
   Pencil,
-  SlidersHorizontal,
-  Sparkles,
   Star,
   Trash2,
 } from "lucide-react";
@@ -20,21 +17,19 @@ import { toast } from "sonner";
 
 import type { ManualDiaryItem, ManualDiaryLog, MealType } from "@/app/actions/nutrition-manual";
 import { MEAL_TYPE_ICONS, MEAL_TYPE_LABELS } from "@/components/nutrition/meal-groups/meal-group-types";
-import { NutritionScopeControls } from "@/components/nutrition/nutrition-scope-controls";
-import { Badge } from "@/components/ui/badge";
+import { DeleteConfirmSheet } from "@/components/nutrition/shared/delete-confirm-sheet";
+import { MealItemEditorSheet, type MealItemEditorValue } from "@/components/nutrition/shared/meal-item-editor-sheet";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/responsive-modal";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Slider } from "@/components/ui/slider";
 import { Textarea } from "@/components/ui/textarea";
 import {
   useClientNutritionSummary7d,
   useFavoriteMealItems,
+  useLogFromPlan,
   useMealPlanTemplates,
   useNutritionDiary,
   useNutritionMutations,
@@ -42,20 +37,24 @@ import {
 import { resolveNutritionSubject, useNutritionAutoMealGroupSelection } from "@/hooks/use-nutrition-data";
 import {
   useNutritionActiveSubject,
-  useSetNutritionActiveSubject,
-  useNutritionSelectedDate,
-  useNutritionSelectedMealGroupId,
-  useSetNutritionDiaryFilters,
-  useSetNutritionNavigationSource,
+  useNutritionDiaryMealTypeOrder,
+  useClearNutritionDiaryMealTypeOrder,
   useNutritionRecentDiaryItems,
   usePushNutritionRecentDiaryItem,
+  useNutritionSelectedDate,
+  useNutritionSelectedMealGroupId,
+  useSetNutritionActiveSubject,
+  useSetNutritionDiaryFilters,
+  useSetNutritionDiaryMealTypeOrder,
+  useSetNutritionNavigationSource,
   useSetNutritionSelectedDate,
   useSetNutritionViewMode,
 } from "@/stores/use-nutrition-ui-store";
 import { useUnitLabels } from "@/stores/use-settings-store";
-import { getMealUnitOptions, normalizeMealUnit } from "@/lib/nutrition/meal-units";
+import { useMediaQuery } from "@/hooks/use-media-query";
+import { normalizeMealUnit } from "@/lib/nutrition/meal-units";
 import type { NutritionSubject } from "@/lib/query-keys-nutrition";
-import { applyMacroQuickAction, canNavigateDate, isMealGroupSelected, mealTypeOrderRank, type MacroQuickAction } from "@/lib/nutrition/meal-ui";
+import { canNavigateDate, isMealGroupSelected, mealTypeOrderRank } from "@/lib/nutrition/meal-ui";
 import { cn } from "@/utils";
 
 type DiaryMealSection =
@@ -68,6 +67,7 @@ type DiaryMealSection =
   | "protein_drink"
   | "water"
   | "other";
+type OrderableMealType = Exclude<DiaryMealSection, "other">;
 
 const DIARY_SECTIONS: Array<{ key: DiaryMealSection; label: string; accent: string }> = [
   { key: "water", label: "Water", accent: "text-chart-3" },
@@ -89,7 +89,35 @@ type VisibleSectionCard = {
   position: number;
 };
 
-const NO_UNIT_SELECT_VALUE = "__no_unit__";
+const ORDERABLE_DIARY_MEAL_TYPES: OrderableMealType[] = [
+  "breakfast",
+  "snack",
+  "lunch",
+  "pre_workout_meal",
+  "post_workout_meal",
+  "dinner",
+  "protein_drink",
+  "water",
+];
+const DEFAULT_DIARY_SECTION_ORDER: DiaryMealSection[] = [
+  "breakfast",
+  "snack",
+  "lunch",
+  "pre_workout_meal",
+  "post_workout_meal",
+  "dinner",
+  "protein_drink",
+  "water",
+];
+
+function isOrderableMealType(value: string): value is OrderableMealType {
+  return ORDERABLE_DIARY_MEAL_TYPES.includes(value as OrderableMealType);
+}
+
+function favoriteItemKey(itemName: string, unit: string | null | undefined) {
+  const canonicalUnit = normalizeMealUnit(unit);
+  return `${itemName.trim().toLowerCase()}::${canonicalUnit || unit || ""}`;
+}
 
 function toDateInput(date: Date) {
   return format(date, "yyyy-MM-dd");
@@ -137,75 +165,6 @@ function SectionIcon({ section, className }: { section: DiaryMealSection; classN
   return <Icon className={className} />;
 }
 
-function MetricControl({
-  label,
-  value,
-  onChange,
-  max,
-  step,
-  unit,
-  accent,
-}: {
-  label: string;
-  value: number;
-  onChange: (next: number) => void;
-  max: number;
-  step: number;
-  unit?: string;
-  accent?: string;
-}) {
-  const roundedValue = Math.max(0, Math.min(max, toSafeInt(value)));
-
-  return (
-    <div className="space-y-2 rounded-xl border border-border/60 bg-background/50 p-3">
-      <div className="flex items-center justify-between gap-3">
-        <span className={cn("text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground", accent)}>{label}</span>
-        <div className="flex items-center gap-1">
-          <Input
-            className="h-8 w-24 border-border/60 bg-muted/40 text-right"
-            type="number"
-            min={0}
-            max={max}
-            step={step}
-            value={roundedValue}
-            onChange={(event) => onChange(toSafeInt(event.target.value))}
-          />
-          {unit ? <span className="text-xs text-muted-foreground">{unit}</span> : null}
-        </div>
-      </div>
-      <Slider
-        value={[roundedValue]}
-        min={0}
-        max={max}
-        step={step}
-        onValueChange={(values) => onChange(toSafeInt(values[0]))}
-      />
-    </div>
-  );
-}
-
-function DailyMacroCard({
-  title,
-  value,
-  unit,
-  accent,
-}: {
-  title: string;
-  value: number;
-  unit?: string;
-  accent: string;
-}) {
-  return (
-    <div className="glass-subtle p-4">
-      <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">{title}</p>
-      <p className={cn("mt-2 text-3xl font-semibold leading-none", accent)}>
-        {Math.round(value)}
-        {unit ? <span className="ml-1 text-lg text-muted-foreground">{unit}</span> : null}
-      </p>
-    </div>
-  );
-}
-
 function ProgressBar({
   label,
   value,
@@ -243,7 +202,6 @@ type ManualNutritionDiaryProps = {
   subject?: NutritionSubject;
   showAssignmentTools?: boolean;
   clientIdForSummary?: string;
-  title?: string;
 };
 
 export function ManualNutritionDiary({
@@ -251,6 +209,7 @@ export function ManualNutritionDiary({
   showAssignmentTools = false,
   clientIdForSummary,
 }: ManualNutritionDiaryProps) {
+  const isDesktop = useMediaQuery("(min-width: 768px)");
   const units = useUnitLabels();
   const performedOn = useNutritionSelectedDate();
   const setPerformedOn = useSetNutritionSelectedDate();
@@ -264,36 +223,20 @@ export function ManualNutritionDiary({
   const [sourceDate, setSourceDate] = useState(() => toDateInput(subDays(new Date(), 1)));
   const [copySections, setCopySections] = useState<DiaryMealSection[]>([]);
 
-  const [itemDialogOpen, setItemDialogOpen] = useState(false);
-  const [quickDialogOpen, setQuickDialogOpen] = useState(false);
+  const [itemEditorOpen, setItemEditorOpen] = useState(false);
+  const [itemEditorQuickMode, setItemEditorQuickMode] = useState(false);
+  const [itemEditorDefaultValue, setItemEditorDefaultValue] = useState<Partial<MealItemEditorValue> | null>(null);
   const [recentDialogOpen, setRecentDialogOpen] = useState(false);
-  const [optionsDialogOpen, setOptionsDialogOpen] = useState(false);
   const [copyDialogOpen, setCopyDialogOpen] = useState(false);
-  const [addMealTypeDialogOpen, setAddMealTypeDialogOpen] = useState(false);
-  const [newMealType, setNewMealType] = useState<DiaryMealSection>("water");
+  const [customOrderModalOpen, setCustomOrderModalOpen] = useState(false);
 
   const [selectedSection, setSelectedSection] = useState<DiaryMealSection>("water");
   const [favoriteSection, setFavoriteSection] = useState<DiaryMealSection>("breakfast");
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
-  const [editingOriginalUnit, setEditingOriginalUnit] = useState<string | null>(null);
-  const [itemTime, setItemTime] = useState("");
-
-  const [itemName, setItemName] = useState("");
-  const [quantity, setQuantity] = useState("");
-  const [unit, setUnit] = useState("");
-  const [calories, setCalories] = useState(0);
-  const [protein, setProtein] = useState(0);
-  const [carbs, setCarbs] = useState(0);
-  const [fat, setFat] = useState(0);
-  const [fiber, setFiber] = useState(0);
-  const [itemNotes, setItemNotes] = useState("");
-  const [saveToFavorites, setSaveToFavorites] = useState(false);
-
-  const [quickCalories, setQuickCalories] = useState(0);
-  const [quickProtein, setQuickProtein] = useState(0);
-  const [quickCarbs, setQuickCarbs] = useState(0);
-  const [quickFat, setQuickFat] = useState(0);
-  const [quickFiber, setQuickFiber] = useState(0);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string | null } | null>(null);
+  const [favoritesOpen, setFavoritesOpen] = useState(false);
+  const [favoritesLookupEnabled, setFavoritesLookupEnabled] = useState(false);
+  const [favoriteOverrides, setFavoriteOverrides] = useState<Record<string, boolean>>({});
 
   const [mealNotesDraft, setMealNotesDraft] = useState<Record<string, string>>({});
   const [planTemplateId, setPlanTemplateId] = useState("");
@@ -309,17 +252,25 @@ export function ManualNutritionDiary({
   });
 
   const mealGroupSelected = isMealGroupSelected(selectedMealGroupId);
+  const storedCustomSectionOrder = useNutritionDiaryMealTypeOrder();
+  const setStoredCustomSectionOrder = useSetNutritionDiaryMealTypeOrder();
+  const clearStoredCustomSectionOrder = useClearNutritionDiaryMealTypeOrder();
+  const customSectionOrder = useMemo(
+    () => storedCustomSectionOrder.filter(isOrderableMealType),
+    [storedCustomSectionOrder]
+  );
   const selectedFavoriteMealType = toActionMealType(favoriteSection);
   const recentItems = useNutritionRecentDiaryItems();
   const pushRecentDiaryItem = usePushNutritionRecentDiaryItem();
 
   const diaryQuery = useNutritionDiary(performedOn, resolvedSubject, selectedMealGroupId || null);
-  const allFavoritesQuery = useFavoriteMealItems(200, null);
-  const favoritesQuery = useFavoriteMealItems(40, selectedFavoriteMealType);
+  const allFavoritesQuery = useFavoriteMealItems(100, null, { enabled: favoritesLookupEnabled || favoritesOpen });
+  const favoritesQuery = useFavoriteMealItems(40, selectedFavoriteMealType, { enabled: favoritesOpen });
   const templatesQuery = useMealPlanTemplates();
   const summaryQuery = useClientNutritionSummary7d(clientIdForSummary || resolvedSubject?.subject_client_id || "", performedOn);
 
   const mutations = useNutritionMutations(performedOn, resolvedSubject, selectedMealGroupId || null);
+  const logFromPlan = useLogFromPlan(performedOn, resolvedSubject);
 
   useEffect(() => {
     setViewMode("diary");
@@ -344,13 +295,26 @@ export function ManualNutritionDiary({
     });
   }, [selectedFavoriteMealType, setDiaryFilters]);
 
+  useEffect(() => {
+    if (!favoritesOpen) return;
+    setFavoritesLookupEnabled(true);
+  }, [favoritesOpen]);
+
+  useEffect(() => {
+    if (!allFavoritesQuery.data) return;
+    setFavoriteOverrides((previous) => (Object.keys(previous).length > 0 ? {} : previous));
+  }, [allFavoritesQuery.data]);
+
   const favoriteMap = useMemo(() => {
     const map = new Map<string, boolean>();
     for (const favorite of allFavoritesQuery.data || []) {
-      map.set(`${favorite.item_name.toLowerCase()}::${favorite.unit || ""}`, true);
+      map.set(favoriteItemKey(favorite.item_name, favorite.unit), true);
+    }
+    for (const [key, value] of Object.entries(favoriteOverrides)) {
+      map.set(key, value);
     }
     return map;
-  }, [allFavoritesQuery.data]);
+  }, [allFavoritesQuery.data, favoriteOverrides]);
 
   const logsBySection = useMemo(() => {
     const map = new Map<DiaryMealSection, ManualDiaryLog>();
@@ -410,15 +374,72 @@ export function ManualNutritionDiary({
       });
     }
 
-    return [...configuredSections, ...inferredSections].sort((a, b) => {
+    const mergedSections = [...configuredSections, ...inferredSections].sort((a, b) => {
       if (a.position !== b.position) return a.position - b.position;
       return mealTypeOrderRank(a.key) - mealTypeOrderRank(b.key);
     });
+    const mergedByType = new Map<DiaryMealSection, VisibleSectionCard>();
+    for (const section of mergedSections) {
+      if (mergedByType.has(section.key)) continue;
+      mergedByType.set(section.key, section);
+    }
+
+    const baseSections = DEFAULT_DIARY_SECTION_ORDER.map((sectionKey, index) => {
+      const existing = mergedByType.get(sectionKey);
+      if (existing) {
+        mergedByType.delete(sectionKey);
+        return existing;
+      }
+      const meta = sectionMeta.get(sectionKey);
+      return {
+        id: `default-${sectionKey}`,
+        key: sectionKey,
+        label: meta?.label || getSectionLabel(sectionKey),
+        accent: meta?.accent || "text-muted-foreground",
+        position: index + 1,
+      };
+    });
+
+    const remainingSections = Array.from(mergedByType.values()).sort((a, b) => {
+      if (a.position !== b.position) return a.position - b.position;
+      return mealTypeOrderRank(a.key) - mealTypeOrderRank(b.key);
+    });
+
+    return [...baseSections, ...remainingSections];
   }, [diaryQuery.data?.meal_sections, logsBySection]);
+
+  const customOrderRank = useMemo(() => {
+    const map = new Map<OrderableMealType, number>();
+    for (const [index, type] of customSectionOrder.entries()) {
+      map.set(type, index + 1);
+    }
+    return map;
+  }, [customSectionOrder]);
+
+  const orderedVisibleSections = useMemo(() => {
+    if (customSectionOrder.length === 0) return visibleSections;
+
+    const orderedBySelection: VisibleSectionCard[] = [];
+    for (const type of customSectionOrder) {
+      for (const section of visibleSections) {
+        if (section.key !== type) continue;
+        orderedBySelection.push(section);
+      }
+    }
+
+    // Keep non-orderable sections that already contain logged items, so legacy/other data stays accessible.
+    const nonOrderableWithData = visibleSections.filter((section) => {
+      if (isOrderableMealType(section.key)) return false;
+      const items = logsBySection.get(section.key)?.items || [];
+      return items.length > 0;
+    });
+
+    return [...orderedBySelection, ...nonOrderableWithData];
+  }, [customSectionOrder, logsBySection, visibleSections]);
 
   const visibleSectionTypeOptions = useMemo(() => {
     const byType = new Map<DiaryMealSection, { key: DiaryMealSection; label: string; accent: string }>();
-    for (const section of visibleSections) {
+    for (const section of orderedVisibleSections) {
       if (byType.has(section.key)) continue;
       byType.set(section.key, {
         key: section.key,
@@ -427,13 +448,24 @@ export function ManualNutritionDiary({
       });
     }
     return Array.from(byType.values());
-  }, [visibleSections]);
+  }, [orderedVisibleSections]);
 
-  const unitOptions = useMemo(() => getMealUnitOptions(unit), [unit]);
   const favoriteSectionOptions = useMemo(
     () => DIARY_SECTIONS.filter((section) => section.key !== "other"),
     []
   );
+  const mealTypeOptionsForEditor = useMemo(() => {
+    if (visibleSectionTypeOptions.length > 0) {
+      return visibleSectionTypeOptions.map((section) => ({
+        value: section.key,
+        label: section.label,
+      }));
+    }
+    return DIARY_SECTIONS.map((section) => ({
+      value: section.key,
+      label: section.label,
+    }));
+  }, [visibleSectionTypeOptions]);
 
   useEffect(() => {
     if (visibleSectionTypeOptions.length === 0) return;
@@ -446,62 +478,52 @@ export function ManualNutritionDiary({
     setFavoriteSection("breakfast");
   }, [favoriteSection, favoriteSectionOptions]);
 
-  const resetItemForm = () => {
+  const resetItemEditor = () => {
     setEditingItemId(null);
-    setEditingOriginalUnit(null);
-    setItemTime("");
-    setItemName("");
-    setQuantity("");
-    setUnit("");
-    setCalories(0);
-    setProtein(0);
-    setCarbs(0);
-    setFat(0);
-    setFiber(0);
-    setItemNotes("");
-    setSaveToFavorites(false);
+    setItemEditorDefaultValue(null);
+    setItemEditorQuickMode(false);
   };
 
-  const openAddDialog = (section: DiaryMealSection) => {
-    if (!mealGroupSelected) {
-      toast.error("Select a meal group to continue.");
-      return;
-    }
-    resetItemForm();
+  const openAddDialog = (section: DiaryMealSection, quickMode = false) => {
+    resetItemEditor();
     setSelectedSection(section);
-    setItemDialogOpen(true);
-  };
-
-  const openQuickDialog = (section: DiaryMealSection) => {
-    if (!mealGroupSelected) {
-      toast.error("Select a meal group to continue.");
-      return;
-    }
-    setSelectedSection(section);
-    setQuickCalories(0);
-    setQuickProtein(0);
-    setQuickCarbs(0);
-    setQuickFat(0);
-    setQuickFiber(0);
-    setQuickDialogOpen(true);
+    setItemEditorQuickMode(quickMode);
+    setItemEditorDefaultValue({
+      type: section,
+      title: quickMode ? "Quick Add" : "",
+      quantity: null,
+      unit: null,
+      calories: 0,
+      protein_g: 0,
+      carbs_g: 0,
+      fat_g: 0,
+      fiber_g: null,
+      notes: null,
+      planned_time: null,
+      save_to_favorites: false,
+    });
+    setItemEditorOpen(true);
   };
 
   const onEditItem = (section: DiaryMealSection, item: ManualDiaryItem) => {
+    resetItemEditor();
     setSelectedSection(section);
     setEditingItemId(item.id);
-    setEditingOriginalUnit(item.unit || null);
-    setItemTime(item.consumed_time || "");
-    setItemName(item.item_name || "");
-    setQuantity(item.quantity?.toString() || "");
-    setUnit(normalizeMealUnit(item.unit) || item.unit || "");
-    setCalories(toSafeInt(item.calories));
-    setProtein(toSafeInt(item.protein_g));
-    setCarbs(toSafeInt(item.carbs_g));
-    setFat(toSafeInt(item.fat_g));
-    setFiber(toSafeInt(item.fiber_g));
-    setItemNotes(item.notes || "");
-    setSaveToFavorites(false);
-    setItemDialogOpen(true);
+    setItemEditorDefaultValue({
+      type: section,
+      title: item.item_name || "",
+      quantity: item.quantity,
+      unit: normalizeMealUnit(item.unit) || item.unit || null,
+      calories: toSafeInt(item.calories),
+      protein_g: toSafeInt(item.protein_g),
+      carbs_g: toSafeInt(item.carbs_g),
+      fat_g: toSafeInt(item.fat_g),
+      fiber_g: toSafeInt(item.fiber_g),
+      notes: item.notes,
+      planned_time: item.consumed_time || null,
+      save_to_favorites: false,
+    });
+    setItemEditorOpen(true);
   };
 
   const rememberRecentItem = (item: {
@@ -528,32 +550,13 @@ export function ManualNutritionDiary({
     });
   };
 
-  const onSaveItem = async () => {
-    if (!mealGroupSelected) {
-      toast.error("Select a meal group to continue.");
-      return;
-    }
-
-    if (!itemName.trim()) {
-      toast.error("Item name is required.");
-      return;
-    }
-    const normalizedName = itemName.trim();
-    const selectedUnit = unit.trim();
-    const canonicalUnit = normalizeMealUnit(selectedUnit);
-    const isPreservingLegacyUnit =
-      Boolean(editingItemId) &&
-      Boolean(selectedUnit) &&
-      !canonicalUnit &&
-      selectedUnit === (editingOriginalUnit || "").trim();
-
-    if (selectedUnit && !canonicalUnit && !isPreservingLegacyUnit) {
-      toast.error("Select a valid unit.");
-      return;
-    }
-
-    const unitForCreate = canonicalUnit || null;
-    const unitForUpdate = isPreservingLegacyUnit ? undefined : canonicalUnit || null;
+  const onSaveItem = async (value: MealItemEditorValue) => {
+    const section = visibleSectionTypeOptions.some((option) => option.key === value.type)
+      ? (value.type as DiaryMealSection)
+      : selectedSection;
+    const normalizedName = value.title.trim() || (itemEditorQuickMode ? "Quick Add" : getSectionLabel(section));
+    const normalizedUnit = normalizeMealUnit(value.unit);
+    const unitForSave = normalizedUnit || value.unit || null;
 
     try {
       if (editingItemId) {
@@ -561,122 +564,101 @@ export function ManualNutritionDiary({
           item_id: editingItemId,
           item: {
             item_name: normalizedName,
-            quantity: quantity ? Number(quantity) : null,
-            unit: unitForUpdate,
-            calories,
-            protein_g: protein,
-            carbs_g: carbs,
-            fat_g: fat,
-            fiber_g: fiber,
-            notes: itemNotes.trim() || null,
-            consumed_time: itemTime.trim() || null,
+            quantity: value.quantity,
+            unit: unitForSave,
+            calories: value.calories,
+            protein_g: value.protein_g,
+            carbs_g: value.carbs_g,
+            fat_g: value.fat_g,
+            fiber_g: value.fiber_g,
+            notes: value.notes,
+            consumed_time: value.planned_time,
           },
         });
       } else {
         const recentItem = {
           item_name: normalizedName,
-          quantity: quantity ? Number(quantity) : null,
-          unit: unitForCreate,
-          calories,
-          protein_g: protein,
-          carbs_g: carbs,
-          fat_g: fat,
-          fiber_g: fiber,
-          notes: itemNotes.trim() || null,
+          quantity: value.quantity,
+          unit: unitForSave,
+          calories: value.calories,
+          protein_g: value.protein_g,
+          carbs_g: value.carbs_g,
+          fat_g: value.fat_g,
+          fiber_g: value.fiber_g,
+          notes: value.notes,
         };
         await mutations.addItem.mutateAsync({
           performed_on: performedOn,
-          meal_type: toActionMealType(selectedSection),
+          meal_type: toActionMealType(section),
           subject: resolvedSubject,
-          meal_group_id: selectedMealGroupId,
+          meal_group_id: selectedMealGroupId || undefined,
           item: {
             ...recentItem,
-            is_quick_add: false,
-            consumed_time: itemTime.trim() || null,
+            consumed_time: value.planned_time,
+            is_quick_add: itemEditorQuickMode,
           },
         });
         rememberRecentItem(recentItem);
       }
 
-      if (saveToFavorites) {
-        const key = `${normalizedName.toLowerCase()}::${unitForCreate || ""}`;
-        if (!favoriteMap.has(key)) {
-          await mutations.toggleFavorite.mutateAsync({
-            item: {
-              item_name: normalizedName,
-              quantity: quantity ? Number(quantity) : null,
-              unit: unitForCreate,
-              calories,
-              protein_g: protein,
-                  carbs_g: carbs,
-                  fat_g: fat,
-                  fiber_g: fiber,
-                  notes: itemNotes.trim() || null,
-                },
-                meal_type: toActionMealType(selectedSection),
-              });
-            }
+      if (value.save_to_favorites) {
+        const key = favoriteItemKey(normalizedName, unitForSave);
+        let isAlreadyFavorite = favoriteMap.get(key) === true;
+        if (!isAlreadyFavorite) {
+          setFavoritesLookupEnabled(true);
+          const refreshedFavorites = await allFavoritesQuery.refetch();
+          if (refreshedFavorites.error) {
+            throw refreshedFavorites.error;
           }
 
+          isAlreadyFavorite = (refreshedFavorites.data || []).some(
+            (favorite) => favoriteItemKey(favorite.item_name, favorite.unit) === key
+          );
+        }
+
+        if (!isAlreadyFavorite) {
+          const favoriteResult = await mutations.toggleFavorite.mutateAsync({
+            item: {
+              item_name: normalizedName,
+              quantity: value.quantity,
+              unit: unitForSave,
+              calories: value.calories,
+              protein_g: value.protein_g,
+              carbs_g: value.carbs_g,
+              fat_g: value.fat_g,
+              fiber_g: value.fiber_g,
+              notes: value.notes,
+            },
+            meal_type: toActionMealType(section),
+          });
+          setFavoriteOverrides((previous) => ({
+            ...previous,
+            [key]: favoriteResult.favorited,
+          }));
+        }
+      }
+
       toast.success(editingItemId ? "Meal item updated" : "Meal item added");
-      setItemDialogOpen(false);
-      resetItemForm();
+      setSelectedSection(section);
+      setItemEditorOpen(false);
+      resetItemEditor();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to save meal item");
     }
   };
 
-  const onSaveQuickItem = async () => {
-    if (!mealGroupSelected) {
-      toast.error("Select a meal group to continue.");
-      return;
-    }
-
-    if (quickCalories + quickProtein + quickCarbs + quickFat + quickFiber <= 0) {
-      toast.error("Add at least one value before saving.");
-      return;
-    }
-
+  const confirmDeleteItem = async () => {
+    if (!deleteTarget) return;
     try {
-      const recentItem = {
-        item_name: "Quick Add",
-        quantity: null,
-        unit: null,
-        calories: quickCalories || null,
-        protein_g: quickProtein || null,
-        carbs_g: quickCarbs || null,
-        fat_g: quickFat || null,
-        fiber_g: quickFiber || null,
-        notes: null,
-      };
-      await mutations.addItem.mutateAsync({
-        performed_on: performedOn,
-        meal_type: toActionMealType(selectedSection),
-        subject: resolvedSubject,
-        meal_group_id: selectedMealGroupId,
-        item: {
-          ...recentItem,
-          is_quick_add: true,
-        },
-      });
-      rememberRecentItem(recentItem);
-      toast.success("Quick add saved");
-      setQuickDialogOpen(false);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to save quick add");
-    }
-  };
-
-  const onDeleteItem = async (itemId: string) => {
-    try {
-      await mutations.removeItem.mutateAsync({ item_id: itemId });
+      await mutations.removeItem.mutateAsync({ item_id: deleteTarget.id });
       toast.success("Meal item removed");
+      setDeleteTarget(null);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to remove item");
     }
   };
 
-  const onToggleFavorite = async (item: {
+  const onToggleFavorite = async (section: DiaryMealSection, item: {
     item_name: string;
     quantity: number | null;
     unit: string | null;
@@ -687,17 +669,56 @@ export function ManualNutritionDiary({
     fiber_g: number | null;
     notes: string | null;
   }) => {
+    const normalizedUnit = normalizeMealUnit(item.unit);
+    const key = favoriteItemKey(item.item_name, normalizedUnit);
+    setFavoritesLookupEnabled(true);
     try {
       const result = await mutations.toggleFavorite.mutateAsync({
         item: {
           ...item,
-          unit: normalizeMealUnit(item.unit),
+          unit: normalizedUnit,
         },
-        meal_type: toActionMealType(selectedSection),
+        meal_type: toActionMealType(section),
       });
+      setFavoriteOverrides((previous) => ({
+        ...previous,
+        [key]: result.favorited,
+      }));
       toast.success(result.favorited ? "Added to favorites" : "Removed from favorites");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to update favorites");
+    }
+  };
+
+  const onDuplicateItem = async (section: DiaryMealSection, item: ManualDiaryItem) => {
+    const unit = normalizeMealUnit(item.unit) || item.unit || null;
+    const recentItem = {
+      item_name: item.item_name,
+      quantity: item.quantity,
+      unit,
+      calories: item.calories,
+      protein_g: item.protein_g,
+      carbs_g: item.carbs_g,
+      fat_g: item.fat_g,
+      fiber_g: item.fiber_g,
+      notes: item.notes,
+    };
+    try {
+      await mutations.addItem.mutateAsync({
+        performed_on: performedOn,
+        meal_type: toActionMealType(section),
+        subject: resolvedSubject,
+        meal_group_id: selectedMealGroupId || undefined,
+        item: {
+          ...recentItem,
+          consumed_time: item.consumed_time || null,
+          is_quick_add: item.is_quick_add,
+        },
+      });
+      rememberRecentItem(recentItem);
+      toast.success("Meal item duplicated");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to duplicate item");
     }
   };
 
@@ -715,11 +736,6 @@ export function ManualNutritionDiary({
       notes: string | null;
     }
   ) => {
-    if (!mealGroupSelected) {
-      toast.error("Select a meal group to continue.");
-      return;
-    }
-
     try {
       const recentItem = {
         ...item,
@@ -729,7 +745,7 @@ export function ManualNutritionDiary({
         performed_on: performedOn,
         meal_type: toActionMealType(section),
         subject: resolvedSubject,
-        meal_group_id: selectedMealGroupId,
+        meal_group_id: selectedMealGroupId || undefined,
         item: {
           ...recentItem,
           is_quick_add: false,
@@ -743,11 +759,6 @@ export function ManualNutritionDiary({
   };
 
   const onCopyMeals = async () => {
-    if (!mealGroupSelected) {
-      toast.error("Select a meal group to continue.");
-      return;
-    }
-
     const defaultSections = visibleSectionTypeOptions
       .map((section) => section.key)
       .filter((section): section is DiaryMealSection => section !== "other");
@@ -758,12 +769,32 @@ export function ManualNutritionDiary({
         target_date: performedOn,
         meal_types: (copySections.length > 0 ? copySections : defaultSections).map((section) => toActionMealType(section)),
         subject: resolvedSubject,
-        meal_group_id: selectedMealGroupId,
+        meal_group_id: selectedMealGroupId || undefined,
       });
       toast.success("Meals copied successfully");
       setCopyDialogOpen(false);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to copy meals");
+    }
+  };
+
+  const onLogFromPlan = async () => {
+    const mealGroupId = diaryQuery.data?.active_plan?.meal_group_id;
+    if (!mealGroupId) return;
+
+    try {
+      const result = await logFromPlan.mutateAsync({
+        performed_on: performedOn,
+        meal_group_id: mealGroupId,
+        subject: resolvedSubject,
+      });
+      if (result.skipped) {
+        toast.message("No meals planned for today.");
+        return;
+      }
+      toast.success(`Imported ${result.inserted_count} ${result.inserted_count === 1 ? "meal item" : "meal items"} from today's plan.`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to import today's plan");
     }
   };
 
@@ -786,66 +817,23 @@ export function ManualNutritionDiary({
     }
   };
 
-  const onAddMealType = async () => {
-    if (!mealGroupSelected) {
-      toast.error("Select a meal group to continue.");
-      return;
-    }
-
-    const targetType = newMealType;
-    if (targetType === "other") {
-      toast.error("Please select a meal type.");
-      return;
-    }
-
-    try {
-      await mutations.addSection.mutateAsync({
-        meal_group_id: selectedMealGroupId,
-        performed_on: performedOn,
-        meal_type: toActionMealType(targetType),
-        subject: resolvedSubject,
-      });
-      setSelectedSection(targetType);
-      setAddMealTypeDialogOpen(false);
-      toast.success("Meal type added");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to add meal type");
-    }
+  const toggleCustomOrderType = (type: OrderableMealType) => {
+    setStoredCustomSectionOrder((previous) => {
+      const normalizedPrevious = previous.filter(isOrderableMealType);
+      if (normalizedPrevious.includes(type)) {
+        return normalizedPrevious.filter((entry) => entry !== type);
+      }
+      return [...normalizedPrevious, type];
+    });
   };
 
-  const applyQuickActionToItemForm = (action: MacroQuickAction) => {
-    const next = applyMacroQuickAction(
-      {
-        calories,
-        protein_g: protein,
-        carbs_g: carbs,
-        fat_g: fat,
-      },
-      action
-    );
-    setCalories(next.calories);
-    setProtein(next.protein_g);
-    setCarbs(next.carbs_g);
-    setFat(next.fat_g);
-  };
-
-  const applyQuickActionToQuickAdd = (action: MacroQuickAction) => {
-    const next = applyMacroQuickAction(
-      {
-        calories: quickCalories,
-        protein_g: quickProtein,
-        carbs_g: quickCarbs,
-        fat_g: quickFat,
-      },
-      action
-    );
-    setQuickCalories(next.calories);
-    setQuickProtein(next.protein_g);
-    setQuickCarbs(next.carbs_g);
-    setQuickFat(next.fat_g);
+  const clearCustomOrder = () => {
+    clearStoredCustomSectionOrder();
   };
 
   const currentDate = new Date(`${performedOn}T00:00:00`);
+  const canLogFromPlan = Boolean(diaryQuery.data?.active_plan?.meal_group_id);
+  const hasDiaryEntries = (diaryQuery.data?.logs.length || 0) > 0;
 
   const navigateDateBy = (offsetDays: number) => {
     const now = Date.now();
@@ -859,7 +847,7 @@ export function ManualNutritionDiary({
       <section className="space-y-4">
         {!mealGroupSelected ? (
           <div className="rounded-xl border border-dashed border-border/70 bg-muted/20 px-4 py-3 text-sm text-muted-foreground">
-            Select a meal group to enable diary actions, meal type cards, and item modals.
+            Logging in general diary mode.
           </div>
         ) : null}
 
@@ -870,7 +858,7 @@ export function ManualNutritionDiary({
             variant="ghost"
             className="h-10 w-10 rounded-xl"
             onClick={() => navigateDateBy(-1)}
-            disabled={!mealGroupSelected || diaryQuery.isFetching}
+            disabled={diaryQuery.isFetching}
           >
             <ChevronLeft className="h-4 w-4" />
           </Button>
@@ -884,7 +872,6 @@ export function ManualNutritionDiary({
                 className="h-9 w-[168px] rounded-xl border-border/60 bg-muted/20 pl-9"
                 value={performedOn}
                 onChange={(event) => setPerformedOn(event.target.value)}
-                disabled={!mealGroupSelected}
               />
             </div>
           </div>
@@ -895,7 +882,7 @@ export function ManualNutritionDiary({
             variant="ghost"
             className="h-10 w-10 rounded-xl"
             onClick={() => navigateDateBy(1)}
-            disabled={!mealGroupSelected || diaryQuery.isFetching}
+            disabled={diaryQuery.isFetching}
           >
             <ChevronRight className="h-4 w-4" />
           </Button>
@@ -906,17 +893,7 @@ export function ManualNutritionDiary({
             variant="outline"
             size="sm"
             className="shrink-0 rounded-xl border-border/60"
-            onClick={() => setOptionsDialogOpen(true)}
-          >
-            <SlidersHorizontal className="mr-2 h-4 w-4" />
-            Options
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="shrink-0 rounded-xl border-border/60"
             onClick={() => setCopyDialogOpen(true)}
-            disabled={!mealGroupSelected}
           >
             <Copy className="mr-2 h-4 w-4" />
             Copy
@@ -925,25 +902,22 @@ export function ManualNutritionDiary({
             variant="outline"
             size="sm"
             className="shrink-0 rounded-xl border-border/60"
-            onClick={() => {
-              setSourceDate(toDateInput(subDays(currentDate, 1)));
-              setCopySections([]);
-              setCopyDialogOpen(true);
-            }}
-            disabled={!mealGroupSelected}
-          >
-            <Sparkles className="mr-2 h-4 w-4" />
-            Yesterday
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="shrink-0 rounded-xl border-border/60"
             onClick={() => setRecentDialogOpen(true)}
-            disabled={!mealGroupSelected}
           >
             Recent
           </Button>
+          {canLogFromPlan && hasDiaryEntries ? (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="ml-auto h-8 shrink-0 text-xs text-muted-foreground"
+              disabled={logFromPlan.isPending}
+              onClick={() => void onLogFromPlan()}
+            >
+              {logFromPlan.isPending ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : null}
+              Add from plan
+            </Button>
+          ) : null}
         </div>
 
         {showAssignmentTools && subject?.subject_client_id ? (
@@ -966,7 +940,7 @@ export function ManualNutritionDiary({
             <Button
               className="accent-strong rounded-xl"
               onClick={() => void onAssignTemplateToClient()}
-              disabled={mutations.assignPlan.isPending || !mealGroupSelected}
+              disabled={mutations.assignPlan.isPending}
             >
               {mutations.assignPlan.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               Assign Plan
@@ -977,12 +951,6 @@ export function ManualNutritionDiary({
 
       {diaryQuery.isLoading && !diaryQuery.data ? (
         <section className="space-y-4">
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <Skeleton className="h-24 w-full rounded-2xl" />
-            <Skeleton className="h-24 w-full rounded-2xl" />
-            <Skeleton className="h-24 w-full rounded-2xl" />
-            <Skeleton className="h-24 w-full rounded-2xl" />
-          </div>
           <Skeleton className="h-36 w-full rounded-3xl" />
           <Skeleton className="h-36 w-full rounded-3xl" />
           <Skeleton className="h-36 w-full rounded-3xl" />
@@ -991,24 +959,8 @@ export function ManualNutritionDiary({
 
       {diaryQuery.data ? (
         <>
-          <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <DailyMacroCard title="Calories" value={diaryQuery.data.totals.calories} accent="text-chart-2" />
-            <DailyMacroCard title="Protein" value={diaryQuery.data.totals.protein_g} unit={units.macro} accent="text-chart-3" />
-            <DailyMacroCard title="Carbs" value={diaryQuery.data.totals.carbs_g} unit={units.macro} accent="text-chart-4" />
-            <DailyMacroCard title="Fat" value={diaryQuery.data.totals.fat_g} unit={units.macro} accent="text-chart-1" />
-          </section>
-
           {diaryQuery.data.active_plan ? (
             <section className="glass-surface surface-pad space-y-3">
-              <div className="flex items-center justify-between gap-2">
-                <div>
-                  <h2 className="text-sm font-semibold uppercase tracking-[0.12em] text-muted-foreground">Active plan progress</h2>
-                  <p className="text-base font-medium">{diaryQuery.data.active_plan.name}</p>
-                </div>
-                <Badge variant="secondary" className="rounded-full border border-border/60 bg-background/40">
-                  {diaryQuery.data.active_plan.start_date} → {diaryQuery.data.active_plan.end_date}
-                </Badge>
-              </div>
               <div className="grid gap-3 md:grid-cols-2">
                 <ProgressBar
                   label="Calories"
@@ -1036,6 +988,31 @@ export function ManualNutritionDiary({
                 />
               </div>
             </section>
+          ) : null}
+
+          {canLogFromPlan && !hasDiaryEntries ? (
+            <div className="flex items-center justify-between gap-3 rounded-xl border border-border/60 bg-muted/20 px-4 py-3">
+              <div className="space-y-0.5">
+                <p className="text-sm font-medium">{diaryQuery.data.active_plan?.name || "Today's plan"} is ready</p>
+                <p className="text-xs text-muted-foreground">Import all planned meals into your diary in one tap.</p>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                className="shrink-0 rounded-xl border-border/60"
+                disabled={logFromPlan.isPending}
+                onClick={() => void onLogFromPlan()}
+              >
+                {logFromPlan.isPending ? (
+                  <span className="inline-flex items-center gap-2">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    Importing...
+                  </span>
+                ) : (
+                  "Log Today's Plan"
+                )}
+              </Button>
+            </div>
           ) : null}
 
           {showAssignmentTools && subject?.subject_client_id ? (
@@ -1076,29 +1053,36 @@ export function ManualNutritionDiary({
           <section className="space-y-3">
             <div className="flex items-center justify-between gap-3">
               <h2 className="text-sm font-semibold uppercase tracking-[0.12em] text-muted-foreground">Meal Types</h2>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="rounded-xl border-border/60"
-                onClick={() => {
-                  setNewMealType("water");
-                  setAddMealTypeDialogOpen(true);
-                }}
-                disabled={!mealGroupSelected}
-              >
-                <CirclePlus className="mr-2 h-4 w-4" />
-                Add Meal Type
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="rounded-xl border-border/60"
+                  onClick={() => setCustomOrderModalOpen(true)}
+                >
+                  Custom Order
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="rounded-xl"
+                  onClick={clearCustomOrder}
+                  disabled={customSectionOrder.length === 0}
+                >
+                  Clear Order
+                </Button>
+              </div>
             </div>
 
-            {visibleSections.length === 0 ? (
+            {orderedVisibleSections.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-border/60 px-4 py-8 text-center text-sm text-muted-foreground">
                 No meal types added for this date yet.
               </div>
             ) : null}
 
-            {visibleSections.map((section) => {
+            {orderedVisibleSections.map((section) => {
               const log = logsBySection.get(section.key);
               const items = log?.items || [];
 
@@ -1120,8 +1104,7 @@ export function ManualNutritionDiary({
                         variant="outline"
                         size="sm"
                         className="hidden rounded-xl border-border/60 md:inline-flex"
-                        onClick={() => openQuickDialog(section.key)}
-                        disabled={!mealGroupSelected}
+                        onClick={() => openAddDialog(section.key, true)}
                       >
                         Quick Add
                       </Button>
@@ -1130,7 +1113,6 @@ export function ManualNutritionDiary({
                         className="h-10 w-10 rounded-full accent-strong"
                         onClick={() => openAddDialog(section.key)}
                         aria-label={`Add item to ${section.label}`}
-                        disabled={!mealGroupSelected}
                       >
                         <CirclePlus className="h-5 w-5" />
                       </Button>
@@ -1142,9 +1124,8 @@ export function ManualNutritionDiary({
                       type="button"
                       className="w-full px-5 py-8 text-center text-sm text-muted-foreground transition-colors hover:text-foreground"
                       onClick={() => openAddDialog(section.key)}
-                      disabled={!mealGroupSelected}
                     >
-                      Tap + to add
+                      Tap + to add your first item
                     </button>
                   ) : (
                     <div className="divide-y divide-border/30 px-4 md:px-5">
@@ -1152,13 +1133,18 @@ export function ManualNutritionDiary({
                         .slice()
                         .sort((a, b) => Number(a.position || 0) - Number(b.position || 0))
                         .map((item) => {
-                          const favoriteKey = `${item.item_name.toLowerCase()}::${item.unit || ""}`;
-                          const isFavorite = favoriteMap.has(favoriteKey);
+                          const favoriteKey = favoriteItemKey(item.item_name, item.unit);
+                          const isFavorite = favoriteMap.get(favoriteKey) === true;
 
                           return (
                             <div key={item.id} className="flex items-start justify-between gap-3 py-3">
                               <div className="min-w-0">
                                 <p className="truncate text-base font-medium leading-tight">{item.item_name}</p>
+                                <p className="mt-1 text-sm text-muted-foreground">
+                                  {item.consumed_time || "No time"}
+                                  {item.quantity !== null && item.quantity !== undefined ? ` • ${item.quantity}` : ""}
+                                  {item.unit ? ` ${item.unit}` : ""}
+                                </p>
                                 <p className="mt-1 text-sm text-muted-foreground">
                                   P {Math.round(Number(item.protein_g || 0))}g • C {Math.round(Number(item.carbs_g || 0))}g • F {Math.round(Number(item.fat_g || 0))}g
                                 </p>
@@ -1171,7 +1157,7 @@ export function ManualNutritionDiary({
                                   size="icon"
                                   className="h-8 w-8 rounded-lg"
                                   onClick={() =>
-                                    void onToggleFavorite({
+                                    void onToggleFavorite(section.key, {
                                       item_name: item.item_name,
                                       quantity: item.quantity,
                                       unit: item.unit,
@@ -1192,8 +1178,16 @@ export function ManualNutritionDiary({
                                 <Button
                                   variant="ghost"
                                   size="icon"
+                                  className="h-8 w-8 rounded-lg"
+                                  onClick={() => void onDuplicateItem(section.key, item)}
+                                >
+                                  <Copy className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
                                   className="h-8 w-8 rounded-lg text-destructive"
-                                  onClick={() => void onDeleteItem(item.id)}
+                                  onClick={() => setDeleteTarget({ id: item.id, name: item.item_name })}
                                 >
                                   <Trash2 className="h-4 w-4" />
                                 </Button>
@@ -1258,299 +1252,113 @@ export function ManualNutritionDiary({
 
           <section className="glass-surface surface-pad">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <Star className="h-4 w-4 text-chart-4" />
-                <p className="text-sm font-semibold">Favorites</p>
-              </div>
-              <Select value={favoriteSection} onValueChange={(value) => setFavoriteSection(value as DiaryMealSection)}>
-                <SelectTrigger className="h-9 w-[170px] rounded-xl border-border/60 bg-muted/20">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {favoriteSectionOptions.map((section) => (
-                    <SelectItem key={section.key} value={section.key}>
-                      {getSectionLabel(section.key)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {(favoritesQuery.data || []).slice(0, 10).map((item) => (
-                <Button
-                  key={item.id}
-                  size="sm"
-                  variant="outline"
-                  className="rounded-full border-border/60 bg-muted/20"
-                  onClick={() =>
-                    void addPresetItemToMeal(favoriteSection, {
-                      item_name: item.item_name,
-                      quantity: item.quantity,
-                      unit: item.unit,
-                      calories: item.calories,
-                      protein_g: item.protein_g,
-                      carbs_g: item.carbs_g,
-                      fat_g: item.fat_g,
-                      fiber_g: item.fiber_g,
-                      notes: item.notes,
-                    })
-                  }
-                >
-                  {item.item_name}
-                </Button>
-              ))}
-              {(favoritesQuery.data || []).length === 0 ? (
-                <span className="text-sm text-muted-foreground">No favorites yet</span>
-              ) : null}
-            </div>
-          </section>
-        </>
-      ) : null}
-
-      <Dialog open={itemDialogOpen} onOpenChange={setItemDialogOpen}>
-        <DialogContent className="max-h-[92vh] overflow-y-auto rounded-2xl border-border/70 bg-card/95 sm:max-w-xl">
-          <DialogHeader>
-            <DialogTitle>{editingItemId ? "Edit Meal Item" : "Add Meal Item"}</DialogTitle>
-            <DialogDescription>
-              {editingItemId ? "Update values and notes for this entry." : "Manual entry only. Adjust metrics using slider + input."}
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-3 py-1">
-            <div className="grid gap-2 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label>Meal Section</Label>
-                <Select value={selectedSection} onValueChange={(value) => setSelectedSection(value as DiaryMealSection)} disabled={Boolean(editingItemId)}>
-                  <SelectTrigger className="h-10 w-full rounded-xl border-border/60 bg-muted/20">
+              <Button
+                type="button"
+                variant="ghost"
+                className="h-auto rounded-lg px-0 text-left hover:bg-transparent"
+                onClick={() => setFavoritesOpen((previous) => !previous)}
+              >
+                <div className="flex items-center gap-2">
+                  <ChevronRight className={cn("h-4 w-4 transition-transform", favoritesOpen ? "rotate-90" : "")} />
+                  <Star className="h-4 w-4 text-chart-4" />
+                  <p className="text-sm font-semibold">Favorites</p>
+                </div>
+              </Button>
+              {favoritesOpen ? (
+                <Select value={favoriteSection} onValueChange={(value) => setFavoriteSection(value as DiaryMealSection)}>
+                  <SelectTrigger className="h-9 w-[170px] rounded-xl border-border/60 bg-muted/20">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {visibleSectionTypeOptions.map((section) => (
+                    {favoriteSectionOptions.map((section) => (
                       <SelectItem key={section.key} value={section.key}>
                         {getSectionLabel(section.key)}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
+              ) : null}
+            </div>
+            {!favoritesOpen ? <p className="mt-2 text-xs text-muted-foreground">Open favorites to load reusable meals.</p> : null}
+            {favoritesOpen ? (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {favoritesQuery.isLoading ? (
+                  <span className="text-sm text-muted-foreground">Loading favorites...</span>
+                ) : null}
+                {(favoritesQuery.data || []).slice(0, 10).map((item) => (
+                  <Button
+                    key={item.id}
+                    size="sm"
+                    variant="outline"
+                    className="rounded-full border-border/60 bg-muted/20"
+                    onClick={() =>
+                      void addPresetItemToMeal(favoriteSection, {
+                        item_name: item.item_name,
+                        quantity: item.quantity,
+                        unit: item.unit,
+                        calories: item.calories,
+                        protein_g: item.protein_g,
+                        carbs_g: item.carbs_g,
+                        fat_g: item.fat_g,
+                        fiber_g: item.fiber_g,
+                        notes: item.notes,
+                      })
+                    }
+                  >
+                    {item.item_name}
+                  </Button>
+                ))}
+                {!favoritesQuery.isLoading && (favoritesQuery.data || []).length === 0 ? (
+                  <span className="text-sm text-muted-foreground">No favorites yet</span>
+                ) : null}
               </div>
-              <div className="space-y-2">
-                <Label>Time</Label>
-                <Input
-                  type="time"
-                  value={itemTime}
-                  onChange={(event) => setItemTime(event.target.value)}
-                  className="rounded-xl border-border/60 bg-muted/20"
-                />
-              </div>
-            </div>
+            ) : null}
+          </section>
+        </>
+      ) : null}
 
-            <div className="space-y-2">
-              <Label>Item Name</Label>
-              <Input
-                value={itemName}
-                onChange={(event) => setItemName(event.target.value)}
-                placeholder="e.g. Greek Yogurt Bowl"
-                className="rounded-xl border-border/60 bg-muted/20"
-              />
-            </div>
+      <MealItemEditorSheet
+        open={itemEditorOpen}
+        onOpenChange={(open) => {
+          setItemEditorOpen(open);
+          if (!open) resetItemEditor();
+        }}
+        mode={editingItemId ? "edit" : "create"}
+        defaultValue={itemEditorDefaultValue}
+        quickMode={itemEditorQuickMode}
+        showPlannedTime
+        showFiber
+        showSaveToFavorites
+        pending={mutations.addItem.isPending || mutations.updateItem.isPending}
+        mealTypeOptions={mealTypeOptionsForEditor}
+        onSave={onSaveItem}
+      />
 
-            <div className="grid gap-2 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label>Quantity</Label>
-                <Input
-                  type="number"
-                  min={0}
-                  value={quantity}
-                  onChange={(event) => setQuantity(event.target.value)}
-                  className="rounded-xl border-border/60 bg-muted/20"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Unit</Label>
-                <Select
-                  value={unit || NO_UNIT_SELECT_VALUE}
-                  onValueChange={(value) => setUnit(value === NO_UNIT_SELECT_VALUE ? "" : value)}
-                >
-                  <SelectTrigger className="h-10 w-full rounded-xl border-border/60 bg-muted/20">
-                    <SelectValue placeholder="Select unit" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={NO_UNIT_SELECT_VALUE}>No unit</SelectItem>
-                    {unitOptions.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
+      <DeleteConfirmSheet
+        open={deleteTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null);
+        }}
+        itemName={deleteTarget?.name}
+        pending={mutations.removeItem.isPending}
+        onConfirm={confirmDeleteItem}
+      />
 
-            <MetricControl
-              label="Calories"
-              value={calories}
-              onChange={setCalories}
-              max={2000}
-              step={5}
-              unit={units.energy}
-              accent="text-chart-1"
-            />
-            <div className="grid gap-3 sm:grid-cols-2">
-              <MetricControl label="Protein" value={protein} onChange={setProtein} max={300} step={1} unit={units.macro} accent="text-chart-2" />
-              <MetricControl label="Carbs" value={carbs} onChange={setCarbs} max={300} step={1} unit={units.macro} accent="text-chart-3" />
-              <MetricControl label="Fat" value={fat} onChange={setFat} max={300} step={1} unit={units.macro} accent="text-chart-4" />
-              <MetricControl label="Fiber" value={fiber} onChange={setFiber} max={120} step={1} unit={units.macro} accent="text-chart-5" />
-            </div>
+      <Sheet open={recentDialogOpen} onOpenChange={setRecentDialogOpen}>
+        <SheetContent
+          side={isDesktop ? "right" : "bottom"}
+          className={cn(
+            "gap-0 overflow-y-auto border-border/70 bg-card/95 p-0",
+            isDesktop ? "w-full sm:max-w-md" : "max-h-[88vh] rounded-t-2xl"
+          )}
+        >
+          <SheetHeader className="border-b border-border/60 px-5 py-4">
+            <SheetTitle>Recent Items</SheetTitle>
+            <SheetDescription>Your latest 10 meal items.</SheetDescription>
+          </SheetHeader>
 
-            <div className="flex flex-wrap gap-2">
-              <Button type="button" size="sm" variant="outline" onClick={() => applyQuickActionToItemForm("plus_50_kcal")}>
-                +50 {units.energy}
-              </Button>
-              <Button type="button" size="sm" variant="outline" onClick={() => applyQuickActionToItemForm("plus_100_kcal")}>
-                +100 {units.energy}
-              </Button>
-              <Button type="button" size="sm" variant="outline" onClick={() => applyQuickActionToItemForm("plus_10_protein")}>
-                +10{units.macro} protein
-              </Button>
-              <Button type="button" size="sm" variant="outline" onClick={() => applyQuickActionToItemForm("plus_10_carbs")}>
-                +10{units.macro} carbs
-              </Button>
-              <Button type="button" size="sm" variant="outline" onClick={() => applyQuickActionToItemForm("plus_5_fat")}>
-                +5{units.macro} fat
-              </Button>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Notes</Label>
-              <Textarea
-                value={itemNotes}
-                onChange={(event) => setItemNotes(event.target.value)}
-                placeholder="Optional context, prep notes, or compliance cues"
-                className="min-h-20 rounded-xl border-border/60 bg-muted/20"
-              />
-            </div>
-
-            <div className="flex items-center gap-2 rounded-xl border border-border/60 bg-background/40 px-3 py-2">
-              <Checkbox id="save-favorite" checked={saveToFavorites} onCheckedChange={(checked) => setSaveToFavorites(Boolean(checked))} />
-              <Label htmlFor="save-favorite" className="text-sm">
-                Save to favorites for quick reuse
-              </Label>
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" className="rounded-xl border-border/60" onClick={() => setItemDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              className="accent-strong rounded-xl"
-              onClick={() => void onSaveItem()}
-              disabled={mutations.addItem.isPending || mutations.updateItem.isPending || !mealGroupSelected}
-            >
-              {mutations.addItem.isPending || mutations.updateItem.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              Save Item
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={quickDialogOpen} onOpenChange={setQuickDialogOpen}>
-        <DialogContent className="max-h-[92vh] overflow-y-auto rounded-2xl border-border/70 bg-card/95 sm:max-w-xl">
-          <DialogHeader>
-            <DialogTitle>Quick Add Macros</DialogTitle>
-            <DialogDescription>Fast manual logging without naming an item.</DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-3 py-1">
-            <div className="space-y-2">
-              <Label>Meal Section</Label>
-              <Select value={selectedSection} onValueChange={(value) => setSelectedSection(value as DiaryMealSection)}>
-                <SelectTrigger className="h-10 w-full rounded-xl border-border/60 bg-muted/20">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {visibleSectionTypeOptions.map((section) => (
-                    <SelectItem key={section.key} value={section.key}>
-                      {getSectionLabel(section.key)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <MetricControl
-              label="Calories"
-              value={quickCalories}
-              onChange={setQuickCalories}
-              max={2000}
-              step={5}
-              unit={units.energy}
-              accent="text-chart-1"
-            />
-            <div className="grid gap-3 sm:grid-cols-2">
-              <MetricControl label="Protein" value={quickProtein} onChange={setQuickProtein} max={300} step={1} unit={units.macro} accent="text-chart-2" />
-              <MetricControl label="Carbs" value={quickCarbs} onChange={setQuickCarbs} max={300} step={1} unit={units.macro} accent="text-chart-3" />
-              <MetricControl label="Fat" value={quickFat} onChange={setQuickFat} max={300} step={1} unit={units.macro} accent="text-chart-4" />
-              <MetricControl label="Fiber" value={quickFiber} onChange={setQuickFiber} max={120} step={1} unit={units.macro} accent="text-chart-5" />
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              <Button type="button" size="sm" variant="outline" onClick={() => applyQuickActionToQuickAdd("plus_50_kcal")}>
-                +50 {units.energy}
-              </Button>
-              <Button type="button" size="sm" variant="outline" onClick={() => applyQuickActionToQuickAdd("plus_100_kcal")}>
-                +100 {units.energy}
-              </Button>
-              <Button type="button" size="sm" variant="outline" onClick={() => applyQuickActionToQuickAdd("plus_10_protein")}>
-                +10{units.macro} protein
-              </Button>
-              <Button type="button" size="sm" variant="outline" onClick={() => applyQuickActionToQuickAdd("plus_10_carbs")}>
-                +10{units.macro} carbs
-              </Button>
-              <Button type="button" size="sm" variant="outline" onClick={() => applyQuickActionToQuickAdd("plus_5_fat")}>
-                +5{units.macro} fat
-              </Button>
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" className="rounded-xl border-border/60" onClick={() => setQuickDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button className="accent-strong rounded-xl" onClick={() => void onSaveQuickItem()} disabled={mutations.addItem.isPending || !mealGroupSelected}>
-              {mutations.addItem.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              Save Quick Add
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={optionsDialogOpen} onOpenChange={setOptionsDialogOpen}>
-        <DialogContent className="rounded-2xl border-border/70 bg-card/95 sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Diary Options</DialogTitle>
-            <DialogDescription>Manage user and meal group context for this diary day.</DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-3 py-1">
-            {!subject?.subject_client_id && !subject?.subject_user_id ? (
-              <NutritionScopeControls showHelperText fullWidthOnMobile />
-            ) : (
-              <p className="text-sm text-muted-foreground">Context is fixed for this view.</p>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={recentDialogOpen} onOpenChange={setRecentDialogOpen}>
-        <DialogContent className="rounded-2xl border-border/70 bg-card/95">
-          <DialogHeader>
-            <DialogTitle>Recent Items</DialogTitle>
-            <DialogDescription>Your latest 10 meal items.</DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-3">
-            <div className="max-h-[360px] overflow-auto rounded-xl border border-border/60 bg-background/40">
+          <div className="px-5 py-4">
+            <div className="max-h-[420px] overflow-auto rounded-xl border border-border/60 bg-background/40">
               {recentItems.length === 0 ? (
                 <p className="p-4 text-sm text-muted-foreground">No recent items yet.</p>
               ) : (
@@ -1572,54 +1380,74 @@ export function ManualNutritionDiary({
               )}
             </div>
           </div>
-        </DialogContent>
-      </Dialog>
+        </SheetContent>
+      </Sheet>
 
-      <Dialog open={addMealTypeDialogOpen} onOpenChange={setAddMealTypeDialogOpen}>
-        <DialogContent className="rounded-2xl border-border/70 bg-card/95 sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Add Meal Type</DialogTitle>
-            <DialogDescription>Add a meal type card to the end of the day sequence.</DialogDescription>
-          </DialogHeader>
+      <Sheet open={customOrderModalOpen} onOpenChange={setCustomOrderModalOpen}>
+        <SheetContent
+          side={isDesktop ? "right" : "bottom"}
+          className={cn(
+            "gap-0 overflow-y-auto border-border/70 bg-card/95 p-0",
+            isDesktop ? "w-full sm:max-w-md" : "max-h-[88vh] rounded-t-2xl"
+          )}
+        >
+          <SheetHeader className="border-b border-border/60 px-5 py-4">
+            <SheetTitle>Custom Order</SheetTitle>
+            <SheetDescription>Select meal types in the order you want them displayed.</SheetDescription>
+          </SheetHeader>
 
-          <div className="space-y-3">
-            <div className="flex items-center justify-between gap-3">
-              <Label className="shrink-0">Meal Type</Label>
-              <Select value={newMealType} onValueChange={(value) => setNewMealType(value as DiaryMealSection)}>
-                <SelectTrigger className="w-[200px] rounded-xl border-border/60 bg-muted/20">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {DIARY_SECTIONS.filter((section) => section.key !== "other").map((section) => (
-                    <SelectItem key={section.key} value={section.key}>
-                      {section.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+          <div className="space-y-2 p-5">
+            {ORDERABLE_DIARY_MEAL_TYPES.map((type) => {
+              const sequence = customOrderRank.get(type) || null;
+              const active = sequence !== null;
+              return (
+                <button
+                  key={type}
+                  type="button"
+                  className={cn(
+                    "flex w-full items-center justify-between rounded-xl border px-3 py-2 text-left transition-colors",
+                    active ? "border-chart-2/60 bg-chart-2/10" : "border-border/60 bg-muted/20 hover:bg-muted/35"
+                  )}
+                  onClick={() => toggleCustomOrderType(type)}
+                >
+                  <span className="inline-flex items-center gap-2">
+                    <SectionIcon section={type} className="h-4 w-4 text-chart-2" />
+                    <span className="text-sm font-medium">{getSectionLabel(type)}</span>
+                  </span>
+                  {sequence ? (
+                    <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-chart-2 px-1 text-xs font-semibold text-black">
+                      {sequence}
+                    </span>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">Not selected</span>
+                  )}
+                </button>
+              );
+            })}
           </div>
 
-          <DialogFooter>
-            <Button variant="outline" className="rounded-xl border-border/60" onClick={() => setAddMealTypeDialogOpen(false)}>
-              Cancel
+          <div className="border-t border-border/60 p-5">
+            <Button variant="outline" className="w-full rounded-xl border-border/60" onClick={clearCustomOrder} disabled={customSectionOrder.length === 0}>
+              Clear Order
             </Button>
-            <Button className="accent-strong rounded-xl" onClick={() => void onAddMealType()} disabled={mutations.addSection.isPending || !mealGroupSelected}>
-              {mutations.addSection.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              Add Type
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </div>
+        </SheetContent>
+      </Sheet>
 
-      <Dialog open={copyDialogOpen} onOpenChange={setCopyDialogOpen}>
-        <DialogContent className="rounded-2xl border-border/70 bg-card/95">
-          <DialogHeader>
-            <DialogTitle>Copy Meals</DialogTitle>
-            <DialogDescription>Copy selected sections from a previous date.</DialogDescription>
-          </DialogHeader>
+      <Sheet open={copyDialogOpen} onOpenChange={setCopyDialogOpen}>
+        <SheetContent
+          side={isDesktop ? "right" : "bottom"}
+          className={cn(
+            "gap-0 overflow-y-auto border-border/70 bg-card/95 p-0",
+            isDesktop ? "w-full sm:max-w-md" : "max-h-[88vh] rounded-t-2xl"
+          )}
+        >
+          <SheetHeader className="border-b border-border/60 px-5 py-4">
+            <SheetTitle>Copy Meals</SheetTitle>
+            <SheetDescription>Copy selected sections from a previous date.</SheetDescription>
+          </SheetHeader>
 
-          <div className="space-y-3">
+          <div className="space-y-3 px-5 py-4">
             <div className="grid gap-2">
               <Label>Source Date</Label>
               <Input
@@ -1660,17 +1488,19 @@ export function ManualNutritionDiary({
             </div>
           </div>
 
-          <DialogFooter>
-            <Button variant="outline" className="rounded-xl border-border/60" onClick={() => setCopyDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button className="accent-strong rounded-xl" onClick={() => void onCopyMeals()} disabled={mutations.copyFromDate.isPending}>
-              {mutations.copyFromDate.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              Copy Meals
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          <div className="border-t border-border/60 px-5 py-4">
+            <div className="flex gap-3">
+              <Button variant="outline" className="flex-1 rounded-xl border-border/60" onClick={() => setCopyDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button className="accent-strong flex-1 rounded-xl" onClick={() => void onCopyMeals()} disabled={mutations.copyFromDate.isPending}>
+                {mutations.copyFromDate.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Copy Meals
+              </Button>
+            </div>
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

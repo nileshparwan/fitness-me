@@ -1,11 +1,11 @@
 "use client";
 
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
   archiveMealGroupAssignmentAction,
   assignMealGroupToSubjectAction,
-  createMealPlanTypeAction,
+  copyMealPlanDayAction,
   createMealItemAction,
   deleteMealGroupAction,
   deleteMealItemAction,
@@ -13,16 +13,21 @@ import {
   duplicateMealItemAction,
   getMealGroupDetailAction,
   listAssignableSubjectsAction,
+  listMealGroupAssigneesAction,
   listMealGroupAssignmentsAction,
   listMealGroupsAction,
   updateMealGroupAssignmentAction,
   updateMealItemAction,
   updateMealPlanNoteAction,
   upsertMealGroupAction,
+  type MealGroupAssigneeOption,
   type MealGroupDetail,
 } from "@/app/actions/meal-groups";
+import { useDebounce } from "@/hooks/use-debounce";
 import { mealGroupKeys, type MealGroupAssignmentListParams, type MealGroupListParams } from "@/lib/query-keys-meal-groups";
 import { nutritionKeys } from "@/lib/query-keys-nutrition";
+
+const MEAL_GROUP_ASSIGNEES_PAGE_SIZE = 15;
 
 export function useMealGroups(params: MealGroupListParams) {
   return useQuery({
@@ -77,48 +82,95 @@ export function useAssignableSubjects() {
   });
 }
 
+export function useMealGroupAssignees(mealGroupId: string, rawSearch: string, enabled = true) {
+  const debouncedSearch = useDebounce(rawSearch.trim(), 250);
+
+  return useInfiniteQuery({
+    queryKey: mealGroupKeys.assignees(mealGroupId, debouncedSearch),
+    enabled: Boolean(mealGroupId) && enabled,
+    initialPageParam: 0,
+    queryFn: async ({ pageParam = 0 }) =>
+      listMealGroupAssigneesAction({
+        meal_group_id: mealGroupId,
+        search: debouncedSearch || undefined,
+        page: pageParam,
+        page_size: MEAL_GROUP_ASSIGNEES_PAGE_SIZE,
+      }),
+    getNextPageParam: (lastPage, allPages) => (lastPage.has_more ? allPages.length : undefined),
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
+  });
+}
+
+export function flattenMealGroupAssigneePages(data: { pages: Array<{ items: MealGroupAssigneeOption[] }> } | undefined) {
+  if (!data) return [] as MealGroupAssigneeOption[];
+  const seen = new Set<string>();
+  const rows: MealGroupAssigneeOption[] = [];
+  for (const page of data.pages) {
+    for (const item of page.items || []) {
+      if (seen.has(item.id)) continue;
+      seen.add(item.id);
+      rows.push(item);
+    }
+  }
+  return rows;
+}
+
 export function useMealGroupMutations() {
   const queryClient = useQueryClient();
 
-  const invalidateAll = async () => {
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: mealGroupKeys.list() }),
-      queryClient.invalidateQueries({ queryKey: mealGroupKeys.detail() }),
-      queryClient.invalidateQueries({ queryKey: mealGroupKeys.assignments() }),
-      queryClient.invalidateQueries({ queryKey: mealGroupKeys.assignableSubjects() }),
+  const invalidateMealGroupList = () => queryClient.invalidateQueries({ queryKey: mealGroupKeys.list() });
+  const invalidateMealGroupDetails = () => queryClient.invalidateQueries({ queryKey: mealGroupKeys.detail() });
+  const invalidateMealGroupDetailById = (mealGroupId?: string | null) =>
+    mealGroupId ? queryClient.invalidateQueries({ queryKey: mealGroupKeys.detailById(mealGroupId) }) : Promise.resolve();
+  const invalidateMealGroupAssignments = () => queryClient.invalidateQueries({ queryKey: mealGroupKeys.assignments() });
+  const invalidateMealGroupAssignees = (mealGroupId?: string | null) =>
+    mealGroupId ? queryClient.invalidateQueries({ queryKey: mealGroupKeys.assigneesRoot(mealGroupId) }) : Promise.resolve();
+  const invalidateNutritionForAssignment = () =>
+    Promise.all([
       queryClient.invalidateQueries({ queryKey: nutritionKeys.dashboard() }),
       queryClient.invalidateQueries({ queryKey: nutritionKeys.diary() }),
     ]);
-  };
 
   const upsertGroup = useMutation({
     mutationFn: upsertMealGroupAction,
-    onSuccess: invalidateAll,
+    onSuccess: async (result, variables) => {
+      await Promise.all([
+        invalidateMealGroupList(),
+        invalidateMealGroupDetailById(result?.id || variables.id || null),
+      ]);
+    },
   });
 
   const deleteGroup = useMutation({
     mutationFn: deleteMealGroupAction,
-    onSuccess: invalidateAll,
+    onSuccess: async (_result, variables) => {
+      await Promise.all([
+        invalidateMealGroupList(),
+        invalidateMealGroupDetailById(variables.meal_group_id),
+      ]);
+    },
   });
 
   const duplicateGroup = useMutation({
     mutationFn: duplicateMealGroupAction,
-    onSuccess: invalidateAll,
+    onSuccess: async (result) => {
+      await Promise.all([
+        invalidateMealGroupList(),
+        invalidateMealGroupDetailById(result?.id || null),
+      ]);
+    },
   });
 
   const updatePlanNote = useMutation({
     mutationFn: updateMealPlanNoteAction,
-    onSuccess: invalidateAll,
+    onSuccess: invalidateMealGroupDetails,
   });
 
   const createItem = useMutation({
     mutationFn: createMealItemAction,
-    onSuccess: invalidateAll,
-  });
-
-  const createPlanType = useMutation({
-    mutationFn: createMealPlanTypeAction,
-    onSuccess: invalidateAll,
+    onSuccess: invalidateMealGroupDetails,
   });
 
   const updateItem = useMutation({
@@ -160,32 +212,66 @@ export function useMealGroupMutations() {
         queryClient.setQueryData(queryKey, detail);
       }
     },
-    onSettled: invalidateAll,
+    onSettled: invalidateMealGroupDetails,
   });
 
   const deleteItem = useMutation({
     mutationFn: deleteMealItemAction,
-    onSuccess: invalidateAll,
+    onSuccess: invalidateMealGroupDetails,
   });
 
   const duplicateItem = useMutation({
     mutationFn: duplicateMealItemAction,
-    onSuccess: invalidateAll,
+    onSuccess: invalidateMealGroupDetails,
+  });
+
+  const copyDay = useMutation({
+    mutationFn: copyMealPlanDayAction,
+    onSuccess: async (_result, variables) => {
+      await Promise.all([
+        invalidateMealGroupDetailById(variables.meal_group_id),
+        invalidateMealGroupDetails(),
+      ]);
+    },
   });
 
   const assignGroup = useMutation({
     mutationFn: assignMealGroupToSubjectAction,
-    onSuccess: invalidateAll,
+    onSuccess: async (result, variables) => {
+      await Promise.all([
+        invalidateMealGroupList(),
+        invalidateMealGroupAssignments(),
+        invalidateMealGroupAssignees(variables.meal_group_id),
+        invalidateMealGroupDetailById(variables.meal_group_id),
+        invalidateMealGroupDetailById(result?.snapshot_group_id || null),
+        invalidateNutritionForAssignment(),
+      ]);
+    },
   });
 
   const updateAssignment = useMutation({
     mutationFn: updateMealGroupAssignmentAction,
-    onSuccess: invalidateAll,
+    onSuccess: async (result) => {
+      await Promise.all([
+        invalidateMealGroupList(),
+        invalidateMealGroupAssignments(),
+        invalidateMealGroupDetailById(result.template_group_id),
+        invalidateMealGroupDetailById(result.meal_group_id),
+        invalidateNutritionForAssignment(),
+      ]);
+    },
   });
 
   const archiveAssignment = useMutation({
     mutationFn: archiveMealGroupAssignmentAction,
-    onSuccess: invalidateAll,
+    onSuccess: async () => {
+      await Promise.all([
+        invalidateMealGroupList(),
+        invalidateMealGroupAssignments(),
+        invalidateMealGroupDetails(),
+        invalidateNutritionForAssignment(),
+      ]);
+    },
   });
 
   return {
@@ -193,11 +279,11 @@ export function useMealGroupMutations() {
     deleteGroup,
     duplicateGroup,
     updatePlanNote,
-    createPlanType,
     createItem,
     updateItem,
     deleteItem,
     duplicateItem,
+    copyDay,
     assignGroup,
     updateAssignment,
     archiveAssignment,

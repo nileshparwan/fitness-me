@@ -17,7 +17,6 @@ import {
 import { resolveNutritionSubject } from "@/lib/nutrition/subject";
 import {
   useNutritionActiveSubject,
-  useNutritionSelectedDate,
   useNutritionSelectedMealGroupId,
   useSetNutritionSelectedMealGroupId,
 } from "@/stores/use-nutrition-ui-store";
@@ -125,8 +124,6 @@ export function useNutritionAutoMealGroupSelection(params?: AutoMealGroupSelecti
 
 export function useNutritionPrefetch() {
   const queryClient = useQueryClient();
-  const selectedDate = useNutritionSelectedDate();
-  const selectedMealGroupId = useNutritionSelectedMealGroupId();
   const subject = useNutritionResolvedSubject();
 
   useEffect(() => {
@@ -145,21 +142,16 @@ export function useNutritionPrefetch() {
   }, [queryClient]);
 
   useEffect(() => {
-    if (!selectedMealGroupId) return;
     const today = toDateInput(new Date());
-    const dates = selectedDate === today ? [today] : [today, selectedDate];
-
-    for (const performedOn of dates) {
-      void queryClient.prefetchQuery({
-        queryKey: nutritionKeys.diaryDay(performedOn, subject, selectedMealGroupId),
-        queryFn: () =>
-          getNutritionDiaryDayAction({
-            performed_on: performedOn,
-            subject,
-            meal_group_id: selectedMealGroupId,
-          }),
-        staleTime: 20_000,
-      });
-    }
-  }, [queryClient, selectedDate, selectedMealGroupId, subject]);
+    void queryClient.prefetchQuery({
+      queryKey: nutritionKeys.diaryDay(today, subject, undefined),
+      queryFn: () =>
+        getNutritionDiaryDayAction({
+          performed_on: today,
+          subject,
+          meal_group_id: undefined,
+        }),
+      staleTime: 60_000,
+    });
+  }, [queryClient, subject]);
 }

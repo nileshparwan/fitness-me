@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { runTrackedAction } from "@/lib/events/dispatcher";
 import { nextSequentialPosition } from "@/lib/nutrition/meal-ui";
@@ -17,14 +18,18 @@ type MealPlanMealInsert = Database["public"]["Tables"]["meal_plan_meals"]["Inser
 type MealPlanAssignmentRow = Database["public"]["Tables"]["meal_plan_assignments"]["Row"];
 type MealPlanAssignmentInsert = Database["public"]["Tables"]["meal_plan_assignments"]["Insert"];
 type MealPlanAssignmentMealInsert = Database["public"]["Tables"]["meal_plan_assignment_meals"]["Insert"];
+type MealGroupPlanRow = Database["public"]["Tables"]["meal_group_plans"]["Row"];
+type MealGroupItemRow = Database["public"]["Tables"]["meal_group_items"]["Row"];
 type MealLogRow = Database["public"]["Tables"]["meal_logs"]["Row"];
 type MealLogInsert = Database["public"]["Tables"]["meal_logs"]["Insert"];
+type MealLogUpdate = Database["public"]["Tables"]["meal_logs"]["Update"];
 type MealLogItemRow = Database["public"]["Tables"]["meal_log_items"]["Row"];
 type MealLogItemInsert = Database["public"]["Tables"]["meal_log_items"]["Insert"];
 type MealLogItemUpdate = Database["public"]["Tables"]["meal_log_items"]["Update"];
 type MealLogSectionRow = Database["public"]["Tables"]["meal_log_sections"]["Row"];
 type MealLogSectionInsert = Database["public"]["Tables"]["meal_log_sections"]["Insert"];
 type FavoriteRow = Database["public"]["Tables"]["meal_item_favorites"]["Row"];
+type MealDayOfWeek = Database["public"]["Enums"]["meal_day_of_week"];
 
 type ClientRow = Database["public"]["Tables"]["clients"]["Row"];
 
@@ -76,6 +81,7 @@ export type ManualDiaryLog = MealLogRow & {
 export type ActiveNutritionPlan = {
   source: "assignment" | "plan";
   id: string;
+  meal_group_id: string | null;
   name: string;
   start_date: string;
   end_date: string;
@@ -112,6 +118,12 @@ export type NutritionDiaryDay = {
     carbs_pct: number | null;
     fat_pct: number | null;
   };
+};
+
+export type NutritionActivePlanForDate = {
+  subject: SubjectRef;
+  performed_on: string;
+  active_plan: ActiveNutritionPlan | null;
 };
 
 type ClientNutritionSummary7d = {
@@ -169,6 +181,11 @@ const diaryDaySchema = z.object({
   performed_on: isoDate,
   subject: subjectSchema,
   meal_group_id: z.string().uuid().optional(),
+});
+
+const activePlanForDateSchema = z.object({
+  performed_on: isoDate,
+  subject: subjectSchema,
 });
 
 const mealItemBaseSchema = z.object({
@@ -245,6 +262,12 @@ const addMealSectionSchema = z.object({
   subject: subjectSchema,
 });
 
+const logFromPlanSchema = z.object({
+  performed_on: isoDate,
+  meal_group_id: z.string().uuid(),
+  subject: subjectSchema,
+});
+
 const diaryNotesSchema = z.object({
   meal_log_id: z.string().uuid(),
   notes: z.string().trim().max(5000).nullable(),
@@ -278,6 +301,13 @@ function normalizeMealType(input: string | null | undefined): MealType {
   return "other";
 }
 
+function toMealDayOfWeek(dateString: string): MealDayOfWeek {
+  const [year, month, day] = dateString.split("-").map(Number);
+  const utcDate = new Date(Date.UTC(year || 0, (month || 1) - 1, day || 1));
+  const dayCode = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"][utcDate.getUTCDay()];
+  return dayCode as MealDayOfWeek;
+}
+
 function mealTypeOrderRank(type: MealType) {
   const index = MEAL_TYPE_DISPLAY_ORDER.indexOf(type);
   return index >= 0 ? index : MEAL_TYPE_DISPLAY_ORDER.length + 1;
@@ -305,6 +335,58 @@ function isMissingColumnError(error: { code?: string; message?: string } | null)
 
 function safeNumber(input: number | null | undefined) {
   return Number(input ?? 0);
+}
+
+type MealLogMacroSource = {
+  calories?: number | null;
+  protein_g?: number | null;
+  carbs_g?: number | null;
+  fat_g?: number | null;
+  fiber_g?: number | null;
+};
+
+function deriveMealLogTotals(items: MealLogMacroSource[]): DailyTotals {
+  return items.reduce<DailyTotals>(
+    (acc, item) => {
+      acc.calories += safeNumber(item.calories);
+      acc.protein_g += safeNumber(item.protein_g);
+      acc.carbs_g += safeNumber(item.carbs_g);
+      acc.fat_g += safeNumber(item.fat_g);
+      acc.fiber_g += safeNumber(item.fiber_g);
+      return acc;
+    },
+    { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0, fiber_g: 0 } satisfies DailyTotals
+  );
+}
+
+async function setMealLogTotals(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  mealLogId: string,
+  totals: DailyTotals
+) {
+  const updateRow: MealLogUpdate = {
+    total_calories: totals.calories,
+    total_protein_g: totals.protein_g,
+    total_carbs_g: totals.carbs_g,
+    total_fat_g: totals.fat_g,
+    total_fiber_g: totals.fiber_g,
+  };
+  const { error } = await supabase.from("meal_logs").update(updateRow).eq("id", mealLogId);
+  if (error) throw new Error(error.message);
+}
+
+async function syncMealLogTotals(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  mealLogId: string
+): Promise<DailyTotals> {
+  const { data: items, error } = await supabase
+    .from("meal_log_items")
+    .select("calories, protein_g, carbs_g, fat_g, fiber_g")
+    .eq("meal_log_id", mealLogId);
+  if (error) throw new Error(error.message);
+  const totals = deriveMealLogTotals((items || []) as MealLogMacroSource[]);
+  await setMealLogTotals(supabase, mealLogId, totals);
+  return totals;
 }
 
 function computeProgress(totals: DailyTotals, activePlan: ActiveNutritionPlan | null) {
@@ -408,7 +490,11 @@ function applyMealGroupFilter<T>(query: T, mealGroupId?: string | null): T {
     return builder.eq("meal_group_id", mealGroupId) as T;
   }
 
-  return builder.is("meal_group_id", null) as T;
+  if (mealGroupId === null) {
+    return builder.is("meal_group_id", null) as T;
+  }
+
+  return query;
 }
 
 async function ensureMealLogSections(args: {
@@ -463,9 +549,36 @@ async function ensureMealLogSections(args: {
 
 async function getActiveNutritionPlanForDate(
   subject: SubjectRef,
-  performedOn: string
+  performedOn: string,
+  supabase: SupabaseClient<Database>
 ): Promise<ActiveNutritionPlan | null> {
-  const { supabase } = await requireActor();
+  const mapAssignment = (assignment: MealPlanAssignmentRow, mealGroupId: string | null): ActiveNutritionPlan => ({
+    source: "assignment",
+    id: assignment.id,
+    meal_group_id: mealGroupId,
+    name: assignment.name,
+    start_date: assignment.start_date,
+    end_date: assignment.end_date,
+    daily_calorie_target: assignment.daily_calorie_target,
+    daily_protein_target_g: assignment.daily_protein_target_g,
+    daily_carbs_target_g: assignment.daily_carbs_target_g,
+    daily_fat_target_g: assignment.daily_fat_target_g,
+    meal_targets_json: assignment.meal_targets_json,
+  });
+
+  const mapPlan = (plan: MealPlanRow, mealGroupId: string | null): ActiveNutritionPlan => ({
+    source: "plan",
+    id: plan.id,
+    meal_group_id: mealGroupId,
+    name: plan.name,
+    start_date: plan.start_date,
+    end_date: plan.end_date,
+    daily_calorie_target: plan.daily_calorie_target,
+    daily_protein_target_g: plan.daily_protein_target_g,
+    daily_carbs_target_g: plan.daily_carbs_target_g,
+    daily_fat_target_g: plan.daily_fat_target_g,
+    meal_targets_json: plan.meal_targets_json,
+  });
 
   let assignmentQuery = supabase
     .from("meal_plan_assignments")
@@ -478,25 +591,6 @@ async function getActiveNutritionPlanForDate(
 
   assignmentQuery = applySubjectFilters(assignmentQuery, subject);
 
-  const { data: assignments, error: assignmentError } = await assignmentQuery;
-  if (assignmentError) throw new Error(assignmentError.message);
-
-  const assignment = (assignments?.[0] ?? null) as MealPlanAssignmentRow | null;
-  if (assignment) {
-    return {
-      source: "assignment",
-      id: assignment.id,
-      name: assignment.name,
-      start_date: assignment.start_date,
-      end_date: assignment.end_date,
-      daily_calorie_target: assignment.daily_calorie_target,
-      daily_protein_target_g: assignment.daily_protein_target_g,
-      daily_carbs_target_g: assignment.daily_carbs_target_g,
-      daily_fat_target_g: assignment.daily_fat_target_g,
-      meal_targets_json: assignment.meal_targets_json,
-    };
-  }
-
   let planQuery = supabase
     .from("meal_plans")
     .select("*")
@@ -508,24 +602,64 @@ async function getActiveNutritionPlanForDate(
 
   planQuery = applySubjectFilters(planQuery, subject);
 
-  const { data: plans, error: planError } = await planQuery;
+  let mealGroupAssignmentQuery = supabase
+    .from("meal_group_assignments")
+    .select("meal_group_id")
+    .eq("status", "active")
+    .lte("start_date", performedOn)
+    .gte("end_date", performedOn)
+    .order("start_date", { ascending: false })
+    .limit(1);
+  mealGroupAssignmentQuery = applySubjectFilters(mealGroupAssignmentQuery, subject);
+
+  const [
+    { data: assignments, error: assignmentError },
+    { data: plans, error: planError },
+    { data: mealGroupAssignments, error: mealGroupAssignmentError },
+  ] = await Promise.all([
+    assignmentQuery,
+    planQuery,
+    mealGroupAssignmentQuery,
+  ]);
+  if (assignmentError) throw new Error(assignmentError.message);
   if (planError) throw new Error(planError.message);
+  if (mealGroupAssignmentError && !isMissingRelationError(mealGroupAssignmentError)) {
+    throw new Error(mealGroupAssignmentError.message);
+  }
+
+  const mealGroupId = mealGroupAssignments?.[0]?.meal_group_id ?? null;
+
+  const assignment = (assignments?.[0] ?? null) as MealPlanAssignmentRow | null;
+  if (assignment) return mapAssignment(assignment, mealGroupId);
 
   const plan = (plans?.[0] ?? null) as MealPlanRow | null;
   if (!plan) return null;
 
-  return {
-    source: "plan",
-    id: plan.id,
-    name: plan.name,
-    start_date: plan.start_date,
-    end_date: plan.end_date,
-    daily_calorie_target: plan.daily_calorie_target,
-    daily_protein_target_g: plan.daily_protein_target_g,
-    daily_carbs_target_g: plan.daily_carbs_target_g,
-    daily_fat_target_g: plan.daily_fat_target_g,
-    meal_targets_json: plan.meal_targets_json,
-  };
+  return mapPlan(plan, mealGroupId);
+}
+
+export async function getNutritionActivePlanForDateAction(
+  input: z.input<typeof activePlanForDateSchema>
+): Promise<NutritionActivePlanForDate> {
+  const payload = activePlanForDateSchema.parse(input);
+  return runTrackedAction({
+    eventName: "nutrition.manual.active-plan.read",
+    payload: {
+      performed_on: payload.performed_on,
+      subject_client_id: payload.subject?.subject_client_id ?? null,
+      subject_user_id: payload.subject?.subject_user_id ?? null,
+    },
+    action: async () => {
+      const { supabase, user } = await requireActor();
+      const subject = resolveSubject(payload.subject, user.id);
+      const activePlan = await getActiveNutritionPlanForDate(subject, payload.performed_on, supabase);
+      return {
+        subject,
+        performed_on: payload.performed_on,
+        active_plan: activePlan,
+      };
+    },
+  });
 }
 
 async function getOrCreateMealLog(args: {
@@ -622,7 +756,7 @@ export async function getNutritionDiaryDayAction(input: z.input<typeof diaryDayS
         await Promise.all([
         logsQuery,
         payload.meal_group_id ? sectionsQuery : Promise.resolve({ data: [], error: null }),
-        getActiveNutritionPlanForDate(subject, payload.performed_on),
+        getActiveNutritionPlanForDate(subject, payload.performed_on, supabase),
         subject.subject_client_id
           ? supabase
               .from("clients")
@@ -661,10 +795,19 @@ export async function getNutritionDiaryDayAction(input: z.input<typeof diaryDayS
         }
       }
 
-      const logsWithItems: ManualDiaryLog[] = logs.map((log) => ({
-        ...log,
-        items: itemsByLog.get(log.id) || [],
-      }));
+      const logsWithItems: ManualDiaryLog[] = logs.map((log) => {
+        const items = itemsByLog.get(log.id) || [];
+        const derivedTotals = deriveMealLogTotals(items);
+        return {
+          ...log,
+          total_calories: derivedTotals.calories,
+          total_protein_g: derivedTotals.protein_g,
+          total_carbs_g: derivedTotals.carbs_g,
+          total_fat_g: derivedTotals.fat_g,
+          total_fiber_g: derivedTotals.fiber_g,
+          items,
+        };
+      });
 
       const configuredSections = ((sectionsError ? [] : sectionsData) || []).map((row) => ({
         meal_type: normalizeMealType(row.meal_type),
@@ -1042,6 +1185,141 @@ export async function addMealLogSectionAction(input: z.input<typeof addMealSecti
   });
 }
 
+export async function logFromPlanAction(input: z.input<typeof logFromPlanSchema>) {
+  const payload = logFromPlanSchema.parse(input);
+  let activityContext: Record<string, unknown> = {};
+  return runTrackedAction({
+    eventName: "nutrition.manual.plan.log_from_plan",
+    payload: {
+      performed_on: payload.performed_on,
+      meal_group_id: payload.meal_group_id,
+      subject_client_id: payload.subject?.subject_client_id ?? null,
+      subject_user_id: payload.subject?.subject_user_id ?? null,
+    },
+    getSuccessPayload: () => activityContext,
+    action: async () => {
+      const { supabase, user } = await requireActor();
+      const subject = resolveSubject(payload.subject, user.id);
+      const dayOfWeek = toMealDayOfWeek(payload.performed_on);
+
+      const { data: dayPlan, error: dayPlanError } = await supabase
+        .from("meal_group_plans")
+        .select("id, day_of_week")
+        .eq("meal_group_id", payload.meal_group_id)
+        .eq("day_of_week", dayOfWeek)
+        .maybeSingle();
+      if (dayPlanError) throw new Error(dayPlanError.message);
+      if (!dayPlan) {
+        activityContext = {
+          meal_group_id: payload.meal_group_id,
+          subject_user_id: subject.subject_user_id,
+          subject_client_id: subject.subject_client_id,
+          inserted_count: 0,
+          skipped: true,
+          reason: "no_plan_for_day",
+        };
+        return { inserted_count: 0, skipped: true as const, reason: "no_plan_for_day" as const };
+      }
+
+      const { data: dayItemsData, error: dayItemsError } = await supabase
+        .from("meal_group_items")
+        .select("*")
+        .eq("meal_plan_id", dayPlan.id)
+        .order("position", { ascending: true });
+      if (dayItemsError) throw new Error(dayItemsError.message);
+
+      const dayItems = (dayItemsData || []) as MealGroupItemRow[];
+      if (dayItems.length === 0) {
+        activityContext = {
+          meal_group_id: payload.meal_group_id,
+          subject_user_id: subject.subject_user_id,
+          subject_client_id: subject.subject_client_id,
+          inserted_count: 0,
+          skipped: true,
+          reason: "no_items_for_day",
+        };
+        return { inserted_count: 0, skipped: true as const, reason: "no_items_for_day" as const };
+      }
+
+      const itemsByMealType = new Map<MealType, MealGroupItemRow[]>();
+      for (const mealItem of dayItems) {
+        const normalizedMealType = normalizeMealType(mealItem.type);
+        const existing = itemsByMealType.get(normalizedMealType) || [];
+        existing.push(mealItem);
+        itemsByMealType.set(normalizedMealType, existing);
+      }
+
+      const mealTypes = Array.from(itemsByMealType.keys());
+      await ensureMealLogSections({
+        supabase,
+        actorUserId: user.id,
+        subject,
+        meal_group_id: payload.meal_group_id,
+        performed_on: payload.performed_on,
+        meal_types: mealTypes,
+      });
+
+      let insertedCount = 0;
+      for (const mealType of mealTypes) {
+        const planItems = itemsByMealType.get(mealType) || [];
+        if (planItems.length === 0) continue;
+
+        const mealLog = await getOrCreateMealLog({
+          supabase,
+          actorUserId: user.id,
+          subject,
+          performed_on: payload.performed_on,
+          meal_type: mealType,
+          meal_group_id: payload.meal_group_id,
+        });
+
+        const { data: lastLogItem, error: lastLogItemError } = await supabase
+          .from("meal_log_items")
+          .select("position")
+          .eq("meal_log_id", mealLog.id)
+          .order("position", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (lastLogItemError) throw new Error(lastLogItemError.message);
+
+        const startPosition = (lastLogItem?.position ?? 0) + 1;
+        const logItemInserts: MealLogItemInsert[] = planItems.map((item, index) => ({
+          meal_log_id: mealLog.id,
+          created_by_user_id: user.id,
+          item_name: item.title,
+          quantity: item.quantity,
+          unit: item.unit,
+          calories: item.calories,
+          protein_g: item.protein_g,
+          carbs_g: item.carbs_g,
+          fat_g: item.fat_g,
+          fiber_g: null,
+          notes: item.notes,
+          is_quick_add: false,
+          consumed_time: item.planned_time ?? null,
+          position: startPosition + index,
+        }));
+
+        const { error: insertItemsError } = await supabase.from("meal_log_items").insert(logItemInserts);
+        if (insertItemsError) throw new Error(insertItemsError.message);
+
+        await syncMealLogTotals(supabase, mealLog.id);
+        insertedCount += logItemInserts.length;
+      }
+
+      activityContext = {
+        meal_group_id: payload.meal_group_id,
+        subject_user_id: subject.subject_user_id,
+        subject_client_id: subject.subject_client_id,
+        inserted_count: insertedCount,
+        skipped: false,
+      };
+      revalidateNutritionPaths(subject.subject_client_id);
+      return { inserted_count: insertedCount, skipped: false as const };
+    },
+  });
+}
+
 export async function addMealItemAction(input: z.input<typeof addMealItemSchema>) {
   const payload = addMealItemSchema.parse(input);
   let activityContext: Record<string, unknown> = {};
@@ -1125,6 +1403,8 @@ export async function addMealItemAction(input: z.input<typeof addMealItemSchema>
           .eq("id", favorite.id);
       }
 
+      await syncMealLogTotals(supabase, log.id);
+
       activityContext = {
         item_name: item.item_name,
         meal_type: normalizedMealType,
@@ -1167,6 +1447,8 @@ export async function updateMealItemAction(input: z.input<typeof updateMealItemS
 
       const { data, error } = await supabase.from("meal_log_items").update(updates).eq("id", payload.item_id).select("*").single();
       if (error) throw new Error(error.message);
+
+      await syncMealLogTotals(supabase, data.meal_log_id);
 
       const { data: mealLog } = await supabase
         .from("meal_logs")
@@ -1214,6 +1496,8 @@ export async function removeMealItemAction(input: z.input<typeof removeMealItemS
 
       const { error } = await supabase.from("meal_log_items").delete().eq("id", payload.item_id);
       if (error) throw new Error(error.message);
+
+      await syncMealLogTotals(supabase, currentItem.meal_log_id);
 
       activityContext = {
         item_name: currentItem.item_name,
@@ -1359,6 +1643,7 @@ export async function copyMealsFromDateAction(input: z.input<typeof copyFromDate
 
         const { error: insertError } = await supabase.from("meal_log_items").insert(copiedRows);
         if (insertError) throw new Error(insertError.message);
+        await setMealLogTotals(supabase, targetLog.id, deriveMealLogTotals(copiedRows));
         copiedCount += copiedRows.length;
       }
 

@@ -14,5 +14,8 @@ export const mealGroupKeys = {
   detailById: nutritionKeys.mealGroupById,
   assignments: nutritionKeys.mealGroupAssignments,
   assignmentsByParams: nutritionKeys.mealGroupAssignmentsByParams,
+  assigneesBase: nutritionKeys.mealGroupAssigneesBase,
+  assigneesRoot: nutritionKeys.mealGroupAssigneesRoot,
+  assignees: nutritionKeys.mealGroupAssignees,
   assignableSubjects: nutritionKeys.mealGroupAssignableSubjects,
 };

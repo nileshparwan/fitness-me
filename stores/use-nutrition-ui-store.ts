@@ -30,12 +30,17 @@ type NutritionRecentDiaryItem = {
   notes: string | null;
 };
 
+type MealTypeOrderUpdater = string[] | ((previous: string[]) => string[]);
+
 type NutritionUiState = {
   selectedDate: string;
   activeSubjectType: NutritionSubjectType;
   activeSubjectId: string | null;
   selectedMealGroupId: string;
   selectedPlannerDay: NutritionPlannerDay;
+  diaryMealTypeOrder: string[];
+  plannerMealTypeOrderByDay: Partial<Record<NutritionPlannerDay, string[]>>;
+  mealGroupMealTypeOrderByGroup: Record<string, Partial<Record<NutritionPlannerDay, string[]>>>;
   diaryFilters: NutritionDiaryFilters;
   plannerFilters: NutritionPlannerFilters;
   viewMode: NutritionViewMode;
@@ -48,6 +53,12 @@ type NutritionUiActions = {
   setActiveSubject: (type: NutritionSubjectType, id: string | null) => void;
   setSelectedMealGroupId: (value: string | null | undefined) => void;
   setSelectedPlannerDay: (value: NutritionPlannerDay) => void;
+  setDiaryMealTypeOrder: (value: MealTypeOrderUpdater) => void;
+  clearDiaryMealTypeOrder: () => void;
+  setPlannerMealTypeOrder: (day: NutritionPlannerDay, value: MealTypeOrderUpdater) => void;
+  clearPlannerMealTypeOrder: (day: NutritionPlannerDay) => void;
+  setMealGroupMealTypeOrder: (mealGroupId: string, day: NutritionPlannerDay, value: MealTypeOrderUpdater) => void;
+  clearMealGroupMealTypeOrder: (mealGroupId: string, day: NutritionPlannerDay) => void;
   setDiaryFilters: (value: Partial<NutritionDiaryFilters>) => void;
   setPlannerFilters: (value: Partial<NutritionPlannerFilters>) => void;
   setViewMode: (value: NutritionViewMode) => void;
@@ -63,6 +74,7 @@ const noopStorage: StateStorage = {
   setItem: () => {},
   removeItem: () => {},
 };
+const EMPTY_MEAL_TYPE_ORDER: string[] = [];
 
 function toDateInput(date: Date) {
   const year = date.getFullYear();
@@ -78,6 +90,9 @@ function initialState(): NutritionUiState {
     activeSubjectId: null,
     selectedMealGroupId: "",
     selectedPlannerDay: currentMealDay(),
+    diaryMealTypeOrder: [],
+    plannerMealTypeOrderByDay: {},
+    mealGroupMealTypeOrderByGroup: {},
     diaryFilters: {
       meal_type: null,
       favorites_meal_type: null,
@@ -91,6 +106,20 @@ function initialState(): NutritionUiState {
   };
 }
 
+function normalizeDiaryMealTypeOrder(value: string[]) {
+  const seen = new Set<string>();
+  const normalized: string[] = [];
+
+  for (const item of value) {
+    const key = `${item || ""}`.trim();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    normalized.push(key);
+  }
+
+  return normalized;
+}
+
 export const useNutritionUiStore = create<NutritionUiStore>()(
   persist(
     (set) => ({
@@ -99,6 +128,76 @@ export const useNutritionUiStore = create<NutritionUiStore>()(
       setActiveSubject: (type, id) => set({ activeSubjectType: type, activeSubjectId: id }),
       setSelectedMealGroupId: (value) => set({ selectedMealGroupId: (value || "").trim() }),
       setSelectedPlannerDay: (value) => set({ selectedPlannerDay: value }),
+      setDiaryMealTypeOrder: (value) =>
+        set((state) => ({
+          diaryMealTypeOrder: normalizeDiaryMealTypeOrder(
+            typeof value === "function" ? value(state.diaryMealTypeOrder) : value
+          ),
+        })),
+      clearDiaryMealTypeOrder: () => set({ diaryMealTypeOrder: [] }),
+      setPlannerMealTypeOrder: (day, value) =>
+        set((state) => {
+          const previous = state.plannerMealTypeOrderByDay[day] ?? EMPTY_MEAL_TYPE_ORDER;
+          const next = normalizeDiaryMealTypeOrder(typeof value === "function" ? value([...previous]) : value);
+          return {
+            plannerMealTypeOrderByDay: {
+              ...state.plannerMealTypeOrderByDay,
+              [day]: next,
+            },
+          };
+        }),
+      clearPlannerMealTypeOrder: (day) =>
+        set((state) => {
+          if (!state.plannerMealTypeOrderByDay[day]) return state;
+          const next = { ...state.plannerMealTypeOrderByDay };
+          delete next[day];
+          return {
+            plannerMealTypeOrderByDay: next,
+          };
+        }),
+      setMealGroupMealTypeOrder: (mealGroupId, day, value) =>
+        set((state) => {
+          const normalizedGroupId = mealGroupId.trim();
+          if (!normalizedGroupId) return state;
+
+          const currentGroupOrder = state.mealGroupMealTypeOrderByGroup[normalizedGroupId] ?? {};
+          const previous = currentGroupOrder[day] ?? EMPTY_MEAL_TYPE_ORDER;
+          const next = normalizeDiaryMealTypeOrder(typeof value === "function" ? value([...previous]) : value);
+
+          return {
+            mealGroupMealTypeOrderByGroup: {
+              ...state.mealGroupMealTypeOrderByGroup,
+              [normalizedGroupId]: {
+                ...currentGroupOrder,
+                [day]: next,
+              },
+            },
+          };
+        }),
+      clearMealGroupMealTypeOrder: (mealGroupId, day) =>
+        set((state) => {
+          const normalizedGroupId = mealGroupId.trim();
+          if (!normalizedGroupId) return state;
+
+          const currentGroupOrder = state.mealGroupMealTypeOrderByGroup[normalizedGroupId];
+          if (!currentGroupOrder?.[day]) return state;
+
+          const nextGroupOrder = { ...currentGroupOrder };
+          delete nextGroupOrder[day];
+
+          if (Object.keys(nextGroupOrder).length === 0) {
+            const nextGroups = { ...state.mealGroupMealTypeOrderByGroup };
+            delete nextGroups[normalizedGroupId];
+            return { mealGroupMealTypeOrderByGroup: nextGroups };
+          }
+
+          return {
+            mealGroupMealTypeOrderByGroup: {
+              ...state.mealGroupMealTypeOrderByGroup,
+              [normalizedGroupId]: nextGroupOrder,
+            },
+          };
+        }),
       setDiaryFilters: (value) =>
         set((state) => ({
           diaryFilters: {
@@ -139,6 +238,9 @@ export const useNutritionUiStore = create<NutritionUiStore>()(
         selectedMealGroupId: state.selectedMealGroupId,
         selectedDate: state.selectedDate,
         selectedPlannerDay: state.selectedPlannerDay,
+        diaryMealTypeOrder: state.diaryMealTypeOrder,
+        plannerMealTypeOrderByDay: state.plannerMealTypeOrderByDay,
+        mealGroupMealTypeOrderByGroup: state.mealGroupMealTypeOrderByGroup,
         recentDiaryItems: state.recentDiaryItems,
       }),
     }
@@ -166,6 +268,20 @@ export const useSetNutritionSelectedMealGroupId = () => useNutritionUiStore((sta
 
 export const useNutritionSelectedPlannerDay = () => useNutritionUiStore((state) => state.selectedPlannerDay);
 export const useSetNutritionSelectedPlannerDay = () => useNutritionUiStore((state) => state.setSelectedPlannerDay);
+
+export const useNutritionDiaryMealTypeOrder = () => useNutritionUiStore((state) => state.diaryMealTypeOrder);
+export const useSetNutritionDiaryMealTypeOrder = () => useNutritionUiStore((state) => state.setDiaryMealTypeOrder);
+export const useClearNutritionDiaryMealTypeOrder = () => useNutritionUiStore((state) => state.clearDiaryMealTypeOrder);
+export const useNutritionPlannerMealTypeOrder = (day: NutritionPlannerDay) =>
+  useNutritionUiStore((state) => state.plannerMealTypeOrderByDay[day] ?? EMPTY_MEAL_TYPE_ORDER);
+export const useSetNutritionPlannerMealTypeOrder = () => useNutritionUiStore((state) => state.setPlannerMealTypeOrder);
+export const useClearNutritionPlannerMealTypeOrder = () => useNutritionUiStore((state) => state.clearPlannerMealTypeOrder);
+export const useNutritionMealGroupMealTypeOrder = (mealGroupId: string, day: NutritionPlannerDay) => {
+  const normalizedMealGroupId = mealGroupId.trim();
+  return useNutritionUiStore((state) => state.mealGroupMealTypeOrderByGroup[normalizedMealGroupId]?.[day] ?? EMPTY_MEAL_TYPE_ORDER);
+};
+export const useSetNutritionMealGroupMealTypeOrder = () => useNutritionUiStore((state) => state.setMealGroupMealTypeOrder);
+export const useClearNutritionMealGroupMealTypeOrder = () => useNutritionUiStore((state) => state.clearMealGroupMealTypeOrder);
 
 export const useSetNutritionDiaryFilters = () => useNutritionUiStore((state) => state.setDiaryFilters);
 
