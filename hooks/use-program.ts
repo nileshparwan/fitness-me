@@ -1,11 +1,20 @@
 "use client";
 
-import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+
+import {
+  assignProgramToClientAction,
+  listProgramAssigneesAction,
+  type ProgramAssigneeOption,
+} from "@/app/actions/program";
 import { createClient } from "@/lib/supabase/client";
 import { trainingKeys } from "@/lib/query-keys-training";
+import { useDebounce } from "@/hooks/use-debounce";
 import { Database } from "@/types/database";
 
 const PROGRAM_PAGE_SIZE = 24;
+const PROGRAM_ASSIGNEES_PAGE_SIZE = 15;
+
 type ProgramRow = Database["public"]["Tables"]["training_plans"]["Row"];
 
 type ProgramListItem = Pick<ProgramRow, "id" | "name" | "description" | "created_at"> & {
@@ -57,4 +66,53 @@ export function useInfinitePrograms() {
     initialPageParam: 0,
     getNextPageParam: (lastPage) => lastPage.nextPage,
   });
+}
+
+export function useProgramAssignees(programId: string, rawSearch: string, enabled = true) {
+  const debouncedSearch = useDebounce(rawSearch.trim(), 250);
+
+  return useInfiniteQuery({
+    queryKey: trainingKeys.planAssignees(programId, debouncedSearch),
+    enabled: Boolean(programId) && enabled,
+    initialPageParam: 0,
+    queryFn: async ({ pageParam = 0 }) =>
+      listProgramAssigneesAction({
+        program_id: programId,
+        search: debouncedSearch || undefined,
+        page: pageParam,
+        page_size: PROGRAM_ASSIGNEES_PAGE_SIZE,
+      }),
+    getNextPageParam: (lastPage, allPages) => (lastPage.has_more ? allPages.length : undefined),
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
+  });
+}
+
+export function useProgramAssigneeMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: assignProgramToClientAction,
+    onSuccess: async (_result, payload) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: trainingKeys.plans() }),
+        queryClient.invalidateQueries({ queryKey: trainingKeys.planAssigneesBase(payload.program_id) }),
+      ]);
+    },
+  });
+}
+
+export function flattenProgramAssigneePages(data: { pages: Array<{ items: ProgramAssigneeOption[] }> } | undefined) {
+  if (!data) return [] as ProgramAssigneeOption[];
+  const seen = new Set<string>();
+  const rows: ProgramAssigneeOption[] = [];
+  for (const page of data.pages) {
+    for (const item of page.items || []) {
+      if (seen.has(item.id)) continue;
+      seen.add(item.id);
+      rows.push(item);
+    }
+  }
+  return rows;
 }

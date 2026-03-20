@@ -5,6 +5,7 @@ import Link from "next/link";
 import { WorkoutPicker } from "@/components/workout/workout-picker";
 import { createClient } from "@/lib/supabase/server";
 import { ProgramBuilder } from "@/components/program/program-builder";
+import { ProgramAssigneeDropdown } from "@/components/program/program-assignee-dropdown";
 import { EditableText } from "@/components/shared/editable-text";
 import { updateProgram } from "@/app/actions/program";
 import { Database } from "@/types/database";
@@ -56,6 +57,18 @@ export default async function ProgramPage({ params }: ProgramPageProps) {
 
   const program = rawProgram as unknown as ProgramWithDetails;
 
+  const { data: assigneeClient } = program.assigned_client_id
+    ? await supabase
+        .from("clients")
+        .select("id, display_name, first_name, last_name")
+        .eq("id", program.assigned_client_id)
+        .maybeSingle()
+    : { data: null };
+  const assigneeName =
+    assigneeClient?.display_name?.trim() ||
+    `${assigneeClient?.first_name || ""} ${assigneeClient?.last_name || ""}`.trim() ||
+    "Myself";
+
   // 2. Fetch Library
   const { data: allWorkouts } = await supabase
     .from("training_sessions")
@@ -88,7 +101,14 @@ export default async function ProgramPage({ params }: ProgramPageProps) {
               </p>
             </div>
           </div>
-          <div><WorkoutPicker programId={programId} /></div>
+          <div className="flex items-center gap-3">
+            <ProgramAssigneeDropdown
+              programId={programId}
+              currentClientId={program.assigned_client_id}
+              currentClientName={assigneeName}
+            />
+            <WorkoutPicker programId={programId} />
+          </div>
         </div>
       </header>
 
