@@ -17,19 +17,29 @@ export async function updateSession(request: NextRequest) {
     request.headers.get("x-real-ip") ??
     "unknown";
   const pathname = request.nextUrl.pathname.toLowerCase();
+  const method = request.method.toUpperCase();
   const isAuthRoute =
     pathname.startsWith("/api/auth") ||
     pathname.startsWith("/client-portal/login") ||
     pathname === "/login" ||
     pathname === "/register";
-  const limit = isAuthRoute ? 10 : 60;
-  const windowMs = 60_000;
-  const { success } = rateLimit(`${isAuthRoute ? "auth" : "api"}:${ip}`, limit, windowMs);
-  if (!success) {
-    return new NextResponse("Too Many Requests", {
-      status: 429,
-      headers: { "Retry-After": "60" },
-    });
+  const isApiRoute = pathname.startsWith("/api/");
+  const isSafeMethod = method === "GET" || method === "HEAD" || method === "OPTIONS";
+  const shouldRateLimit = isAuthRoute || isApiRoute || !isSafeMethod;
+
+  // Skip throttling for normal page GET/HEAD requests (including React Server Component fetches)
+  // to avoid false 429s during navigation, prefetch, and local HMR refresh cycles.
+  if (shouldRateLimit) {
+    const limit = isAuthRoute ? 10 : 60;
+    const windowMs = 60_000;
+    const key = isAuthRoute ? `auth:${ip}` : `${isApiRoute ? "api" : "mutation"}:${ip}:${pathname}`;
+    const { success } = rateLimit(key, limit, windowMs);
+    if (!success) {
+      return new NextResponse("Too Many Requests", {
+        status: 429,
+        headers: { "Retry-After": "60" },
+      });
+    }
   }
 
   // 1. Create an unmodified response
