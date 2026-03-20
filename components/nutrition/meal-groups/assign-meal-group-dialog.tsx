@@ -7,18 +7,19 @@ import { Loader2 } from "lucide-react";
 import { useAssignableSubjects, useMealGroupMutations } from "@/hooks/use-meal-groups";
 import { Button } from "@/components/ui/button";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/responsive-modal";
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
+import { useMediaQuery } from "@/hooks/use-media-query";
+import { cn } from "@/utils";
 
 type Props = {
   mealGroupId: string;
@@ -46,6 +47,7 @@ export function AssignMealGroupDialog({
   defaultStartDate,
   defaultEndDate,
 }: Props) {
+  const isDesktop = useMediaQuery("(min-width: 768px)");
   const subjectsQuery = useAssignableSubjects();
   const mutations = useMealGroupMutations();
 
@@ -121,53 +123,58 @@ export function AssignMealGroupDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="rounded-2xl border-border/70 bg-card/95 sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Assign Meal Group</DialogTitle>
-          <DialogDescription>Assign a snapshot of {mealGroupName} to a user or client.</DialogDescription>
-        </DialogHeader>
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent
+        side={isDesktop ? "right" : "bottom"}
+        className={cn("flex flex-col gap-0 p-0", isDesktop ? "w-[480px] max-w-[480px]" : "max-h-[92dvh] rounded-t-2xl")}
+      >
+        <SheetHeader className="border-b border-border/50 px-5 py-4">
+          <SheetTitle>Assign Meal Group</SheetTitle>
+          <SheetDescription>Assign a snapshot of {mealGroupName} to a user or client.</SheetDescription>
+        </SheetHeader>
 
-        <div className="grid gap-4 py-2">
-          <div className="grid gap-2">
-            <Label>Assign To</Label>
-            <Select value={selectedTarget} onValueChange={setSelectedTarget}>
-              <SelectTrigger className="rounded-xl border-border/60 bg-muted/20">
-                <SelectValue placeholder="Select user or client" />
-              </SelectTrigger>
-              <SelectContent>
-                {options.map((option) => (
-                  <SelectItem key={option.key} value={option.key}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="grid gap-2 md:grid-cols-2">
+        <div className="flex-1 overflow-y-auto px-5 py-4">
+          <div className="grid gap-4 py-2">
             <div className="grid gap-2">
-              <Label>Start Date</Label>
-              <Input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} className="rounded-xl border-border/60 bg-muted/20" />
+              <Label>Assign To</Label>
+              <Select value={selectedTarget} onValueChange={setSelectedTarget}>
+                <SelectTrigger className="rounded-xl border-border/60 bg-muted/20">
+                  <SelectValue placeholder="Select user or client" />
+                </SelectTrigger>
+                <SelectContent>
+                  {options.map((option) => (
+                    <SelectItem key={option.key} value={option.key}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-            <div className="grid gap-2">
-              <Label>End Date</Label>
-              <Input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} className="rounded-xl border-border/60 bg-muted/20" />
-            </div>
-          </div>
 
-          <div className="grid gap-2">
-            <Label>Notes</Label>
-            <Textarea
-              value={notes}
-              onChange={(event) => setNotes(event.target.value)}
-              placeholder="Optional assignment notes for coach/client context"
-              className="rounded-xl border-border/60 bg-muted/20"
-            />
+            <div className="grid gap-2 md:grid-cols-2">
+              <div className="grid gap-2">
+                <Label>Start Date</Label>
+                <Input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} className="rounded-xl border-border/60 bg-muted/20" />
+              </div>
+              <div className="grid gap-2">
+                <Label>End Date</Label>
+                <Input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} className="rounded-xl border-border/60 bg-muted/20" />
+              </div>
+            </div>
+
+            <div className="grid gap-2">
+              <Label>Notes</Label>
+              <Textarea
+                value={notes}
+                onChange={(event) => setNotes(event.target.value)}
+                placeholder="Optional assignment notes for coach/client context"
+                className="rounded-xl border-border/60 bg-muted/20"
+              />
+            </div>
           </div>
         </div>
 
-        <DialogFooter>
+        <div className="flex justify-end gap-3 border-t border-border/50 px-5 py-4">
           <Button variant="outline" className="rounded-xl border-border/60" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
@@ -175,8 +182,8 @@ export function AssignMealGroupDialog({
             {mutations.assignGroup.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
             Assign
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </div>
+      </SheetContent>
+    </Sheet>
   );
 }
