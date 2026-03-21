@@ -8,6 +8,7 @@ import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { withToastFeedback } from "@/lib/ui/toast-feedback";
 
 type SetPasswordCardProps = {
   isSocialOnly: boolean;
@@ -44,11 +45,22 @@ export function SetPasswordCard({ isSocialOnly }: SetPasswordCardProps) {
         password_configured_at: new Date().toISOString(),
       };
 
-      const { error } = await supabase.auth.updateUser({ password, data: metadata });
-      if (error) throw error;
+      const updated = await withToastFeedback(
+        (async () => {
+          const { error } = await supabase.auth.updateUser({ password, data: metadata });
+          if (error) throw error;
+          return true;
+        })(),
+        {
+          loading: "Setting password...",
+          success: "Password set successfully. You can now sign in using email and password.",
+          error: "Unable to set password",
+        }
+      ).catch(() => null);
+      if (!updated) return;
+
       setPassword("");
       setConfirmPassword("");
-      toast.success("Password set successfully. You can now sign in using email and password.");
       await wait(2400);
       toast.message("Signing out for security. Please log in again.");
       setIsSigningOut(true);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Resolver, useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -30,8 +30,10 @@ import { useWorkouts } from "@/hooks/use-workout";
 import { usePrograms } from "@/hooks/use-program";
 import { linkWorkoutToPrograms } from "@/app/actions/program";
 import { Database } from "@/types/database";
-import type { WorkoutActionInput } from "@/app/actions/workout";
+import { getWorkoutExerciseLastSessionAction, type WorkoutActionInput } from "@/app/actions/workout";
 import { mapEntriesToActionExercises, useWorkoutDraftStore } from "@/stores/use-workout-draft-store";
+import { trainingKeys } from "@/lib/query-keys-training";
+import { useQuery } from "@tanstack/react-query";
 
 type Program = Database['public']['Tables']['training_plans']['Row'];
 
@@ -93,7 +95,45 @@ export function WorkoutForm({ initialData, workoutId }: WorkoutFormProps) {
     name: "exercises",
   });
   const watchedEntries = form.watch("exercises");
-  const entries = watchedEntries ?? [];
+  const entries = useMemo(() => watchedEntries ?? [], [watchedEntries]);
+  const strengthExerciseNames = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          entries
+            .filter((entry) => entry.type !== "cardio")
+            .map((entry) => entry.name?.trim())
+            .filter((name): name is string => Boolean(name))
+        )
+      ),
+    [entries]
+  );
+  const lastSessionQuery = useQuery({
+    queryKey: [
+      ...trainingKeys.sessions(),
+      "last-session",
+      workoutId || null,
+      [...strengthExerciseNames].sort(),
+    ],
+    queryFn: () =>
+      getWorkoutExerciseLastSessionAction({
+        exercise_names: strengthExerciseNames,
+        current_workout_id: workoutId,
+      }),
+    enabled: Boolean(user?.id) && strengthExerciseNames.length > 0,
+    staleTime: 2 * 60_000,
+    refetchOnWindowFocus: false,
+  });
+  const lastSessionByExercise = useMemo(
+    () =>
+      new Map(
+        (lastSessionQuery.data || []).map((item) => [
+          item.exercise_name.trim().toLowerCase(),
+          item,
+        ] as const)
+      ),
+    [lastSessionQuery.data]
+  );
 
   useEffect(() => {
     setDraftEntries(watchedEntries ?? []);
@@ -108,8 +148,8 @@ export function WorkoutForm({ initialData, workoutId }: WorkoutFormProps) {
     programOptions.find((program) => program.value === selectedProgramId)?.label || "No Program";
 
   async function onFormSubmit(data: WorkoutFormValues) {
+    let savedId: string | undefined;
     try {
-      let savedId: string | undefined;
       const actionInput = toWorkoutActionInput(data);
 
       if (workoutId) {
@@ -142,8 +182,10 @@ export function WorkoutForm({ initialData, workoutId }: WorkoutFormProps) {
         router.push("/workouts");
       }
       clearDraft();
-    } catch (error) {
-      toast.error("Failed to save workout");
+    } catch {
+      if (savedId) {
+        toast.error("Workout saved, but program linking failed.");
+      }
     }
   }
 
@@ -486,7 +528,17 @@ export function WorkoutForm({ initialData, workoutId }: WorkoutFormProps) {
                     (entries?.[index]?.type ?? "strength") === "cardio" ? (
                       <CardioEntryCard key={field.id} index={index} remove={() => remove(index)} control={form.control} />
                     ) : (
-                      <ExerciseCard key={field.id} index={index} remove={() => remove(index)} control={form.control} />
+                      <ExerciseCard
+                        key={field.id}
+                        index={index}
+                        remove={() => remove(index)}
+                        control={form.control}
+                        lastSession={
+                          lastSessionByExercise.get(
+                            (entries?.[index]?.name || "").trim().toLowerCase()
+                          ) || null
+                        }
+                      />
                     )
                   ))}
                   <div className="grid grid-cols-1 gap-2 border-t pt-4 sm:grid-cols-2">

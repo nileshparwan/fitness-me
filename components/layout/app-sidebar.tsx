@@ -12,6 +12,7 @@ import {
   Folder,
   LayoutDashboard,
   MessageSquare,
+  Pill,
   Settings,
   Shield,
   Target,
@@ -67,9 +68,13 @@ const iconMap = {
   message: MessageSquare,
   building: Building2,
   bell: Bell,
+  pill: Pill,
 } as const
 
 function isRouteActive(pathname: string, href: string) {
+  if (href === "/supplements") {
+    return pathname === "/supplements";
+  }
   return pathname === href || pathname.startsWith(`${href}/`)
 }
 

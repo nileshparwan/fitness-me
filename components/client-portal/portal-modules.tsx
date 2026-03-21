@@ -31,6 +31,7 @@ import {
   useClientPortalTrainingPlan,
   useClientPortalWorkouts,
 } from "@/hooks/use-client-portal";
+import { withToastFeedback } from "@/lib/ui/toast-feedback";
 import { normalizeMealUnit } from "@/lib/nutrition/meal-units";
 import { cn } from "@/utils";
 
@@ -136,11 +137,11 @@ export function ClientPortalTasksView({ readOnly }: { readOnly: boolean }) {
                       variant={completed ? "outline" : "default"}
                       disabled={readOnly || mutations.completeTask.isPending}
                       onClick={() =>
-                        void mutations.completeTask
-                          .mutateAsync({ task_id: task.id, completed: !completed })
-                          .catch((error) =>
-                            toast.error(error instanceof Error ? error.message : "Unable to update task")
-                          )
+                        void withToastFeedback(mutations.completeTask.mutateAsync({ task_id: task.id, completed: !completed }), {
+                          loading: completed ? "Marking task pending..." : "Marking task complete...",
+                          success: completed ? "Task marked pending" : "Task marked complete",
+                          error: "Unable to update task",
+                        }).catch(() => null)
                       }
                     >
                       {completed ? "Mark Pending" : "Mark Done"}
@@ -556,8 +557,8 @@ export function ClientPortalNutritionView({ readOnly }: { readOnly: boolean }) {
                                   variant="ghost"
                                   className="h-7 w-7"
                                   onClick={() =>
-                                    void mutations.toggleMealFavorite
-                                      .mutateAsync({
+                                    void withToastFeedback(
+                                      mutations.toggleMealFavorite.mutateAsync({
                                         item: {
                                           item_name: item.item_name,
                                           quantity: item.quantity,
@@ -569,8 +570,13 @@ export function ClientPortalNutritionView({ readOnly }: { readOnly: boolean }) {
                                           fiber_g: item.fiber_g,
                                           notes: item.notes,
                                         },
-                                      })
-                                      .catch((error) => toast.error(error instanceof Error ? error.message : "Unable to update favorites"))
+                                      }),
+                                      {
+                                        loading: "Updating favorites...",
+                                        success: "Favorites updated",
+                                        error: "Unable to update favorites",
+                                      }
+                                    ).catch(() => null)
                                   }
                                 >
                                   <Star className="h-4 w-4" />
@@ -580,9 +586,11 @@ export function ClientPortalNutritionView({ readOnly }: { readOnly: boolean }) {
                                   variant="ghost"
                                   className="h-7 w-7 text-destructive"
                                   onClick={() =>
-                                    void mutations.removeMealItem
-                                      .mutateAsync({ item_id: item.id })
-                                      .catch((error) => toast.error(error instanceof Error ? error.message : "Unable to delete item"))
+                                    void withToastFeedback(mutations.removeMealItem.mutateAsync({ item_id: item.id }), {
+                                      loading: "Deleting meal item...",
+                                      success: "Meal item deleted",
+                                      error: "Unable to delete item",
+                                    }).catch(() => null)
                                   }
                                 >
                                   <Trash2 className="h-4 w-4" />
@@ -744,14 +752,18 @@ export function ClientPortalStepsView({ readOnly }: { readOnly: boolean }) {
           <Button
             disabled={readOnly || mutations.upsertSteps.isPending}
             onClick={() =>
-              void mutations.upsertSteps
-                .mutateAsync({
+              void withToastFeedback(
+                mutations.upsertSteps.mutateAsync({
                   performed_on: performedOn,
                   steps: Number(stepsInput || query.data?.steps || 0),
                   notes: notes.trim() || null,
-                })
-                .then(() => toast.success("Steps saved"))
-                .catch((error) => toast.error(error instanceof Error ? error.message : "Unable to save steps"))
+                }),
+                {
+                  loading: "Saving steps...",
+                  success: "Steps saved",
+                  error: "Unable to save steps",
+                }
+              ).catch(() => null)
             }
           >
             {mutations.upsertSteps.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
@@ -887,10 +899,11 @@ export function ClientPortalGoalsView({ readOnly }: { readOnly: boolean }) {
           <Button
             disabled={readOnly || mutations.updateGoals.isPending}
             onClick={() =>
-              void mutations.updateGoals
-                .mutateAsync({ goals: draftGoals || query.data?.goals || "" })
-                .then(() => toast.success("Goals updated"))
-                .catch((error) => toast.error(error instanceof Error ? error.message : "Unable to update goals"))
+              void withToastFeedback(mutations.updateGoals.mutateAsync({ goals: draftGoals || query.data?.goals || "" }), {
+                loading: "Updating goals...",
+                success: "Goals updated",
+                error: "Unable to update goals",
+              }).catch(() => null)
             }
           >
             {mutations.updateGoals.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}

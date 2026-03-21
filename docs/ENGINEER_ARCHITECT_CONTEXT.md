@@ -3,7 +3,7 @@
 Last updated: 2026-03-20
 Repository: `fitness-tracker`
 Branch: `master`
-Working tree: dirty (A-022 implemented; A-023/A-024 queued; A-020/A-021 queued; A-019 queued)
+Working tree: dirty (A-019 through A-027 implemented; A-026 DB migrations pending; A-028 queued; A-029 queued)
 
 ## 1) Roles and Collaboration Contract
 
@@ -4843,6 +4843,184 @@ Working tree: dirty (A-007 implemented; A-008/A-009/A-010/A-011/A-012/A-013/A-01
 - Blockers / decisions needed:
   - None.
 
+### [E-044] Nutrition progress UI alignment pass — reference parity + render-performance tuning
+- Linked architect item: latest nutrition progress visual parity follow-up (reference screenshots + loader behavior constraints)
+- Implementation status: completed
+- Files touched:
+  - `components/nutrition/progress/nutrition-progress-page.tsx`
+  - `components/nutrition/progress/nutrition-progress-skeleton.tsx`
+  - `docs/ENGINEER_ARCHITECT_CONTEXT.md`
+- Validation run:
+  - `npm run -s typecheck` -> pass
+  - `npm run -s lint` -> pass
+  - `npm run -s test -- tests/nutrition-architecture.test.ts` -> pass (36/36)
+- What changed:
+  - Reworked top layout to better match references:
+    - left-aligned back icon + title/subtitle stack
+    - right-side icon actions (share + export)
+    - compact control row with `7/30/90 Days`, calendar affordance, `All Training`, and compare toggle
+    - supporting metadata row (`date range`, `days logged`, `streak`)
+  - Standardized dark-card visual language to match the reference palette:
+    - introduced shared section panel styles (`PANEL_CLASS`, `SUB_PANEL_CLASS`)
+    - updated chart color mapping (pink calories bars, blue/pink/yellow macro lines, green fiber bars)
+    - meal breakdown now uses deterministic color mapping by meal type (breakfast/lunch/dinner/snacks/other)
+  - Updated chart styling for parity and readability:
+    - unified axis + grid colors
+    - improved tooltip surfaces (dark elevated cards)
+    - compare toggle now controls display of target reference lines in relevant charts
+  - Render-performance improvements:
+    - disabled chart animations (`isAnimationActive={false}`) across heavy charts for faster paint and lower CPU use
+    - retained existing cache behavior (`keepPreviousData`, 5-minute stale window) to avoid refetch flicker
+  - Loader behavior:
+    - simplified `NutritionProgressSkeleton` to section-level placeholders only (removed oversized full-page-style skeleton stack)
+    - preserves non-blocking feel while the route hydrates.
+- Why this fix:
+  - Brings UI much closer to architect/reference direction without changing validated data contracts.
+  - Reduces visual inconsistency with the rest of the nutrition suite.
+  - Improves perceived speed and interaction smoothness on chart-heavy views.
+- Deviations from design:
+  - `All Training` is currently a visual control shell (no backend filter wiring yet); kept intentionally to match target UI while preserving current data behavior.
+- Blockers / decisions needed:
+  - Optional: confirm if the extra advanced sections (deficit/surplus, DOW, logging calendar, meal timing, macro distribution) should remain visible by default or move under an "Advanced" collapse for stricter screenshot parity.
+
+### [E-045] Nutrition progress chart hover/tooltip color fixes
+- Linked architect item: follow-up QA issue on graph hover overlays + unreadable tooltip text + black chart bars
+- Implementation status: completed
+- Files touched:
+  - `components/nutrition/progress/nutrition-progress-page.tsx`
+  - `docs/ENGINEER_ARCHITECT_CONTEXT.md`
+- Validation run:
+  - `npm run -s typecheck` -> pass
+  - `npm run -s lint` -> pass
+- What changed:
+  - Removed bright hover overlays on charts by setting `cursor={false}` on tooltips and `activeBar={false}` on bar-series.
+  - Fixed unreadable tooltip text by forcing high-contrast tooltip text styles (`itemStyle` and `labelStyle`).
+  - Eliminated black bar fallbacks by replacing SVG `hsl(var(...))` fills with explicit color constants.
+  - Updated fallback pie palette to explicit hex values so unknown meal categories never render black.
+- Why this fix:
+  - Restores visual consistency and legibility in dark mode.
+  - Prevents browser/SVG color parsing fallbacks that produced black bars.
+- Deviations from design:
+  - None.
+- Blockers / decisions needed:
+  - None.
+
+### [E-046] Nutrition progress compare-mode implementation + toolbar cleanup
+- Linked architect item: follow-up request to remove non-functional filter and make compare switch meaningful
+- Implementation status: completed
+- Files touched:
+  - `components/nutrition/progress/nutrition-progress-page.tsx`
+  - `docs/ENGINEER_ARCHITECT_CONTEXT.md`
+- Validation run:
+  - `npm run -s typecheck` -> pass
+  - `npm run -s lint` -> pass
+- What changed:
+  - Removed the `All Training` dropdown from the toolbar.
+  - Reworked compare switch behavior:
+    - compare now fetches the previous period (`same range length`) via a dedicated cached query.
+    - previous-period values are remapped by day offset to current-period dates.
+    - overlay added to charts:
+      - `Daily Calories`: dashed previous-period calorie line.
+      - `Macros vs Targets`: dashed previous-period protein/carbs/fat lines.
+  - Added lightweight compare-state microcopy in chart headers to indicate what dashed lines represent.
+  - Kept target reference lines independent from compare mode so targets remain visible at all times.
+- Why this fix:
+  - Eliminates non-functional UI affordance and reduces user confusion.
+  - Makes compare switch immediately visible and useful without adding heavy new data contracts.
+- Deviations from design:
+  - Comparison currently appears on calories/macros charts only (not all sections) to keep render cost low and avoid visual noise.
+- Blockers / decisions needed:
+  - Optional: if desired, extend compare overlays to fiber/deficit charts behind the same toggle.
+
+### [E-047] Nutrition progress polish — insights revamp + macro distribution alignment + logging calendar contrast
+- Linked architect item: follow-up UI request for nutrition progress page
+- Implementation status: completed
+- Files touched:
+  - `components/nutrition/progress/nutrition-progress-page.tsx`
+  - `docs/ENGINEER_ARCHITECT_CONTEXT.md`
+- Validation run:
+  - `npm run -s typecheck` -> pass
+  - `npm run -s lint` -> pass
+- What changed:
+  - Insights section revamped:
+    - moved into a dedicated surfaced panel
+    - added improved visual hierarchy (signal count, type labels, icon chips, left accent rail)
+    - preserved existing rule-driven insight content from server action.
+  - Macro distribution layout adjusted:
+    - macro metric percentages now render on the right side of each donut, matching the same left-chart/right-metrics pattern used in Meal Breakdown.
+    - both `Actual` and `Target` blocks now use this aligned presentation.
+  - Logging calendar contrast improved:
+    - replaced dark muted classes with explicit brighter color tokens for:
+      - `logged_no_target`
+      - `not_logged`
+    - added explicit legend item for `Logged no target`.
+    - day dots now include subtle border for better visibility on dark background.
+- Why this fix:
+  - Improves scanability and consistency across nutrition analytics sections.
+  - Makes low-signal calendar states visible enough for quick interpretation.
+- Deviations from design:
+  - None.
+- Blockers / decisions needed:
+  - None.
+
+### [E-048] Nutrition insights layout simplification (reduced card density)
+- Linked architect item: follow-up request to revamp insights and avoid card-per-item presentation
+- Implementation status: completed
+- Files touched:
+  - `components/nutrition/progress/nutrition-progress-page.tsx`
+  - `docs/ENGINEER_ARCHITECT_CONTEXT.md`
+- Validation run:
+  - `npm run -s typecheck` -> pass
+  - `npm run -s lint` -> pass
+- What changed:
+  - Replaced the previous insight-card grid with a lighter split layout:
+    - left: single lead insight block
+    - right: divider-based list of all insights (rows, not cards)
+  - Kept insight semantics intact (`Win`, `Attention`, `Observation`) with icon + tone badges.
+  - Removed heavy per-item bordered card treatment to reduce visual clutter.
+- Why this fix:
+  - Improves scan speed and hierarchy on analytics pages with many surfaced panels.
+  - Aligns with the design goal to avoid "cards everywhere".
+- Deviations from design:
+  - None.
+- Blockers / decisions needed:
+  - None.
+
+### [E-049] Nutrition compliance + micronutrient architecture research handoff (for GO)
+- Linked architect item: nutrition progress follow-up (compliance semantics + micronutrient roadmap)
+- Implementation status: documentation completed (no runtime code changes in this step)
+- Files touched:
+  - `docs/NUTRITION_PROGRESS_HANDOFF_2026-03-20.md` (new)
+  - `docs/COMPETITIVE_ANALYSIS_PHASE_1.md`
+  - `docs/ENGINEER_ARCHITECT_CONTEXT.md`
+- What was documented:
+  - Full recap of recently shipped nutrition-progress steps (A-025 implementation + E-044..E-048 polish passes).
+  - Current-state compliance audit:
+    - compliance is computed server-side on read in `app/actions/nutrition-progress.ts`,
+    - target source currently resolves from active `fitness_goals`,
+    - no standalone persisted compliance fact store yet.
+  - Current-state micronutrient audit:
+    - not connected yet in active nutrition pipeline,
+    - UI remains placeholder only.
+  - Competitive research references and extracted patterns:
+    - MyFitnessPal (custom goals + historical handling),
+    - Cronometer (nutrient targets, nutrition scores, top contributors),
+    - MacroFactor (check-in/coaching loop).
+  - Proposed implementation plan requiring architect GO:
+    - Phase A: effective-date target history + target precedence + daily compliance fact table,
+    - Phase B: micronutrient ingestion/snapshot/aggregation + grouped scoring + coach workflows,
+    - Phase C: rollout sequence and decision gates.
+- Why this handoff:
+  - Gives architect a concrete, implementable sequence instead of broad recommendations.
+  - Preserves all recent engineering context and connects it to next-phase data model decisions.
+- Architect GO requested on:
+  - target precedence contract,
+  - compliance computation mode (sync vs worker),
+  - micronutrient data source strategy (curated/internal vs external in v1),
+  - v1 micronutrient score groups.
+- Blockers / decisions needed:
+  - Architect GO on the four decision points above before migration authoring.
+
 ## 15) Decision Log
 
 Record approved decisions with date and owner.
@@ -4860,6 +5038,12 @@ Record approved decisions with date and owner.
 - 2026-03-17 | Owner: architect | Decision [A-008 — notifications]: New `notifications` table (append-only, RLS user-scoped, no `read_at` column). Dismiss = DELETE, not UPDATE. Badge count = total row count for user (all rows are unread until deleted). No INSERT/UPDATE RLS policy for app users — only admin client (Inngest) inserts. DELETE policy allows users to dismiss their own notifications. Opening the bell panel does NOT auto-clear anything — user must explicitly dismiss. Goal-achieved notifications created inside existing `sync-goal-from-workout` Inngest function. 24-hour dedup guard prevents repeat notifications per goal. Check-in notifications delivered to the linked subject user. Bell sits at far right of dashboard header (ml-auto, opposite the SidebarTrigger). | Rationale: Delete-on-dismiss is simpler than read_at tracking — no partial-read states, no stale badge counts, no UPDATE RLS complexity. Badge persisting until explicit action is intentional — forces the user to actively acknowledge rather than just glance and close.
 - 2026-03-17 | Owner: architect | Decision [A-009]: Ticket notifications with subscriber model. Eight distinct notification types (created/updated/comment_added/comment_edited/comment_deleted/status_changed/closed/reopened). Single Inngest fanout function `notify-ticket-activity` handles all types. Actor role passed in event payload to avoid extra DB lookup in Inngest. Reporter auto-subscribed synchronously in `createTicketAction` (not deferred — critical for fanout correctness). Reporter cannot unsubscribe from own ticket. `updateTicketStatusAction` must SELECT-before-UPDATE to get `from_status` (current code does not). No notification on ticket delete (broken link risk) or upvote (noise). Visibility gate (BR-1) enforced in Inngest before bulk INSERT. | Amendments to engineer's draft: removed dead BR-5 admin path (only reporter can edit content); added BR-11 (reopened as distinct type); added BR-13 (no notification on delete); added BR-14 (no notification on upvote); simplified ticket_subscriptions RLS to action-layer enforcement; added `actor_is_admin` to event payload; added comment no-op guard; added SELECT-before-UPDATE requirement.
 - 2026-03-17 | Owner: architect | Decision [A-008 — realtime]: Use Supabase Realtime (`postgres_changes` INSERT subscription) for live badge updates — no polling. `ALTER PUBLICATION supabase_realtime ADD TABLE public.notifications` in migration. Dedicated hook `use-notification-realtime.ts` holds the browser Supabase client — justified exception to the no-client-Supabase rule (realtime subscriptions have no server-action equivalent). `userId` passed as a prop from the async server `DashboardLayout` to avoid a redundant client-side auth call. On INSERT event: increment count cache + prepend to feed cache directly via `setQueryData` (no server round-trip). Channel scoped to `notifications:${userId}` and cleaned up on unmount. | Rationale: True real-time requires a persistent WebSocket connection which only the browser client can maintain. Passing userId from the server component is the cleanest pattern — the layout already has auth context, no extra fetch needed.
+- 2026-03-20 | Owner: architect | Decision [E-049 GO — target precedence]: APPROVED with simplification. Target precedence for compliance = (1) active meal plan assignment targets for the date, (2) active fitness_goals (most recently updated, status = 'active'), (3) none. Do NOT add a manual daily override tier — this adds UI complexity we don't need. The two-tier fallback covers all real coaching scenarios.
+- 2026-03-20 | Owner: architect | Decision [E-049 GO — compliance computation mode]: SYNCHRONOUS in server action, not a worker. A compliance upsert is a single row write (≤5ms). Worker failure would silently diverge compliance facts from actuals. Worker infrastructure adds latency, failure modes, and observability burden we don't need at this stage. Compute synchronously inside the meal log mutation action, after `syncMealLogTotals`. Any future scale concern (high-volume clients logging >50 items/day) can migrate to worker at that point.
+- 2026-03-20 | Owner: architect | Decision [E-049 GO — micronutrient source v1]: Internal curated DB only. No external provider integrations (USDA API, Open Food Facts, Nutritionix) in v1. Reasons: (a) external providers add compliance surface and data quality variability; (b) API rate limits and latency risk at scale; (c) curated internal data is faster to trust-verify. Seed a `food_nutrient_reference` table from USDA values for ~200 common foods. Let coaches add custom entries via a future admin UI. Revisit external enrichment in v2 only after internal model is proven stable.
+- 2026-03-20 | Owner: architect | Decision [E-049 GO — micronutrient v1 score groups]: Start with 3 groups only: (1) Vitamins — D, B12, C, A, E, K, B6, Folate; (2) Minerals — Iron, Calcium, Magnesium, Zinc; (3) Electrolytes — Sodium, Potassium. No "All Targets" aggregate score in v1 — wait for real user feedback before adding top-level scores. Do not implement Phase B micronutrient tracking until A-026 (compliance infrastructure) has shipped and been stable for at least 2 weeks in production.
+- 2026-03-20 | Owner: architect | Decision [E-049 — architecture simplification]: Engineer proposed a separate `nutrition_target_history` table for Phase A. This is correct direction but over-engineered for current stage. Instead: snapshot the active targets directly in `daily_macro_compliance` columns at mutation time. This achieves historical immutability without an additional audit table. See A-026 spec for exact schema. The full history table can be added in a future task if we need per-day target delta reporting.
+- 2026-03-20 | Owner: architect | Decision [custom meal order persistence]: E-027–E-038 implemented meal-type ordering in Zustand persist (localStorage). This is acceptable for the current stage — it avoids a schema migration and keeps ordering snappy. Known limitation: order is device-specific. Flag as tech debt. Server-persist when we build a user preferences API (separate future task). Do NOT block current work on this.
 ```
 
 ## 16) Open Questions
@@ -8487,7 +8671,7 @@ Implement in this exact order to minimize risk of breaking changes:
 
 - Priority: High
 - Depends on: A-019 (already done), A-020 (cache fix). Safe to implement before A-021/A-022.
-- Status: Queued
+- Status: ~~Completed — implemented in E-041~~
 - Files:
   - `lib/nutrition/dashboard.ts` — add `activePlanName`, remove `greetingName`/`greetingSubtitle`
   - `hooks/use-nutrition-dashboard.ts` — expose `diaryIsLoading` / `activityIsLoading` separately; add `activePlanName`
@@ -9055,7 +9239,7 @@ After removing `greetingName` and `greetingSubtitle` from `NutritionDashboardDat
 
 - Priority: High
 - Depends on: none — self-contained
-- Status: Queued
+- Status: ~~Completed — implemented in E-042/E-043~~
 - Files:
   - `app/actions/meal-groups.ts` — add `MealGroupAssigneePreview` type, `assignee_preview` field to `MealGroupListRow`, extend `listMealGroupsAction` batch to resolve assignee names
   - `components/nutrition/meal-groups/meal-groups-dashboard.tsx` — full card redesign + all 4 Dialogs → Sheets
@@ -9527,3 +9711,5696 @@ Add new imports:
 - [x] `npm run typecheck` → pass
 - [x] `npm run lint` → pass
 - [ ] Smoke test: cards show assignee names; tooltip shows full title on hover; edit sheet opens from right on desktop; all create/edit/duplicate/delete actions work
+
+---
+
+### [A-025] Nutrition Progress Page — Full Revamp
+
+- Priority: High
+- Depends on: A-020 (cache fix), A-023 (dashboard revamp). Independent of A-021/A-022/A-024.
+- Status: ~~Completed — implemented in E-044 through E-048~~
+- Files:
+  - DELETE: `app/actions/nutrition-progress.ts`
+  - DELETE: `components/nutrition/progress-charts.tsx`
+  - DELETE: `components/nutrition/program-selector.tsx`
+  - DELETE: `types/nutrition.ts`
+  - NEW: `app/actions/nutrition-progress.ts` (complete rewrite)
+  - NEW: `app/(dashboard)/(insights)/progress/nutrition/loading.tsx`
+  - NEW: `components/nutrition/progress/nutrition-progress-page.tsx`
+  - NEW: `components/nutrition/progress/nutrition-progress-skeleton.tsx`
+  - REWRITE: `app/(dashboard)/(insights)/progress/nutrition/page.tsx`
+  - UPDATE: `lib/query-keys-progress.ts`
+  - UPDATE: `lib/auth/route-access.ts` (add sidebar link)
+
+Full spec: see `A-025 — Nutrition Progress Page Full Revamp` section at the bottom of this file.
+
+---
+
+### [A-026] Nutrition Compliance Infrastructure — Daily Fact Table + Target Snapshot
+
+- Priority: High
+- Depends on: A-025 (progress page must be live)
+- Status: Queued
+- Files:
+  - NEW: `supabase/migrations/YYYYMMDD_daily_macro_compliance.sql`
+  - NEW: `types/database.ts` — add `daily_macro_compliance` type
+  - UPDATE: `app/actions/nutrition-manual.ts` — upsert compliance row on every meal log mutation
+  - UPDATE: `app/actions/nutrition-progress.ts` — read compliance from fact table instead of computing inline
+
+#### Summary of changes
+
+The current compliance score is computed dynamically in the progress action using the user's current `fitness_goals`. This means if a user updates their calorie target from 2000→2500 kcal, all their historical compliance scores retroactively change — this is wrong.
+
+This task creates a `daily_macro_compliance` fact table that **snapshots the active targets at mutation time**, making historical compliance immutable and correct.
+
+**Architect-approved design (simplified vs engineer's Phase A proposal):**
+
+**Why simplified:** The engineer proposed a separate `nutrition_target_history` table. This adds a full append-only audit log that we don't need at this stage. The simpler approach captures the target snapshot directly in the compliance row. Same result, less schema surface.
+
+**Target precedence order (approved):**
+1. Active meal plan assignment targets for the date (from `meal_plan_assignments` + plan targets)
+2. Active `fitness_goals` targets (most recently updated, `status = 'active'`)
+3. None — compliance stored with `basis = 'missing_target'`, not displayed
+
+**No manual daily override** — do not add a UI for this. The two-tier precedence above covers all real coaching scenarios.
+
+**Compliance fact table — `daily_macro_compliance`:**
+
+```sql
+CREATE TABLE public.daily_macro_compliance (
+  id                    uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  subject_user_id       uuid REFERENCES auth.users(id) ON DELETE CASCADE,
+  subject_client_id     uuid REFERENCES public.clients(id) ON DELETE CASCADE,
+  performed_on          date NOT NULL,
+
+  -- Snapshot of targets active at mutation time
+  target_calories       numeric,
+  target_protein_g      numeric,
+  target_carbs_g        numeric,
+  target_fat_g          numeric,
+  target_source         text NOT NULL,   -- 'plan_assignment' | 'fitness_goal' | 'none'
+
+  -- Actuals from meal_logs for this date
+  actual_calories       numeric NOT NULL DEFAULT 0,
+  actual_protein_g      numeric NOT NULL DEFAULT 0,
+  actual_carbs_g        numeric NOT NULL DEFAULT 0,
+  actual_fat_g          numeric NOT NULL DEFAULT 0,
+
+  -- Per-macro compliance flags (within ±15% of target)
+  calories_compliant    boolean,
+  protein_compliant     boolean,
+  carbs_compliant       boolean,
+  fat_compliant         boolean,
+
+  -- Day classification
+  basis                 text NOT NULL,   -- 'complete_log' | 'partial_log' | 'missing_target' | 'no_log'
+  overall_compliant     boolean,         -- true when ALL four macros are compliant
+
+  updated_at            timestamptz NOT NULL DEFAULT now(),
+
+  CONSTRAINT daily_macro_compliance_subject_date_unique
+    UNIQUE (subject_user_id, subject_client_id, performed_on)
+);
+
+CREATE INDEX idx_daily_macro_compliance_user_date
+  ON public.daily_macro_compliance (subject_user_id, performed_on DESC)
+  WHERE subject_user_id IS NOT NULL;
+
+CREATE INDEX idx_daily_macro_compliance_client_date
+  ON public.daily_macro_compliance (subject_client_id, performed_on DESC)
+  WHERE subject_client_id IS NOT NULL;
+```
+
+**RLS:** Subject-scoped. Users can only read their own rows. Admin client used for writes from server actions.
+
+**Upsert on meal log mutation (synchronous — no worker):**
+
+Add a shared helper `upsertDailyCompliance(supabase, { subject, performedOn })` in `nutrition-manual.ts`. Call it at the end of every meal item mutation that changes `meal_logs.total_*`:
+- `addMealItemAction` → sync totals → upsert compliance
+- `updateMealItemAction` → sync totals → upsert compliance
+- `removeMealItemAction` → sync totals → upsert compliance
+- `copyMealsFromDateAction` → sync totals → upsert compliance for target date
+- `logFromPlanAction` → sync totals → upsert compliance
+
+**Why synchronous, not a worker:** Compliance is a single-row upsert (≤5ms). Worker failure would silently diverge compliance facts from actuals. At this stage, synchronous in-action computation is reliable, observable, and requires no extra infrastructure.
+
+**Progress page read path update:**
+
+Update `getNutritionProgressAction` to read compliance from the fact table for the requested date range:
+```ts
+const complianceRows = await admin
+  .from('daily_macro_compliance')
+  .select('performed_on, overall_compliant, basis, target_source, target_calories, actual_calories')
+  .match(subjectFilter)
+  .gte('performed_on', startDate)
+  .lte('performed_on', endDate)
+  .order('performed_on', { ascending: true });
+```
+
+Fall back to the current inline computation only when `complianceRows` is empty (i.e., before this migration runs on existing data). Backfill is optional — existing days will self-populate as users continue logging.
+
+**Partial-log handling:**
+
+A day is `basis = 'partial_log'` when the diary has fewer than 2 meal types logged. This prevents false-compliance from a user who logged only breakfast. Do NOT count `partial_log` days in the compliance % calculation — show them in the calendar as a distinct amber/striped state.
+
+**UI updates to `NutritionProgressPage`:**
+
+- Compliance score tooltip: show "Based on ±15% tolerance for all 4 macros. Partial days excluded."
+- Compliance calendar: add a fourth state `partial_log` — amber + striped or dotted border to distinguish from `logged_off_target`
+- Compare mode: the existing dashed compare lines are unaffected — compliance facts are independent
+
+**Checklist:**
+- [ ] Migration created with table + indexes + RLS policy
+- [ ] `types/database.ts` updated
+- [ ] `upsertDailyCompliance` helper added to `nutrition-manual.ts`
+- [ ] All 5 mutation actions call `upsertDailyCompliance` after syncing totals
+- [ ] Progress action reads from `daily_macro_compliance` when rows exist
+- [ ] `partial_log` basis handled correctly (excluded from % numerator)
+- [ ] Calendar shows 4 states including `partial_log`
+- [ ] `npm run typecheck && npm run lint && npm run test` → pass
+- [ ] Manual QA: log a meal, check compliance row exists in DB for today
+
+#### Architect note — Compliance Score: Recommended Practice
+
+**Problem with the current `overall_compliant` definition:**
+The schema as written sets `overall_compliant = true` only when ALL four macros (calories, protein, carbs, fat) are within ±15% of target simultaneously. In practice, this produces almost no green days for most clients — it is too strict to be useful as a coaching signal.
+
+**Why this matters:**
+- Clients on flexible diets, carb cycling, or high-fat protocols will routinely fail carb or fat compliance even when hitting their calorie and protein targets — the metrics coaches actually care about
+- Requiring carb + fat compliance punishes dietary variety and contextually appropriate deviations (e.g., a higher-fat meal on a rest day is fine by most coaching standards)
+- A compliance % near 0% is demoralising and meaningless — it does not help a coach or client identify actionable trends
+
+**Recommended practice for this application:**
+
+`overall_compliant = calories_compliant AND protein_compliant`
+
+| Macro | Gate overall_compliant? | Tolerance | Rationale |
+|-------|------------------------|-----------|-----------|
+| Calories | Yes | ±15% | Primary lever for weight outcome; non-negotiable |
+| Protein | Yes | ±20% | #1 macro coaches track for body composition; slightly wider tolerance because precise protein hits are harder (restaurant meals, food variety) |
+| Carbs | No | ±20% (tracked, displayed only) | Flexible macro; carb cycling and keto protocols make carb compliance meaningless as a universal gate |
+| Fat | No | ±20% (tracked, displayed only) | Flexible macro; dietary fat varies by food source in ways that don't reflect coaching intent |
+
+**Display recommendation:**
+- Show compliance as `"X of Y days on target"` alongside the percentage — `"18 of 30 days on target (60%)"` is more actionable than just `"60%"`. Update the progress page UI to show both.
+- Per-macro compliance bars (calories, protein, carbs, fat) shown individually below the headline score — clients see which macro they're consistently missing.
+
+**Partial log exclusion is correct** — keep as-is. A `partial_log` day is neither compliant nor non-compliant; excluded from both numerator and denominator.
+
+**Future (not for A-026):** Make tolerance asymmetric based on `fitness_goals.goal_type`:
+- A client on a `cut` who eats 5% under calories is still compliant (under-eating is acceptable)
+- A client on a `bulk` who eats 15% under calories is non-compliant (under-eating defeats the goal)
+Queue as a future enhancement once goal types are fully in use.
+
+**Schema change from this note:**
+Update `upsertDailyCompliance` so that:
+```ts
+overall_compliant = calories_compliant && protein_compliant
+// carbs_compliant and fat_compliant are still written to the row for per-macro display
+// but do NOT gate overall_compliant
+```
+
+---
+
+### [A-027] Nutrition Progress — Chart Bug Fixes + Compare Fiber + CSV Export
+
+- Priority: High
+- Depends on: A-025 (done)
+- Status: Completed (chart bugs fixed + two-zone deficit/surplus chart by architect 2026-03-20; compare fiber + CSV by engineer)
+- Files:
+  - UPDATE: `components/nutrition/progress/nutrition-progress-page.tsx`
+
+#### Summary of changes
+
+**Two confirmed chart rendering bugs found by architect code review (screenshots provided).**
+
+---
+
+**BUG FIX 1: Macros vs Targets — isolated data points completely invisible**
+
+**Root cause confirmed by code audit:**
+All three `Line` components in the Macros vs Targets chart have `dot={false}`. In Recharts, when `dot={false}` + `connectNulls` is not set (defaults to `false`) and a data point has `null` values on both adjacent dates, that point renders nothing at all — no dot, no line segment. This is the Recharts behavior for isolated non-null values surrounded by nulls. With only 4 logged days out of a 90-day range, every logged day is isolated. The chart shows only the fat target reference line (at ~75g) and is otherwise completely blank.
+
+**Fix — three changes to the Macros vs Targets `LineChart`:**
+
+1. Add visible dots to all three macro lines so isolated data points render:
+```tsx
+// protein line:
+<Line
+  dataKey="protein_g"
+  stroke={MACRO_COLORS.protein}
+  dot={{ r: 2.5, fill: MACRO_COLORS.protein, strokeWidth: 0 }}
+  activeDot={{ r: 4 }}
+  strokeWidth={2}
+  type="monotone"
+  isAnimationActive={false}
+/>
+// same pattern for carbs_g and fat_g
+```
+
+2. Add `ifOverflow="extendDomain"` to all three target reference lines so they force the Y-axis to include the target value even when actual data is near zero:
+```tsx
+<ReferenceLine
+  y={data.targets.protein_g}
+  stroke={MACRO_COLORS.protein}
+  strokeDasharray="6 3"
+  ifOverflow="extendDomain"
+/>
+// same for carbs and fat reference lines
+```
+
+3. Add an explicit `domain` to the YAxis to always start from 0:
+```tsx
+<YAxis
+  domain={[0, (dataMax: number) => Math.ceil(Math.max(dataMax, data.targets.protein_g, data.targets.carbs_g, data.targets.fat_g) * 1.15 / 10) * 10]}
+  tick={{ fontSize: 11, fill: AXIS_COLOR }}
+  tickLine={false}
+  axisLine={false}
+/>
+```
+This ensures the Y-axis always spans from 0 to at least the highest target value, making both actual lines and target reference lines visible together.
+
+---
+
+**BUG FIX 2: Calorie Deficit / Surplus — bars don't anchor at zero**
+
+**Root cause confirmed by code audit:**
+The `BarChart` YAxis has no `domain` prop. When ALL `deficit_surplus` values are negative (e.g., -1200 to -2800), Recharts auto-scales the domain to approximately `[-3100, -1100]` without including 0. The `<ReferenceLine y={0}>` is in the code but falls outside the visible chart area and is invisible. Bars appear to fill from the chart top downward (as if anchored at -1200), not from zero downward. The formula `consumed - target` is **correct** — negative values are genuine deficits.
+
+**Fix — add explicit domain to the Deficit/Surplus YAxis:**
+```tsx
+<YAxis
+  domain={[
+    (dataMin: number) => Math.floor(Math.min(dataMin, 0) * 1.1 / 100) * 100,
+    (dataMax: number) => Math.ceil(Math.max(dataMax, 0) * 1.1 / 100) * 100,
+  ]}
+  tick={{ fontSize: 11, fill: AXIS_COLOR }}
+  tickLine={false}
+  axisLine={false}
+/>
+```
+This guarantees:
+- Max is always at least `0` — bars correctly extend downward from the zero baseline
+- Min is at least `dataMin * 1.1` — room below the lowest bar
+- When there are positive values (surplus), they extend upward above 0 correctly
+- The `<ReferenceLine y={0}>` now falls within the visible domain and renders as the zero baseline
+
+---
+
+**3. Compare mode fiber chart**
+
+E-046 extended compare overlays to Daily Calories and Macros charts only. Add the same previous-period dashed line to the Fiber chart:
+```tsx
+{compareMode && compareQuery.data ? (
+  <Line
+    dataKey="compare_fiber_g"
+    stroke="#92ddb8"
+    dot={false}
+    strokeWidth={1.5}
+    strokeDasharray="6 4"
+    type="monotone"
+    connectNulls
+    isAnimationActive={false}
+  />
+) : null}
+```
+
+**4. CSV export wire-up**
+
+E-044 added a Download icon button to the toolbar header. Verify it is wired to an actual export function. If it is a visual shell, implement:
+```ts
+function exportNutritionProgressCSV(data: NutritionProgressData) {
+  const headers = ['Date', 'Calories', 'Protein (g)', 'Carbs (g)', 'Fat (g)', 'Fiber (g)', 'Deficit/Surplus (kcal)'];
+  const rows = data.daily_rows.map(row => [
+    row.date,
+    row.calories,
+    row.protein_g,
+    row.carbs_g,
+    row.fat_g,
+    row.fiber_g ?? '',
+    row.deficit_surplus ?? '',
+  ]);
+  const csv = [headers, ...rows].map(r => r.join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `nutrition-${data.range}d-${data.end_date}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+```
+
+**Checklist:**
+- [x] Macros vs Targets: macro data points visible as small dots even when sparse
+- [x] Macros vs Targets: all three target reference lines visible (protein/carbs/fat)
+- [x] Macros vs Targets: Y-axis always includes 0 and the highest target value
+- [x] Deficit/Surplus: bars correctly anchor at 0 and extend downward for deficits
+- [x] Deficit/Surplus: zero baseline (`ReferenceLine y={0}`) is visible in the chart
+- [x] Fiber chart: dashed compare line added when compare mode active
+- [x] CSV export: Download button triggers download, not a visual shell
+- [ ] Manual QA: with only 1 logged day in a 90-day range, all three macro dots are visible
+- [ ] Manual QA: with all-negative deficits, bars start from 0 and go down
+- [ ] `npm run typecheck && npm run lint` → pass
+
+---
+
+### [A-028] Training Competitive Parity — Inline History + Exercise Seed Library
+
+- Priority: Medium
+- Depends on: none — independent of nutrition work
+- Status: Queued
+- Files:
+  - UPDATE: workout logging UI (exercise set input rows)
+  - NEW: `supabase/migrations/YYYYMMDD_seed_exercises.sql`
+  - UPDATE: `app/actions/workout.ts` or dedicated exercises action
+
+#### Summary of changes
+
+Based on competitive analysis in `docs/COMPETITIVE_ANALYSIS_PHASE_1.md`. Two high-value gaps with direct impact on daily coach/client usage.
+
+**1. Inline "Last session" history on workout logging**
+
+When a user is entering sets for an exercise, they currently see blank input fields. Every competitor (Hevy, Strong, Trainerize, Everfit) shows "Last: 100 kg × 5" ghosted in or adjacent to the inputs. This is the single most requested feature in consumer workout apps.
+
+**Implementation:**
+- On exercise row render in the logging UI, query `strength_sets` for the most recent session of the same exercise for the same subject (not the current session).
+- Fetch the top set (max weight) from the most recent prior `workout_sessions.workout_date`.
+- Display as ghost text or a faint row above the inputs: `Last session: 100 kg × 5 (2 days ago)`
+- Batch by exercise name for the current session (one query per session, not per exercise row) to avoid N+1.
+
+```ts
+// Example query shape (one round-trip for all exercises in the current session):
+const lastSets = await supabase
+  .from('strength_sets')
+  .select('exercise_name, weight_kg, reps, workout_session_id, workout_sessions!inner(workout_date)')
+  .in('exercise_name', currentSessionExerciseNames)
+  .eq('subject_user_id', subjectUserId)
+  .neq('workout_session_id', currentSessionId)
+  .order('workout_sessions(workout_date)', { ascending: false })
+  .limit(1); // per exercise — use a GROUP BY or distinct-on in an RPC if needed
+```
+
+If a single query with `distinct on (exercise_name)` is cleaner, use an RPC or a view. The goal is one DB round-trip for all previous sets.
+
+**2. Seed exercise library (50 essential exercises)**
+
+New coaches face an empty exercise library. Write a migration seed that inserts ~50 essential exercises with standardized names, muscle groups, and equipment. Use open-source exercise metadata. Do not add video URLs in seed — coaches can add those.
+
+Exercises to include (minimum):
+- Barbell: Squat, Deadlift, Bench Press, Overhead Press, Barbell Row, Romanian Deadlift, Hip Thrust, Sumo Deadlift, Power Clean
+- Dumbbell: Dumbbell Press, Dumbbell Row, Dumbbell Curl, Lateral Raise, Goblet Squat, Dumbbell Lunge, Incline Press, RDL
+- Bodyweight: Pull-up, Chin-up, Push-up, Dip, Plank, Glute Bridge, Bulgarian Split Squat, Inverted Row, Pike Push-up, Nordic Curl
+- Cable/Machine: Cable Row, Lat Pulldown, Leg Press, Leg Curl, Leg Extension, Chest Fly, Face Pull, Tricep Pushdown, Cable Lateral Raise
+- Cardio: Treadmill Run, Rowing Machine, Cycling (Stationary), Jump Rope
+
+The migration must be idempotent — use `INSERT ... ON CONFLICT DO NOTHING` on exercise name so it's safe to run multiple times.
+
+**Checklist:**
+- [ ] Inline last-session display added to workout logging UI
+- [ ] Previous sets fetched in one batch query (no N+1)
+- [ ] Ghost text shows exercise name, weight, reps, and relative date
+- [ ] Seed migration: 50 exercises inserted with correct muscle groups + equipment
+- [ ] Migration is idempotent (`ON CONFLICT DO NOTHING`)
+- [ ] `npm run typecheck && npm run lint && npm run test` → pass
+- [ ] Manual QA: create a workout session for Squat; on second session, ghost text shows previous weight
+
+---
+
+### [A-029] Supplement Management — Catalog + Assignments (Informational)
+
+- Priority: High
+- Depends on: Independent of A-026/A-027/A-028.
+- Status: Queued
+- Files:
+  - NEW: `supabase/migrations/YYYYMMDD_supplement_catalog.sql`
+  - NEW: `supabase/migrations/YYYYMMDD_supplement_assignments.sql`
+  - NEW: `app/actions/supplements.ts`
+  - NEW: `app/(dashboard)/supplements/page.tsx` — catalog page
+  - NEW: `app/(dashboard)/supplements/assigned/page.tsx` — assignments roster
+  - NEW: `app/(dashboard)/supplements/assigned/[subjectId]/page.tsx` — person detail
+  - NEW: `components/supplements/supplement-catalog-table.tsx`
+  - NEW: `components/supplements/supplement-assignment-table.tsx`
+  - NEW: `components/supplements/supplement-person-detail-table.tsx`
+  - NEW: `components/supplements/assign-supplements-dialog.tsx`
+  - NEW: `components/supplements/create-supplement-dialog.tsx`
+  - NEW: `components/supplements/edit-assignment-item-dialog.tsx`
+  - NEW: `lib/query-keys-supplements.ts`
+  - UPDATE: `components/nutrition/progress/nutrition-progress-page.tsx` — replace micronutrient placeholder
+  - UPDATE: `lib/auth/route-access.ts` — allow supplement routes
+  - UPDATE: `components/layout/sidebar.tsx` (or equivalent nav file) — add Supplements nav items
+
+#### Architecture overview
+
+**Purpose: purely informational.** Supplements track what a coach, user, or client is taking — not whether they took it on any given day. There is no daily logging, no streak, no adherence %, no compliance. The feature answers one question: "What supplements is this person on, and at what dosages?"
+
+**No `supplement_logs` table.** No logging actions. No streak. No adherence.
+
+Three pages:
+1. `/supplements` — supplement catalog (all available supplements, generic names)
+2. `/supplements/assigned` — assignments roster (one row per person who has supplements assigned)
+3. `/supplements/assigned/[subjectId]` — person detail (one row per supplement in their stack, with editable dosage)
+
+---
+
+#### PART A — Data model
+
+**`supplement_catalog` — the generic supplement library:**
+
+Supplement names are **generic** — no dosage in the name. `"Calcium"`, `"Zinc"`, `"Vitamin D3"`. The dosage is set per-person on the assignment. The catalog stores what nutrient the supplement provides and in what unit, so the detail table knows what unit to display when the coach sets the amount.
+
+```sql
+CREATE TABLE public.supplement_catalog (
+  id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  name            text NOT NULL,         -- "Calcium", "Zinc", "Vitamin D3", "Omega-3 Fish Oil"
+  category        text NOT NULL,         -- 'vitamin' | 'mineral' | 'omega' | 'performance' | 'electrolyte' | 'herbal' | 'other'
+  nutrient_key    text,                  -- primary nutrient key: "calcium_mg", "zinc_mg", "vitamin_d_iu"
+                                         -- null for multi-nutrient supplements (Multivitamin, Electrolyte)
+  unit            text,                  -- "mg", "mcg", "IU", "g" — display unit for daily_amount
+  serving_form    text,                  -- "tablet", "capsule", "softgel", "powder", "gummy", "liquid"
+  description     text,                  -- optional one-line description for the table
+  is_global       boolean NOT NULL DEFAULT false,   -- system-seeded; not editable by users
+  owner_user_id   uuid REFERENCES auth.users(id),   -- null for global; set for custom coach entries
+  created_at      timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_supplement_catalog_category ON public.supplement_catalog (category);
+CREATE INDEX idx_supplement_catalog_global   ON public.supplement_catalog (is_global);
+CREATE INDEX idx_supplement_catalog_owner    ON public.supplement_catalog (owner_user_id) WHERE owner_user_id IS NOT NULL;
+```
+
+**RLS on supplement_catalog:**
+- SELECT: all authenticated users (global + their own custom entries)
+- INSERT: authenticated users (owner_user_id = auth.uid(), is_global = false)
+- UPDATE/DELETE: owner_user_id = auth.uid() only; global entries are immutable
+
+**Global seed (~20 entries, idempotent — ON CONFLICT (name, is_global) DO NOTHING):**
+
+```sql
+-- Vitamins
+('Vitamin D3',   'vitamin',     'vitamin_d_iu',    'IU',   'softgel',  'Supports bone health and immune function',           true),
+('Vitamin C',    'vitamin',     'vitamin_c_mg',    'mg',   'tablet',   'Antioxidant; supports immune system',                 true),
+('Vitamin B12',  'vitamin',     'vitamin_b12_mcg', 'mcg',  'tablet',   'Nerve function and red blood cell production',       true),
+('Vitamin K2',   'vitamin',     'vitamin_k2_mcg',  'mcg',  'capsule',  'Supports calcium metabolism and bone strength',      true),
+('Vitamin A',    'vitamin',     'vitamin_a_mcg',   'mcg',  'capsule',  'Vision and immune function',                         true),
+('Folate',       'vitamin',     'folate_mcg',      'mcg',  'tablet',   'Cell division; critical during pregnancy',           true),
+('Multivitamin', 'vitamin',     null,               null,   'tablet',   'Multi-nutrient daily supplement',                    true),
+-- Minerals
+('Calcium',      'mineral',     'calcium_mg',      'mg',   'tablet',   'Bone and teeth strength; muscle function',           true),
+('Magnesium',    'mineral',     'magnesium_mg',    'mg',   'capsule',  'Muscle recovery, sleep, and nerve function',         true),
+('Zinc',         'mineral',     'zinc_mg',         'mg',   'tablet',   'Immune support and testosterone regulation',         true),
+('Iron',         'mineral',     'iron_mg',         'mg',   'tablet',   'Oxygen transport; critical for anaemia prevention',  true),
+-- Omega / Fats
+('Omega-3 Fish Oil', 'omega',   'omega3_g',        'g',    'softgel',  'EPA/DHA for cardiovascular and brain health',        true),
+-- Electrolytes
+('Electrolyte',  'electrolyte', null,               null,   'tablet',   'Sodium, potassium, magnesium blend',                  true),
+-- Performance
+('Creatine',     'performance', 'creatine_g',      'g',    'powder',   'Muscle strength and power output',                   true),
+('Whey Protein', 'performance', 'protein_g',       'g',    'powder',   'Post-workout protein source',                        true),
+('Collagen',     'performance', 'collagen_g',      'g',    'powder',   'Joint and skin health',                              true),
+-- Herbal
+('Ashwagandha',  'herbal',      null,               'mg',   'capsule',  'Adaptogen; stress and cortisol regulation',          true),
+('Turmeric',     'herbal',      null,               'mg',   'capsule',  'Anti-inflammatory; curcumin source',                 true);
+```
+
+---
+
+**`supplement_assignments` — what a person is taking:**
+
+One row per person per supplement. The coach sets the daily dosage (`daily_amount`) here — this is where `"Calcium 1000mg"` lives, not in the catalog.
+
+```sql
+CREATE TABLE public.supplement_assignments (
+  id                  uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  subject_user_id     uuid REFERENCES auth.users(id) ON DELETE CASCADE,
+  subject_client_id   uuid REFERENCES public.clients(id) ON DELETE CASCADE,
+  supplement_id       uuid NOT NULL REFERENCES public.supplement_catalog(id),
+
+  daily_amount        numeric,           -- amount in catalog.unit (e.g., 1000 for "1000mg" of Calcium)
+  serving_count       numeric,           -- optional: how many tablets/capsules/scoops per day
+  time_of_day         text,              -- 'morning' | 'midday' | 'evening' | 'night' | null
+  taken_with_food     boolean,           -- clinically relevant for fat-soluble vitamins, iron, magnesium
+  notes               text,              -- personal or coach note for this supplement
+  coach_note          text,              -- coach annotation — visible to client (read-only for client)
+  coach_noted_by      uuid REFERENCES auth.users(id),
+  assigned_by         uuid REFERENCES auth.users(id),
+  created_at          timestamptz NOT NULL DEFAULT now(),
+  updated_at          timestamptz NOT NULL DEFAULT now(),
+
+  CONSTRAINT supplement_assignments_subject_check CHECK (
+    (subject_user_id IS NOT NULL AND subject_client_id IS NULL) OR
+    (subject_user_id IS NULL AND subject_client_id IS NOT NULL)
+  ),
+  CONSTRAINT supplement_assignments_user_supplement_unique
+    UNIQUE (subject_user_id, supplement_id),
+  CONSTRAINT supplement_assignments_client_supplement_unique
+    UNIQUE (subject_client_id, supplement_id)
+);
+
+CREATE INDEX idx_supplement_assignments_user
+  ON public.supplement_assignments (subject_user_id)
+  WHERE subject_user_id IS NOT NULL;
+
+CREATE INDEX idx_supplement_assignments_client
+  ON public.supplement_assignments (subject_client_id)
+  WHERE subject_client_id IS NOT NULL;
+```
+
+**RLS on supplement_assignments:**
+- SELECT: subject-scoped (own row, or coach access via `clients.primary_coach_id`)
+- INSERT/UPDATE/DELETE: user for own; coach for client via admin client
+
+---
+
+#### PART B — Server actions (`app/actions/supplements.ts`)
+
+```ts
+// ── Catalog ──────────────────────────────────────────────────────────────
+
+// List all supplements visible to the caller (global + their own custom entries)
+listSupplementCatalogAction(input: {
+  search?: string;
+  category?: string;
+}): Promise<SupplementCatalogRow[]>
+
+// Add a new custom supplement to the catalog (coach-owned)
+createSupplementAction(input: {
+  name: string;
+  category: string;
+  nutrient_key?: string;
+  unit?: string;
+  serving_form?: string;
+  description?: string;
+}): Promise<{ id: string }>
+
+
+// ── Assignments — roster level ────────────────────────────────────────────
+
+// All people (me + clients) who have ≥1 supplement assigned
+// One row per person — all aggregation done server-side in a single CTE
+listSupplementSubjectsAction(): Promise<SupplementSubjectRow[]>
+// Each row:
+// {
+//   subject_type: 'user' | 'client'
+//   subject_id: string
+//   display_name: string
+//   avatar_url: string | null
+//   supplement_count: number             -- COUNT(active assignments)
+//   categories: string[]                 -- distinct categories assigned (e.g. ['vitamin', 'mineral'])
+//   key_nutrient_coverage: {             -- auto-calculated: daily_amount / RDI × 100
+//     vitamin_d_pct: number | null       -- null if not assigned
+//     magnesium_pct: number | null
+//     calcium_pct: number | null
+//     zinc_pct: number | null
+//   }
+//   assigned_at: string                  -- most recent assignment created_at
+// }
+
+
+// ── Assignments — detail level ────────────────────────────────────────────
+
+// All supplements assigned to one person
+listAssignmentsAction(input: {
+  subject: SupplementSubject;   // { type: 'me' } | { type: 'client'; id: string }
+}): Promise<SupplementAssignmentRow[]>
+// Each row:
+// {
+//   id, supplement_id, supplement_name, category, nutrient_key, unit, serving_form, description
+//   daily_amount: number | null          -- what the coach set (e.g. 1000 for Calcium 1000mg)
+//   daily_amount_display: string         -- "1000mg", "2000 IU", "3g" — auto-formatted
+//   serving_count: number | null
+//   time_of_day: string | null
+//   taken_with_food: boolean | null
+//   notes: string | null
+//   coach_note: string | null
+//   rdi_coverage_pct: number | null      -- daily_amount / RDI[nutrient_key] × 100; null if no RDI
+//   assigned_at: string
+// }
+
+// Assign multiple supplements to one person at once (from the modal)
+assignSupplementsAction(input: {
+  subject: SupplementSubject;
+  supplement_ids: string[];        -- multi-select from the modal
+}): Promise<{ created: number; skipped: number }>
+// Upserts: creates rows that don't exist yet; skips already-assigned ones (idempotent)
+// daily_amount is null on creation — coach sets it in the detail table later
+// Returns count of newly created vs already-existed
+
+// Update one assignment (coach edits dosage, time, notes, etc. in the detail table)
+updateAssignmentAction(input: {
+  id: string;
+  daily_amount?: number;
+  serving_count?: number;
+  time_of_day?: string;
+  taken_with_food?: boolean;
+  notes?: string;
+  coach_note?: string;
+}): Promise<void>
+
+// Remove one supplement from a person's stack
+removeAssignmentAction(id: string): Promise<void>
+
+
+// ── Progress page ─────────────────────────────────────────────────────────
+
+// Nutrient coverage from assignments (static — no logging involved)
+getSupplementCoverageAction(input: {
+  subject: SupplementSubject;
+}): Promise<{
+  assignments: { nutrient_key: string; daily_amount: number; unit: string; supplement_name: string }[];
+  nutrient_totals: Record<string, number>;   -- summed daily_amount per nutrient_key
+  // e.g. { calcium_mg: 1000, vitamin_d_iu: 2000, magnesium_mg: 400 }
+}>
+// Used by progress page to show nutrient totals vs RDI
+// Static — recalculated each load from current assignments
+```
+
+**CTE query pattern for `listSupplementSubjectsAction`:**
+```sql
+WITH subject_assignments AS (
+  SELECT
+    subject_user_id, subject_client_id,
+    COUNT(*) AS supplement_count,
+    array_agg(DISTINCT sc.category) AS categories,
+    MAX(sa.created_at) AS assigned_at
+  FROM supplement_assignments sa
+  JOIN supplement_catalog sc ON sc.id = sa.supplement_id
+  GROUP BY subject_user_id, subject_client_id
+),
+nutrient_totals AS (
+  SELECT
+    subject_user_id, subject_client_id,
+    SUM(CASE WHEN sc.nutrient_key = 'vitamin_d_iu'  THEN sa.daily_amount END) AS vit_d_total,
+    SUM(CASE WHEN sc.nutrient_key = 'magnesium_mg'  THEN sa.daily_amount END) AS mag_total,
+    SUM(CASE WHEN sc.nutrient_key = 'calcium_mg'    THEN sa.daily_amount END) AS cal_total,
+    SUM(CASE WHEN sc.nutrient_key = 'zinc_mg'       THEN sa.daily_amount END) AS zinc_total
+  FROM supplement_assignments sa
+  JOIN supplement_catalog sc ON sc.id = sa.supplement_id
+  GROUP BY subject_user_id, subject_client_id
+)
+SELECT ... FROM subject_assignments JOIN nutrient_totals USING (subject_user_id, subject_client_id)
+```
+
+`rdi_coverage_pct` computed in application layer after fetch: `total / RDI_CONSTANT × 100`.
+
+**RDI constants (hardcoded — no DB table):**
+```ts
+export const SUPPLEMENT_NUTRIENT_RDI = {
+  vitamin_d_iu:    1500,
+  vitamin_c_mg:    90,
+  vitamin_b12_mcg: 2.4,
+  folate_mcg:      400,
+  iron_mg:         18,
+  calcium_mg:      1000,
+  magnesium_mg:    400,
+  zinc_mg:         11,
+} as const;
+
+export const SUPPLEMENT_NUTRIENT_LABELS: Record<string, { label: string; unit: string }> = {
+  vitamin_d_iu:    { label: 'Vitamin D',  unit: 'IU'  },
+  vitamin_c_mg:    { label: 'Vitamin C',  unit: 'mg'  },
+  vitamin_b12_mcg: { label: 'B12',        unit: 'mcg' },
+  folate_mcg:      { label: 'Folate',     unit: 'mcg' },
+  iron_mg:         { label: 'Iron',       unit: 'mg'  },
+  calcium_mg:      { label: 'Calcium',    unit: 'mg'  },
+  magnesium_mg:    { label: 'Magnesium',  unit: 'mg'  },
+  zinc_mg:         { label: 'Zinc',       unit: 'mg'  },
+  omega3_g:        { label: 'Omega-3',    unit: 'g'   },
+  creatine_g:      { label: 'Creatine',   unit: 'g'   },
+} as const;
+```
+
+---
+
+#### PART C — Routes and navigation
+
+```
+app/(dashboard)/supplements/
+  page.tsx                         ← Catalog page
+  assigned/
+    page.tsx                       ← Assignments roster
+    [subjectId]/
+      page.tsx                     ← Person detail
+```
+
+**`[subjectId]` encoding:** use `me` for the coach themselves; client UUID for clients. Server reads auth session to resolve `me`.
+
+**Sidebar nav:** Add two items under a "Supplements" group (or as a single item with sub-nav matching the pattern of other sections):
+- "Catalog" → `/supplements`
+- "Assigned" → `/supplements/assigned`
+
+Icon: `Pill` (lucide-react).
+
+**`lib/query-keys-supplements.ts`:**
+```ts
+export const supplementKeys = {
+  catalog:   (q?: string) => ['supplement-catalog', q] as const,
+  subjects:  ()           => ['supplement-subjects'] as const,
+  assignments: (s: string) => ['supplement-assignments', s] as const,
+  coverage:  (s: string)  => ['supplement-coverage', s] as const,
+}
+```
+
+---
+
+#### PART D — Catalog page (`/supplements`)
+
+**Purpose:** Browse all available supplements. Add custom ones. This is the starting point for everything — you discover supplements here and assign them from here.
+
+**Page header:** `"Supplements"` · subtitle: `"Browse the supplement catalog. Select supplements to assign to yourself or a client."` · actions: `[+ Add Supplement]` (opens `CreateSupplementDialog`) · `[Assign Supplements →]` button (opens `AssignSupplementsDialog`).
+
+**TanStack Table — `<SupplementCatalogTable />`:**
+
+Plugins: `getCoreRowModel`, `getSortedRowModel`, `getFilteredRowModel`, `getPaginationRowModel`.
+
+**Column definitions:**
+
+| Column key | Header | Value | Notes |
+|------------|--------|-------|-------|
+| `name` | Supplement | Name text | Sortable. Bold |
+| `category` | Category | Colored badge (Vitamin / Mineral / Omega / Performance / Electrolyte / Herbal / Other) | Filterable |
+| `nutrient_key` | Nutrient | Human label from `SUPPLEMENT_NUTRIENT_LABELS` (e.g., "Vitamin D") or "—" for multi-nutrient | |
+| `unit` | Unit | "mg", "IU", "mcg", "g" or "—" | |
+| `serving_form` | Form | "Tablet", "Capsule", "Softgel", "Powder" | Filterable |
+| `rdi_reference` | RDI reference | e.g., "1500 IU/day" — from `SUPPLEMENT_NUTRIENT_RDI` if key exists, else "—" | Auto-calculated |
+| `description` | Description | Muted truncated text | |
+| `source` | Source | "Global" badge or "Custom" badge (is_global) | Filterable |
+| `actions` | — | Edit + Delete (only for custom/owner entries; global rows have no actions) | |
+
+**Table features:**
+- **Global filter:** search by supplement name or description
+- **Column filters:** category (segmented: All / Vitamins / Minerals / Omega / Performance / Other) · source (All / Global / Custom) · serving_form
+- **Column visibility:** dropdown toggle
+- **Sorting:** click header — asc/desc/none. Default sort: category asc, then name asc
+- **Pagination:** 10/25/50 rows per page selector + prev/next
+- **Row selection (checkboxes):** multi-select rows → enables `[Assign Selected →]` bulk action button in the toolbar that pre-populates the `AssignSupplementsDialog` with the selected supplements
+- **Empty state:** "No supplements match your filters." or "No custom supplements yet. Add one with + Add Supplement."
+
+**Wire-up:**
+```tsx
+const { data } = useQuery({
+  queryKey: supplementKeys.catalog(search),
+  queryFn: () => listSupplementCatalogAction({ search, category }),
+  staleTime: 300_000,
+})
+```
+
+---
+
+#### PART E — Assignments roster (`/supplements/assigned`)
+
+**Purpose:** See who has supplements assigned. One row per person. Click a row to manage their stack.
+
+**Page header:** `"Supplement Assignments"` · subtitle: `"Supplements assigned to you and your clients."` · actions: `[+ Assign Supplements]` (opens `AssignSupplementsDialog`).
+
+**TanStack Table — `<SupplementAssignmentTable />`:**
+
+Plugins: `getCoreRowModel`, `getSortedRowModel`, `getFilteredRowModel`, `getPaginationRowModel`.
+
+**Column definitions:**
+
+| Column key | Header | Value | Notes |
+|------------|--------|-------|-------|
+| `display_name` | Person | Avatar + name | Sticky left. Full row is clickable → navigate to detail |
+| `subject_type` | Type | `You` or `Client` badge | Filterable |
+| `supplement_count` | Supplements | Number | Sortable |
+| `categories` | Categories | Compact badges (Vitamin, Mineral, etc.) | Auto-calculated from assigned supplements |
+| `vitamin_d_pct` | Vitamin D | `133%` progress pill or `—` | Auto-calc: sum of assigned Vit D / RDI. Green ≥100%, amber 50–99%, red <50% |
+| `magnesium_pct` | Magnesium | Same pattern | Auto-calc |
+| `calcium_pct` | Calcium | Same pattern | Auto-calc |
+| `zinc_pct` | Zinc | Same pattern | Auto-calc |
+| `assigned_at` | Last updated | Relative date of most recent assignment | Sortable |
+| `actions` | — | View detail · Remove all (confirm) | |
+
+**Table features:**
+- **Global filter:** search by person name
+- **Column filter:** subject_type (All / Me / Clients)
+- **Column visibility:** toggle (nutrient % columns can be hidden if not relevant)
+- **Sorting:** default subject_type asc (you first), then name
+- **Row click:** navigates to `/supplements/assigned/[subjectId]`
+- **Empty state:** "No supplement assignments yet. Use 'Assign Supplements' to get started."
+
+---
+
+#### PART F — Person detail page (`/supplements/assigned/[subjectId]`)
+
+**Purpose:** Full supplement stack for one person. Coach sets the dosage per supplement here.
+
+**Page header:** Back arrow → `/supplements/assigned` · `"{Name} — Supplement Stack"` · actions: `[+ Add Supplement]` (opens `AssignSupplementsDialog` pre-scoped to this person).
+
+**Stats bar** (below header):
+```
+Supplements: 5  ·  Categories: Vitamins, Minerals, Omega  ·  Last updated: Mar 18
+```
+
+**TanStack Table — `<SupplementPersonDetailTable />`:**
+
+Plugins: `getCoreRowModel`, `getSortedRowModel`, `getFilteredRowModel`. No pagination (stacks are small).
+
+**Column definitions:**
+
+| Column key | Header | Value | Notes |
+|------------|--------|-------|-------|
+| `supplement_name` | Supplement | Name | Sortable |
+| `category` | Category | Colored badge | Filterable |
+| `daily_amount_display` | Daily dose | `"1000mg"`, `"2000 IU"`, `"3g"` — auto-formatted from daily_amount + unit. `"Not set"` if null | Editable — clicking opens `EditAssignmentItemDialog` |
+| `serving_count` | Servings | `"2 tablets"` or `"—"` | |
+| `rdi_coverage_pct` | % of RDI | Progress bar + `"133%"` — auto-calc: daily_amount / RDI; `"—"` if no RDI for this nutrient | Auto-calculated |
+| `time_of_day` | Time | `Morning` badge or `—` | Sortable |
+| `taken_with_food` | With food | `Yes` / `No` / `—` | |
+| `notes` | Notes | Truncated text or `—` | |
+| `coach_note` | Coach note | Truncated or `—` · highlighted if set | |
+| `assigned_at` | Assigned | Relative date | Sortable |
+| `actions` | — | Edit (`✎`) · Remove (`×`) | |
+
+**Table features:**
+- **Global filter:** search by supplement name
+- **Column filter:** category segmented control
+- **Column visibility:** toggle
+- **Sorting:** default category asc, then name
+- **`daily_amount_display` cell click or `✎` button:** opens `EditAssignmentItemDialog`
+- **`×` remove:** calls `removeAssignmentAction` with inline confirmation popover
+- **"Not set" dose highlighting:** amber/warning style to prompt the coach to set a dosage
+
+---
+
+#### PART G — Modals
+
+**1. `AssignSupplementsDialog` — assign supplements to a person:**
+
+`Dialog` (centered modal, max-width 560px). Opens from: catalog page toolbar, assigned page toolbar, person detail page toolbar.
+
+```
+┌─ Assign Supplements ─────────────────────────────────────────────┐
+│                                                                   │
+│  Assign to                                                        │
+│  [Select person ▼]                                               │
+│   ┌─ dropdown ──────────────────────────────────────────────┐    │
+│   │  You (Coach)                                             │    │
+│   │  Sarah Mitchell  · Client                               │    │
+│   │  James Cooper    · Client                               │    │
+│   └─────────────────────────────────────────────────────────┘    │
+│                                                                   │
+│  Select supplements  [Search...]                                  │
+│  ┌──────────────────────────────────────────────────────────────┐ │
+│  │  ── Vitamins ──────────────────────────────────────────────  │ │
+│  │  [☑] Vitamin D3    [☑] Vitamin C    [☐] B12    [☐] Folate  │ │
+│  │  ── Minerals ──────────────────────────────────────────────  │ │
+│  │  [☑] Calcium       [☑] Magnesium   [☐] Zinc   [☐] Iron    │ │
+│  │  ── Omega ─────────────────────────────────────────────────  │ │
+│  │  [☑] Omega-3 Fish Oil                                       │ │
+│  │  ── Performance ───────────────────────────────────────────  │ │
+│  │  [☐] Creatine      [☐] Whey Protein                        │ │
+│  └──────────────────────────────────────────────────────────────┘ │
+│                                                                   │
+│  Selected (3)                                                     │
+│  ┌──────────────────────────────────────────────────────────────┐ │
+│  │  [Vitamin D3 ×]  [Calcium ×]  [Omega-3 ×]                  │ │
+│  └──────────────────────────────────────────────────────────────┘ │
+│                                                                   │
+│                                   [Cancel]  [Assign]             │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+**Behaviour:**
+- Person dropdown: same component/pattern as the "assigned clients" dropdown used elsewhere in the app. Shows "You (Coach)" as the first option.
+- If opened from the person detail page, the person is pre-selected and the dropdown is disabled.
+- If supplements were pre-selected from the catalog table (row checkboxes), they are pre-checked.
+- Supplements grouped by category with category headings. Search filters within all groups simultaneously.
+- Selected chips shown below with × to deselect — same visual pattern as selected exercises in the goals page.
+- Already-assigned supplements for the selected person: shown with a `(Already assigned)` muted label and disabled checkbox — cannot re-assign.
+- On person dropdown change: re-fetches that person's existing assignments to update the disabled state.
+- **Save:** calls `assignSupplementsAction({ subject, supplement_ids })`. On success: invalidates `supplementKeys.subjects()` + `supplementKeys.assignments(subjectId)`. Shows toast `"N supplements assigned to {name}"`. If opened from detail page, closes dialog. If opened from catalog/roster, navigates to the person's detail page.
+
+---
+
+**2. `CreateSupplementDialog` — add a custom supplement to the catalog:**
+
+`Dialog`, 480px, single-step. Opens from the catalog page `[+ Add Supplement]` button.
+
+```
+┌─ Add Supplement ─────────────────────────────────────────────────┐
+│  Name *          [Ashwagandha_____________________________]      │
+│  Category *      [Herbal ▼]                                      │
+│  Serving form *  [Capsule ▼]                                     │
+│  Primary nutrient [None ▼]  (optional — select if single-nutrient)│
+│  Unit            [mg]   (auto-filled when nutrient selected)     │
+│  Description     [Adaptogen; stress and cortisol regulation___]  │
+│                                                                   │
+│  This supplement will be saved to your personal catalog.         │
+│                                     [Cancel]  [Add Supplement]   │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+"Primary nutrient" is a select of the known nutrient keys (Vitamin D, Calcium, etc.) + "Other / None". When selected, `unit` auto-fills. On save: calls `createSupplementAction`. Invalidates `supplementKeys.catalog()`. Shows toast.
+
+---
+
+**3. `EditAssignmentItemDialog` — set dosage and details for one supplement:**
+
+`Dialog`, 480px. Opens from `✎` button or clicking the `daily_amount_display` cell in the detail table.
+
+```
+┌─ Edit — Calcium (Sarah Mitchell) ────────────────────────────────┐
+│  Daily amount    [1000]  mg/day                                   │
+│  Servings        [2]     tablets/day   (optional)                │
+│  Time of day     [Morning ▼]           (optional)                │
+│  With food       [● Yes  ○ No  ○ Not set]                       │
+│  Notes           [Take with breakfast______________________]     │
+│  Coach note      [Monitor calcium + Vit D ratio___________]     │
+│  (Coach note is shown to client as a highlighted tip)            │
+│                                                                   │
+│  [Remove from stack]              [Cancel]  [Save]              │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+`daily_amount` input: numeric, shows `unit` label from catalog (mg, IU, g, mcg) inline. `rdi_coverage_pct` shown live below the input: `"133% of RDI (1500 IU/day)"` — updates as user types.
+On save: calls `updateAssignmentAction`. Invalidates `supplementKeys.assignments(subjectId)`. 
+"Remove from stack": calls `removeAssignmentAction` with confirm.
+
+---
+
+#### PART H — Progress page micronutrient section
+
+**Replace the current placeholder entirely.** Powered by `getSupplementCoverageAction`. **Purely static** — shows what nutrients the person's assigned supplements provide vs RDI. No time-averaging, no "X of 30 days logged."
+
+```
+┌─ Micronutrient Coverage ──────────────────────────────────────────────┐
+│  Based on your assigned supplement stack.  Manage →                   │
+│                                                                        │
+│  Vitamins                          Minerals                            │
+│  Vitamin D  ████████████  2000 IU │ Calcium    ████████░░  800mg     │
+│             133% of RDI (1500 IU) │            80% of RDI (1000mg)   │
+│  Vitamin C  ██░░░░░░░░░   0 mg    │ Magnesium  ████████████ 400mg    │
+│             — not assigned        │            100% of RDI            │
+│  B12        ████████████  1000mcg │ Zinc       ██░░░░░░░░   0mg      │
+│  Folate     ██░░░░░░░░░   0 mcg   │            — not assigned         │
+│             — not assigned        │                                   │
+│                                                                        │
+│  Other:  Omega-3 3g/day  ·  Creatine 5g/day                          │
+│                                                                        │
+│  [→ Manage supplements]                                               │
+└────────────────────────────────────────────────────────────────────────┘
+```
+
+**UI rules:**
+- Always show 8 primary nutrients (Vitamin D, Vitamin C, B12, Folate, Iron, Calcium, Magnesium, Zinc) — if not assigned, show empty bar + "— not assigned"
+- "Other" row: show any assigned supplements with a nutrient_key outside the 8 primary ones (Omega-3, Creatine, Collagen, etc.)
+- Progress bar colors: green ≥100% RDI · amber 50–99% · red <50% · grey if not assigned
+- `"Manage →"` links to `/supplements/assigned/me` (or `/supplements/assigned/{clientId}` in client context)
+- **Empty state** (no assignments at all): `"No supplements assigned yet. Assign supplements to see micronutrient coverage."` with `[→ Assign Supplements]` button
+- Remove the old "Connect a data source" placeholder entirely
+
+---
+
+#### PART I — Implementation order (strict)
+
+1. **Migration:** `supplement_catalog` (with global seed, idempotent)
+2. **Migration:** `supplement_assignments` (with subject constraint + unique constraints + RLS + indexes)
+3. **Types:** update `types/database.ts` for both tables
+4. **Constants:** `SUPPLEMENT_NUTRIENT_RDI` and `SUPPLEMENT_NUTRIENT_LABELS` — create `lib/constants/supplements.ts`
+5. **Query keys:** create `lib/query-keys-supplements.ts`
+6. **Server actions:** `app/actions/supplements.ts` — implement in this order:
+   - `listSupplementCatalogAction`
+   - `createSupplementAction`
+   - `listSupplementSubjectsAction` (CTE query)
+   - `listAssignmentsAction` (CTE query)
+   - `assignSupplementsAction`
+   - `updateAssignmentAction`
+   - `removeAssignmentAction`
+   - `getSupplementCoverageAction`
+7. **Route access:** update `lib/auth/route-access.ts`
+8. **Sidebar nav:** add Catalog + Assigned items with Pill icon
+9. **Catalog page** (`/supplements`) + `SupplementCatalogTable`
+10. **Assignments roster** (`/supplements/assigned`) + `SupplementAssignmentTable`
+11. **Person detail page** (`/supplements/assigned/[subjectId]`) + `SupplementPersonDetailTable`
+12. **`AssignSupplementsDialog`** (used by all three pages)
+13. **`CreateSupplementDialog`**
+14. **`EditAssignmentItemDialog`**
+15. **Progress page micronutrient section** — replace placeholder with `getSupplementCoverageAction`
+16. Typecheck + lint + test
+
+---
+
+**Checklist:**
+- [ ] `supplement_catalog` migration with ~19 global entries (ON CONFLICT DO NOTHING)
+- [ ] `supplement_assignments` migration with subject constraint + unique constraints + RLS + indexes
+- [ ] `types/database.ts` updated for both tables
+- [ ] `lib/constants/supplements.ts` with `SUPPLEMENT_NUTRIENT_RDI` and `SUPPLEMENT_NUTRIENT_LABELS`
+- [ ] `lib/query-keys-supplements.ts` created
+- [ ] `listSupplementCatalogAction` — global + caller's custom; searchable, filterable by category
+- [ ] `createSupplementAction` — creates caller-owned catalog entry
+- [ ] `listSupplementSubjectsAction` — single CTE; returns me + clients with supplement_count, categories, key nutrient % coverage
+- [ ] `listAssignmentsAction` — single CTE; returns all assignments for one person with daily_amount_display + rdi_coverage_pct
+- [ ] `assignSupplementsAction` — multi-upsert for selected supplement_ids; skips already-assigned
+- [ ] `updateAssignmentAction` — patches daily_amount, serving_count, time_of_day, taken_with_food, notes, coach_note
+- [ ] `removeAssignmentAction` — deletes one assignment
+- [ ] `getSupplementCoverageAction` — returns nutrient_totals map for progress page
+- [ ] Route access updated for `/supplements/*`
+- [ ] Sidebar: "Catalog" → `/supplements` and "Assigned" → `/supplements/assigned` with Pill icon
+- [ ] Catalog page: TanStack table with sort, global filter, column filters (category, source, serving_form), column visibility, pagination, row selection
+- [ ] Catalog table: RDI reference column auto-populated from constants where nutrient_key exists
+- [ ] Catalog table: global entries have no edit/delete actions; custom entries have both
+- [ ] Catalog table: multi-row checkbox selection → `[Assign Selected →]` button pre-populates dialog
+- [ ] `CreateSupplementDialog` saves new catalog entry, invalidates catalog query
+- [ ] Assignments roster: TanStack table with sort, subject_type filter, column visibility, pagination
+- [ ] Assignments roster: key nutrient % columns (Vitamin D, Magnesium, Calcium, Zinc) with color-coded progress pills
+- [ ] Assignments roster: row click navigates to person detail page
+- [ ] Person detail page: TanStack table with sort, category filter, column visibility
+- [ ] Person detail table: `daily_amount_display` shows formatted value or "Not set" (amber) if null
+- [ ] Person detail table: `rdi_coverage_pct` auto-calculated and shown as progress bar
+- [ ] Person detail table: `✎` or cell click opens `EditAssignmentItemDialog`
+- [ ] `AssignSupplementsDialog`: person dropdown (You + clients), supplement multi-select grouped by category, selected chips display, already-assigned shown as disabled
+- [ ] `AssignSupplementsDialog`: pre-populates person if opened from detail page; pre-populates supplements if opened from catalog table row selection
+- [ ] `EditAssignmentItemDialog`: live RDI coverage preview as user types daily_amount; remove from stack with confirm
+- [ ] Progress page: old placeholder removed; replaced with `getSupplementCoverageAction`-powered nutrient bars
+- [ ] Progress page: 8 primary nutrients always shown; "not assigned" shown as empty bar
+- [ ] Progress page: "Manage →" links to correct subject supplement detail page
+- [ ] `npm run typecheck && npm run lint && npm run test` → pass
+- [ ] Manual QA: assign Calcium to myself → appears in assignments roster (1 supplement) → click row → detail shows Calcium with "Not set" dose → set 1000mg → detail shows "100% of RDI" → progress page shows Calcium bar at 100%
+
+> **No daily logging, no streak tracking, no adherence %.** This feature is purely informational. Food-based micronutrient extraction is explicitly deferred indefinitely.
+
+---
+
+### [A-030] Restore Deactivate Account Flow in Settings — Security Tab
+
+- Priority: Medium
+- Depends on: None — all code already exists in the codebase
+- Status: Queued
+- Files:
+  - UPDATE: `components/settings/security-settings-panel.tsx` — re-add `<AccountDangerZone />`
+  - EXISTING (no changes needed): `components/settings/account-danger-zone.tsx`
+  - EXISTING (no changes needed): `app/actions/account-security.ts`
+  - EXISTING (no changes needed): `app/(auth)/restore-account/page.tsx`
+  - EXISTING (no changes needed): `components/auth/restore-account-form.tsx`
+  - EXISTING (no changes needed): `components/auth/user-auth-form.tsx`
+
+#### Background
+
+The **Deactivate Account** button and its full modal flow were previously visible in Settings → Security. The underlying code is 100% intact — the button was removed by omission when `SecuritySettingsPanel` was last updated. This task is a one-line reconnect.
+
+#### What exists (do not modify these files)
+
+| File | What it does |
+|------|-------------|
+| `components/settings/account-danger-zone.tsx` | Full `<AccountDangerZone>` component — renders the "Danger Zone" card with a destructive `Deactivate account` button. Opens an `AlertDialog` with: HMAC-signed identity challenge (math question), optional reason textarea, type-DELETE confirmation input, and an "I understand" checkbox. All 5 conditions must pass before the submit button enables. |
+| `app/actions/account-security.ts` | Server actions: `createDeleteAccountChallenge` (generates signed challenge token), `requestSoftDeleteAccount` (validates challenge, sets `user_metadata.is_deleted = true`, writes to `account_deletion_requests`, signs the user out), `restoreSoftDeletedAccount` (re-login + restore), `restoreCurrentSoftDeletedAccount` (restore from active session). |
+| `app/(auth)/restore-account/page.tsx` | The restore account page a deactivated user lands on if they try to re-login during the 30-day recovery window. |
+| `components/auth/restore-account-form.tsx` | The form that calls `restoreSoftDeletedAccount`. |
+| `components/auth/user-auth-form.tsx` | Login form already handles `is_deleted` — redirects to `/restore-account` when a deactivated user attempts to sign in. |
+
+#### What the engineer must do
+
+**One change only:** add `<AccountDangerZone>` to `SecuritySettingsPanel`.
+
+In `components/settings/security-settings-panel.tsx`:
+
+1. Import `AccountDangerZone`:
+   ```ts
+   import { AccountDangerZone } from "@/components/settings/account-danger-zone";
+   ```
+
+2. Determine whether the current user is an admin. `SecuritySettingsPanel` already receives props from `getSettingsProfile()` in the page component. Check if `getSettingsProfile` returns a `role` field. If it does, pass `isAdmin={profile.role === "sysadmin"}` to `<AccountDangerZone>`. If not, update `getSettingsProfile` in `app/actions/settings.ts` to also return `role` from `profiles`.
+
+3. Render `<AccountDangerZone>` as the last section inside the `stack-gap` wrapper, below the Sign Out section:
+   ```tsx
+   <AccountDangerZone isAdmin={isAdmin} />
+   ```
+
+4. If `isAdmin` is `true`, the button renders disabled with the label "Admin accounts cannot be self-deactivated." — no additional guard needed.
+
+#### Behaviour summary (for QA)
+
+- **Non-admin user flow:**
+  1. Navigate to Settings → Security.
+  2. "Danger Zone" card is visible at the bottom with a red `Deactivate account` button.
+  3. Clicking opens the `AlertDialog`.
+  4. Modal loads an identity challenge (`X + Y = ?`). A `Refresh` button allows re-loading the challenge.
+  5. User fills in: challenge answer → optional reason → types `DELETE` → checks the checkbox.
+  6. All 5 conditions met → `Confirm deactivation` button enables.
+  7. On confirm: account is soft-deleted (`user_metadata.is_deleted = true`), user is signed out, redirected to `/login`.
+  8. Success toast: `"Account deactivated. You can restore it before <date>."`
+  9. If the user tries to log back in within 30 days: redirected to `/restore-account` page to restore their account.
+
+- **Admin user flow:**
+  - Button is visible but disabled. Tooltip/label states "Admin accounts cannot be self-deactivated."
+
+#### Checklist
+
+- [ ] `AccountDangerZone` imported in `security-settings-panel.tsx`
+- [ ] `isAdmin` prop resolved — either from existing `role` field or by extending `getSettingsProfile` to return `role`
+- [ ] `<AccountDangerZone isAdmin={isAdmin} />` rendered as the last section on the Security tab
+- [ ] Manual QA: non-admin user sees and can trigger the deactivation flow end-to-end
+- [ ] Manual QA: sysadmin user sees the button disabled with correct label
+- [ ] `npm run typecheck && npm run lint` → pass
+
+---
+
+### [A-031] My Progress Page — Full Dashboard Revamp
+
+- Priority: High
+- Depends on: None — independent of other queued work
+- Status: Queued
+- Files:
+  - REWRITE: `app/(dashboard)/(insights)/progress/page.tsx`
+  - NEW: `app/actions/progress-overview.ts`
+  - NEW: `supabase/migrations/YYYYMMDD_body_measurements_hips_chest.sql`
+  - NEW: `components/progress/overview/progress-filter-bar.tsx`
+  - NEW: `components/progress/overview/progress-stats-bar.tsx`
+  - NEW: `components/progress/overview/progress-insights.tsx`
+  - NEW: `components/progress/overview/body-composition-card.tsx`
+  - NEW: `components/progress/overview/strength-progress-card.tsx`
+  - NEW: `components/progress/overview/cardio-progress-card.tsx`
+  - NEW: `components/progress/overview/compliance-recovery-card.tsx`
+  - UPDATE: `lib/query-keys-progress.ts` — add new query keys
+  - KEEP (do not delete): all existing `components/progress/*.tsx` files
+
+---
+
+#### Design Reference
+
+The new page replaces the current per-exercise drill-down UI with a holistic overview dashboard. All panels are always visible. The page is divided into four major sections arranged in a 2-column grid.
+
+**Full page layout (top to bottom):**
+```
+Header: "My Progress" + subtitle + [Nutrients] [Share] [Export]
+Filter bar: [7 Days] [30 Days] [90 Days] [📅] | [Mixed ▾] | [○ Compare]
+Stats bar: SESSIONS | COMPLETION | AVG RPE | VOLUME | CARDIO TIME | STEPS/DAY | WEIGHT
+
+Insights (full width)
+
+[Body Composition]        [Strength Progress]
+[Cardio Progress]         [Compliance & Recovery]
+```
+
+---
+
+#### PART I — DB Migration
+
+**File:** `supabase/migrations/YYYYMMDD_body_measurements_hips_chest.sql`
+
+```sql
+alter table public.body_measurements
+  add column if not exists hips_cm numeric,
+  add column if not exists chest_cm numeric;
+```
+
+No RLS changes needed — existing policies on `body_measurements` cover the new columns.
+
+Update `types/database.ts` to add `hips_cm` and `chest_cm` to the `body_measurements` Row, Insert, and Update types.
+
+---
+
+#### PART II — Server Actions (`app/actions/progress-overview.ts`)
+
+All actions are `"use server"`. All are scoped to `auth.uid()`. Range values: `"7d" | "30d" | "90d"`. Training type: `"all" | "strength" | "cardio" | "mixed"`.
+
+---
+
+**Action 1: `getProgressSummaryStats(range, trainingType)`**
+
+Returns the 7 KPI cards shown in the stats bar.
+
+```ts
+export type ProgressSummaryStats = {
+  sessions: number;             // count of training_sessions in range
+  completion_pct: number;       // completed sessions / total scheduled sessions * 100
+  avg_rpe: number | null;       // avg of strength_sets.rpe across range
+  volume_kg: number;            // sum of (weight_kg * reps) from strength_sets in range
+  cardio_time_minutes: number;  // sum of cardio_sessions.duration_minutes in range
+  avg_steps_per_day: number | null; // avg of daily_activity.steps in range
+  latest_weight_kg: number | null;  // most recent body_measurements.weight in range
+};
+```
+
+- `sessions`: count from `training_sessions` where `user_id = auth.uid()` and `performed_on` in range and `status = 'completed'`
+- `completion_pct`: completed / (completed + scheduled in range) * 100. Use `status` field: `'completed'` vs `'scheduled'` or `'planned'`.
+- `avg_rpe`: average of `strength_sets.rpe` joined via `workout_id` to `training_sessions` in range. Filter by `trainingType` (skip if `"cardio"`).
+- `volume_kg`: sum of `weight_kg * reps` from `strength_sets` in range. Filter by `trainingType`.
+- `cardio_time_minutes`: sum of `cardio_sessions.duration_minutes` in range. Filter by `trainingType`.
+- `avg_steps_per_day`: average of `daily_activity.steps` in range (table from monitoring overhaul migration). Return `null` if table empty.
+- `latest_weight_kg`: most recent `body_measurements.weight` in range.
+
+**Display rules:**
+- `completion_pct`: show in green if ≥80%, amber if 60–79%, default if <60%
+- `volume_kg`: format as `48.5k` if ≥ 1000
+- `latest_weight_kg`: show in green if decreased vs prior period, red if increased, default if no change
+- `avg_rpe`: show `—` if `null`
+- `avg_steps_per_day`: show `—` if `null`
+
+---
+
+**Action 2: `getProgressInsights(range, trainingType)`**
+
+Returns an array of rule-based insight cards. **No AI/OpenAI call.** All insights are computed from real data in the DB.
+
+```ts
+export type InsightSeverity = "positive" | "warning" | "info";
+
+export type ProgressInsight = {
+  id: string;
+  severity: InsightSeverity;
+  title: string;
+  body: string;
+};
+```
+
+Rules (compute all that apply, max 5 shown, priority: positive → warning → info):
+
+| Rule | Condition | Severity | Title | Body |
+|------|-----------|----------|-------|------|
+| Volume trend | volume in range > prior period volume by >10% | positive | "Volume Up X%" | "Your total training volume increased X% compared to last period. Great progressive overload." |
+| Volume drop | volume in range < prior period volume by >15% | warning | "Volume Dropped X%" | "Your training volume dropped X% vs last period. Check recovery or schedule." |
+| PR detected | any new max estimated 1RM in range > prior best | positive | "X PR!" | "New estimated 1RM of Y kg on X, beating your previous best by Z kg." (one card per PR, max 2) |
+| RPE increasing | avg RPE in last 7 days > avg RPE in prior 7 days by ≥0.5 | warning | "RPE Creeping Up" | "Average RPE has increased from X to Y. Monitor fatigue and consider a deload soon." |
+| Low session frequency | sessions per week in range < 2 | warning | "Training Frequency Low" | "You averaged fewer than 2 sessions per week this period. Consistency is key." |
+| Cardio variety | >80% of cardio sessions are same `activity_type` | info | "Add Cardio Variety" | "Your cardio is X% Y. Consider adding Z for balanced conditioning." |
+| Cardio distance trend | avg distance per session increased by >10% vs prior | positive | "Cardio Distance Up X%" | "Your average run distance increased X% this period. Strong aerobic progression." |
+| No sleep data | `sleep_log` has 0 entries in range | info | "Log Your Sleep" | "No sleep data found. Tracking sleep helps monitor recovery and readiness." |
+
+- Return `[]` if insufficient data (<3 sessions in range).
+- Estimate 1RM using the same `estimateOneRepMax` utility used elsewhere in the codebase.
+- For PR detection, compare max estimated 1RM per exercise in current range vs all-time max before the range start.
+
+---
+
+**Action 3: `getBodyCompositionSeries(range)`**
+
+Returns daily time-series for all 5 body composition metrics.
+
+```ts
+export type BodyCompositionPoint = {
+  date: string; // YYYY-MM-DD
+  weight_kg: number | null;
+  body_fat_pct: number | null;
+  waist_cm: number | null;
+  hips_cm: number | null;
+  chest_cm: number | null;
+};
+
+export type BodyCompositionSeries = BodyCompositionPoint[];
+```
+
+Query `body_measurements` ordered by `date asc`, filtered to range and `user_id`. Return all rows — the chart renders lines only for metrics with data.
+
+---
+
+**Action 4: `getStrengthProgressSeries(range)`**
+
+Returns 1RM trends for the top 4 most-trained exercises + recent PR list.
+
+```ts
+export type StrengthTrendPoint = {
+  date: string;
+  [exerciseName: string]: number | string; // dynamic — one key per top exercise
+};
+
+export type RecentPR = {
+  exercise: string;
+  estimated_1rm_kg: number;
+  achieved_on: string; // YYYY-MM-DD
+  delta_kg: number;    // vs previous best
+};
+
+export type StrengthProgressData = {
+  top_exercises: string[];       // ordered by set count desc, max 4
+  trend_series: StrengthTrendPoint[]; // one point per day with data
+  recent_prs: RecentPR[];        // max 5, ordered by achieved_on desc
+};
+```
+
+- Top 4 exercises: group `strength_sets` by `exercise_name`, count sets in last 90 days, take top 4.
+- Trend series: for each exercise in `top_exercises`, compute estimated 1RM per session day using `estimateOneRepMax(weight, reps)` taking max per day.
+- Recent PRs: for each of the top 4 exercises, find the max estimated 1RM in the current range and compare to all-time prior best. If current max > prior best, it's a PR.
+
+Line colors (fixed):
+- 1st exercise: `#60A5FA` (blue)
+- 2nd exercise: `#4ADE80` (green)
+- 3rd exercise: `#F472B6` (pink)
+- 4th exercise: `#FBBF24` (amber/yellow)
+
+---
+
+**Action 5: `getCardioProgressSeries(range)`**
+
+Returns 3 time-series: distance, pace, avg HR — one point per cardio session day.
+
+```ts
+export type CardioProgressPoint = {
+  date: string;
+  distance_km: number | null;
+  pace_min_per_km: number | null;
+  avg_hr_bpm: number | null;
+};
+
+export type CardioProgressSeries = CardioProgressPoint[];
+```
+
+Query `cardio_sessions` for `user_id` in range, ordered by `date asc`. For each day: average distance, average pace (duration / distance), average HR across sessions that day.
+
+- Filter by `activity_type` only if `trainingType = "cardio"` (otherwise include all cardio sessions regardless of type).
+- Compute `pace_min_per_km = duration_minutes / distance_km` per session. Skip rows where `distance_km = 0`.
+
+---
+
+**Action 6: `getComplianceRecovery(range)`**
+
+Returns the compliance & recovery panel data.
+
+```ts
+export type WeeklyWorkoutBar = {
+  week_start: string; // YYYY-MM-DD (Monday)
+  session_count: number;
+};
+
+export type RecoveryReadinessPoint = {
+  date: string;
+  recovery_score: number | null; // 0–100, computed
+  hrv_ms: number | null;         // raw from vitals_log
+};
+
+export type ComplianceRecoveryData = {
+  day_streak: number;
+  task_completion: { completed: number; total: number; pct: number };
+  recovery_score: number | null;      // latest computed score
+  last_sleep_hours: number | null;    // most recent sleep_log entry
+  last_hrv_ms: number | null;         // most recent vitals_log.hrv_ms
+  workouts_per_week: WeeklyWorkoutBar[]; // last 8 complete weeks
+  readiness_series: RecoveryReadinessPoint[]; // last 14 days
+};
+```
+
+**Day streak:**
+Count consecutive days ending today where `training_sessions` has at least 1 completed session for `user_id`. Walk backward from today.
+
+**Task completion:**
+Count `fitness_goals` rows for `user_id` where `is_personal = true` and goal is active in range. `completed` = goals with a check-in (`goal_checkins`) in the range. `total` = total active personal goals in range.
+
+**Recovery score (derived):**
+Compute per day from last 14 days:
+```
+normalized_hrv = clamp(hrv_ms / 80, 0, 1) * 100   // 80ms = reference max
+normalized_sleep = clamp(sleep_hours / 8, 0, 1) * 100
+energy = (daily_activity.energy_level / 5) * 100    // if available
+recovery_score = (normalized_hrv * 0.45) + (normalized_sleep * 0.40) + (energy * 0.15)
+```
+Round to integer. Return `null` for days with no data. The `recovery_score` field on `ComplianceRecoveryData` is the most recent non-null value.
+
+**Last sleep hours:**
+Most recent `sleep_log.total_duration_minutes / 60` or `daily_activity.sleep_hours` in last 7 days. Display as `"7h"` or `"7.5h"`.
+
+**Last HRV:**
+Most recent `vitals_log.hrv_ms` in last 7 days. Display as `"40 ms"`.
+
+**Workouts per week:**
+Group `training_sessions` by ISO week (Monday as week start), count sessions per week, return last 8 weeks. Always return 8 bars even if count = 0.
+
+**Readiness series:**
+Last 14 calendar days. For each day, join `vitals_log` and `sleep_log`/`daily_activity`. Return raw `hrv_ms` + computed `recovery_score`. Normalize HRV to 0–100 scale in the UI (not in action): `hrv_normalized = clamp(hrv_ms / 80, 0, 1) * 100`.
+
+---
+
+#### PART III — Query Keys
+
+Add to `lib/query-keys-progress.ts`:
+
+```ts
+progressOverviewKeys = {
+  summaryStats: (range: string, type: string) => ["progress", "overview", "stats", range, type],
+  insights: (range: string, type: string) => ["progress", "overview", "insights", range, type],
+  bodyComposition: (range: string) => ["progress", "overview", "body-composition", range],
+  strengthProgress: (range: string) => ["progress", "overview", "strength", range],
+  cardioProgress: (range: string, type: string) => ["progress", "overview", "cardio", range, type],
+  complianceRecovery: (range: string) => ["progress", "overview", "compliance", range],
+};
+```
+
+---
+
+#### PART IV — Component Specs
+
+All new components live in `components/progress/overview/`.
+
+---
+
+**`progress-filter-bar.tsx`** (client component)
+
+Props: `range`, `onRangeChange`, `trainingType`, `onTrainingTypeChange`, `compare`, `onCompareChange`
+
+```
+[7 Days] [30 Days] [90 Days] [📅]    [Mixed ▾]    [○ Compare]
+```
+
+- Range pills: segmented buttons, active pill is filled (accent color matching the app — pink/red). `"7d" | "30d" | "90d"`. Calendar icon opens a date picker for custom range (deferred — render as disabled icon for now).
+- Training type: `<Select>` dropdown with options: `All Training | Strength | Cardio | Mixed`. Default: `"mixed"`.
+- Compare: toggle switch + label. When enabled, prior period data overlays current period (show as lighter/dashed series on charts). Implementation: pass `compare` boolean to each chart component — each chart fetches and renders prior period series if `compare = true`.
+
+---
+
+**`progress-stats-bar.tsx`** (client component)
+
+Props: `data: ProgressSummaryStats | undefined`, `isLoading: boolean`
+
+Horizontal scrollable row of 7 stat cards. Each card:
+```
+LABEL (small caps, muted)
+VALUE (large bold)
+```
+
+Cards (in order): SESSIONS · COMPLETION · AVG RPE · VOLUME · CARDIO TIME · STEPS/DAY · WEIGHT
+
+- Show skeleton state while loading.
+- Apply color to value: `completion_pct` (green/amber), `volume_kg` (blue), `latest_weight_kg` (green/red vs prior).
+- Null values render as `—`.
+
+---
+
+**`progress-insights.tsx`** (client component)
+
+Props: `insights: ProgressInsight[]`, `isLoading: boolean`
+
+Section card titled "Insights". Renders each `ProgressInsight` as a row:
+
+```
+[icon]  Title
+        Body text description
+```
+
+- `positive` → green left border + green `↗` icon
+- `warning` → amber left border + amber `⚠` icon
+- `info` → blue/dark left border + blue `💡` icon
+- Empty state: render nothing (hide the section if `insights.length === 0`)
+- Skeleton: 3 rows while loading
+
+---
+
+**`body-composition-card.tsx`** (client component)
+
+Props: `series: BodyCompositionSeries`, `isLoading: boolean`
+
+Section card titled "Body Composition".
+
+**Metric toggle pills** (multi-select, any combination):
+```
+[Weight]  [Body Fat]  [Waist]  [Hips]  [Chest]
+```
+
+- Active pills: filled/solid style
+- Inactive pills: ghost/outline style
+- Multiple pills can be active simultaneously (default: Weight + Body Fat active)
+- If a pill's data is entirely null in the series, disable the pill with a tooltip "No data logged"
+
+**Chart:** Recharts `<LineChart>` with one `<Line>` per active metric.
+
+Line colors:
+| Metric | Color |
+|--------|-------|
+| Weight | `#F472B6` (pink) |
+| Body Fat | `#4ADE80` (green) |
+| Waist | `#FBBF24` (amber) |
+| Hips | `#60A5FA` (blue) |
+| Chest | `#A78BFA` (purple) |
+
+Chart specs:
+- `dot={false}` with isolated point fix (use `dot={{ r: 2.5 }}` pattern from A-027 patch — add explicit dot object to avoid Recharts isolation bug)
+- `connectNulls={false}`
+- Dashed grid lines (`strokeDasharray="3 3"`)
+- X-axis: `MM-DD` formatted dates, sparse ticks
+- Y-axis: single shared axis — domain `[Math.floor(min * 0.95), Math.ceil(max * 1.05)]`
+- Custom tooltip: shows date + each active metric's value with its color. Format: `"Weight (kg) : 82.8"`, `"Body Fat (%) : 17.8"`
+- Crosshair cursor line (vertical white/grey line at hover point)
+
+---
+
+**`strength-progress-card.tsx`** (client component)
+
+Props: `data: StrengthProgressData | undefined`, `isLoading: boolean`
+
+Section card titled "Strength Progress".
+
+**Top section:** Multi-line `<LineChart>` labeled "Estimated 1RM Trends"
+- One `<Line>` per exercise in `top_exercises` (max 4)
+- Fixed color order: blue → green → pink → amber
+- Y-axis: `0kg` to max + 20kg, ticks labeled with `kg` suffix
+- X-axis: dates, `MM-DD` format
+- Dashed grid lines
+- `dot={false}` with isolated point fix
+- `connectNulls={false}`
+- Tooltip: shows all exercise 1RM values for hovered date
+
+**Bottom section:** "Recent PRs" list
+Each PR row:
+```
+[🏆 icon (amber bg)] Exercise name          142 kg
+                      Est. 1RM · YYYY-MM-DD  +4 kg (green)
+```
+
+- Trophy icon: use `Trophy` from `lucide-react`, wrapped in a small rounded amber background square
+- Weight: bold, right-aligned
+- Delta: green text, smaller, right-aligned below weight
+- Empty state: "No PRs recorded in this period." (muted text)
+- Max 5 PR rows
+
+---
+
+**`cardio-progress-card.tsx`** (client component)
+
+Props: `series: CardioProgressSeries`, `isLoading: boolean`
+
+Section card titled "Cardio Progress". Three stacked independent mini-charts sharing the same x-axis date range.
+
+Each mini-chart:
+- Label above chart (muted, small): e.g. `Distance (km)`
+- Recharts `<LineChart>`, height 140px
+- Single `<Line>`
+- `dot={false}` with isolated point fix
+- Dashed grid lines
+- Y-axis on left, x-axis only shown on the last (bottom) chart — hidden on top two
+- Tooltip: shows date + `"value : X.X"` in the line's color
+
+| Chart | Data key | Color |
+|-------|----------|-------|
+| Distance (km) | `distance_km` | `#60A5FA` (blue) |
+| Pace (min/km) | `pace_min_per_km` | `#4ADE80` (green) |
+| Avg HR (bpm) | `avg_hr_bpm` | `#F472B6` (pink) |
+
+- Hover state: vertical cursor line spans all 3 charts synchronised via `syncId="cardio"` on all three `<LineChart>` components (Recharts built-in prop)
+- Empty state: "No cardio sessions logged in this period." centred in the card
+
+---
+
+**`compliance-recovery-card.tsx`** (client component)
+
+Props: `data: ComplianceRecoveryData | undefined`, `isLoading: boolean`
+
+Section card titled "Compliance & Recovery".
+
+**Top stat cards (3 in a row):**
+```
+🔥  ✅  ⚡
+14  78%  57
+Day Streak  25/32 Tasks  Recovery Score
+```
+
+- Each in its own rounded dark sub-card
+- Icons: `Flame` (orange), `ListChecks` (blue), `Zap` (green) — all from `lucide-react`
+- For task completion: show `"X/Y Tasks"` as subtitle and `"X%"` as main value (or show raw fraction, match the image)
+
+**Workouts per Week bar chart:**
+- Label: "Workouts per Week"
+- Recharts `<BarChart>`, height ~160px
+- Bars: pink/rose color (`#F472B6` or similar)
+- Y-axis: 0 to 7 (max 7 sessions/week)
+- X-axis: week start dates, `MM-DD` format
+- 8 bars (last 8 complete weeks)
+- Tooltip: date + `"days : N"`
+- Bar radius: `[4, 4, 0, 0]` (rounded top)
+
+**Recovery & Readiness (14-day):**
+- Label: `"Recovery & Readiness (14-day)"`
+- Two stat pills in a row:
+  - `🌙 7h / Last Sleep` (Moon icon)
+  - `📈 40 ms / Last HRV` (Activity icon)
+  - Render `—` if null
+- Multi-line `<LineChart>`, height ~160px:
+  - Green line: `recovery_score` (0–100)
+  - Purple line: HRV normalized to 0–100 (`hrv_ms / 80 * 100`, clamped)
+  - Y-axis: 0–100
+  - X-axis: 14 dates, `MM-DD` format
+  - Dashed grid lines, `dot={false}` with isolated point fix
+  - Tooltip: date + `"Recovery : X"` (green) + `"HRV : Y"` (purple)
+  - `connectNulls={false}`
+- Footer text: `"Avg recovery: X/100"` — average of non-null `recovery_score` values. Render `"Avg recovery: —"` if no data.
+
+---
+
+#### PART V — Page Rewrite (`app/(dashboard)/(insights)/progress/page.tsx`)
+
+**Convert to `"use client"` page** (stays client component — uses `useState` for filter/compare state + `useQuery` for data).
+
+```tsx
+export default function ProgressPage() {
+  const [range, setRange] = useState<"7d" | "30d" | "90d">("30d");
+  const [trainingType, setTrainingType] = useState("mixed");
+  const [compare, setCompare] = useState(false);
+
+  const { data: stats, isLoading: statsLoading } = useQuery({ ... getProgressSummaryStats(range, trainingType) });
+  const { data: insights, isLoading: insightsLoading } = useQuery({ ... getProgressInsights(range, trainingType) });
+  const { data: bodyComp, isLoading: bodyCompLoading } = useQuery({ ... getBodyCompositionSeries(range) });
+  const { data: strength, isLoading: strengthLoading } = useQuery({ ... getStrengthProgressSeries(range) });
+  const { data: cardio, isLoading: cardioLoading } = useQuery({ ... getCardioProgressSeries(range, trainingType) });
+  const { data: compliance, isLoading: complianceLoading } = useQuery({ ... getComplianceRecovery(range) });
+
+  return (
+    <div className="page-shell ...">
+      {/* Header */}
+      <div className="flex items-start justify-between">
+        <div>
+          <h1>My Progress</h1>
+          <p className="text-muted-foreground">Track your training, body, and habits</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button asChild variant="outline" size="sm"><Link href="/progress/nutrition">🍎 Nutrients</Link></Button>
+          <Button variant="ghost" size="icon" disabled><Share2 /></Button>
+          <Button variant="ghost" size="icon" disabled><Download /></Button>
+        </div>
+      </div>
+
+      <ProgressFilterBar range={range} onRangeChange={setRange} trainingType={trainingType} onTrainingTypeChange={setTrainingType} compare={compare} onCompareChange={setCompare} />
+      <ProgressStatsBar data={stats} isLoading={statsLoading} />
+      <ProgressInsights insights={insights ?? []} isLoading={insightsLoading} />
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <BodyCompositionCard series={bodyComp ?? []} isLoading={bodyCompLoading} />
+        <StrengthProgressCard data={strength} isLoading={strengthLoading} />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <CardioProgressCard series={cardio ?? []} isLoading={cardioLoading} />
+        <ComplianceRecoveryCard data={compliance} isLoading={complianceLoading} />
+      </div>
+    </div>
+  );
+}
+```
+
+**Stale times:**
+- `summaryStats`: 5 minutes
+- `insights`: 10 minutes
+- `bodyComposition`: 10 minutes
+- `strengthProgress`: 5 minutes
+- `cardioProgress`: 5 minutes
+- `complianceRecovery`: 5 minutes
+
+All 6 queries fetch in parallel (no `enabled` dependency chains).
+
+---
+
+#### PART VI — What to do with existing components
+
+**Do not delete** any file in `components/progress/`. The old per-exercise drill-down components are preserved but no longer imported by the main page. They may be repurposed in a future `/progress/exercise` drill-down sub-page.
+
+---
+
+#### Data availability notes
+
+| Data | Source table | Notes |
+|------|-------------|-------|
+| Sessions, RPE, completion | `training_sessions` + `strength_sets` | Available |
+| Volume | `strength_sets.weight_kg * reps` | Available |
+| Cardio time | `cardio_sessions.duration_minutes` | Available |
+| Steps/day | `daily_activity.steps` | Table exists from monitoring overhaul migration — may be empty if no wearable connected |
+| Body weight | `body_measurements.weight` | Available |
+| Body fat % | `body_measurements.body_fat_percent` | Available |
+| Waist | `body_measurements.waist_cm` | Available |
+| Hips | `body_measurements.hips_cm` | **NEW column — added by this migration** |
+| Chest | `body_measurements.chest_cm` | **NEW column — added by this migration** |
+| Sleep hours | `sleep_log.total_duration_minutes / 60` or `daily_activity.sleep_hours` | Table exists — may be empty |
+| HRV | `vitals_log.hrv_ms` | Table exists — may be empty |
+| Goal completion | `fitness_goals` + `goal_checkins` | Available |
+
+**Empty state rule:** If a data source table has no entries for the user in the range, render a graceful empty state per card — do not error. The `compliance-recovery-card` should show `—` for sleep/HRV/recovery score if the relevant tables are empty.
+
+---
+
+#### Checklist
+
+- [ ] DB migration: `hips_cm` and `chest_cm` added to `body_measurements`, `types/database.ts` updated
+- [ ] `getProgressSummaryStats` implemented — 7 KPIs, filtered by range + trainingType
+- [ ] `getProgressInsights` implemented — rule-based, no AI call, returns up to 5 insights
+- [ ] `getBodyCompositionSeries` implemented — 5 metrics, time series
+- [ ] `getStrengthProgressSeries` implemented — top 4 exercises 1RM trend + recent PRs
+- [ ] `getCardioProgressSeries` implemented — distance, pace, avg HR series
+- [ ] `getComplianceRecovery` implemented — streak, tasks, recovery score, workouts/week, readiness series
+- [ ] `ProgressFilterBar`: range pills (7d/30d/90d active), training type select, compare toggle
+- [ ] `ProgressStatsBar`: 7 KPI cards, colour-coded values, skeleton loading state
+- [ ] `ProgressInsights`: severity-coloured cards, hidden when empty, skeleton loading
+- [ ] `BodyCompositionCard`: multi-select pills, multi-line chart, crosshair tooltip
+- [ ] `BodyCompositionCard`: isolated data point fix applied (no invisible dots)
+- [ ] `StrengthProgressCard`: 4-line 1RM chart + Recent PRs list with trophy icon + delta
+- [ ] `CardioProgressCard`: 3 stacked independent mini-charts, `syncId="cardio"` for crosshair sync
+- [ ] `ComplianceRecoveryCard`: 3 stat cards + workouts/week bar chart + readiness line chart + sleep/HRV pills
+- [ ] Page rewrite: 6 parallel queries, 2×2 grid layout, header with Nutrients link
+- [ ] Header "Nutrients" button links to `/progress/nutrition`
+- [ ] Share and Export buttons render but are disabled (not yet implemented)
+- [ ] All existing `components/progress/*.tsx` files preserved (not deleted)
+- [ ] `npm run typecheck && npm run lint && npm run test` → pass
+- [ ] Manual QA: 30d range shows all 4 cards with data; switching to 7d re-fetches and updates stats bar
+- [ ] Manual QA: Body Composition — toggle Waist pill on → amber line appears on chart
+- [ ] Manual QA: hover over cardio chart top panel → crosshair appears on all 3 panels simultaneously
+
+---
+
+#### PART VII — Competitive Feature Additions (benchmarked vs Hevy, WHOOP, Garmin, Strava, Apple Fitness, Trainerize, Everfit, Strong, MyFitnessPal)
+
+The following features were identified by comparing the page design against best-in-class fitness apps. Each item is categorised as **In Scope** (build in A-031) or **Deferred** (designed/planned, not built now).
+
+---
+
+##### VII-A — Additional Body Measurement Columns (extend PART I migration)
+
+Add to the same migration file as `hips_cm` / `chest_cm`:
+
+```sql
+alter table public.body_measurements
+  add column if not exists neck_cm numeric,
+  add column if not exists bicep_left_cm numeric,
+  add column if not exists bicep_right_cm numeric,
+  add column if not exists thigh_left_cm numeric,
+  add column if not exists thigh_right_cm numeric,
+  add column if not exists calf_cm numeric;
+```
+
+Hevy supports 14 circumference measurements; Trainerize supports custom fields. This brings the app to 11 tracked fields matching competitive parity.
+
+Update `types/database.ts` and `BodyCompositionPoint` type accordingly.
+
+**Full pill set for `BodyCompositionCard` (ordered):**
+```
+[Weight]  [Body Fat]  [Waist]  [Hips]  [Chest]  [+ More ▾]
+   → expanded: [Neck]  [Bicep L]  [Bicep R]  [Thigh L]  [Thigh R]  [Calf]
+```
+
+First 5 pills always visible. Remaining 6 in a collapsible `+ More` toggle. If a pill's data is entirely null → disable it with tooltip `"No data logged"`.
+
+Line colors for new measurements:
+| Metric | Color |
+|--------|-------|
+| Neck | `#06B6D4` (cyan) |
+| Bicep L | `#8B5CF6` (violet) |
+| Bicep R | `#EC4899` (hot pink) |
+| Thigh L | `#F97316` (orange) |
+| Thigh R | `#14B8A6` (teal) |
+| Calf | `#84CC16` (lime) |
+
+---
+
+##### VII-B — Training Load & Status Panel (new full-width card)
+
+**Inspired by:** Strava Fitness & Freshness, Garmin Training Status, Apple Training Load (watchOS 11)
+
+**Component:** `components/progress/overview/training-load-card.tsx`
+
+**New server action:** `getTrainingLoad(range)` in `app/actions/progress-overview.ts`
+
+```ts
+export type TrainingLoadData = {
+  training_status: "Productive" | "Maintaining" | "Peaking" | "Detraining" | "Recovery" | "Insufficient Data";
+  fitness_score: number;   // chronic training load — 42-day rolling weighted avg
+  fatigue_score: number;   // acute training load — 7-day rolling weighted avg
+  form_score: number;      // Form = Fitness - Fatigue (positive = fresh, negative = fatigued)
+  load_trend: Array<{
+    date: string;
+    fitness: number;
+    fatigue: number;
+    form: number;
+  }>;                      // last 42 days, one point per day
+};
+```
+
+**Load calculation (simplified TRIMP):**
+```
+Per session:
+  trimp = duration_minutes × avg_hr_ratio × 0.64 × e^(1.92 × avg_hr_ratio)
+  avg_hr_ratio = session_avg_hr / max_hr
+  max_hr = 220 - age  (from profiles.birth_date; default 190 if no birth_date)
+
+For strength sessions without HR:
+  trimp = sum(weight_kg × reps) / 1000 × perceived_exertion  (use training_sessions.perceived_exertion, default 6 if null)
+
+CTL (Fitness) = 42-day exponentially weighted moving average of daily TRIMP
+ATL (Fatigue) = 7-day exponentially weighted moving average of daily TRIMP
+Form = CTL - ATL
+```
+
+**Training Status rules:**
+| Condition | Status |
+|-----------|--------|
+| CTL increasing AND Form > -10 | Productive |
+| CTL stable (±5%) AND Form > -10 | Maintaining |
+| CTL high AND Form < -20 | Peaking |
+| No sessions in last 5 days AND CTL was previously >20 | Recovery |
+| No sessions in last 5 days AND CTL was low | Detraining |
+| Fewer than 7 days of data | Insufficient Data |
+
+**UI layout:**
+```
+Training Load & Status
+[● Productive]   Fitness 68   Fatigue 44   Form +24
+
+[42-day chart: Fitness (green) · Fatigue (orange) · Form (blue dashed)]
+```
+
+- Training Status badge colours: Productive=green · Maintaining=blue · Peaking=amber · Recovery=purple · Detraining=red · Insufficient Data=grey
+- Form shown with `+` prefix when positive
+- Chart: 3 `<Line>` components — Fitness=green, Fatigue=amber, Form=blue `strokeDasharray="4 2"`
+- `<ReferenceLine y={0} stroke="grey" strokeDasharray="2 2" />` to separate fresh/fatigued zones
+- `dot={false}` with isolated point fix
+- Tooltip: date + all 3 values
+
+**Page position:** render **full-width between the stats bar and the insights section**.
+
+Final page order:
+```
+Header
+Filter bar
+Stats bar
+Training Load & Status  ← NEW full-width
+Insights
+Row 1: [Body Composition]  [Strength Progress]
+Row 2: [Cardio Progress]   [Compliance & Recovery]
+Row 3: [Muscle Focus]      [Workout Calendar]   ← NEW row
+```
+
+---
+
+##### VII-C — Muscle Focus Card (repurposed from existing AthleteRadar)
+
+**Inspired by:** Hevy muscle distribution chart, Strong muscle heatmap, Garmin muscle load map
+
+**Component:** `components/progress/overview/muscle-focus-card.tsx`
+
+No new server action needed — reuse `getMuscleBalance()` (already exists) and extend `getStrengthProgressSeries` to return volume by muscle group.
+
+**Add to `StrengthProgressData`:**
+```ts
+muscle_volume: Array<{ muscle_group: string; volume_kg: number; pct: number }>; // top 6, sorted desc
+```
+
+Compute by joining `strength_sets` → `exercise_catalog.muscle_groups` → sum `weight_kg * reps` per muscle group.
+
+**UI — two sub-sections side by side:**
+
+Left: Radar chart (reuse existing `AthleteRadar` radar shape) — Push / Pull / Legs / Core balance.
+Right: Horizontal bar chart — top 6 muscle groups by volume, ranked.
+
+```
+[Radar: Push/Pull/Legs/Core]    Top Muscles this period
+                                  Quadriceps  ██████████  38%
+                                  Chest       ████████    28%
+                                  Back        ██████      22%
+                                  Hamstrings  ███         12%
+                                  ...
+```
+
+- Horizontal bars: accent color
+- Show absolute volume kg + % of total
+- Empty state: `"Log strength workouts to see muscle distribution."`
+
+---
+
+##### VII-D — Workout Calendar Card
+
+**Inspired by:** Hevy workout calendar, Apple activity ring month view
+
+**Component:** `components/progress/overview/workout-calendar-card.tsx`
+
+**Data:** extend `getComplianceRecovery` to return:
+```ts
+workout_calendar: Array<{
+  date: string;         // YYYY-MM-DD
+  has_strength: boolean;
+  has_cardio: boolean;
+  session_count: number;
+}>;
+```
+Query last 2 calendar months from `training_sessions` and `cardio_sessions`.
+
+**UI:**
+- Current month calendar grid (columns = Mon–Sun, rows = weeks)
+- Each day cell:
+  - Strength only → blue dot
+  - Cardio only → green dot
+  - Both → split (blue + green) or stacked dots
+  - Hover/click tooltip: session names from that day
+- Month navigation (prev / next arrows)
+- Legend: `● Strength  ● Cardio`
+- Today highlighted with a ring/border
+
+---
+
+##### VII-E — HR Zones Distribution (add to Cardio Progress Card)
+
+**Inspired by:** Garmin, Strava, Apple Fitness HR time-in-zone charts
+
+**Extend `getCardioProgressSeries` return type:**
+```ts
+hr_zones_summary: {
+  zone1_pct: number;   // <50% max HR — Very Light (grey)
+  zone2_pct: number;   // 50–60% — Light / Fat Burn (blue)
+  zone3_pct: number;   // 60–70% — Aerobic (green)
+  zone4_pct: number;   // 70–85% — Threshold (amber)
+  zone5_pct: number;   // >85% — Anaerobic (red)
+} | null;
+activity_breakdown: Array<{ type: string; pct: number; session_count: number }>;
+```
+
+Compute `hr_zones_summary` from `cardio_sessions.average_heart_rate` aggregated across the range:
+- Max HR = 220 − user_age (default 190 if no `birth_date`)
+- Assign each session to a zone based on its `average_heart_rate / max_hr` ratio
+
+**UI additions to `CardioProgressCard`:**
+
+**Above the 3 stacked charts — Activity Breakdown pills:**
+```
+Activity Mix:  [● Running 72%]  [● Cycling 18%]  [● HIIT 10%]
+```
+Omit if only one activity type (or surface as the "Add Cardio Variety" insight instead).
+
+**Below the 3 stacked charts — HR Zones bar:**
+```
+HR Zones   [Z1: 15%][Z2: 35%][Z3: 28%][Z4: 17%][Z5: 5%]
+```
+Horizontal stacked bar, % labels inside each segment. Omit if `hr_zones_summary` is null (no HR data).
+
+---
+
+##### VII-F — Enhanced Compliance & Recovery (sleep stages, RHR trend, habit tracking)
+
+**Inspired by:** WHOOP sleep stages, Garmin RHR trend, Trainerize habit tracking, Apple Vitals morning summary
+
+**Extend `getComplianceRecovery` return type with:**
+```ts
+rhr_series: Array<{ date: string; rhr_bpm: number }>;  // 14 days, vitals_log.resting_heart_rate
+sleep_score_avg: number | null;                         // avg sleep_log.sleep_score in range
+sleep_stages_last: {                                    // most recent sleep_log entry
+  deep_minutes: number | null;
+  rem_minutes: number | null;
+  light_minutes: number | null;
+  awake_minutes: number | null;
+} | null;
+habits: Array<{
+  id: string;
+  name: string;
+  completed_today: boolean;
+  streak_days: number;
+  completion_pct_range: number;  // % days completed in current range
+}>;
+```
+
+**Sleep Quality section** (add below the Sleep/HRV pills in `ComplianceRecoveryCard`):
+
+Show the sleep stage breakdown for the most recent logged night as a horizontal stacked bar:
+```
+Last night sleep  [Deep 1h20m][REM 1h45m][Light 3h10m][Awake 25m]
+```
+Colors: Deep=indigo · REM=purple · Light=sky-blue · Awake=grey. Show duration in minutes or `Xh Ym` format.
+
+Update the `7h Last Sleep` pill to also show sleep score if available: `"7h · Score 82"`.
+
+**RHR on readiness chart:** Add `rhr_bpm` as a 4th `<Line>` on the existing 14-day chart:
+- Red dashed line `strokeDasharray="3 3"`, color `#EF4444`
+- Secondary right Y-axis (scale ~40–100 bpm)
+- Update chart tooltip: add `"RHR : X bpm"` in red
+
+**Habit Tracking section** (new sub-section at bottom of `ComplianceRecoveryCard`):
+
+Title: `"Habits"`
+
+Each active personal habit as a row:
+```
+💧 Drink Water    ████████░░  80%   🔥 12d
+🛌 Sleep 8h       █████░░░░░  50%   🔥  3d
+🧘 Meditate       ██████████ 100%   🔥  7d
+```
+- Icon (from `fitness_goals` emoji/icon field if available, else default)
+- Name
+- Progress bar: % of days in range the habit was completed
+- Streak: flame icon + streak count
+- If `completed_today = true` → row has a subtle green tint
+- Empty state: `"No habits set up yet."` with link to `/settings/goals`
+
+Data source: query `fitness_goals` where `goal_type = 'habit'` (or equivalent) + `goal_checkins`. If the existing `fitness_goals` schema does not support `goal_type = 'habit'`, engineer should check the schema and use the closest equivalent (personal goals with binary check-in). Do not add a new table without confirming with architect first.
+
+---
+
+##### VII-G — Strength Standards Benchmarking (add to Strength Progress Card)
+
+**Inspired by:** Hevy Strength Level, strength standards by Lon Kilgore / ExRx
+
+Add a `"Strength Standards"` sub-section to `StrengthProgressCard` below Recent PRs.
+
+Requires `latest_weight_kg` (from summary stats) and user's top lift 1RM values.
+
+**Standards (bodyweight multiplier):**
+| Level | Squat | Bench Press | Deadlift | OHP |
+|-------|-------|-------------|----------|-----|
+| Beginner | 0.75× | 0.50× | 1.00× | 0.35× |
+| Novice | 1.25× | 0.75× | 1.50× | 0.55× |
+| Intermediate | 1.50× | 1.00× | 2.00× | 0.70× |
+| Advanced | 2.00× | 1.25× | 2.50× | 0.90× |
+| Elite | 2.50× | 1.50× | 3.00× | 1.10× |
+
+Women's multipliers ≈ 75% of the above. Pull `profiles.gender` if available.
+
+**UI:** For each of the Big 3 (+ OHP if in top exercises), a horizontal segmented bar:
+```
+Squat     [Beginner|Novice| → Intermediate|Advanced|Elite]   142 kg · Intermediate
+```
+- Coloured fill up to user's current position
+- Level label as text badge to the right
+- Omit if `latest_weight_kg` is null (can't normalise)
+- Computed entirely client-side — no new server call
+
+---
+
+##### VII-H — Extended Insight Rules
+
+Add to `getProgressInsights` (supplement the existing 8 rules in PART II):
+
+| Rule | Condition | Severity | Title | Body |
+|------|-----------|----------|-------|------|
+| Sleep debt | avg sleep_hours in range < 6.5h | warning | "Sleep Debt Accumulating" | "Averaging Xh sleep this period. Aim for 7–9h to support recovery and adaptation." |
+| RHR elevated | avg RHR last 7 days > personal 90-day avg by ≥5 bpm | warning | "Resting HR Elevated" | "Your resting HR is Xbpm above baseline. Consider prioritising recovery." |
+| Muscle imbalance | Push or Pull volume < 15% of total strength volume | warning | "Muscle Imbalance Detected" | "Your training is X% Push vs Y% Pull. Balance push and pull movements to reduce injury risk." |
+| Training load peak | ATL > CTL × 1.5 | warning | "High Training Load" | "Acute load is well above your chronic base. A deload week may prevent overtraining." |
+| Detraining gap | No sessions logged in 5+ days | warning | "Training Gap Detected" | "No sessions in the last 5 days. Consistency drives long-term progress." |
+| Weight goal progress | weight decreased ≥2 kg vs 30 days prior | positive | "Weight Goal Progress" | "You've dropped Xkg in the last 30 days. Strong progress." |
+| Pace improving | avg pace improved >5% vs prior period | positive | "Pace Improving" | "Average pace improved X% this period. Your aerobic base is building." |
+| VO2 improving | VO2 estimate up vs prior period | positive | "Cardio Fitness Improving" | "Your estimated VO2 max is trending up — a strong sign of aerobic adaptation." |
+
+Priority cap: max 5 insights. Order: positive (max 2) → warning (max 2) → info (max 1). When multiple of same type, rank by largest absolute delta/deviation.
+
+---
+
+##### VII-I — VO2 Max Estimate (add to stats bar)
+
+**Inspired by:** Garmin Cardio Fitness score, Apple Fitness VO2 Max
+
+Add `vo2max_estimate: number | null` to `ProgressSummaryStats` and compute in `getProgressSummaryStats`.
+
+**Estimation (Jack Daniels VDOT approximation):**
+```
+// Use the best run session in the range (longest distance with both distance_km and duration_minutes present)
+speed_m_per_min = (distance_km * 1000) / duration_minutes
+
+vo2_estimate = (-4.60 + 0.182258 * speed + 0.000104 * speed²) /
+               (0.8 + 0.1894393 * e^(-0.012778 * duration_min) + 0.2989558 * e^(-0.1932605 * duration_min))
+```
+
+Only compute if: `distance_km > 1.0` AND `duration_minutes > 5`. Return `null` otherwise.
+
+**Stats bar:** Add `VO2 Max` as an 8th tile. Render as `"42.5"` with unit `"ml/kg/min"` below. Show a small `↑` or `↓` trend arrow vs prior period. If null → `"—"`.
+
+---
+
+##### VII-J — Progress Photos Placeholder (design-only, implementation deferred)
+
+**Inspired by:** Hevy progress photos, Trainerize side-by-side comparison, Everfit body metrics
+
+Add a placeholder section at the bottom of `BodyCompositionCard`:
+
+```
+Progress Photos
+[📷 + Add Photo]   No photos logged yet — track your body composition visually over time.
+```
+
+- Render the section always (not conditionally hidden)
+- `+ Add Photo` button is disabled with `cursor-not-allowed` and tooltip: `"Coming soon"`
+- Do not wire up any upload logic in A-031
+- Design the section to accommodate a 2-up (before / after) side-by-side layout for a future task
+
+---
+
+##### VII-K — Race Predictor (add to Cardio Progress Card)
+
+**Inspired by:** Garmin race predictor
+
+**Pure math — no new infrastructure.** Already have VO2 max estimate from Part VII-I.
+
+Add a `"Race Predictions"` sub-section to the bottom of `CardioProgressCard`. Compute client-side from `vo2max_estimate` using Jack Daniels' VDOT race equivalence tables (hardcoded lookup table).
+
+```ts
+// Standard VDOT → race time approximations (minutes)
+// Simplified polynomial fit for common distances
+function predictRaceTime(vo2max: number, distanceKm: number): string {
+  // Returns formatted time "mm:ss" or "h:mm:ss"
+  // Uses Riegel formula: T2 = T1 × (D2/D1)^1.06 anchored to a reference performance
+  // ... see Jack Daniels VDOT tables or Riegel formula
+}
+```
+
+Show 4 distance predictions:
+
+```
+Race Predictions (based on estimated VO2 max: 42.5)
+5 km    22:14
+10 km   46:08
+Half    1:42:30
+Full    3:34:20
+```
+
+Omit entirely if `vo2max_estimate` is null.
+
+---
+
+##### VII-L — Deferred Features (hardware / major product scope)
+
+The following items were reviewed and confirmed as genuinely not implementable with the current stack. They require external hardware sensors, lab integrations, or are a standalone major product decision.
+
+| Feature | Inspired by | Why it stays deferred |
+|---------|------------|----------------------|
+| Real-time continuous stress monitoring | WHOOP Stress Monitor | Requires 24/7 continuous optical HRV wearable — no sensor data |
+| Skin temperature deviation tracking | WHOOP, Garmin | Hardware sensor on wearable — no data source |
+| Full training load with cycling power meter | Strava, Garmin | Power meter hardware (€200–500 device) — simplified TRIMP already in scope |
+| GPS route map + activity heatmap | Strava | Requires GPX track data stored per session + Mapbox/Leaflet map library. `cardio_sessions.route_gpx_url` column exists but is empty — no GPX data currently collected |
+| Smart scale integration | Garmin Index | Hardware Bluetooth/WiFi scale + API integration |
+| Biomarker labs (cortisol, glucose, cholesterol) | WHOOP Advanced Labs | Requires wearable biosensor or lab partner API |
+| Competitive strength percentile vs global user base | Hevy Strength Level | Requires anonymised workout data pool across all app users — privacy and data governance decision |
+| Social activity feed / follow other athletes | Hevy | Major product feature requiring social graph, privacy controls, feed infrastructure — separate product initiative |
+
+---
+
+#### Updated Checklist (Part VII additions)
+
+**DB & Types:**
+- [ ] Additional body measurements migration: neck, bicep L/R, thigh L/R, calf — `types/database.ts` updated
+- [ ] `BodyCompositionPoint` type updated with 6 new fields
+
+**Training Load:**
+- [ ] `getTrainingLoad` action: TRIMP-based CTL/ATL/Form + Training Status
+- [ ] `TrainingLoadCard` rendered full-width between stats bar and insights
+- [ ] Training Status badge uses correct colour per state
+- [ ] 42-day chart: Fitness/Fatigue/Form lines + zero reference line
+
+**Muscle Focus:**
+- [ ] `getStrengthProgressSeries` extended: `muscle_volume` array (top 6 groups)
+- [ ] `MuscleFocusCard` rendered — radar + horizontal volume bars (row 3 left)
+
+**Workout Calendar:**
+- [ ] `getComplianceRecovery` extended: `workout_calendar` array (2 months)
+- [ ] `WorkoutCalendarCard` rendered — month grid, coloured dots, month navigation (row 3 right)
+
+**Cardio Progress Card:**
+- [ ] `getCardioProgressSeries` extended: `hr_zones_summary` + `activity_breakdown`
+- [ ] Activity breakdown pills above the 3 stacked charts
+- [ ] HR zones stacked bar below the 3 stacked charts (hidden if no HR data)
+- [ ] Race Predictor sub-section (4 distances, computed from `vo2max_estimate`, omit if null)
+
+**Compliance & Recovery Card:**
+- [ ] `getComplianceRecovery` extended: RHR series, sleep score avg, sleep stages last night, habits array
+- [ ] Sleep stage bar (Deep/REM/Light/Awake) shown below sleep/HRV pills
+- [ ] RHR as 4th dashed red line on the readiness chart (secondary right Y-axis)
+- [ ] Habits section: progress bar + streak per habit, empty state with link
+
+**Strength Progress Card:**
+- [ ] Strength Standards sub-section (Big 3 + OHP bodyweight multiplier bands)
+- [ ] Computed client-side from existing `StrengthProgressData` + `latest_weight_kg`
+
+**Stats Bar:**
+- [ ] `getProgressSummaryStats` extended: `vo2max_estimate` field
+- [ ] 8th tile `VO2 Max` rendered in stats bar (shows `"—"` if null)
+
+**Body Composition Card:**
+- [ ] 11-pill set: first 5 always visible, last 6 in `+ More` collapsible section
+- [ ] Progress Photos placeholder section at bottom — placeholder only, full upload deferred
+
+**Insights:**
+- [ ] `getProgressInsights` extended: 8 additional rules (sleep debt, RHR, muscle imbalance, training load, detraining, weight goal, pace, VO2)
+
+---
+
+## A-025 — Nutrition Progress Page Full Revamp (Full Spec)
+
+**Priority:** High
+**Depends on:** A-020 (cache fix). A-023/A-024 can run in parallel.
+
+---
+
+## Context
+
+The current nutrition progress page is entirely legacy:
+- `app/actions/nutrition-progress.ts` reads from `meal_plans` + `meal_plan_meals` — the old meal planning tables that are no longer the source of truth for what users actually eat
+- `components/nutrition/progress-charts.tsx` renders cumulative vs daily calorie charts from those legacy tables
+- `types/nutrition.ts` exports `NutritionProgram` / `NutritionMeal` pointing to the old tables
+- The page has no time range selector, no compliance tracking, no meal breakdown, no top foods
+
+The source of truth for actual consumed nutrition is `meal_logs` + `meal_log_items`. Every metric on this page must be derived from those tables.
+
+**Everything from the legacy system is deleted. There is no code to migrate.**
+
+---
+
+## STEP 0 — Delete legacy files
+
+Delete the following files entirely before starting any new work. Do not archive or comment them out.
+
+```
+app/actions/nutrition-progress.ts           DELETE
+components/nutrition/progress-charts.tsx    DELETE
+components/nutrition/program-selector.tsx   DELETE
+types/nutrition.ts                          DELETE
+```
+
+After deleting, run `grep -r "progress-charts\|program-selector\|getProgressData\|NutritionProgram\|NutritionMeal\|ProgramSummary" app/ components/ hooks/ lib/ types/` and fix any remaining broken imports before proceeding.
+
+---
+
+## STEP 1 — Data types
+
+Create `types/nutrition-progress.ts` (new file):
+
+```ts
+import type { MealGroupSubject } from "@/lib/query-keys-nutrition";
+
+export type NutritionProgressRange = 7 | 30 | 90;
+
+export type NutritionProgressInput = {
+  range: NutritionProgressRange;
+  subject?: MealGroupSubject;
+  // custom date override (optional — used when range is overridden by date picker)
+  start_date?: string;  // YYYY-MM-DD
+  end_date?: string;    // YYYY-MM-DD
+};
+
+export type NutritionProgressDayRow = {
+  date: string;         // YYYY-MM-DD
+  calories: number;
+  protein_g: number;
+  carbs_g: number;
+  fat_g: number;
+  fiber_g: number;
+  deficit_surplus: number;  // calories - target_calories (negative = deficit, positive = surplus)
+};
+
+export type NutritionProgressTargets = {
+  calories: number;
+  protein_g: number;
+  carbs_g: number;
+  fat_g: number;
+  source: "fitness_goal" | "none";
+  plan_name: string | null;
+};
+
+export type NutritionProgressMealBreakdown = {
+  type: string;         // breakfast | lunch | dinner | snack | water | other
+  calories: number;
+  pct: number;          // % of total calories logged
+};
+
+export type NutritionProgressTopFood = {
+  name: string;
+  count: number;        // number of times logged in the period
+  avg_calories: number;
+};
+
+export type NutritionProgressDeltas = {
+  avg_calories: number | null;     // vs prior period; null if no prior data
+  avg_protein_g: number | null;
+  avg_carbs_g: number | null;
+  avg_fat_g: number | null;
+  compliance_score: number | null;
+};
+
+export type NutritionProgressData = {
+  // Period
+  range: NutritionProgressRange;
+  start_date: string;
+  end_date: string;
+  days_in_range: number;
+  days_logged: number;
+  logging_streak: number;           // consecutive days ending today with >= 1 log
+
+  // Targets (from fitness_goals, fallback zeros if none)
+  targets: NutritionProgressTargets;
+
+  // Period averages (across logged days only)
+  avg_calories: number;
+  avg_protein_g: number;
+  avg_carbs_g: number;
+  avg_fat_g: number;
+  avg_fiber_g: number;
+
+  // Compliance — % of logged days where macro was within 15% of target
+  // 0 if no target set
+  compliance_score: number;         // overall: average of all 4 per-macro compliances
+  cal_compliance: number;
+  protein_compliance: number;
+  carbs_compliance: number;
+  fat_compliance: number;
+
+  // Calorie totals
+  total_calories: number;
+  total_deficit_surplus: number;    // sum of daily deficit/surplus across logged days
+
+  // Macro ratio as % of total calories (Atwater: P*4 + C*4 + F*9)
+  protein_pct_of_calories: number;
+  carbs_pct_of_calories: number;
+  fat_pct_of_calories: number;
+
+  // Weekday vs weekend averages
+  weekday_avg_calories: number;     // Mon–Fri logged days
+  weekend_avg_calories: number;     // Sat–Sun logged days
+
+  // Chart data
+  daily_rows: NutritionProgressDayRow[];
+
+  // Breakdown + analysis
+  meal_breakdown: NutritionProgressMealBreakdown[];
+  top_foods: NutritionProgressTopFood[];     // top 10 by count
+
+  // vs prior period deltas (for stat card badge)
+  deltas: NutritionProgressDeltas;
+};
+```
+
+---
+
+## STEP 2 — Update query keys
+
+In `lib/query-keys-progress.ts`, update the `nutrition` key to accept parameters:
+
+```ts
+export const progressKeys = {
+  all: ["progress"] as const,
+  // ... existing keys unchanged ...
+  nutrition: (params: { range: number; subjectKey: string }) =>
+    [...progressKeys.all, "nutrition", params] as const,
+};
+```
+
+`subjectKey` is a stable string derived from the subject (e.g. `"self"`, `"client:uuid"`, `"user:uuid"`) — compute it in the hook, not in the component.
+
+---
+
+## STEP 3 — New server action
+
+Create the new `app/actions/nutrition-progress.ts` (complete file — replaces deleted one):
+
+### Input validation
+
+```ts
+import { z } from "zod";
+const nutritionProgressSchema = z.object({
+  range: z.union([z.literal(7), z.literal(30), z.literal(90)]).default(30),
+  subject_user_id: z.string().uuid().nullable().optional(),
+  subject_client_id: z.string().uuid().nullable().optional(),
+  start_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  end_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+});
+```
+
+### Date range computation
+
+```ts
+function buildDateRange(input: z.infer<typeof nutritionProgressSchema>) {
+  const today = toDateInput(new Date());
+  const endDate = input.end_date ?? today;
+  const startDate = input.start_date ?? subtractDays(endDate, input.range - 1);
+  return { startDate, endDate };
+}
+```
+
+### Subject resolution
+
+Resolve subject the same way as other nutrition actions: check for `subject_client_id` → `subject_user_id` → `user.id` (self). Use `requireActor()` from the existing auth helper.
+
+### Query 1 — Daily diary totals
+
+```ts
+// meal_logs already has pre-aggregated totals per log (one per meal_type per day).
+// Sum across logs for each day to get the full daily total.
+const { data: logs } = await supabase
+  .from("meal_logs")
+  .select("performed_on, total_calories, total_protein_g, total_carbs_g, total_fat_g, total_fiber_g, meal_type")
+  .gte("performed_on", startDate)
+  .lte("performed_on", endDate)
+  .match(subjectFilter)   // { subject_user_id } or { subject_client_id }
+  .order("performed_on", { ascending: true });
+```
+
+`subjectFilter` is `{ subject_user_id: uid }` for self/user, `{ subject_client_id: clientId }` for client.
+
+### Query 2 — Top foods from meal_log_items
+
+```ts
+// First get all meal_log IDs in the range
+const logIds = (logs || []).map((l) => l.id);  // NOTE: need to also select 'id' in Query 1
+
+if (logIds.length > 0) {
+  const { data: items } = await supabase
+    .from("meal_log_items")
+    .select("item_name, calories")
+    .in("meal_log_id", logIds)
+    .eq("is_quick_add", false)
+    .not("item_name", "is", null)
+    .neq("item_name", "");
+  // Group by item_name in JS (max ~1500 rows for 90 days)
+}
+```
+
+### Query 3 — Nutrition targets
+
+```ts
+const { data: goalRow } = await supabase
+  .from("fitness_goals")
+  .select("daily_calories, protein_target, carbs_target, fat_target, goal_type")
+  .eq("user_id", uid)
+  .in("status", ["active"])
+  .order("created_at", { ascending: false })
+  .limit(1)
+  .maybeSingle();
+```
+
+If `subject_client_id` is set: look up the client's linked user ID first, then query their fitness_goals. If no goal exists, targets default to 0 and `source: "none"`.
+
+### Query 4 — Prior period daily logs (for delta calculation)
+
+Run the same Query 1 but for the prior period (`startDate - range days` to `startDate - 1`). Used only to compute `deltas`. Skip if targets have `source: "none"`.
+
+### Computation (server-side, in JS after queries)
+
+All aggregation done in the server action. Key formulas:
+
+**Daily rows:**
+```ts
+const byDate = new Map<string, NutritionProgressDayRow>();
+for (const log of logs || []) {
+  const row = byDate.get(log.performed_on) ?? {
+    date: log.performed_on, calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0, fiber_g: 0, deficit_surplus: 0
+  };
+  row.calories += Math.round(log.total_calories || 0);
+  row.protein_g += Math.round(log.total_protein_g || 0);
+  row.carbs_g += Math.round(log.total_carbs_g || 0);
+  row.fat_g += Math.round(log.total_fat_g || 0);
+  row.fiber_g += Math.round(log.total_fiber_g || 0);
+  byDate.set(log.performed_on, row);
+}
+// After loop: compute deficit_surplus per day
+for (const row of byDate.values()) {
+  row.deficit_surplus = row.calories - targets.calories;
+}
+const daily_rows = Array.from(byDate.values()).sort((a, b) => a.date.localeCompare(b.date));
+```
+
+**Averages:** sum / days_logged (only count days where calories > 0).
+
+**Compliance per day:** `Math.abs(actual - target) / Math.max(target, 1) <= 0.15`
+
+**Compliance score:** `(days_compliant / days_logged) * 100` — `0` if `days_logged === 0` or `targets.source === "none"`.
+
+**Macro ratio:**
+```ts
+const totalCalFromMacros = (avg_protein_g * 4) + (avg_carbs_g * 4) + (avg_fat_g * 9);
+protein_pct_of_calories = totalCalFromMacros > 0 ? Math.round((avg_protein_g * 4 / totalCalFromMacros) * 100) : 0;
+carbs_pct_of_calories = ...;
+fat_pct_of_calories = ...;
+```
+
+**Meal breakdown:**
+```ts
+const calByType = new Map<string, number>();
+for (const log of logs || []) {
+  const key = log.meal_type || "other";
+  calByType.set(key, (calByType.get(key) || 0) + Math.round(log.total_calories || 0));
+}
+const totalCals = Array.from(calByType.values()).reduce((a, b) => a + b, 0);
+const meal_breakdown = Array.from(calByType.entries())
+  .map(([type, calories]) => ({ type, calories, pct: totalCals > 0 ? Math.round((calories / totalCals) * 100) : 0 }))
+  .sort((a, b) => b.calories - a.calories);
+```
+
+**Top foods:**
+```ts
+const foodMap = new Map<string, { count: number; totalCals: number }>();
+for (const item of items || []) {
+  const name = item.item_name!.trim();
+  const entry = foodMap.get(name) ?? { count: 0, totalCals: 0 };
+  entry.count++;
+  entry.totalCals += item.calories || 0;
+  foodMap.set(name, entry);
+}
+const top_foods = Array.from(foodMap.entries())
+  .map(([name, { count, totalCals }]) => ({ name, count, avg_calories: Math.round(totalCals / count) }))
+  .sort((a, b) => b.count - a.count)
+  .slice(0, 10);
+```
+
+**Logging streak (consecutive days ending today):**
+```ts
+function computeStreak(dailyRows: NutritionProgressDayRow[], today: string): number {
+  const loggedDates = new Set(dailyRows.map((r) => r.date));
+  let streak = 0;
+  let check = today;
+  while (loggedDates.has(check)) {
+    streak++;
+    check = subtractDays(check, 1);
+  }
+  return streak;
+}
+```
+
+**Weekday vs weekend:**
+```ts
+const weekdayRows = daily_rows.filter((r) => { const d = new Date(r.date + "T12:00:00Z").getDay(); return d >= 1 && d <= 5; });
+const weekendRows = daily_rows.filter((r) => { const d = new Date(r.date + "T12:00:00Z").getDay(); return d === 0 || d === 6; });
+const weekday_avg_calories = weekdayRows.length > 0 ? Math.round(weekdayRows.reduce((s, r) => s + r.calories, 0) / weekdayRows.length) : 0;
+const weekend_avg_calories = weekendRows.length > 0 ? Math.round(weekendRows.reduce((s, r) => s + r.calories, 0) / weekendRows.length) : 0;
+```
+
+### Action signature
+
+```ts
+export async function getNutritionProgressAction(
+  input: z.input<typeof nutritionProgressSchema>
+): Promise<NutritionProgressData>
+```
+
+Event name: `"nutrition.progress.read"` (same as before — preserves analytics continuity).
+
+---
+
+## STEP 4 — New page + loading
+
+### `app/(dashboard)/(insights)/progress/nutrition/page.tsx`
+
+Full rewrite — thin wrapper that renders `NutritionProgressPage` component:
+
+```tsx
+import { NutritionProgressPage } from "@/components/nutrition/progress/nutrition-progress-page";
+
+export default function NutritionProgressRoute() {
+  return (
+    <div className="page-shell">
+      <NutritionProgressPage />
+    </div>
+  );
+}
+```
+
+No `"use client"` on the route — the component is client-side.
+
+### `app/(dashboard)/(insights)/progress/nutrition/loading.tsx`
+
+```tsx
+import { NutritionProgressSkeleton } from "@/components/nutrition/progress/nutrition-progress-skeleton";
+
+export default function NutritionProgressLoading() {
+  return (
+    <div className="page-shell">
+      <NutritionProgressSkeleton />
+    </div>
+  );
+}
+```
+
+---
+
+## STEP 5 — Main client component
+
+Create `components/nutrition/progress/nutrition-progress-page.tsx`.
+
+### State
+
+```ts
+const [range, setRange] = useState<NutritionProgressRange>(30);
+const { activeSubjectType, activeSubjectId } = useNutritionActiveSubject();
+const subject = useMemo(() => resolveNutritionSubject(activeSubjectType, activeSubjectId), [activeSubjectType, activeSubjectId]);
+const subjectKey = subject ? (subject.subject_client_id ? `client:${subject.subject_client_id}` : `user:${subject.subject_user_id}`) : "self";
+
+const query = useQuery({
+  queryKey: progressKeys.nutrition({ range, subjectKey }),
+  queryFn: () => getNutritionProgressAction({ range, ...subject }),
+  staleTime: 300_000,   // 5 minutes — progress data changes rarely
+  gcTime: 10 * 60_000,
+  refetchOnWindowFocus: false,
+});
+```
+
+### Loading
+
+When `query.isLoading`: render `<NutritionProgressSkeleton />` — the entire page disappears and is replaced by the skeleton. No partial content.
+
+### Error
+
+When `query.isError`: render glass-surface error card with Retry button (same pattern as A-023 dashboard error state).
+
+### Page structure (ordered top to bottom)
+
+```
+1. Page header (static — always renders)
+2. Controls bar: range pills + date display
+3. Stat cards row (5 cards)
+4. Daily Calories bar chart
+5. Macros vs Targets line chart
+6. 2-column row: [Fiber Intake chart] [Compliance Score card]
+7. 2-column row: [Meal Breakdown donut] [Top Foods list]
+8. Calorie Deficit/Surplus bar chart
+9. Weekday vs Weekend comparison row
+10. Daily Detail table
+11. Macro Distribution donut
+12. Micronutrient placeholder section
+```
+
+---
+
+## STEP 6 — Section-by-section component specs
+
+All charts use `recharts`. Do NOT add a new chart library.
+
+### 6A — Page header
+
+Static. No data dependency. Always renders instantly.
+
+```tsx
+<section className="space-y-1">
+  <h1 className="text-3xl font-semibold tracking-tight">Nutrition Progress</h1>
+  <p className="text-sm text-muted-foreground">Calories, macros, and dietary insights</p>
+</section>
+```
+
+### 6B — Controls bar
+
+```tsx
+<section className="flex flex-wrap items-center gap-3">
+  {/* Range pills */}
+  <div className="flex items-center rounded-xl border border-border/60 bg-muted/20 p-1 gap-1">
+    {([7, 30, 90] as NutritionProgressRange[]).map((r) => (
+      <button
+        key={r}
+        className={cn("rounded-lg px-3 py-1.5 text-sm font-medium transition-colors",
+          range === r ? "accent-strong text-black" : "text-muted-foreground hover:text-foreground")}
+        onClick={() => setRange(r)}
+      >
+        {r} Days
+      </button>
+    ))}
+  </div>
+  {/* Date range label */}
+  <span className="text-sm text-muted-foreground">
+    {data.start_date} → {data.end_date}
+  </span>
+  {/* Logging stats */}
+  <span className="ml-auto text-sm text-muted-foreground">
+    {data.days_logged} of {data.days_in_range} days logged
+    {data.logging_streak > 1 ? ` · 🔥 ${data.logging_streak}-day streak` : ""}
+  </span>
+</section>
+```
+
+Note: no emoji if the project doesn't use emojis elsewhere. Replace streak icon with a `Flame` lucide icon if needed.
+
+### 6C — Stat cards (5 cards)
+
+One row, 5 equal columns on desktop, 2-column grid on mobile (last card full-width if odd count).
+
+```tsx
+function StatCard({ label, value, unit, delta, deltaUnit }: StatCardProps) {
+  const isPositiveDelta = delta !== null && delta > 0;
+  const isNegativeDelta = delta !== null && delta < 0;
+  return (
+    <div className="glass-surface surface-pad flex flex-col gap-2">
+      <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">{label}</p>
+      <p className="text-3xl font-semibold tabular-nums leading-none">
+        {value}<span className="ml-0.5 text-lg text-muted-foreground">{unit}</span>
+      </p>
+      {delta !== null ? (
+        <p className={cn("text-xs font-medium", isPositiveDelta ? "text-chart-2" : isNegativeDelta ? "text-destructive" : "text-muted-foreground")}>
+          {delta > 0 ? "+" : ""}{delta}{deltaUnit} vs prior period
+        </p>
+      ) : (
+        <p className="text-xs text-muted-foreground/50">No prior data</p>
+      )}
+    </div>
+  );
+}
+```
+
+Cards: Avg Cal | Avg Protein | Avg Carbs | Avg Fat | Compliance
+
+Delta color rule:
+- Calories: positive delta is neutral (not automatically bad). Color gray if within ±5% of target, green if closer to target, amber if further.
+- Protein/Carbs/Fat: positive delta green (more is contextually good for protein)
+- Compliance: positive delta always green
+
+### 6D — Daily Calories bar chart
+
+```tsx
+<section className="glass-surface surface-pad space-y-4">
+  <h2 className="text-xl font-semibold tracking-tight">Daily Calories</h2>
+  <ResponsiveContainer width="100%" height={280}>
+    <ComposedChart data={data.daily_rows}>
+      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border)/0.3)" vertical={false} />
+      <XAxis dataKey="date" tickFormatter={formatChartDate} tick={{ fontSize: 11 }} />
+      <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => v.toLocaleString()} />
+      <Tooltip content={<CaloriesTooltip target={data.targets.calories} />} />
+      {/* Calorie target reference line */}
+      {data.targets.calories > 0 && (
+        <ReferenceLine y={data.targets.calories} stroke="hsl(var(--chart-2))" strokeDasharray="6 3" strokeWidth={1.5} label={{ value: "Target", position: "right", fontSize: 10 }} />
+      )}
+      {/* Daily bars */}
+      <Bar dataKey="calories" fill="hsl(var(--chart-1)/0.75)" radius={[3, 3, 0, 0]} />
+      {/* 7-day rolling average line */}
+      <Line dataKey="rolling_avg_7" stroke="hsl(var(--chart-2))" dot={false} strokeWidth={2} type="monotone" connectNulls />
+    </ComposedChart>
+  </ResponsiveContainer>
+</section>
+```
+
+The `rolling_avg_7` field is computed in the server action when `range >= 14`:
+```ts
+daily_rows.forEach((row, i) => {
+  if (i < 6) { row.rolling_avg_7 = null; return; }
+  const slice = daily_rows.slice(i - 6, i + 1);
+  row.rolling_avg_7 = Math.round(slice.reduce((s, r) => s + r.calories, 0) / 7);
+});
+```
+Add `rolling_avg_7: number | null` to `NutritionProgressDayRow`.
+
+Custom `CaloriesTooltip`: shows date, calories, target, deficit/surplus colored green/red.
+
+### 6E — Macros vs Targets line chart
+
+```tsx
+<section className="glass-surface surface-pad space-y-4">
+  <h2 className="text-xl font-semibold tracking-tight">Macros vs Targets</h2>
+  <ResponsiveContainer width="100%" height={300}>
+    <LineChart data={data.daily_rows}>
+      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border)/0.3)" vertical={false} />
+      <XAxis dataKey="date" tickFormatter={formatChartDate} tick={{ fontSize: 11 }} />
+      <YAxis unit="g" tick={{ fontSize: 11 }} />
+      <Tooltip content={<MacrosTooltip targets={data.targets} />} />
+      {/* Actual macro lines */}
+      <Line dataKey="protein_g" stroke="hsl(var(--chart-3))" dot={false} strokeWidth={2} type="monotone" name="Protein" />
+      <Line dataKey="carbs_g" stroke="hsl(var(--chart-4))" dot={false} strokeWidth={2} type="monotone" name="Carbs" />
+      <Line dataKey="fat_g" stroke="hsl(var(--chart-1))" dot={false} strokeWidth={2} type="monotone" name="Fat" />
+      {/* Target reference lines (dashed) */}
+      {data.targets.protein_g > 0 && <ReferenceLine y={data.targets.protein_g} stroke="hsl(var(--chart-3))" strokeDasharray="6 3" strokeWidth={1} />}
+      {data.targets.carbs_g > 0 && <ReferenceLine y={data.targets.carbs_g} stroke="hsl(var(--chart-4))" strokeDasharray="6 3" strokeWidth={1} />}
+      {data.targets.fat_g > 0 && <ReferenceLine y={data.targets.fat_g} stroke="hsl(var(--chart-1))" strokeDasharray="6 3" strokeWidth={1} />}
+    </LineChart>
+  </ResponsiveContainer>
+</section>
+```
+
+`MacrosTooltip`: shows date, then for each macro: actual value + target value side-by-side (colored per macro).
+
+### 6F — Fiber Intake bar chart
+
+```tsx
+<section className="glass-surface surface-pad space-y-4">
+  <h2 className="text-xl font-semibold tracking-tight">Fiber Intake</h2>
+  <ResponsiveContainer width="100%" height={220}>
+    <BarChart data={data.daily_rows}>
+      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border)/0.3)" vertical={false} />
+      <XAxis dataKey="date" tickFormatter={formatChartDate} tick={{ fontSize: 11 }} />
+      <YAxis unit="g" tick={{ fontSize: 11 }} />
+      <Tooltip formatter={(v) => [`${v}g`, "Fiber"]} labelFormatter={formatChartDate} />
+      {/* Recommended fiber reference line: 25g women / 38g men — use 25g as safe default */}
+      <ReferenceLine y={25} stroke="hsl(var(--chart-2))" strokeDasharray="4 2" strokeWidth={1} label={{ value: "25g rec.", position: "right", fontSize: 10 }} />
+      <Bar dataKey="fiber_g" fill="hsl(var(--chart-2)/0.7)" radius={[3, 3, 0, 0]} />
+    </BarChart>
+  </ResponsiveContainer>
+</section>
+```
+
+### 6G — Compliance Score card
+
+Sits in a 2-column row alongside Fiber Intake (on desktop). Single column on mobile.
+
+```tsx
+<div className="glass-surface surface-pad flex flex-col gap-5">
+  <h2 className="text-xl font-semibold tracking-tight">Compliance Score</h2>
+  {data.targets.source === "none" ? (
+    <p className="text-sm text-muted-foreground">Set macro targets in your goals to track compliance.</p>
+  ) : (
+    <>
+      <div className="flex flex-col items-center gap-1">
+        <p className="text-6xl font-bold tabular-nums leading-none">{data.compliance_score}%</p>
+        <p className="text-sm text-muted-foreground">Average daily macro compliance</p>
+      </div>
+      <div className="grid grid-cols-4 gap-2">
+        {[
+          { label: "Cal", value: data.cal_compliance },
+          { label: "Protein", value: data.protein_compliance },
+          { label: "Carbs", value: data.carbs_compliance },
+          { label: "Fat", value: data.fat_compliance },
+        ].map(({ label, value }) => (
+          <div key={label} className="glass-subtle flex flex-col items-center gap-1 rounded-xl p-2">
+            <p className="text-lg font-semibold tabular-nums">{value}%</p>
+            <p className="text-[11px] text-muted-foreground">{label}</p>
+          </div>
+        ))}
+      </div>
+    </>
+  )}
+</div>
+```
+
+### 6H — Meal Breakdown donut chart
+
+```tsx
+<section className="glass-surface surface-pad space-y-4">
+  <h2 className="text-xl font-semibold tracking-tight">Meal Breakdown</h2>
+  <div className="flex items-center gap-6">
+    <ResponsiveContainer width={160} height={160}>
+      <PieChart>
+        <Pie data={data.meal_breakdown} dataKey="calories" cx="50%" cy="50%"
+          innerRadius={50} outerRadius={75} paddingAngle={2}>
+          {data.meal_breakdown.map((entry, i) => (
+            <Cell key={entry.type} fill={MEAL_TYPE_PIE_COLORS[i % MEAL_TYPE_PIE_COLORS.length]} />
+          ))}
+        </Pie>
+        <Tooltip formatter={(v, name, props) => [`${props.payload.pct}%`, props.payload.type]} />
+      </PieChart>
+    </ResponsiveContainer>
+    <div className="flex flex-col gap-2">
+      {data.meal_breakdown.map((entry, i) => (
+        <div key={entry.type} className="flex items-center gap-2 text-sm">
+          <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ background: MEAL_TYPE_PIE_COLORS[i % MEAL_TYPE_PIE_COLORS.length] }} />
+          <span className="capitalize">{entry.type}</span>
+          <span className="ml-auto pl-4 font-medium">{entry.pct}%</span>
+        </div>
+      ))}
+    </div>
+  </div>
+</section>
+```
+
+`MEAL_TYPE_PIE_COLORS`: use chart CSS vars: `["hsl(var(--chart-1))", "hsl(var(--chart-2))", "hsl(var(--chart-3))", "hsl(var(--chart-4))", "hsl(var(--chart-5))", "hsl(var(--muted-foreground))"]`
+
+### 6I — Top Foods list
+
+```tsx
+<section className="glass-surface surface-pad space-y-4">
+  <h2 className="text-xl font-semibold tracking-tight">Top Foods</h2>
+  {data.top_foods.length === 0 ? (
+    <p className="text-sm text-muted-foreground">No food items logged in this period.</p>
+  ) : (
+    <ol className="divide-y divide-border/30">
+      {data.top_foods.map((food, i) => (
+        <li key={food.name} className="flex items-center gap-3 py-3">
+          <span className="w-5 shrink-0 text-sm tabular-nums text-muted-foreground">{i + 1}.</span>
+          <span className="flex-1 truncate text-sm font-medium">{food.name}</span>
+          <span className="shrink-0 rounded-full bg-muted/60 px-2 py-0.5 text-xs tabular-nums">{food.count}x</span>
+          <span className="w-16 shrink-0 text-right text-xs tabular-nums text-muted-foreground">{food.avg_calories} cal</span>
+        </li>
+      ))}
+    </ol>
+  )}
+</section>
+```
+
+### 6J — Calorie Deficit / Surplus bar chart
+
+Bars colored by sign: green for surplus (above target), red/destructive for deficit (below target).
+
+```tsx
+<section className="glass-surface surface-pad space-y-4">
+  <div className="flex items-center justify-between gap-3">
+    <h2 className="text-xl font-semibold tracking-tight">Calorie Deficit / Surplus</h2>
+    <span className={cn("text-sm font-medium tabular-nums",
+      data.total_deficit_surplus >= 0 ? "text-chart-2" : "text-destructive")}>
+      {data.total_deficit_surplus >= 0 ? "+" : ""}{data.total_deficit_surplus.toLocaleString()} kcal total
+    </span>
+  </div>
+  <ResponsiveContainer width="100%" height={200}>
+    <BarChart data={data.daily_rows} barCategoryGap="20%">
+      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border)/0.3)" vertical={false} />
+      <XAxis dataKey="date" tickFormatter={formatChartDate} tick={{ fontSize: 11 }} />
+      <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `${v > 0 ? "+" : ""}${v}`} />
+      <ReferenceLine y={0} stroke="hsl(var(--border))" strokeWidth={1} />
+      <Tooltip formatter={(v: number) => [`${v > 0 ? "+" : ""}${v} kcal`, "vs target"]} labelFormatter={formatChartDate} />
+      <Bar dataKey="deficit_surplus" radius={[3, 3, 0, 0]}>
+        {data.daily_rows.map((row, i) => (
+          <Cell key={i} fill={row.deficit_surplus >= 0 ? "hsl(var(--chart-2)/0.75)" : "hsl(var(--destructive)/0.6)"} />
+        ))}
+      </Bar>
+    </BarChart>
+  </ResponsiveContainer>
+  {data.targets.source === "none" && (
+    <p className="text-xs text-muted-foreground">Set a calorie target in your goals to see deficit/surplus tracking.</p>
+  )}
+</section>
+```
+
+### 6K — Weekday vs Weekend comparison
+
+A compact 2-card comparison row. Only render if `days_in_range >= 14` (otherwise not meaningful).
+
+```tsx
+{data.days_in_range >= 14 && (
+  <section className="glass-surface surface-pad space-y-4">
+    <h2 className="text-xl font-semibold tracking-tight">Weekday vs Weekend</h2>
+    <div className="grid grid-cols-2 gap-4">
+      <div className="glass-subtle flex flex-col gap-1 rounded-2xl p-4">
+        <p className="text-xs text-muted-foreground uppercase tracking-[0.1em]">Mon – Fri avg</p>
+        <p className="text-2xl font-semibold tabular-nums">{data.weekday_avg_calories.toLocaleString()}</p>
+        <p className="text-xs text-muted-foreground">kcal / day</p>
+      </div>
+      <div className="glass-subtle flex flex-col gap-1 rounded-2xl p-4">
+        <p className="text-xs text-muted-foreground uppercase tracking-[0.1em]">Sat – Sun avg</p>
+        <p className="text-2xl font-semibold tabular-nums">{data.weekend_avg_calories.toLocaleString()}</p>
+        <p className="text-xs text-muted-foreground">kcal / day</p>
+      </div>
+    </div>
+    {Math.abs(data.weekday_avg_calories - data.weekend_avg_calories) > 200 && (
+      <p className="text-sm text-muted-foreground">
+        Your weekend intake is {data.weekend_avg_calories > data.weekday_avg_calories ? "higher" : "lower"} than weekdays
+        by {Math.abs(data.weekday_avg_calories - data.weekend_avg_calories)} kcal on average.
+      </p>
+    )}
+  </section>
+)}
+```
+
+### 6L — Daily Detail table
+
+Sortable table. Default sort: date descending (most recent first).
+
+```tsx
+<section className="glass-surface surface-pad space-y-4">
+  <h2 className="text-xl font-semibold tracking-tight">Daily Detail</h2>
+  <div className="overflow-x-auto">
+    <table className="w-full text-sm">
+      <thead>
+        <tr className="border-b border-border/40">
+          {["Date", "Calories", "Protein", "Carbs", "Fat", "Fiber"].map((col) => (
+            <th key={col} className="px-4 py-3 text-left text-xs uppercase tracking-[0.1em] text-muted-foreground font-medium">
+              {col}
+            </th>
+          ))}
+        </tr>
+      </thead>
+      <tbody className="divide-y divide-border/30">
+        {[...data.daily_rows].reverse().map((row) => (
+          <tr key={row.date} className="hover:bg-muted/20 transition-colors">
+            <td className="px-4 py-3 tabular-nums text-muted-foreground">{formatTableDate(row.date)}</td>
+            <td className="px-4 py-3 tabular-nums font-medium">{row.calories.toLocaleString()}</td>
+            <td className="px-4 py-3 tabular-nums text-chart-3">{row.protein_g}g</td>
+            <td className="px-4 py-3 tabular-nums text-chart-4">{row.carbs_g}g</td>
+            <td className="px-4 py-3 tabular-nums text-chart-1">{row.fat_g}g</td>
+            <td className="px-4 py-3 tabular-nums text-chart-2">{row.fiber_g}g</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+</section>
+```
+
+### 6M — Macro Distribution donut
+
+Shows the actual P/C/F ratio for the period (as % of calories) vs the target ratio side by side.
+
+```tsx
+<section className="glass-surface surface-pad space-y-4">
+  <h2 className="text-xl font-semibold tracking-tight">Macro Distribution</h2>
+  <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+    {/* Actual ratio */}
+    <div className="flex flex-col items-center gap-3">
+      <p className="text-sm text-muted-foreground">Actual (this period)</p>
+      <MacroDonut
+        protein={data.protein_pct_of_calories}
+        carbs={data.carbs_pct_of_calories}
+        fat={data.fat_pct_of_calories}
+      />
+    </div>
+    {/* Target ratio — only render if targets exist */}
+    {data.targets.source !== "none" && (
+      <div className="flex flex-col items-center gap-3">
+        <p className="text-sm text-muted-foreground">Target</p>
+        <MacroDonut
+          protein={computeMacroRatio(data.targets).protein}
+          carbs={computeMacroRatio(data.targets).carbs}
+          fat={computeMacroRatio(data.targets).fat}
+        />
+      </div>
+    )}
+  </div>
+</section>
+```
+
+`MacroDonut` is a small inline component — PieChart with innerRadius 45, outerRadius 70, with protein (chart-3) / carbs (chart-4) / fat (chart-1) slices and a legend below.
+
+`computeMacroRatio(targets)` applies Atwater factors on server-provided data.
+
+### 6N — Micronutrient placeholder
+
+```tsx
+<section className="glass-surface surface-pad">
+  <div className="flex items-center gap-3 mb-4">
+    <Info className="h-4 w-4 text-muted-foreground" />
+    <h2 className="text-xl font-semibold tracking-tight">Micronutrient Tracking</h2>
+  </div>
+  <p className="text-sm text-muted-foreground mb-4">
+    Micronutrient tracking requires per-item nutritional data. Connect a food database or log items with micronutrient details to unlock vitamin, mineral, and electrolyte insights.
+  </p>
+  <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+    {["Vitamin D", "Iron", "Magnesium", "Omega-3"].map((name) => (
+      <div key={name} className="glass-subtle flex flex-col items-center gap-2 rounded-2xl p-4 opacity-50">
+        <UtensilsCrossed className="h-5 w-5 text-muted-foreground" />
+        <p className="text-xs text-muted-foreground">{name}</p>
+      </div>
+    ))}
+  </div>
+</section>
+```
+
+---
+
+## STEP 7 — Skeleton
+
+Create `components/nutrition/progress/nutrition-progress-skeleton.tsx`.
+
+Matches every section's approximate height and layout. Use `NutritionProgressSkeleton` as the default export.
+
+Structure:
+```tsx
+export function NutritionProgressSkeleton() {
+  return (
+    <div className="section-gap">
+      {/* Static header — always real */}
+      <section className="space-y-1">
+        <h1 className="text-3xl font-semibold tracking-tight">Nutrition Progress</h1>
+        <p className="text-sm text-muted-foreground">Calories, macros, and dietary insights</p>
+      </section>
+
+      {/* Controls bar */}
+      <div className="flex gap-3">
+        <Skeleton className="h-10 w-52 rounded-xl" />
+        <Skeleton className="h-10 w-36 rounded-xl" />
+      </div>
+
+      {/* Stat cards */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-2xl" />)}
+      </div>
+
+      {/* Daily Calories chart */}
+      <Skeleton className="h-64 w-full rounded-2xl" />
+
+      {/* Macros vs Targets chart */}
+      <Skeleton className="h-72 w-full rounded-2xl" />
+
+      {/* Fiber + Compliance row */}
+      <div className="grid gap-4 md:grid-cols-2">
+        <Skeleton className="h-56 rounded-2xl" />
+        <Skeleton className="h-56 rounded-2xl" />
+      </div>
+
+      {/* Meal Breakdown + Top Foods row */}
+      <div className="grid gap-4 md:grid-cols-2">
+        <Skeleton className="h-64 rounded-2xl" />
+        <Skeleton className="h-64 rounded-2xl" />
+      </div>
+
+      {/* Deficit/Surplus chart */}
+      <Skeleton className="h-52 w-full rounded-2xl" />
+
+      {/* Daily Detail table */}
+      <Skeleton className="h-96 w-full rounded-2xl" />
+    </div>
+  );
+}
+```
+
+---
+
+## STEP 8 — Sidebar link
+
+In `lib/auth/route-access.ts`, add "Nutrition Progress" under the Insights section:
+
+```ts
+// Before:
+{
+  label: "Insights",
+  items: [{ title: "Progress", href: "/progress", icon: "trend" }],
+}
+
+// After:
+{
+  label: "Insights",
+  items: [
+    { title: "Progress", href: "/progress", icon: "trend" },
+    { title: "Nutrition", href: "/progress/nutrition", icon: "nutrition" },
+  ],
+}
+```
+
+Check the icon mapping in `app-sidebar.tsx` to see what icon key maps to what Lucide icon. Use an existing icon key (e.g. `"chart"` → `BarChart2`, or `"leaf"` → `Leaf`, or `"trend"` → `TrendingUp`). If `"nutrition"` is not mapped, add the mapping:
+
+```ts
+// In the icon map:
+nutrition: Salad,   // or: BarChart3, Leaf, Apple — pick what looks best
+```
+
+Also check if there is a `/progress/nutrition` route guard in the allowed routes arrays. In `route-access.ts`, the allowed paths arrays include `"/progress"` — ensure `/progress/nutrition` is also covered (it should be by prefix matching, but confirm).
+
+---
+
+## STEP 9 — Performance constraints
+
+| Rule | Why |
+|---|---|
+| `staleTime: 300_000` on the query | Progress data changes at most once per diary log — 5 min staleness is fine |
+| All aggregations done in the server action | Zero heavy loops in the browser — component receives pre-computed data |
+| `query.isLoading` shows full `NutritionProgressSkeleton` | No partial renders — entire page is either skeleton or real |
+| Static header renders immediately (no data dependency) | Page always looks "complete" structurally |
+| Top foods query uses `limit 10` equivalent (JS `.slice(0, 10)`) | Bounded regardless of period size |
+| `rolling_avg_7` computed in server action, not client | One fewer useMemo on critical path |
+| `refetchOnWindowFocus: false` | Analytics page doesn't need live-updates on tab focus |
+| Prior period query (for deltas) skips if `days_in_range < 14` | Avoids unnecessary DB query for 7-day view where deltas aren't meaningful |
+
+---
+
+## Implementation sequence
+
+1. **Delete** legacy files (STEP 0). Fix any broken imports. Run `typecheck`.
+2. **Create** `types/nutrition-progress.ts` (STEP 1).
+3. **Update** `lib/query-keys-progress.ts` (STEP 2).
+4. **Write** new `app/actions/nutrition-progress.ts` (STEP 3). Run `typecheck`.
+5. **Rewrite** `app/(dashboard)/(insights)/progress/nutrition/page.tsx` (STEP 4).
+6. **Create** `app/(dashboard)/(insights)/progress/nutrition/loading.tsx` (STEP 4).
+7. **Create** `components/nutrition/progress/nutrition-progress-skeleton.tsx` (STEP 7).
+8. **Create** `components/nutrition/progress/nutrition-progress-page.tsx` with all sub-components (STEP 5–6). Run `typecheck + lint`.
+9. **Update** `lib/auth/route-access.ts` sidebar link (STEP 8).
+10. Final: `npm run typecheck && npm run lint && npm run test`.
+
+---
+
+## Checklist
+
+- [ ] Legacy files deleted: `progress-charts.tsx`, `program-selector.tsx`, `nutrition-progress.ts` (old), `types/nutrition.ts`
+- [ ] `grep` confirms zero broken references after deletion
+- [ ] `types/nutrition-progress.ts` created with all types
+- [ ] `progressKeys.nutrition()` accepts `{ range, subjectKey }` params
+- [ ] New `getNutritionProgressAction` uses `meal_logs` + `meal_log_items` (NOT `meal_plans`)
+- [ ] Daily rows computed from `meal_logs` aggregated by `performed_on`
+- [ ] Top foods from `meal_log_items` grouped by `item_name`, limited to top 10
+- [ ] Targets from `fitness_goals` (active, most recent)
+- [ ] Compliance computed only when `targets.source !== "none"`
+- [ ] `rolling_avg_7` computed server-side for range >= 14
+- [ ] Prior period data fetched for delta computation
+- [ ] Weekday/weekend split computed from `day_of_week`
+- [ ] Page: static header always renders
+- [ ] Page: `query.isLoading` → full `NutritionProgressSkeleton` (no partial content)
+- [ ] All 13 sections rendered in correct order
+- [ ] Fiber chart has 25g reference line
+- [ ] Deficit/surplus bars colored green/red by sign
+- [ ] Top foods shows `Nx` count badge + avg calories
+- [ ] Daily detail table: date descending, 6 columns
+- [ ] Macro distribution donut: actual + target side-by-side
+- [ ] Micronutrient placeholder section rendered last
+- [ ] Sidebar: "Nutrition" link added under Insights in `route-access.ts`
+- [ ] Icon mapping added/confirmed for new sidebar item
+- [ ] `loading.tsx` created at route level
+- [ ] `staleTime: 300_000` on query
+- [ ] `npm run typecheck` → pass
+- [ ] `npm run lint` → pass
+- [ ] `npm run test` → pass
+- [ ] Smoke test: navigate to `/progress/nutrition` → all 13 sections visible; range switch refreshes data; empty state (no logs) shows gracefully; skeleton shows on initial load
+
+---
+
+## A-025-SUPPLEMENT — Nutrition Progress: Additional Sections from Industry Research
+
+**Appended after competitive analysis of MyFitnessPal, Cronometer, MacroFactor, Carbon, Lose It, Trainerize, Everfit.**
+This supplement extends A-025. Implement all items below as additional sections after the 13 already specified. No changes to existing A-025 steps — only additions.
+
+---
+
+## Additional data fields needed in `NutritionProgressData`
+
+Add the following fields to the type in `types/nutrition-progress.ts`:
+
+```ts
+// Compliance calendar
+daily_compliance: {
+  date: string;
+  level: "logged_on_target" | "logged_off_target" | "logged_no_target" | "not_logged";
+}[];
+
+// Day-of-week averages (0=Sun...6=Sat)
+dow_avg_calories: { dow: number; label: string; avg: number }[];  // 7 entries Mon–Sun
+
+// Cumulative deficit/surplus
+cumulative_rows: { date: string; cumulative: number }[];  // running sum of deficit_surplus
+
+// Meal timing (from meal_log_items.consumed_time)
+avg_first_meal_time: string | null;   // HH:MM local time average
+avg_last_meal_time: string | null;
+avg_eating_window_minutes: number | null;
+late_meal_days: number;               // days with any log after 21:00
+
+// Perfect days
+perfect_days: number;                 // days where ALL targets hit within 15%
+longest_streak: number;               // longest streak in the period (not just current)
+
+// Coaching insights (rule-based text)
+insights: NutritionInsight[];
+```
+
+```ts
+export type NutritionInsight = {
+  id: string;                         // stable key for React rendering
+  type: "success" | "warning" | "info";
+  text: string;                       // pre-computed human-readable insight text
+};
+```
+
+---
+
+## Additional server-side computations
+
+Add these to the server action (`app/actions/nutrition-progress.ts`) after existing computations:
+
+### Compliance calendar
+
+```ts
+const daily_compliance = Array.from({ length: daysInRange }, (_, i) => {
+  const date = addDays(startDate, i);
+  const row = byDate.get(date);
+  if (!row) return { date, level: "not_logged" };
+  if (targets.source === "none") return { date, level: "logged_no_target" };
+  const calOk = Math.abs(row.calories - targets.calories) / Math.max(targets.calories, 1) <= 0.15;
+  const pOk = Math.abs(row.protein_g - targets.protein_g) / Math.max(targets.protein_g, 1) <= 0.15;
+  const cOk = Math.abs(row.carbs_g - targets.carbs_g) / Math.max(targets.carbs_g, 1) <= 0.15;
+  const fOk = Math.abs(row.fat_g - targets.fat_g) / Math.max(targets.fat_g, 1) <= 0.15;
+  const allOk = calOk && pOk && cOk && fOk;
+  return { date, level: allOk ? "logged_on_target" : "logged_off_target" };
+}) satisfies { date: string; level: NutritionProgressData["daily_compliance"][number]["level"] }[];
+```
+
+### Day-of-week averages
+
+```ts
+const dowBuckets = new Map<number, number[]>();  // 0=Sun...6=Sat
+for (const row of daily_rows) {
+  const d = new Date(row.date + "T12:00:00Z").getDay();
+  const bucket = dowBuckets.get(d) ?? [];
+  bucket.push(row.calories);
+  dowBuckets.set(d, bucket);
+}
+const DOW_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+// Order Mon–Sun (1–6, 0) for display
+const dowOrder = [1, 2, 3, 4, 5, 6, 0];
+const dow_avg_calories = dowOrder.map((dow) => {
+  const bucket = dowBuckets.get(dow) ?? [];
+  return { dow, label: DOW_LABELS[dow], avg: bucket.length > 0 ? Math.round(bucket.reduce((a, b) => a + b, 0) / bucket.length) : 0 };
+});
+```
+
+### Cumulative deficit/surplus
+
+```ts
+let running = 0;
+const cumulative_rows = daily_rows.map((row) => {
+  running += row.deficit_surplus;
+  return { date: row.date, cumulative: running };
+});
+```
+
+### Meal timing (from `meal_log_items.consumed_time`)
+
+Fetch `consumed_time` from `meal_log_items` for all logs in the range. `consumed_time` is an ISO timestamp or `HH:MM` string.
+
+```ts
+// When fetching meal_log_items (Query 2), also select consumed_time:
+// .select("item_name, calories, consumed_time")
+
+// Group consumed_time values by log date
+const timesByDate = new Map<string, number[]>();  // date → minutes-since-midnight array
+for (const item of items || []) {
+  if (!item.consumed_time) continue;
+  const minutes = parseConsumedTimeToMinutes(item.consumed_time);  // HH:MM → 0–1439
+  if (minutes === null) continue;
+  const log = logsById.get(item.meal_log_id);
+  if (!log) continue;
+  const bucket = timesByDate.get(log.performed_on) ?? [];
+  bucket.push(minutes);
+  timesByDate.set(log.performed_on, bucket);
+}
+
+const firstMealTimes: number[] = [];
+const lastMealTimes: number[] = [];
+let late_meal_days = 0;
+for (const [date, times] of timesByDate) {
+  const first = Math.min(...times);
+  const last = Math.max(...times);
+  firstMealTimes.push(first);
+  lastMealTimes.push(last);
+  if (last >= 21 * 60) late_meal_days++;  // after 21:00
+}
+
+const avg_first_meal_time = firstMealTimes.length > 0
+  ? minutesToHHMM(Math.round(firstMealTimes.reduce((a, b) => a + b, 0) / firstMealTimes.length))
+  : null;
+const avg_last_meal_time = lastMealTimes.length > 0
+  ? minutesToHHMM(Math.round(lastMealTimes.reduce((a, b) => a + b, 0) / lastMealTimes.length))
+  : null;
+const avg_eating_window_minutes = (firstMealTimes.length > 0 && lastMealTimes.length > 0)
+  ? Math.round(lastMealTimes.reduce((a, b) => a + b, 0) / lastMealTimes.length - firstMealTimes.reduce((a, b) => a + b, 0) / firstMealTimes.length)
+  : null;
+```
+
+Helper functions (add to action file):
+```ts
+function parseConsumedTimeToMinutes(time: string): number | null {
+  const match = time.match(/(\d{1,2}):(\d{2})/);
+  if (!match) return null;
+  return parseInt(match[1]) * 60 + parseInt(match[2]);
+}
+function minutesToHHMM(minutes: number): string {
+  const h = Math.floor(minutes / 60) % 24;
+  const m = minutes % 60;
+  return `${h}:${m.toString().padStart(2, "0")}`;
+}
+```
+
+### Perfect days + longest streak
+
+```ts
+const perfect_days = daily_rows.filter((row) => {
+  if (targets.source === "none") return false;
+  return (
+    Math.abs(row.calories - targets.calories) / Math.max(targets.calories, 1) <= 0.15 &&
+    Math.abs(row.protein_g - targets.protein_g) / Math.max(targets.protein_g, 1) <= 0.15 &&
+    Math.abs(row.carbs_g - targets.carbs_g) / Math.max(targets.carbs_g, 1) <= 0.15 &&
+    Math.abs(row.fat_g - targets.fat_g) / Math.max(targets.fat_g, 1) <= 0.15
+  );
+}).length;
+
+// Longest streak
+const loggedSet = new Set(daily_rows.map((r) => r.date));
+let longest = 0, current = 0;
+for (let i = 0; i < daysInRange; i++) {
+  const date = addDays(startDate, i);
+  if (loggedSet.has(date)) { current++; longest = Math.max(longest, current); } else { current = 0; }
+}
+const longest_streak = longest;
+```
+
+### Rule-based coaching insights
+
+Compute up to 5 insights. Each insight is a plain English observation derived from the data. Use conservative thresholds.
+
+```ts
+const insights: NutritionInsight[] = [];
+
+// 1. Logging compliance
+const loggingPct = Math.round((days_logged / days_in_range) * 100);
+if (loggingPct === 100) {
+  insights.push({ id: "log_perfect", type: "success", text: `You logged every day in this ${range}-day period — excellent consistency.` });
+} else if (loggingPct < 50) {
+  insights.push({ id: "log_low", type: "warning", text: `You logged on ${days_logged} of ${days_in_range} days (${loggingPct}%). More consistent logging will give you a clearer picture of your nutrition.` });
+}
+
+// 2. Protein gap
+if (targets.protein_g > 0 && avg_protein_g < targets.protein_g * 0.85) {
+  const gap = Math.round(targets.protein_g - avg_protein_g);
+  insights.push({ id: "protein_low", type: "warning", text: `Your average protein (${avg_protein_g}g) is ${gap}g below your ${targets.protein_g}g target. You're hitting your protein goal on ${protein_compliance}% of days.` });
+}
+
+// 3. Weekend pattern
+if (days_in_range >= 14 && Math.abs(weekday_avg_calories - weekend_avg_calories) > 250) {
+  const dir = weekend_avg_calories > weekday_avg_calories ? "higher" : "lower";
+  const diff = Math.abs(weekday_avg_calories - weekend_avg_calories);
+  insights.push({ id: "weekend_pattern", type: "info", text: `Your weekend calorie intake is ${diff} kcal ${dir} than weekdays on average. This pattern is worth watching if you have specific calorie targets.` });
+}
+
+// 4. Fiber deficit
+if (avg_fiber_g < 18) {
+  insights.push({ id: "fiber_low", type: "warning", text: `Your average fiber intake (${avg_fiber_g}g/day) is below the recommended 25g. Consider adding more vegetables, legumes, or whole grains.` });
+}
+
+// 5. Compliance trend (compare first half vs second half of period)
+if (days_in_range >= 14 && targets.source !== "none") {
+  const midIdx = Math.floor(daily_rows.length / 2);
+  const firstHalf = daily_rows.slice(0, midIdx);
+  const secondHalf = daily_rows.slice(midIdx);
+  // ... compute compliance for each half and compare
+  // If second half compliance is noticeably higher: "Your adherence improved in the second half of this period."
+}
+
+// 6. Perfect days milestone
+if (perfect_days >= 7) {
+  insights.push({ id: "perfect_days", type: "success", text: `You hit all your macro targets on ${perfect_days} days this period — well done.` });
+}
+
+// Cap at 4 insights max
+const final_insights = insights.slice(0, 4);
+```
+
+---
+
+## Additional page sections
+
+Add these sections to the page in `nutrition-progress-page.tsx` after the existing 13 sections defined in A-025. Insert at the appropriate positions noted below.
+
+### Section 3B — Coaching Insights (insert after stat cards, before Daily Calories chart)
+
+Only render if `data.insights.length > 0`.
+
+```tsx
+{data.insights.length > 0 && (
+  <section className="space-y-3">
+    <h2 className="text-xl font-semibold tracking-tight">Insights</h2>
+    <div className="grid gap-3 sm:grid-cols-2">
+      {data.insights.map((insight) => (
+        <div key={insight.id} className={cn(
+          "glass-subtle flex items-start gap-3 rounded-2xl px-4 py-3",
+          insight.type === "success" && "border border-chart-2/20",
+          insight.type === "warning" && "border border-chart-1/20",
+          insight.type === "info" && "border border-border/40",
+        )}>
+          {insight.type === "success" && <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-chart-2" />}
+          {insight.type === "warning" && <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-chart-1" />}
+          {insight.type === "info" && <Info className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />}
+          <p className="text-sm leading-relaxed">{insight.text}</p>
+        </div>
+      ))}
+    </div>
+  </section>
+)}
+```
+
+Import `CheckCircle2`, `AlertCircle`, `Info` from `lucide-react`.
+
+### Section 9B — Day-of-Week Average Calories (insert after Deficit/Surplus chart, before Weekday vs Weekend)
+
+Only render if `days_in_range >= 14`.
+
+```tsx
+{data.days_in_range >= 14 && (
+  <section className="glass-surface surface-pad space-y-4">
+    <h2 className="text-xl font-semibold tracking-tight">Calories by Day of Week</h2>
+    <p className="text-sm text-muted-foreground">Average calorie intake per day of the week over this period.</p>
+    <ResponsiveContainer width="100%" height={200}>
+      <BarChart data={data.dow_avg_calories} barCategoryGap="25%">
+        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border)/0.3)" vertical={false} />
+        <XAxis dataKey="label" tick={{ fontSize: 12 }} />
+        <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => v.toLocaleString()} />
+        {data.targets.calories > 0 && (
+          <ReferenceLine y={data.targets.calories} stroke="hsl(var(--chart-2))" strokeDasharray="6 3" strokeWidth={1.5} />
+        )}
+        <Tooltip formatter={(v: number) => [`${v.toLocaleString()} kcal`, "Avg calories"]} />
+        <Bar dataKey="avg" radius={[4, 4, 0, 0]}>
+          {data.dow_avg_calories.map((entry, i) => (
+            // Weekend days (Sat=6, Sun=0) get a slightly different shade
+            <Cell key={i} fill={entry.dow === 0 || entry.dow === 6 ? "hsl(var(--chart-4)/0.7)" : "hsl(var(--chart-1)/0.7)"} />
+          ))}
+        </Bar>
+      </BarChart>
+    </ResponsiveContainer>
+    <div className="flex items-center gap-4 text-xs text-muted-foreground">
+      <span className="flex items-center gap-1.5"><span className="h-2 w-3 rounded-sm bg-chart-1/70" /> Weekday</span>
+      <span className="flex items-center gap-1.5"><span className="h-2 w-3 rounded-sm bg-chart-4/70" /> Weekend</span>
+    </div>
+  </section>
+)}
+```
+
+### Section 10B — Compliance Calendar (insert after Daily Detail table)
+
+Only render for `range >= 14`. Shows a grid of colored dots — one per day in the period.
+
+Color coding:
+- `logged_on_target` → `bg-chart-2` (green)
+- `logged_off_target` → `bg-chart-1` (amber/red)
+- `logged_no_target` → `bg-muted` (grey, has data but no target set)
+- `not_logged` → `bg-muted/30` (very faint grey)
+
+```tsx
+{data.days_in_range >= 14 && (
+  <section className="glass-surface surface-pad space-y-4">
+    <div className="flex items-center justify-between gap-3">
+      <h2 className="text-xl font-semibold tracking-tight">Logging Calendar</h2>
+      <div className="flex items-center gap-3 text-xs text-muted-foreground">
+        <span className="flex items-center gap-1.5"><span className="inline-block h-2.5 w-2.5 rounded-full bg-chart-2" /> On target</span>
+        <span className="flex items-center gap-1.5"><span className="inline-block h-2.5 w-2.5 rounded-full bg-chart-1" /> Off target</span>
+        <span className="flex items-center gap-1.5"><span className="inline-block h-2.5 w-2.5 rounded-full bg-muted/40" /> Not logged</span>
+      </div>
+    </div>
+    <div className="flex flex-wrap gap-1.5">
+      {data.daily_compliance.map((day) => (
+        <Tooltip key={day.date}>
+          <TooltipTrigger asChild>
+            <div className={cn(
+              "h-5 w-5 rounded-sm transition-opacity hover:opacity-80",
+              day.level === "logged_on_target" && "bg-chart-2",
+              day.level === "logged_off_target" && "bg-chart-1/70",
+              day.level === "logged_no_target" && "bg-muted",
+              day.level === "not_logged" && "bg-muted/30",
+            )} />
+          </TooltipTrigger>
+          <TooltipContent side="top">
+            <p className="text-xs">{formatTableDate(day.date)}</p>
+            <p className="text-xs text-muted-foreground capitalize">{day.level.replace(/_/g, " ")}</p>
+          </TooltipContent>
+        </Tooltip>
+      ))}
+    </div>
+    <div className="flex items-center gap-4 text-xs text-muted-foreground">
+      <span>{data.perfect_days} perfect days</span>
+      <span>·</span>
+      <span>Best streak: {data.longest_streak} days</span>
+    </div>
+  </section>
+)}
+```
+
+### Section 11B — Meal Timing (insert after Compliance Calendar)
+
+Only render if `avg_first_meal_time` is non-null (i.e. `consumed_time` data exists).
+
+```tsx
+{data.avg_first_meal_time !== null && (
+  <section className="glass-surface surface-pad space-y-4">
+    <h2 className="text-xl font-semibold tracking-tight">Meal Timing</h2>
+    <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+      <div className="glass-subtle flex flex-col gap-1 rounded-2xl p-4">
+        <p className="text-xs text-muted-foreground uppercase tracking-[0.1em]">First meal</p>
+        <p className="text-2xl font-semibold tabular-nums">{data.avg_first_meal_time}</p>
+        <p className="text-xs text-muted-foreground">avg start</p>
+      </div>
+      <div className="glass-subtle flex flex-col gap-1 rounded-2xl p-4">
+        <p className="text-xs text-muted-foreground uppercase tracking-[0.1em]">Last meal</p>
+        <p className="text-2xl font-semibold tabular-nums">{data.avg_last_meal_time}</p>
+        <p className="text-xs text-muted-foreground">avg end</p>
+      </div>
+      <div className="glass-subtle flex flex-col gap-1 rounded-2xl p-4">
+        <p className="text-xs text-muted-foreground uppercase tracking-[0.1em]">Eating window</p>
+        <p className="text-2xl font-semibold tabular-nums">
+          {data.avg_eating_window_minutes !== null ? `${Math.floor(data.avg_eating_window_minutes / 60)}h ${data.avg_eating_window_minutes % 60}m` : "—"}
+        </p>
+        <p className="text-xs text-muted-foreground">avg duration</p>
+      </div>
+      <div className="glass-subtle flex flex-col gap-1 rounded-2xl p-4">
+        <p className="text-xs text-muted-foreground uppercase tracking-[0.1em]">Late meals</p>
+        <p className={cn("text-2xl font-semibold tabular-nums", data.late_meal_days > 3 ? "text-chart-1" : "text-foreground")}>
+          {data.late_meal_days}
+        </p>
+        <p className="text-xs text-muted-foreground">days after 9 PM</p>
+      </div>
+    </div>
+    {data.late_meal_days > (data.days_logged * 0.3) && (
+      <p className="text-sm text-muted-foreground">
+        You logged meals after 9 PM on {data.late_meal_days} days in this period. Late eating can affect sleep quality and digestion.
+      </p>
+    )}
+  </section>
+)}
+```
+
+### Section 12B — CSV Export button (add to stat cards row header)
+
+Add a small export button to the controls bar (right-aligned):
+
+```tsx
+<Button
+  variant="outline"
+  size="sm"
+  className="rounded-xl border-border/60 gap-2"
+  onClick={() => exportNutritionProgressCSV(data)}
+>
+  <Download className="h-4 w-4" />
+  <span className="hidden sm:inline">Export CSV</span>
+</Button>
+```
+
+Add a pure helper function `exportNutritionProgressCSV(data: NutritionProgressData)` in the same component file (or a `lib/nutrition/export.ts` helper):
+
+```ts
+export function exportNutritionProgressCSV(data: NutritionProgressData) {
+  const headers = ["Date", "Calories", "Protein (g)", "Carbs (g)", "Fat (g)", "Fiber (g)", "vs Target (kcal)"];
+  const rows = data.daily_rows.map((r) => [
+    r.date, r.calories, r.protein_g, r.carbs_g, r.fat_g, r.fiber_g,
+    data.targets.calories > 0 ? r.deficit_surplus : "—",
+  ]);
+  const csv = [headers, ...rows].map((row) => row.join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `nutrition-progress-${data.start_date}-to-${data.end_date}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+```
+
+---
+
+## Updated stat cards (add 2 more)
+
+The existing 5 stat cards (Avg Cal, Protein, Carbs, Fat, Compliance) stay. Add these two as a second row of smaller supplementary cards:
+
+```tsx
+<div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+  <div className="glass-subtle flex flex-col gap-1 rounded-2xl p-3">
+    <p className="text-[11px] uppercase tracking-[0.1em] text-muted-foreground">Days Logged</p>
+    <p className="text-xl font-semibold tabular-nums">{data.days_logged}<span className="text-sm text-muted-foreground">/{data.days_in_range}</span></p>
+  </div>
+  <div className="glass-subtle flex flex-col gap-1 rounded-2xl p-3">
+    <p className="text-[11px] uppercase tracking-[0.1em] text-muted-foreground">Best Streak</p>
+    <p className="text-xl font-semibold tabular-nums">{data.longest_streak}<span className="text-sm text-muted-foreground"> days</span></p>
+  </div>
+  <div className="glass-subtle flex flex-col gap-1 rounded-2xl p-3">
+    <p className="text-[11px] uppercase tracking-[0.1em] text-muted-foreground">Perfect Days</p>
+    <p className="text-xl font-semibold tabular-nums">{data.perfect_days}</p>
+  </div>
+  <div className="glass-subtle flex flex-col gap-1 rounded-2xl p-3">
+    <p className="text-[11px] uppercase tracking-[0.1em] text-muted-foreground">Avg Fiber</p>
+    <p className="text-xl font-semibold tabular-nums">{data.avg_fiber_g}<span className="text-sm text-muted-foreground">g</span></p>
+  </div>
+</div>
+```
+
+Render this row immediately after the main 5-card row.
+
+---
+
+## Updated checklist additions (append to A-025 checklist)
+
+- [ ] `daily_compliance` computed and typed correctly
+- [ ] `dow_avg_calories` computed (7 entries Mon–Sun)
+- [ ] `cumulative_rows` computed as running sum
+- [ ] Meal timing fields computed from `meal_log_items.consumed_time` (null-safe if no timestamps)
+- [ ] `perfect_days` + `longest_streak` computed
+- [ ] `insights` array: up to 4 rule-based coaching observations
+- [ ] Coaching Insights section rendered (only if `insights.length > 0`)
+- [ ] Day-of-week bar chart: weekday bars vs weekend bars color-differentiated
+- [ ] Compliance Calendar rendered (range >= 14)
+- [ ] Meal Timing section rendered (only if `avg_first_meal_time` non-null)
+- [ ] Secondary stat row (Days Logged / Best Streak / Perfect Days / Avg Fiber)
+- [ ] CSV export button in controls bar — downloads daily_rows
+- [ ] `NutritionProgressSkeleton` updated to include skeletons for new sections
+
+### [A-025-ENGINEER-IMPLEMENTATION] Nutrition Progress Revamp + Non-Blocking Loader (2026-03-20)
+
+- Linked architect item: A-025 + A-025-SUPPLEMENT
+- Status: Implemented
+
+#### Completed implementation
+
+- Replaced nutrition progress data contract with a dedicated typed model.
+  - Added: `types/nutrition-progress.ts`
+  - Added fields: `daily_compliance`, `dow_avg_calories`, `cumulative_rows`, meal timing fields, `perfect_days`, `longest_streak`, `insights`, `rolling_avg_7`.
+- Rewrote nutrition progress server action to use real diary data only (`meal_logs` + `meal_log_items`).
+  - Rewritten: `app/actions/nutrition-progress.ts`
+  - Removed legacy dependency on `meal_plans` / `meal_plan_meals`.
+  - Added server-side aggregation for all metrics/charts/deltas/compliance/insights.
+- Parameterized nutrition progress query keys by range + subject scope for cache correctness.
+  - Updated: `lib/query-keys-progress.ts`
+- Rebuilt `/progress/nutrition` route UI with the full section structure from A-025 and supplement.
+  - Added: `components/nutrition/progress/nutrition-progress-page.tsx`
+  - Added: `components/nutrition/progress/nutrition-progress-skeleton.tsx`
+  - Rewritten: `app/(dashboard)/(insights)/progress/nutrition/page.tsx`
+  - Added: `app/(dashboard)/(insights)/progress/nutrition/loading.tsx`
+- Added CSV export flow from current `daily_rows`.
+- Added Insights navigation link in sidebar.
+  - Updated: `lib/auth/route-access.ts` (`/progress/nutrition` under Insights)
+- Removed legacy nutrition progress UI files no longer used by route:
+  - Deleted: `components/nutrition/progress-charts.tsx`
+  - Deleted: `components/nutrition/program-selector.tsx`
+
+#### Loader + performance behavior
+
+- Loader is section-scoped with static header retained; it does not block with a full-page takeover.
+- Query uses `placeholderData: keepPreviousData` so range switches keep previous charts visible while fetching.
+- Query caching tuned for analytics workload:
+  - `staleTime: 300_000`
+  - `gcTime: 10 * 60_000`
+  - `refetchOnWindowFocus: false`
+
+#### Validation
+
+- `npm run -s typecheck` -> pass
+- `npm run -s lint` -> pass
+
+
+### [E-069] Global old-URL sweep (settings aliases + nutrition stale revalidation paths) (2026-03-21)
+
+- Linked request: Remove all old URLs and replace them with canonical routes.
+- Status: Implemented
+
+#### Route cleanup
+
+- Removed legacy settings alias route files:
+  - `app/(dashboard)/(account)/settings/account/page.tsx`
+  - `app/(dashboard)/(account)/settings/goals/page.tsx`
+- Canonical settings routes remain:
+  - `/settings/profile`
+  - `/settings/coaching`
+  - `/settings/display`
+  - `/settings/security`
+  - `/goals` (not `/settings/goals`)
+
+#### Action/path cleanup
+
+- Replaced stale nutrition program revalidation URLs in `app/actions/nutrition.ts`:
+  - from `revalidatePath(\`/nutrition/program/${id}\`)`
+  - to `revalidatePath(\`/nutrition/${id}\`)`
+- This removes cache invalidations for a non-existent legacy path and points revalidation to the active detail route.
+
+#### Validation
+
+- `npx next typegen` -> pass (refresh route types after alias route deletion)
+- `npm run -s typecheck` -> pass
+- `npm run -s lint` -> pass
+- `npm run -s test -- tests/settings-goals-contract.test.ts` -> pass
+
+
+### [A-026-ENGINEER-IMPLEMENTATION] Nutrition Compliance Infrastructure (2026-03-20)
+
+- Linked architect item: A-026
+- Status: Implemented
+
+#### Completed implementation
+
+- Added immutable daily compliance fact table migration with indexes, checks, trigger, and RLS:
+  - Added: `supabase/migrations/20260320173000_daily_macro_compliance.sql`
+  - Table: `public.daily_macro_compliance`
+  - Basis values: `complete_log | partial_log | missing_target | no_log`
+  - Target source values: `plan_assignment | fitness_goal | none`
+  - Added uniqueness guards per subject/day using partial unique indexes.
+- Added database typing for the new fact table:
+  - Updated: `types/database.ts`
+  - Added `public.Tables.daily_macro_compliance` Row/Insert/Update contract.
+- Added mutation-time compliance snapshot writer:
+  - Updated: `app/actions/nutrition-manual.ts`
+  - New helper: `upsertDailyCompliance(...)`
+  - New helpers: `resolveComplianceTargetsForDate(...)`, `resolveComplianceActualsForDate(...)`
+  - Target precedence implemented:
+    1. active `meal_plan_assignments` for date (if full macro targets present)
+    2. active `fitness_goals` for linked subject user
+    3. `none`
+  - `partial_log` implemented when fewer than 2 distinct meal types have items for the day.
+- Wired compliance upsert into all required mutation actions (post totals sync):
+  - `logFromPlanAction`
+  - `addMealItemAction`
+  - `updateMealItemAction`
+  - `removeMealItemAction`
+  - `copyMealsFromDateAction`
+- Switched progress compliance read path to fact rows when available:
+  - Updated: `app/actions/nutrition-progress.ts`
+  - Reads `daily_macro_compliance` for selected date range and subject.
+  - Falls back to prior inline computation if fact table/columns are not present or no rows exist yet.
+  - Compliance percentage excludes non-`complete_log` days (`partial_log`, `missing_target`, `no_log`) by denominator design.
+  - Prior-period compliance delta path now also uses fact rows when available.
+
+#### UI/behavior updates tied to A-026
+
+- Updated progress typing for new compliance semantics:
+  - Updated: `types/nutrition-progress.ts`
+  - Added `targets.source = "plan_assignment"`.
+  - Added `daily_compliance.level = "partial_log"`.
+- Updated compliance UX:
+  - Updated: `components/nutrition/progress/nutrition-progress-page.tsx`
+  - Added compliance score tooltip text clarifying `±15%` rule and partial-day exclusion.
+  - Logging calendar now includes `partial_log` state with striped amber styling.
+
+### [A-027-ENGINEER-IMPLEMENTATION] Compare + CSV Verification (2026-03-20)
+
+- Linked architect item: A-027
+- Status: Implemented (chart bug fixes applied separately by architect — see below)
+
+#### Architect patch (2026-03-20) — chart rendering bugs
+Engineer's A-027 submission covered fiber compare + CSV only. Architect directly patched the two rendering bugs:
+
+- **BUG FIX 1 — Macros vs Targets blank chart:** Changed `dot={false}` to `dot={{ r: 2.5, fill: ..., strokeWidth: 0 }}` + `activeDot={{ r: 4 }}` on all three macro Lines (protein_g, carbs_g, fat_g). Added `ifOverflow="extendDomain"` to all three target ReferenceLines. Added explicit `domain` to YAxis anchoring from 0 to 115% of the highest target value.
+- **BUG FIX 2 + ENHANCEMENT — Deficit/Surplus two-zone chart:** Added explicit `domain` to the BarChart YAxis so 0 is always included. Added `ReferenceArea` zone fills (subtle red below 0 = Deficit, subtle green above 0 = Surplus) with inline "Deficit" / "Surplus" labels on the right edge of each zone. YAxis tick formatter prefixes `+` on positive surplus values. `ReferenceLine y={0}` now visible as the dividing baseline. Added `ReferenceArea` to recharts imports.
+
+#### Completed implementation
+
+- Extended compare mode to fiber chart:
+  - Updated: `components/nutrition/progress/nutrition-progress-page.tsx`
+  - Fiber chart now uses normalized chart rows and renders dashed previous-period `compare_fiber_g` line when compare mode is enabled.
+- Verified and upgraded CSV export wiring:
+  - Updated: `components/nutrition/progress/nutrition-progress-page.tsx`
+  - Export button triggers client-side blob download.
+  - CSV columns now include:
+    - `Date`
+    - `Calories`
+    - `Protein (g)`
+    - `Carbs (g)`
+    - `Fat (g)`
+    - `Fiber (g)`
+    - `Deficit/Surplus`
+    - `Compliance Status`
+  - Compliance status is derived per date from `daily_compliance`.
+
+#### Validation
+
+- `npm run -s typecheck` -> pass
+- `npm run -s lint` -> pass
+- `npm run -s test` -> pass
+
+### [E-057] Assigned log sheet selected-supplement badges with remove action (2026-03-20)
+
+- Linked architect item: A-029 follow-up
+- Status: Implemented
+
+#### Changes
+
+- Updated `components/supplements/bulk-log-supplement-sheet.tsx`:
+  - Added selected-supplement badges below the supplements dropdown.
+  - Each badge shows normalized supplement name.
+  - Added inline remove (`x`) control per badge to unselect without reopening list.
+  - Remove action updates the same multi-select state used by dropdown checkboxes.
+
+#### Validation
+
+- `npm run -s typecheck` -> pass
+- `npm run -s lint` -> pass
+
+### [A-029-ENGINEER-IMPLEMENTATION] Micronutrient + Supplement Tracking (2026-03-20)
+
+- Linked architect item: A-029
+- Status: Implemented
+
+#### Completed implementation
+
+- Added supplement catalog schema + seeded global defaults:
+  - Added: `supabase/migrations/20260320191000_supplement_catalog.sql`
+  - Table: `public.supplement_catalog`
+  - Includes category check, global/owner scope check, indexes, and RLS.
+  - Seeded 35 global supplement entries (vitamins, minerals, omega, electrolytes, performance, herbal).
+- Added supplement daily log schema:
+  - Added: `supabase/migrations/20260320192000_supplement_logs.sql`
+  - Table: `public.supplement_logs`
+  - Includes subject XOR constraint, servings constraint, indexes, and subject-scoped RLS.
+- Added DB typing:
+  - Updated: `types/database.ts`
+  - Added `public.Tables.supplement_catalog` + `public.Tables.supplement_logs` definitions.
+- Added supplement server action module:
+  - Added: `app/actions/supplements.ts`
+  - Implemented:
+    - `listSupplementCatalogAction`
+    - `logSupplementAction`
+    - `removeSupplementLogAction`
+    - `listDailySupplementLogsAction`
+    - `createCustomSupplementAction`
+    - `getSupplementProgressAction`
+  - Subject resolution follows existing nutrition user/client pattern.
+  - Daily/progress nutrient totals are computed as `catalog.nutrients × servings` at read time (no redundant storage).
+- Added shared nutrient constants:
+  - Added: `lib/nutrition/supplements.ts`
+  - Added:
+    - `SUPPLEMENT_NUTRIENT_RDI`
+    - `SUPPLEMENT_NUTRIENT_LABELS`
+    - `SUPPLEMENT_PRIMARY_NUTRIENTS`
+    - `SUPPLEMENT_CATEGORY_LABELS`
+- Added supplement query keys + hooks:
+  - Updated: `lib/query-keys-nutrition.ts`
+  - Added keys under `nutritionKeys.supplements()`: catalog, daily logs, progress.
+  - Added: `hooks/use-supplements.ts`
+  - Includes scoped query invalidation for daily logs/progress/catalog.
+- Added diary UI for supplement logging:
+  - Added: `components/nutrition/supplements/supplement-log-sheet.tsx`
+  - Added: `components/nutrition/supplements/supplement-section.tsx`
+  - Updated: `components/nutrition/manual-nutrition-diary.tsx`
+  - `Supplements` section is always rendered below meal sections (not meal-group gated).
+  - Supports searchable categorized catalog, servings/date/time, custom supplement creation, and row-level delete.
+- Replaced progress page micronutrient placeholder with supplement-driven insights:
+  - Updated: `components/nutrition/progress/nutrition-progress-page.tsx`
+  - Removed old “connect data source” placeholder.
+  - Added:
+    - header with logged-day coverage (`X of Y days`)
+    - 8 primary nutrient progress bars vs RDI (green/amber/red thresholds)
+    - secondary “other nutrients” row (Omega-3, Creatine, etc. when present)
+    - empty onboarding CTA (`+ Log Supplement`) when no logs in range
+    - shortcut CTA to `/nutrition/diary` (`Log today's supplements`)
+
+#### Validation
+
+- `npm run -s typecheck` -> pass
+- `npm run -s lint` -> pass
+- `npm run -s test` -> pass
+
+#### QA notes
+
+- Manual QA against a live DB was not run in this turn (migration apply + interactive log flow still needed).
+- Recommended first QA scenario:
+  1. Apply migrations.
+  2. Log `Vitamin D3 2000 IU` (1 serving) from diary supplements section.
+  3. Confirm diary row appears and progress micronutrient section reflects `~2000 IU/day` average.
+
+### [A-029-ENGINEER-REALIGNMENT] Dedicated `/supplements` domain + assignment model (2026-03-20)
+
+- Linked architect item: A-029 (dedicated page architecture)
+- Status: Implemented
+
+#### What changed (alignment delta)
+
+The prior implementation logged supplements inside the diary flow. This realignment moves supplements to a dedicated top-level domain and introduces assignment-based logging architecture.
+
+#### Database + migration work
+
+- Added migration:
+  - `supabase/migrations/20260320201000_supplement_assignments_and_model_alignment.sql`
+- Migration contents:
+  - Added `public.supplement_assignments` with:
+    - subject XOR constraint (`subject_user_id` vs `subject_client_id`)
+    - unique one-assignment-per-subject-per-supplement constraints
+    - assignment metadata fields (`default_servings`, `time_of_day`, `taken_with_food`, `notes`, `coach_note`, `assigned_by`, `coach_noted_by`, `is_active`)
+    - indexes for subject and supplement lookups
+    - RLS policies using `has_nutrition_subject_access(...)`
+    - `updated_at` trigger (`trigger_set_updated_at`)
+  - Aligned `public.supplement_logs`:
+    - added `assignment_id` FK (`ON DELETE SET NULL`)
+    - added `time_of_day`, `taken_with_food`
+    - added `time_of_day` check constraint
+    - added assignment/date index
+  - Aligned `public.supplement_catalog` uniqueness:
+    - dropped old single-name uniqueness constraint
+    - added unique index on `(name, is_global)` to match seed conflict strategy
+
+#### Types + query keys
+
+- Updated DB typing:
+  - `types/database.ts`
+    - added `supplement_assignments` table type contracts
+    - updated `supplement_logs` fields + assignment FK relationship
+- Added dedicated query keys:
+  - `lib/query-keys-supplements.ts`
+    - `subjects`, `assignments(subject)`, `history(id, days)`, `catalog(query)`, `progress(range, subject)`, `people`
+- Removed nutrition-domain supplement key surface:
+  - `lib/query-keys-nutrition.ts` no longer carries supplement query keys
+
+#### Server actions rewritten
+
+- Rebuilt file:
+  - `app/actions/supplements.ts`
+- Implemented action surface:
+  - `listSupplementCatalogAction`
+  - `createCustomSupplementAction`
+  - `listSupplementPeopleAction` (person picker for add-person/log flow)
+  - `listSupplementSubjectsAction` (roster metrics)
+  - `listAssignmentsAction` (detail rows + computed fields)
+  - `addSupplementAssignmentAction`
+  - `updateSupplementAssignmentAction`
+  - `removeSupplementAssignmentAction`
+  - `logSupplementAction`
+  - `removeSupplementLogAction`
+  - `logAllTodayAction`
+  - `getSupplementHistoryAction`
+  - `getSupplementProgressAction`
+- Revalidation targets now include:
+  - `/supplements`
+  - `/supplements/me`
+  - `/supplements/[clientId]`
+  - `/progress/nutrition`
+
+#### New UI routes + components
+
+- Added routes:
+  - `app/(dashboard)/supplements/page.tsx`
+  - `app/(dashboard)/supplements/me/page.tsx`
+  - `app/(dashboard)/supplements/[clientId]/page.tsx`
+- Added components:
+  - `components/supplements/supplements-roster-page.tsx`
+  - `components/supplements/supplements-detail-page.tsx`
+  - `components/supplements/supplement-roster-table.tsx`
+  - `components/supplements/supplement-detail-table.tsx`
+  - `components/supplements/log-supplement-sheet.tsx` (3-step flow)
+  - `components/supplements/create-custom-supplement-dialog.tsx`
+  - `components/supplements/edit-assignment-dialog.tsx`
+  - `components/supplements/supplement-history-sheet.tsx`
+
+#### Navigation + route access
+
+- Updated route access:
+  - `lib/auth/route-access.ts`
+    - added `/supplements` route prefix access
+    - added Supplements section in sidebar model
+    - added new icon token `pill`
+- Updated icon maps:
+  - `components/layout/app-sidebar.tsx` (`Pill` icon)
+  - `components/layout/mobile-bottom-nav.tsx` (supports `pill` sidebar entries)
+
+#### Progress page integration
+
+- Updated micronutrient section to use dedicated supplement subject model:
+  - `components/nutrition/progress/nutrition-progress-page.tsx`
+- Updated CTA routing from diary to dedicated supplements area:
+  - `Manage supplements` / `Go to Supplements` -> `/supplements`
+
+#### Legacy removal
+
+- Removed diary supplement embed:
+  - `components/nutrition/manual-nutrition-diary.tsx` (deleted `<SupplementSection />` usage)
+- Deleted obsolete diary-supplement UI files:
+  - `components/nutrition/supplements/supplement-log-sheet.tsx`
+  - `components/nutrition/supplements/supplement-section.tsx`
+
+#### Hook layer update
+
+- Rebuilt supplement hooks against the dedicated action/key surface:
+  - `hooks/use-supplements.ts`
+
+#### Validation
+
+- `npm run -s typecheck` -> pass
+- `npm run -s lint` -> pass
+- `npm run -s test` -> pass
+
+#### QA checklist (focused)
+
+1. Navigate to `/supplements`: roster table loads with sort/filter/pagination.
+2. Click `+ Log Supplement` from roster and complete all 3 steps.
+3. Navigate to `/supplements/me`:
+   - add supplement -> row appears in detail table
+   - use inline `Today` circle -> row marks logged
+   - `Log Today’s Stack` logs remaining unlogged rows only
+4. Open history from supplement name cell -> verify calendar dots + recent logs.
+5. Open edit dialog -> update serving/time/notes and verify persistence.
+6. Remove an assignment -> row disappears; logs remain queryable by history scope where applicable.
+7. Check `/progress/nutrition` micronutrient section CTA navigates to `/supplements` and data reflects logged supplement activity.
+
+### [A-028-ENGINEER-IMPLEMENTATION] Inline Last Session + Exercise Seed Library (2026-03-20)
+
+- Linked architect item: A-028
+- Status: Implemented
+
+#### Completed implementation
+
+- Added batched "last session" server action (single round-trip for all exercise names in current workout form):
+  - Updated: `app/actions/workout.ts`
+  - Added `getWorkoutExerciseLastSessionAction(input)`:
+    - input: `{ exercise_names: string[]; current_workout_id?: string }`
+    - filters to authenticated actor (`training_sessions.user_id = auth.uid()`)
+    - excludes current session when editing (`neq(workout_id, current_workout_id)`)
+    - one joined query against `strength_sets` + `training_sessions`
+    - ordered by session date desc + weight desc to resolve latest session top set per exercise
+    - returns per exercise:
+      - `exercise_name`
+      - `weight`
+      - `reps`
+      - `workout_id`
+      - `workout_date`
+      - `days_ago`
+      - `relative_label` (e.g. `2 days ago`)
+- Wired workout logging UI to consume batched history once per form state, not per row:
+  - Updated: `components/workout/workout-form.tsx`
+  - Added `useQuery` call keyed by current workout + deduped strength exercise names
+  - Built `lastSessionByExercise` map and passed hint into each `ExerciseCard`
+- Added inline ghost history on exercise cards:
+  - Updated: `components/workout/exercise-card.tsx`
+  - New row above set grid:
+    - `Last session (Exercise): {weight} kg × {reps} ({relative_label})`
+
+#### Seed migration
+
+- Added idempotent exercise seed migration:
+  - `supabase/migrations/20260320210000_seed_exercises.sql`
+- Inserts 52 essential default exercises across:
+  - Barbell
+  - Dumbbell
+  - Bodyweight
+  - Cable/Machine
+  - Cardio
+- Includes required core list from A-028 and additional practical defaults.
+- Idempotency strategy:
+  - `ON CONFLICT (name) DO NOTHING`
+
+#### Validation
+
+- `npm run -s typecheck` -> pass
+- `npm run -s lint` -> pass
+- `npm run -s test` -> pass
+
+#### QA guidance
+
+1. Open `/workouts/new` and add a strength exercise that has historical logs.
+2. Confirm card shows ghost row: `Last session (...)` with weight, reps, and relative date.
+3. Open `/workouts/[id]/edit` and confirm current workout is excluded from history lookup.
+4. Add multiple exercises and confirm only one batched history fetch is used for all names (no per-row fetch pattern).
+5. Apply migration `20260320210000_seed_exercises.sql` and confirm no duplicate insert on re-run.
+
+### [E-050] Supplements navigation split + assigned route normalization (2026-03-20)
+
+- Linked architect item: A-029 follow-up IA cleanup
+- Status: Implemented
+
+#### Summary
+
+- Split supplements IA into two explicit pages in app navigation:
+  - `Catalog` -> `/supplements`
+  - `Assigned` -> `/supplements/assigned`
+- Converted `/supplements` into a real catalog view (search/filter/table of supplement entries).
+- Moved assignment roster entry route to `/supplements/assigned`.
+- Normalized detail pages under assigned namespace:
+  - `/supplements/assigned/me`
+  - `/supplements/assigned/[clientId]`
+- Preserved legacy deep links by redirecting:
+  - `/supplements/me` -> `/supplements/assigned/me`
+  - `/supplements/[clientId]` -> `/supplements/assigned/[clientId]`
+
+#### Files added
+
+- `components/supplements/supplement-catalog-table.tsx`
+- `components/supplements/supplements-catalog-page.tsx`
+- `app/(dashboard)/supplements/assigned/page.tsx`
+- `app/(dashboard)/supplements/assigned/me/page.tsx`
+- `app/(dashboard)/supplements/assigned/[clientId]/page.tsx`
+
+#### Files updated
+
+- `lib/auth/route-access.ts`
+  - Supplements section now has two links (`Catalog`, `Assigned`).
+- `components/layout/app-sidebar.tsx`
+  - Active-route guard to prevent `/supplements` item from activating on `/supplements/assigned/*`.
+- `components/layout/mobile-bottom-nav.tsx`
+  - Same active-route guard for mobile menu highlighting.
+- `app/(dashboard)/supplements/page.tsx`
+  - Now renders `SupplementsCatalogPage`.
+- `app/(dashboard)/supplements/me/page.tsx`
+  - Redirect to `/supplements/assigned/me`.
+- `app/(dashboard)/supplements/[clientId]/page.tsx`
+  - Redirect to `/supplements/assigned/[clientId]`.
+- `components/supplements/supplements-roster-page.tsx`
+  - Updated to assigned semantics and routing (`/supplements/assigned/*`).
+- `components/supplements/supplements-detail-page.tsx`
+  - Back-link now returns to `/supplements/assigned`.
+- `app/actions/supplements.ts`
+  - Revalidation expanded to include new assigned route tree.
+
+#### Validation
+
+- `npm run -s typecheck` -> pass
+- `npm run -s lint` -> pass
+- `npm run -s test` -> pass
+
+#### QA checklist
+
+1. Sidebar > Supplements shows two items: `Catalog` and `Assigned`.
+2. `Catalog` opens `/supplements` and displays supplement list table with search/category filter.
+3. `Assigned` opens `/supplements/assigned` and shows one row per subject group (user/client).
+4. Clicking an assigned row opens `/supplements/assigned/me` or `/supplements/assigned/{clientId}`.
+5. Legacy URLs `/supplements/me` and `/supplements/{clientId}` redirect to new assigned URLs.
+
+### [E-051] Supplements catalog normalization + multi-category column update (2026-03-20)
+
+- Linked architect item: A-029 follow-up (catalog quality + IA consistency)
+- Status: Implemented
+
+#### Scope requested
+
+- Catalog must not show duplicate calcium entries (`500mg` and `1000mg`).
+- Keep one canonical `Calcium` catalog item; dosage is assigned at subject level.
+- Remove `Brand` and `Nutrients` columns from supplements catalog table.
+- Category column should behave like exercise muscles (chip list / multi-tag presentation).
+
+#### Implementation details
+
+1. Catalog output normalization (server action)
+- Updated: `app/actions/supplements.ts`
+- `listSupplementCatalogAction` now suppresses legacy dose-SKU calcium names from catalog response:
+  - `Calcium 500mg`
+  - `Calcium 1000mg`
+- This guarantees the catalog UI no longer surfaces duplicate calcium variants.
+
+2. Database migration for canonical calcium
+- Added: `supabase/migrations/20260320223000_supplement_catalog_calcium_normalization.sql`
+- Migration behavior:
+  - Inserts canonical global row `Calcium` if missing:
+    - `category = mineral`
+    - `serving_label = mg`
+    - `nutrients = {"calcium_mg":1}` (dose multiplier model)
+  - Deletes legacy calcium SKUs only when unreferenced by assignments/logs.
+  - Referenced legacy rows are retained for historical integrity but remain hidden from catalog listing via server-action filter.
+
+3. Catalog table structure update
+- Updated: `components/supplements/supplement-catalog-table.tsx`
+- Removed table columns:
+  - `Brand`
+  - `Nutrients`
+- Added/kept columns:
+  - `Supplement`
+  - `Categories` (multi-chip display)
+  - `Unit`
+
+4. Multi-category rendering (exercise-style chips)
+- Updated: `components/supplements/supplement-catalog-table.tsx`
+- Implemented derived multi-category logic per supplement:
+  - uses primary `category` + nutrient-key inference to build a category set
+  - displays first 2 tags as compact chips, then `+N` overflow indicator
+- Category filter now uses derived category set membership (not single-category equality).
+- Search now matches supplement name, serving unit, and derived category labels.
+
+5. Dosage range update to support mg-based assignment model
+- Updated: `app/actions/supplements.ts`
+  - Increased validation caps:
+    - `default_servings`: `max(30)` -> `max(5000)`
+    - `servings`: `max(30)` -> `max(5000)`
+- Updated assignment/logging UI labels to dosage terminology:
+  - `components/supplements/edit-assignment-dialog.tsx`
+    - `Servings` -> `Default dosage ({unit})`
+  - `components/supplements/log-supplement-sheet.tsx`
+    - step guidance + validation/error text now uses `dosage`
+    - field label now shows dynamic unit: `Dosage ({selectedSupplement.serving_label})`
+
+#### Data-model note (for architect)
+
+- Current DB keeps a single `category` column.
+- Multi-category in UI is derived from nutrient composition plus primary category.
+- If strict multi-category persistence is required later, next phase can add `categories text[]` with backfill + RLS-safe writes. Current implementation avoids schema expansion while delivering requested UX immediately.
+
+#### Validation
+
+- `npm run -s typecheck` -> pass
+- `npm run -s lint` -> pass
+- `npm run -s test` -> pass
+
+#### QA checklist
+
+1. Open `/supplements` (Catalog): verify only one `Calcium` row is visible.
+2. Confirm `Brand` and `Nutrients` columns are absent.
+3. Confirm `Categories` displays chip list style with `+N` overflow behavior.
+4. Confirm category filter works for supplements with inferred multi-category tags.
+5. Apply migration `20260320223000_supplement_catalog_calcium_normalization.sql`; rerun and verify idempotent behavior.
+
+### [E-052] Supplement name normalization (remove dosage text from display) (2026-03-20)
+
+- Linked architect item: A-029 follow-up (catalog readability)
+- Status: Implemented
+
+#### Problem
+
+- Calcium disappeared from catalog for users who had not applied the canonical-calcium migration yet.
+- Product direction clarified: keep supplements visible, but remove dosage text from names (e.g., show `Calcium`, not `Calcium 500mg`), and apply same naming behavior across supplements UI.
+
+#### Implementation
+
+1. Added shared name normalization helper
+- Updated: `lib/nutrition/supplements.ts`
+- Added `normalizeSupplementDisplayName(name)`:
+  - removes trailing dose patterns (`500mg`, `1000 IU`, `3g`, etc.)
+  - removes trailing dose parenthetical blocks (e.g., `(325mg ferrous)`)
+
+2. Catalog action now normalizes + deduplicates by normalized name
+- Updated: `app/actions/supplements.ts` (`listSupplementCatalogAction`)
+- Removed hard filter that hid calcium SKUs.
+- Applied normalized-name grouping so dose variants collapse into one catalog row.
+- Result: `Calcium` is visible again even before running the migration, and duplicates are collapsed.
+
+3. Applied same normalized display across supplements UI surfaces
+- Updated: `components/supplements/supplement-catalog-table.tsx`
+  - name cell now renders normalized display name
+- Updated: `components/supplements/supplement-detail-table.tsx`
+  - table search and supplement-name cell now use normalized names
+- Updated: `components/supplements/supplement-history-sheet.tsx`
+  - sheet title uses normalized name
+- Updated: `components/supplements/edit-assignment-dialog.tsx`
+  - dialog title uses normalized name
+- Updated: `components/supplements/supplements-detail-page.tsx`
+  - remove-confirmation prompt uses normalized name
+
+#### Validation
+
+- `npm run -s typecheck` -> pass
+- `npm run -s lint` -> pass
+- `npm run -s test` -> pass
+
+#### QA checklist
+
+1. Open `/supplements`: confirm `Calcium` is visible as plain text (no mg suffix).
+2. Verify other dose-based names display normalized (`Vitamin D3`, `Omega-3 Fish Oil`, etc.).
+3. Verify no duplicate normalized calcium rows appear in catalog.
+4. Open assigned detail/history/edit surfaces: confirm names use same normalized format.
+
+### [E-053] Catalog table cleanup: remove units and dosage display (2026-03-20)
+
+- Linked architect item: A-029 follow-up (catalog simplification)
+- Status: Implemented
+
+#### Changes
+
+- Updated catalog table to remove dosage/unit presentation:
+  - Removed `Unit` column from catalog table.
+  - Removed serving/dose subtitle under supplement names (`scoop`, `capsule`, `5g`, `3g`, etc.).
+- Catalog now displays clean supplement names + category chips only.
+
+#### File updated
+
+- `components/supplements/supplement-catalog-table.tsx`
+
+#### Validation
+
+- `npm run -s typecheck` -> pass
+- `npm run -s lint` -> pass
+- `npm run -s test` -> pass
+
+### [E-054] Supplements seed dedupe + multi-category create modal simplification (2026-03-20)
+
+- Linked architect item: A-029 follow-up (supplements model cleanup)
+- Status: Implemented
+
+#### Requested scope
+
+- Remove duplicate supplements from seed.
+- Remove global badge next to supplements in catalog.
+- Create supplement modal should include only:
+  - `name`
+  - `categories` (multi-select)
+- Modal presentation:
+  - desktop: right sheet
+  - mobile: bottom sheet
+
+#### Implementation
+
+1. Seed cleanup and multi-category schema support
+- Updated seed migration: `supabase/migrations/20260320191000_supplement_catalog.sql`
+  - Added `categories text[]` column + constraint + GIN index for fresh environments.
+  - Replaced dose-variant seed entries with canonical unique names (no duplicate dosage SKUs).
+  - Seed now stores category arrays per row (e.g. `['vitamin', 'mineral']` for multivitamin).
+
+2. Existing DB backfill + dedupe migration
+- Added migration: `supabase/migrations/20260320232000_supplement_catalog_multicategory_and_dedupe.sql`
+  - Adds `categories` column if missing.
+  - Backfills categories from legacy `category`.
+  - Enforces allowed categories and non-empty arrays.
+  - Inserts canonical global entries if missing.
+  - Deletes duplicate global variants only when unreferenced by assignments/logs.
+
+3. Server action update for simplified create API
+- Updated: `app/actions/supplements.ts`
+  - `createCustomSupplementAction` input changed to:
+    - `name`
+    - `categories[]`
+  - Removed create payload requirements for:
+    - `brand`
+    - `serving_label`
+    - `nutrients`
+  - Insert defaults on create:
+    - `brand = null`
+    - `serving_label = 'unit'`
+    - `nutrients = {}`
+    - `category = first selected category`
+    - `categories = selected categories`
+  - Catalog list now dedupes by normalized display name and merges category arrays.
+
+4. Catalog UI: removed global badge
+- Updated: `components/supplements/supplement-catalog-table.tsx`
+  - Removed the global/custom badge next to supplement name.
+  - Category chips continue to render using multi-category data.
+
+5. Create modal revamped to name + multi-category only
+- Rebuilt: `components/supplements/create-custom-supplement-dialog.tsx`
+  - Replaced center dialog with responsive sheet:
+    - desktop `side="right"`
+    - mobile `side="bottom"`
+  - Removed all legacy inputs (brand/serving/nutrients/custom nutrients).
+  - New minimal form:
+    - Name input
+    - Category chip multi-select (min 1 selection)
+
+6. Type contract update
+- Updated: `types/database.ts`
+  - `public.supplement_catalog` now includes `categories: string[]` in `Row/Insert/Update`.
+
+#### Validation
+
+- `npm run -s typecheck` -> pass
+- `npm run -s lint` -> pass
+- `npm run -s test` -> pass
+
+### [E-055] Catalog edit sheet + assigned bulk-log flow (2026-03-20)
+
+- Linked architect item: A-029 follow-up (catalog management + assigned logging UX)
+- Status: Implemented
+
+#### 1) Catalog: edit supplement in modal sheet (right desktop / bottom mobile)
+
+- Added server action:
+  - `updateCustomSupplementAction` in `app/actions/supplements.ts`
+  - Input: `id`, `name`, `categories[]`
+  - Behavior:
+    - updates only custom rows under RLS
+    - normalizes display name
+    - keeps simplified fields (`brand=null`, `serving_label='unit'`, `nutrients={}`)
+- Added UI:
+  - New file: `components/supplements/edit-supplement-dialog.tsx`
+  - Responsive sheet behavior:
+    - Desktop: `side="right"`
+    - Mobile: `side="bottom"`
+  - Form fields: name + multi-category chips
+- Catalog table integration:
+  - `components/supplements/supplement-catalog-table.tsx`
+    - added `Edit` action per row
+  - `components/supplements/supplements-catalog-page.tsx`
+    - wires edit sheet state
+    - blocks global rows with toast: "Global supplements are read-only"
+
+#### 2) Assigned supplements: log modal now supports subject dropdown + multi-select supplements
+
+- Added new sheet component:
+  - `components/supplements/bulk-log-supplement-sheet.tsx`
+  - Behavior:
+    - shows `Assigned Client` dropdown (me + clients)
+    - loads assigned supplements for selected subject
+    - supports search + multi-select checkboxes
+    - supports "Select Visible"
+    - logs selected rows in one submit (uses each assignment's default dosage/time/notes)
+    - skips rows already logged today
+    - invalidates subject queries after success
+  - Responsive sheet behavior:
+    - Desktop: `side="right"`
+    - Mobile: `side="bottom"`
+- Rewired assigned roster page:
+  - `components/supplements/supplements-roster-page.tsx`
+  - Replaced `LogSupplementSheet` with `BulkLogSupplementSheet`
+
+#### Validation
+
+- `npm run -s typecheck` -> pass
+- `npm run -s lint` -> pass
+- `npm run -s test` -> pass
+
+### [E-056] Editable global catalog + assigned log dropdown parity + DB log date defaults (2026-03-20)
+
+- Linked architect item: A-029 follow-up
+- Status: Implemented
+
+#### 1) Catalog: all supplements editable
+
+- Removed UI restriction that blocked editing global supplements.
+  - Updated: `components/supplements/supplements-catalog-page.tsx`
+- Removed read-only lock in edit sheet:
+  - Updated: `components/supplements/edit-supplement-dialog.tsx`
+- Kept unified edit action path (`updateCustomSupplementAction`) and adjusted error copy.
+  - Updated: `app/actions/supplements.ts`
+- Added RLS migration so global rows are editable from app UI:
+  - Added: `supabase/migrations/20260320235000_supplement_catalog_edit_all_and_log_defaults.sql`
+  - Policy change: `supplement_catalog_update_visible` allows update for visible rows (global + owned + sysadmin), while preserving scope checks.
+
+#### 2) Assigned page log flow parity (program-style client dropdown)
+
+- Rebuilt assigned log sheet UX to match requested structure:
+  - Top: `Assigned Client` dropdown (searchable popover style, similar to program assignment pattern).
+  - Below: `Supplements` dropdown (searchable multi-select from catalog).
+  - Supports selecting multiple catalog supplements in one submit.
+  - Uses assignment defaults when an assignment exists; still allows logging catalog items not yet assigned.
+- Updated file:
+  - `components/supplements/bulk-log-supplement-sheet.tsx`
+
+#### 3) Removed manual date field from assigned bulk log + DB defaults
+
+- Assigned bulk-log sheet no longer asks for date input; logs use current date.
+  - Updated: `components/supplements/bulk-log-supplement-sheet.tsx`
+- Database changes:
+  - `supplement_logs.performed_on` now defaults to current date (`now()::date`)
+  - added `supplement_logs.updated_at`
+  - added `trg_supplement_logs_set_updated_at` trigger (uses `trigger_set_updated_at()`)
+  - Added migration: `supabase/migrations/20260320235000_supplement_catalog_edit_all_and_log_defaults.sql`
+  - Fresh-base migration aligned:
+    - Updated: `supabase/migrations/20260320192000_supplement_logs.sql`
+- Types updated for new `updated_at` field:
+  - Updated: `types/database.ts`
+
+#### Validation
+
+- `npm run -s typecheck` -> pass
+- `npm run -s lint` -> pass
+- `npm run -s test` -> pass
+
+### [E-058] Assigned bulk-log title input + assigned table update + schema-compat fallback (2026-03-20)
+
+- Linked architect item: A-029 follow-up
+- Status: Implemented
+
+#### 1) Assigned bulk-log modal: title input
+
+- Updated `components/supplements/bulk-log-supplement-sheet.tsx`:
+  - Added `Title` input field below `Assigned Client`.
+  - Title value is submitted with each selected supplement log.
+  - Existing selected-supplement badge UX remains unchanged.
+  - Logging flow now auto-creates missing supplement assignments first, then logs against that assignment so assigned tables remain consistent.
+
+#### 2) Assigned roster table update
+
+- Updated roster data contract (`app/actions/supplements.ts`):
+  - `SupplementSubjectRow` now includes `last_log_title`.
+  - `last_log_title` is derived from latest log note/title text per subject.
+- Updated table UI (`components/supplements/supplement-roster-table.tsx`):
+  - Added `Last title` column to surface latest logged title text.
+
+#### 3) Fixed runtime error for missing `supplement_logs.assignment_id`
+
+- Error addressed:
+  - `Could not find the 'assignment_id' column of 'supplement_logs' in the schema cache`
+- Server action hardening in `app/actions/supplements.ts`:
+  - Added resilient insert helpers for supplement logs:
+    - single insert fallback: retries without `assignment_id` if schema cache is missing the column
+    - bulk insert fallback: retries all rows without `assignment_id` when needed
+  - `logSupplementAction` now uses fallback insert helper.
+  - `logAllTodayAction` now uses fallback bulk insert helper.
+  - `listAssignmentsAction` no longer requests `assignment_id` from logs query (not needed for current aggregation).
+  - `getSupplementHistoryAction` now falls back from assignment-id filtering to subject+supplement filtering when `assignment_id` is unavailable.
+
+#### 4) Action contract update
+
+- Updated `logSupplementAction` input schema:
+  - Added optional `title` field (`max 180`).
+  - Logging now persists `title` content as log note text for compatibility with current schema/UI surfaces.
+
+#### Validation
+
+- `npm run -s typecheck` -> pass
+- `npm run -s lint` -> pass
+- `npm run -s test` -> pass
+
+### [E-059] Assigned supplements informational table + program field in log modal (2026-03-20)
+
+- Linked architect item: A-029 follow-up
+- Status: Implemented
+
+#### 1) Assigned roster table simplified to informational columns
+
+- Updated `components/supplements/supplement-roster-table.tsx`:
+  - Removed log-centric columns:
+    - `Type`
+    - `Today`
+    - `7-day adherence`
+    - `Streak`
+    - `Last logged`
+  - Renamed column header:
+    - `Last title` -> `Title`
+  - Table now focuses on assignment context rather than adherence/logging metrics.
+
+#### 2) Program field added to assigned log-supplements modal
+
+- Updated `components/supplements/bulk-log-supplement-sheet.tsx`:
+  - Replaced `Title` input with `Program` input.
+  - On submit:
+    - if assignment is missing, creates assignment with `notes = program`
+    - if assignment exists and program changed, updates assignment `notes`
+    - then logs supplement event (for timeline/history compatibility)
+  - Added `updateSupplementAssignmentAction` mutation and pending-state integration.
+
+#### 3) Assigned roster title now sourced from assignment data (not logs)
+
+- Updated `app/actions/supplements.ts` (`listSupplementSubjectsAction`):
+  - Assignment query now reads `notes` + `created_at`.
+  - Subject-level title is derived from latest active assignment note.
+  - `last_log_title` payload key is retained for API compatibility but now maps to assignment-based title text.
+
+#### Validation
+
+- `npm run -s typecheck` -> pass
+- `npm run -s lint` -> pass
+- `npm run -s test` -> pass
+
+### [E-060] Single-select program dropdown + title restoration + assigned detail de-logging (2026-03-20)
+
+- Linked architect item: A-029 follow-up
+- Status: Implemented
+
+#### 1) Log Supplements modal: Title restored + Program changed to searchable single-select dropdown
+
+- Updated `components/supplements/bulk-log-supplement-sheet.tsx`:
+  - Restored `Title` text input.
+  - Replaced free-text `Program` input with searchable popover dropdown (single select).
+  - Program options are loaded per selected subject and support:
+    - clear to `No program`
+    - one selected program only
+  - Assignment persistence behavior:
+    - `notes` stores `Title`
+    - `coach_note` stores selected `Program` label
+    - for existing assignments, updates only when Title/Program changed
+
+#### 2) Program options data source added (subject-scoped)
+
+- Added action `listSupplementProgramOptionsAction` in `app/actions/supplements.ts`:
+  - Workout options from active `training_plans`
+  - Nutrition options from active `meal_group_assignments` + `meal_groups`
+  - Returns normalized options:
+    - `{ id, label, kind: "workout" | "nutrition" }`
+- Added hook + query key support:
+  - `hooks/use-supplements.ts` -> `useSupplementProgramOptions`
+  - `lib/query-keys-supplements.ts` -> `supplementKeys.programs(subject)`
+
+#### 3) `/supplements/assigned/me` detail table: removed log-centric columns
+
+- Updated `components/supplements/supplement-detail-table.tsx`:
+  - Removed:
+    - `Today`
+    - `30-day freq`
+    - `Streak`
+    - `Last taken`
+  - Removed inline log callback wiring from table props.
+
+#### 4) Assigned detail page aligned to informational model
+
+- Updated `components/supplements/supplements-detail-page.tsx`:
+  - Removed `Log Today's Stack` action and inline-log mutation flow.
+  - Header subtitle now reflects informational assignments.
+  - Top metrics now show:
+    - `Supplements assigned`
+    - `Title`
+
+#### 5) Subject roster query optimized for assignment-first model
+
+- Updated `listSupplementSubjectsAction` in `app/actions/supplements.ts`:
+  - removed heavy log scans for roster summary
+  - keeps title derivation from active assignment metadata
+  - sets log-derived summary fields to neutral defaults for compatibility
+
+#### Validation
+
+- `npm run -s typecheck` -> pass
+- `npm run -s lint` -> pass
+- `npm run -s test` -> pass
+
+### [E-061] Assigned edit sheet responsiveness + assignment unit support + split workout/nutrition program selectors (2026-03-20)
+
+- Linked architect item: A-029 follow-up
+- Status: Implemented
+
+#### 1) `/supplements/assigned/me` edit modal now uses responsive sheet behavior
+
+- Updated `components/supplements/edit-assignment-dialog.tsx`:
+  - migrated from centered `Dialog` to responsive `Sheet`
+  - desktop: opens from `right`
+  - mobile: opens from `bottom`
+  - preserved existing actions (`Save Changes`, `Remove from stack`)
+
+#### 2) Assignment-level `unit` added with dropdown selection
+
+- Added shared unit catalog in `lib/nutrition/supplements.ts`:
+  - `SUPPLEMENT_UNIT_VALUES`
+  - `SUPPLEMENT_UNIT_OPTIONS`
+  - includes: `unit`, `serving`, `scoop`, `capsule`, `tablet`, `softgel`, `packet`, `sachet`, `drop`, `spray`, `piece`, `tsp`, `tbsp`, `ml`, `l`, `fl_oz`, `oz`, `g`, `mg`, `mcg`, `iu`
+- Updated edit sheet UI (`components/supplements/edit-assignment-dialog.tsx`):
+  - added `Unit` dropdown
+  - selected unit is saved with assignment updates
+- Updated assignment table rendering (`components/supplements/supplement-detail-table.tsx`):
+  - serving cell now displays `default_servings + unit`
+
+#### 3) Backend + schema support for assignment unit persistence
+
+- Updated `app/actions/supplements.ts`:
+  - `SupplementAssignmentRow` now includes `unit`
+  - `addSupplementAssignmentAction` accepts optional `unit`
+  - `updateSupplementAssignmentAction` accepts optional/nullable `unit`
+  - assignment list query now selects/returns `unit`
+- Added migration:
+  - `supabase/migrations/20260321003000_supplement_assignment_units.sql`
+  - adds `supplement_assignments.unit`
+  - adds `supplement_assignments_unit_check` constraint aligned to allowed unit list
+- Updated generated DB contract manually:
+  - `types/database.ts` (`supplement_assignments` row/insert/update include `unit`)
+
+#### 4) Log supplement flows now use two separate program dropdowns
+
+- Updated `components/supplements/bulk-log-supplement-sheet.tsx`:
+  - replaced single `Program` picker with:
+    - `Workout Program` dropdown (searchable)
+    - `Nutrition Program` dropdown (searchable)
+  - assignment persistence:
+    - selected programs are combined into `coach_note` via helper format:
+      - `Workout: <name> | Nutrition: <name>` (when both selected)
+- Updated `components/supplements/log-supplement-sheet.tsx`:
+  - step 3 now includes separate `Workout Program` and `Nutrition Program` dropdowns
+  - if a program is selected and assignment does not yet exist, assignment is created automatically so program metadata is not lost
+  - existing assignment program note is updated when changed
+
+#### 5) Shared program-note formatting helper
+
+- Added `buildSupplementProgramNote(...)` in `lib/nutrition/supplements.ts` and reused across supplement flows.
+
+#### Validation
+
+- `npm run -s typecheck` -> pass
+- `npm run -s lint` -> pass
+- `npm run -s test` -> pass
+
+### [E-062] Assigned detail terminology alignment + program/title visibility fix (2026-03-20)
+
+- Linked architect item: A-029 follow-up
+- Status: Implemented
+
+#### 1) `/supplements/assigned/me` edit modal cleanup
+
+- Updated `components/supplements/edit-assignment-dialog.tsx`:
+  - removed legacy `Notes` and `Coach note` fields from the edit modal
+  - modal now focuses on assignment execution settings only:
+    - dosage
+    - unit
+    - time of day
+    - with food
+
+#### 2) Assigned detail table now shows explicit title/program fields
+
+- Updated `components/supplements/supplement-detail-table.tsx`:
+  - renamed notes presentation to `Title`
+  - added explicit columns:
+    - `Workout Program`
+    - `Nutrition Program`
+  - values are parsed from assignment program metadata format:
+    - `Workout: <name> | Nutrition: <name>`
+
+#### 3) Program metadata parser utility
+
+- Updated `lib/nutrition/supplements.ts`:
+  - added `parseSupplementProgramNote(...)` helper
+  - keeps `buildSupplementProgramNote(...)` as write formatter
+
+#### 4) Subject title recency fixed to reflect latest assignment updates
+
+- Updated `app/actions/supplements.ts` (`listSupplementSubjectsAction`):
+  - title timestamp source switched from `created_at` to `updated_at`
+  - ensures roster-level `Title` reflects recent edits/log-modal updates on existing assignments
+
+#### 5) Wiring update for edit modal save payload
+
+- Updated `components/supplements/supplements-detail-page.tsx`:
+  - removed notes/coach_note payload mapping for edit-save action
+
+#### Validation
+
+- `npm run -s typecheck` -> pass
+- `npm run -s lint` -> pass
+- `npm run -s test` -> pass
+
+### [E-063] Assigned roster program columns + bulk-log modal subject prefill (2026-03-20)
+
+- Linked architect item: A-029 follow-up
+- Status: Implemented
+
+#### 1) `/supplements/assigned` roster table now shows workout/nutrition program columns
+
+- Updated `app/actions/supplements.ts` (`listSupplementSubjectsAction`):
+  - assignment summary query now reads `coach_note`
+  - parses latest assignment program metadata per subject
+  - response now includes:
+    - `last_workout_program`
+    - `last_nutrition_program`
+- Updated `components/supplements/supplement-roster-table.tsx`:
+  - added visible columns:
+    - `Workout Program`
+    - `Nutrition Program`
+  - search now matches title + workout/nutrition program text in addition to person name
+
+#### 2) Bulk Log Supplements modal now pre-fills selected subject context
+
+- Updated `components/supplements/bulk-log-supplement-sheet.tsx`:
+  - when a subject is selected/opened and data is loaded, modal now pre-fills:
+    - `Title` from latest assignment title
+    - `Workout Program` from latest assignment program metadata
+    - `Nutrition Program` from latest assignment program metadata
+    - `Supplements` with currently assigned supplement IDs
+  - prefill runs once per subject selection while the modal is open (prevents user-entered values from being repeatedly overridden)
+
+#### 3) Program metadata parse helper reused
+
+- Updated `lib/nutrition/supplements.ts`:
+  - introduced `parseSupplementProgramNote(...)` for consistent parsing of:
+    - `Workout: <name> | Nutrition: <name>`
+
+#### Validation
+
+- `npm run -s typecheck` -> pass
+- `npm run -s lint` -> pass
+- `npm run -s test` -> pass
+
+### [E-064] Supplements legacy-code cleanup (code + DB) (2026-03-20)
+
+- Linked architect item: A-029 stability/cleanup pass
+- Status: Implemented
+
+#### Scope audited
+
+- Routes: `/supplements`, `/supplements/assigned`, `/supplements/assigned/me`, `/supplements/assigned/[clientId]`
+- Components under `components/supplements/*`
+- Hooks: `hooks/use-supplements.ts`
+- Server actions: `app/actions/supplements.ts`
+- DB schema/types: supplement logs + supplement subject payloads
+
+#### Removed (legacy/dead)
+
+1) Unused hook API surface
+- File: `hooks/use-supplements.ts`
+- Removed:
+  - `useSupplementMutations(...)` (no callers in app)
+  - internal invalidation helper used only by removed hook
+- Removed stale imports tied to that dead hook (`useMutation`, `useQueryClient`, multiple action imports).
+
+2) Unused server actions
+- File: `app/actions/supplements.ts`
+- Removed:
+  - `removeSupplementLogAction`
+  - `logAllTodayAction`
+  - `logAllTodaySchema`
+  - `insertSupplementLogsWithFallback` helper (only used by removed `logAllTodayAction`)
+  - `keyForSubject` helper (unused)
+
+3) Legacy roster payload fields not consumed by UI
+- File: `app/actions/supplements.ts`
+- `SupplementSubjectRow` no longer includes dead fields that were always synthetic zeros/null in current UI:
+  - `today_logged_count`
+  - `today_adherence_pct`
+  - `seven_day_adherence_pct`
+  - `streak_days`
+  - `last_logged_on`
+
+4) Legacy assignment metrics not consumed by UI
+- File: `app/actions/supplements.ts`
+- `SupplementAssignmentRow` no longer includes:
+  - `last_taken_on`
+  - `thirty_day_frequency`
+  - `avg_servings_30d`
+  - `streak_days`
+- `listAssignmentsAction` simplified:
+  - removed 120-day/30-day rollup scans
+  - now fetches only `today` logs to compute `today_logged` (the only metric currently used by supplements UI)
+  - reduces query load and payload size.
+
+5) Unused DB column
+- Added migration: `supabase/migrations/20260321012000_supplement_logs_drop_logged_at.sql`
+- Drops unused `public.supplement_logs.logged_at` column.
+- `types/database.ts` updated accordingly (removed `logged_at` from row/insert/update types).
+
+#### Retained intentionally (in-use)
+
+- `logSupplementAction` retained (used by active log flows).
+- `getSupplementHistoryAction` + `SupplementHistorySheet` retained (reachable from assignment detail table).
+- `getSupplementProgressAction` retained (consumed by nutrition progress page micronutrient insights).
+- Schema-compat fallbacks for missing `assignment_id`/`unit` retained to avoid runtime breakage on partially migrated environments.
+
+#### Validation
+
+- `npm run -s typecheck` -> pass
+- `npm run -s lint` -> pass
+- `npm run -s test` -> pass
+
+### [A-029-ARCHITECT-REVIEW] Supplement Implementation Correction (2026-03-21)
+
+- Linked architect item: A-029
+- Triggered by: Architect review of engineer's supplement implementation
+- Status: **Correction required — engineer must address all Critical and Significant issues before A-029 is considered done**
+
+---
+
+#### Overview
+
+The engineer's supplement implementation was reviewed against the final A-029 spec (informational-only supplement tracking — no daily logging, no streak, no adherence). The implementation was built against an earlier spec revision that included logging flows. Several critical gaps remain.
+
+---
+
+#### Issue Priority Table
+
+| # | Severity | Area | Issue |
+|---|----------|------|-------|
+| 1 | **Critical** | DB / Schema | `supplement_logs` table and all logging infrastructure must be removed |
+| 2 | **Critical** | DB / Schema | `daily_amount` column missing from `supplement_assignments` |
+| 3 | **Critical** | UI / Roster | Roster table missing nutrient coverage columns per spec |
+| 4 | **Critical** | UI / Assignments | `AssignSupplementsDialog` (multi-select modal) not built |
+| 5 | **Critical** | Routes | Old logging routes still exist alongside new spec routes |
+| 6 | **Significant** | DB / Migrations | 8 migrations for 2 tables — must consolidate |
+| 7 | **Significant** | DB / Catalog | `supplement_catalog` missing `serving_size`, `serving_unit`, `nutrients_per_serving` columns from spec |
+| 8 | **Significant** | DB / Seeds | Seed `serving_label = 'unit'` for all items is wrong — value should reflect real unit (e.g. `capsule`, `tablet`, `softgel`) |
+| 9 | **Minor** | UI / Catalog | Catalog filter uses `<Select>` — spec requires segmented buttons (All / Global / Custom) matching other table filter patterns |
+| 10 | **Minor** | Actions | `deriveCategories()` heuristic in `supplements.ts` infers categories from name strings — fragile, remove |
+| 11 | **Minor** | Actions | `isMissingColumn()` schema-compat fallbacks in `supplements.ts` must be removed after migrations are final |
+
+---
+
+#### Critical Issue Details
+
+**Issue 1 — Remove `supplement_logs` and all logging infrastructure**
+
+The final A-029 spec explicitly states: _"No daily logging, no streak, no adherence. This is purely informational — to understand what the user/coach/client is taking as supplements."_
+
+Remove:
+- Migration: `supabase/migrations/20260320192000_supplement_logs.sql` (drop the table entirely)
+- Migration: `supabase/migrations/20260321012000_supplement_logs_drop_logged_at.sql` (obsolete after above)
+- Actions in `app/actions/supplements.ts`:
+  - `logSupplementAction`
+  - `getSupplementHistoryAction`
+  - `getSupplementProgressAction`
+  - Any remaining references to `supplement_logs`
+- Components:
+  - `components/supplements/log-supplement-sheet.tsx`
+  - `components/supplements/bulk-log-supplement-sheet.tsx`
+  - `components/supplements/supplement-history-sheet.tsx`
+- Revalidation targets pointing to `/progress/nutrition` via supplement logs
+- `supplement_logs` from `types/database.ts`
+
+After removal, `getSupplementProgressAction` integration in `nutrition-progress-page.tsx` must also be unwired (the micronutrient section CTA should just navigate to `/supplements`).
+
+---
+
+**Issue 2 — Add `daily_amount` to `supplement_assignments`**
+
+The engineer used `default_servings` (a count of servings) instead of `daily_amount` (total amount with unit, e.g. `1000 mg`).
+
+Per spec, when a coach opens an assignment detail row they should be able to set: _"mg of calcium, zinc etc."_ — this requires `daily_amount numeric` + `unit text` on the assignment row.
+
+The `unit` column was added in a separate migration (`20260321003000_supplement_assignment_units.sql`). The `daily_amount` column was never added.
+
+Actions:
+- Add migration: `alter table public.supplement_assignments add column if not exists daily_amount numeric;`
+- Keep both `default_servings` (serving count per day) and `daily_amount` (absolute dose, e.g. `1000`) + `unit` (e.g. `mg`) as separate fields — they serve different purposes.
+- Update `app/actions/supplements.ts` `SupplementAssignmentRow` type and all related actions.
+- Update `components/supplements/supplement-detail-table.tsx` to display and edit `daily_amount` + `unit`.
+
+---
+
+**Issue 3 — Roster table missing nutrient coverage columns**
+
+The current `supplement-roster-table.tsx` shows: `Person`, `Supplements`, `Title`, `Workout Program`, `Nutrition Program`.
+
+Per spec, the roster table should show coverage information for each person's supplement stack. Required columns:
+- `Person` — avatar + name (keep)
+- `Supplements` — count (keep)
+- `Key Nutrients` — badge list of top nutrients covered by assigned supplements (e.g. `Vitamin D · Magnesium · Zinc`)
+- `Last Updated` — date the assignment was last modified
+
+Remove columns: `Title`, `Workout Program`, `Nutrition Program` — these are logging-era fields that belong to the removed `supplement_logs` model.
+
+Update `listSupplementSubjectsAction` to return `key_nutrients` (array of top nutrient/supplement names from assigned supplements) and `last_updated_at`.
+
+---
+
+**Issue 4 — `AssignSupplementsDialog` not built**
+
+The spec requires a multi-select modal triggered by `+ Assign Supplements` on the detail page:
+
+1. Subject dropdown (Me + all clients, same as existing person picker)
+2. Below the dropdown: searchable supplement list — each supplement shows a checkbox
+3. Selected supplements render as removable pills below the list (same pattern as selected exercises in goals)
+4. Save creates `supplement_assignments` rows for each selected supplement
+
+The engineer built `log-supplement-sheet.tsx` (a 3-step log flow) instead. This sheet must be removed and replaced with `AssignSupplementsDialog`.
+
+Build:
+- `components/supplements/assign-supplements-dialog.tsx`
+- Wire to detail page `+ Assign Supplements` button
+- On save, call `addSupplementAssignmentAction` for each selected supplement
+
+---
+
+**Issue 5 — Old logging routes still live alongside new spec routes**
+
+Audit and delete any routes under `/supplements` that belong to the old logging-era flow (any route that renders the 3-step log sheet as a page-level component). Valid spec routes are:
+- `/supplements` — roster table (all people)
+- `/supplements/me` — detail table for the coach's own stack
+- `/supplements/[clientId]` — detail table for a specific client
+
+No logging routes should exist.
+
+---
+
+#### Significant Issue Details
+
+**Issue 6 — Consolidate migrations**
+
+Current state: 8 migrations for 2 tables. Target: 2 clean migrations.
+
+```
+supabase/migrations/20260320191000_supplement_catalog.sql        <- keep, clean up
+supabase/migrations/20260320201000_supplement_assignments.sql    <- consolidate all assignment work here
+```
+
+Delete or fold into the two above:
+- `20260320192000_supplement_logs.sql` — drop this table
+- `20260321003000_supplement_assignment_units.sql` — fold `unit` column into assignment migration
+- `20260321012000_supplement_logs_drop_logged_at.sql` — obsolete once logs table is gone
+
+If Supabase migration history is already applied remotely, add a single consolidation migration that drops `supplement_logs` and adds `daily_amount` rather than rewriting history.
+
+---
+
+**Issue 7 — Missing catalog columns**
+
+`supplement_catalog` is missing:
+- `serving_size numeric` — the standard dose size (e.g. `1000` for `1000 mg`)
+- `serving_unit text` — the unit for serving size (e.g. `mg`, `mcg`, `iu`)
+- `nutrients_per_serving jsonb` — optional structured nutrient breakdown
+
+These allow the catalog table to display richer information and allow pre-population of `daily_amount`/`unit` when assigning a supplement to a person.
+
+---
+
+**Issue 8 — Fix seed `serving_label`**
+
+Current seeds set `serving_label = 'unit'` for all items. Update seeds to use accurate labels:
+
+| Supplement | serving_label |
+|------------|--------------|
+| Whey Protein | scoop |
+| Creatine | scoop |
+| Vitamin D3 | softgel |
+| Magnesium Glycinate | capsule |
+| Omega-3 Fish Oil | softgel |
+| Zinc | tablet |
+| B-Complex | tablet |
+| Ashwagandha | capsule |
+| Melatonin | tablet |
+| Collagen Peptides | scoop |
+| Electrolyte Powder | packet |
+| Probiotic | capsule |
+
+---
+
+#### Minor Issue Details
+
+**Issue 9 — Catalog filter: segmented buttons, not Select**
+
+Replace `<Select>` filter in `supplement-catalog-table.tsx` with segmented `<Button>` group:
+
+```tsx
+// All | Global | Custom
+<Button variant={filter === "all" ? "default" : "outline"} onClick={() => setFilter("all")}>All</Button>
+<Button variant={filter === "global" ? "default" : "outline"} onClick={() => setFilter("global")}>Global</Button>
+<Button variant={filter === "custom" ? "default" : "outline"} onClick={() => setFilter("custom")}>Custom</Button>
+```
+
+This matches the filter pattern used in `supplement-roster-table.tsx` (All / Me / Clients) and other tables in the app.
+
+---
+
+**Issue 10 — Remove `deriveCategories()` heuristic**
+
+The `deriveCategories()` helper in `supplements.ts` infers a supplement's categories by pattern-matching its name string. This is fragile — a supplement named "ZMA" won't match anything. Categories must come from the `categories` DB column set at seed/creation time only.
+
+Remove `deriveCategories()` and all call sites.
+
+---
+
+**Issue 11 — Remove `isMissingColumn()` fallbacks**
+
+Once the migrations above are finalized and the schema is stable, remove all `isMissingColumn()` runtime column-detection guards in `supplements.ts`. These were temporary workarounds for partially migrated environments and must not ship to production.
+
+---
+
+#### Suggested Engineer Execution Order
+
+1. **Consolidate DB**: Drop `supplement_logs` migration. Add `daily_amount` column. Fold `unit` column migration in. Clean up migration files.
+2. **Update `types/database.ts`**: Remove `supplement_logs` table type. Add `daily_amount` to `supplement_assignments`.
+3. **Trim `app/actions/supplements.ts`**: Remove all logging actions, `getSupplementHistoryAction`, `getSupplementProgressAction`, `deriveCategories()`, `isMissingColumn()` guards. Update `SupplementSubjectRow` to drop logging fields and add `key_nutrients`, `last_updated_at`.
+4. **Remove logging components**: Delete `log-supplement-sheet.tsx`, `bulk-log-supplement-sheet.tsx`, `supplement-history-sheet.tsx`.
+5. **Build `AssignSupplementsDialog`**: Multi-select modal per Issue 4 spec above.
+6. **Fix roster table**: Replace `Title`/`Workout Program`/`Nutrition Program` columns with `Key Nutrients` and `Last Updated`.
+7. **Fix catalog table**: Add `serving_size`/`serving_unit` columns to display. Switch filter to segmented buttons.
+8. **Fix seeds**: Update `serving_label` per table above.
+9. **Unwire nutrition progress supplement integration**: Remove `getSupplementProgressAction` call from progress page — the CTA link to `/supplements` is sufficient.
+10. **Typecheck / lint / test pass** before marking A-029 complete.
+
+### [E-065] Supplements assignment-only cleanup (remove logging-era legacy) (2026-03-21)
+
+- Linked request: Engineer cleanup after architect scope shift
+- Status: Implemented
+
+#### Scope
+
+- Supplements are now strictly informational assignments.
+- Removed daily supplement log/history/progress code paths.
+- Preserved program linkage model (workout + nutrition) per assignment context.
+
+#### Backend (`app/actions/supplements.ts`)
+
+- Removed logging-era exports and logic:
+  - `logSupplementAction`
+  - `getSupplementHistoryAction`
+  - `getSupplementProgressAction`
+  - all `supplement_logs` read/write code paths and schema-compat fallbacks.
+- Refactored subject/assignment responses to assignment-centric fields:
+  - subject rows now expose `title`, `workout_program`, `nutrition_program`, `key_nutrients`, `last_updated_at`.
+  - assignment rows now expose `title`, `workout_program`, `nutrition_program`.
+- Added `addSupplementAssignmentsBulkAction`:
+  - accepts subject + selected supplement IDs + optional title/program metadata.
+  - updates existing assignments and inserts missing assignments in one server action.
+  - reduces client-side N network calls for multi-select assignment.
+
+#### UI cleanup (`components/supplements/*`)
+
+- Removed legacy components:
+  - `log-supplement-sheet.tsx`
+  - `bulk-log-supplement-sheet.tsx`
+  - `supplement-history-sheet.tsx`
+- Added new component:
+  - `assign-supplements-sheet.tsx`
+  - right-side sheet on desktop, bottom sheet on mobile.
+  - supports person selection, title, workout/nutrition program selection, multi-supplement selection, selected badges with remove action.
+- Updated pages/tables:
+  - `supplements-roster-page.tsx`: replaced “Log Supplement” flow with “Assign Supplements”.
+  - `supplement-roster-table.tsx`: replaced log-era columns/actions with `Key Nutrients` + `Last Updated` and assignment action.
+  - `supplements-detail-page.tsx`: removed history/log wiring; now assignment-only with new sheet.
+  - `supplement-detail-table.tsx`: removed log-centric columns; now shows dosage + title + workout/nutrition program + updated date.
+  - `edit-assignment-dialog.tsx`: removed log-era schedule fields and now edits assignment title/program metadata + dosage/unit.
+  - `supplement-catalog-table.tsx`: removed heuristic category derivation from nutrient-key parsing and now uses stored category arrays only.
+
+#### Hooks/query keys cleanup
+
+- `hooks/use-supplements.ts`:
+  - removed `useSupplementHistory` and `useSupplementProgress`.
+- `lib/query-keys-supplements.ts`:
+  - removed `history` and `progress` keys.
+
+#### Nutrition progress unwire
+
+- `components/nutrition/progress/nutrition-progress-page.tsx`:
+  - removed supplement-log micronutrient query dependency.
+  - replaced with assignment-model informational CTA block linking to `/supplements/assigned`.
+
+#### Database/schema cleanup
+
+- Added migration:
+  - `supabase/migrations/20260321150000_supplement_assignment_informational_cleanup.sql`
+- Migration actions:
+  - drops `public.supplement_logs` (logging model removed).
+  - drops log-era scheduling columns from `public.supplement_assignments`:
+    - `time_of_day`
+    - `taken_with_food`
+  - drops related check constraint.
+- Updated `types/database.ts` to match cleanup:
+  - removed `supplement_logs` table type.
+  - removed `time_of_day` and `taken_with_food` from `supplement_assignments` types.
+
+#### Validation
+
+- `npm run -s typecheck` -> pass
+- `npm run -s lint` -> pass
+- `npm run -s test` -> pass
+
+
+### [E-066] Supplements roster/detail field relocation + DB model split (2026-03-21)
+
+- Linked request: Move `title/workout/nutrition` from `/supplements/assigned/me` table to `/supplements/assigned`; remove nutrients column from assigned roster; reflect in DB.
+- Status: Implemented
+
+#### Product behavior changes
+
+- `/supplements/assigned` roster table now shows:
+  - `Person`
+  - `Supplements`
+  - `Title`
+  - `Workout Program`
+  - `Nutrition Program`
+  - `Last Updated`
+- `/supplements/assigned` no longer shows nutrient column.
+- `/supplements/assigned/me` and `/supplements/assigned/[clientId]` assignment table no longer shows title/workout/nutrition columns.
+- Edit modal on `/supplements/assigned/me` and client detail now edits only assignment dosage:
+  - `default_servings`
+  - `unit`
+  - title/program fields removed from this modal.
+
+#### DB model changes
+
+- Added new subject-level metadata table:
+  - `public.supplement_subject_profiles`
+  - Columns: `subject_user_id`, `subject_client_id`, `title`, `workout_program`, `nutrition_program`, `updated_by`, timestamps.
+- Added RLS + indexes + update trigger for the new table.
+- Migrated latest legacy assignment metadata into subject profiles from old assignment columns (`notes`, `coach_note`).
+- Removed metadata columns from `public.supplement_assignments`:
+  - `notes`
+  - `coach_note`
+  - `coach_noted_by`
+
+#### Server action refactor (`app/actions/supplements.ts`)
+
+- Subject roster now reads title/program from `supplement_subject_profiles`.
+- Assignment row payload no longer includes title/program (detail table scope cleaned).
+- `addSupplementAssignmentAction` and `addSupplementAssignmentsBulkAction` now upsert subject metadata into `supplement_subject_profiles` when provided.
+- `updateSupplementAssignmentAction` now updates only assignment fields (`default_servings`, `unit`, `is_active`).
+
+#### Migration added
+
+- `supabase/migrations/20260321165000_supplement_subject_profiles_and_assignment_cleanup.sql`
+
+#### Type updates
+
+- `types/database.ts` updated:
+  - Added `supplement_subject_profiles` table type.
+  - Removed dropped columns from `supplement_assignments` type.
+
+#### Validation
+
+- `npm run -s typecheck` -> pass
+- `npm run -s lint` -> pass
+- `npm run -s test` -> pass
+
+
+### [E-067] Supplements assigned roster status + multi-stack per person (2026-03-21)
+
+- Linked request: Add `status` column to assigned supplements roster and allow coach/user to create more than one row per person.
+- Status: Implemented
+
+#### Product behavior changes
+
+- `/supplements/assigned` table now includes `Status` column (`Active`, `Inactive`, `Archived`, `Completed`).
+- The roster now supports multiple rows (stacks) for the same person instead of one row per person.
+- Clicking a roster row now opens that specific stack via `?stack=<profile_id>`.
+- Assign flow supports:
+  - creating a new stack for a subject (no `profile_id`)
+  - appending supplements to an existing stack (with `profile_id`)
+
+#### DB migration
+
+- Added migration:
+  - `supabase/migrations/20260321190000_supplement_profile_status_and_multi_stack.sql`
+- Migration changes:
+  - adds `supplement_subject_profiles.status` with check constraint and default `active`
+  - removes uniqueness indexes that forced one profile per subject
+  - adds `supplement_assignments.subject_profile_id` FK to `supplement_subject_profiles`
+  - backfills `subject_profile_id` for existing assignments
+  - replaces legacy uniqueness (`subject_user_id/client_id + supplement_id`) with:
+    - unique `(subject_profile_id, supplement_id)`
+  - adds index on `(subject_profile_id, is_active)`
+
+#### Client/data wiring updates
+
+- Query keys:
+  - added `supplementKeys.assignmentScope(subject)`
+  - added `supplementKeys.assignmentsByProfile(subject, profileId)`
+- Hooks:
+  - `useSupplementAssignments(subject, profileId?, enabled?)` now supports per-stack fetch.
+- Roster page/table:
+  - row actions now pass full row context (including `profile_id`, `status`)
+  - status badge rendered in table
+  - top-level copy updated to “multiple supplement stacks per person”
+  - actions menu now includes:
+    - `Edit stack`
+    - `Delete assigned supplement` (stack-level delete; cascades linked supplements via profile FK)
+- Detail routes:
+  - `assigned/me` and `assigned/[clientId]` now read `searchParams.stack`
+- Assign sheet:
+  - accepts `initialProfileId` + `initialStatus`
+  - includes stack status dropdown selector
+  - submits `profile_id` + `status` in bulk assignment action
+  - invalidates assignment queries at scope level (all stack variants for that subject)
+  - pre-fills existing stack metadata when opened from an existing row:
+    - title
+    - workout program
+    - nutrition program
+    - selected supplements
+  - preserves visible program labels even if option IDs are not pre-selected yet, then auto-matches by label once options load
+  - supplement dropdown popover updated to modal layering with opaque background and explicit z-index to avoid visual bleed/overlap with underlying modal content
+
+- Nutrition progress micronutrient panel:
+  - `Manage supplements` CTA is always shown (not gated by whether nutrition progress data exists), so coach/user can always jump to assignment management.
+
+#### Type updates
+
+- `types/database.ts` updated:
+  - `supplement_subject_profiles`: added `status`
+  - `supplement_assignments`: added `subject_profile_id` + relationship
+
+
+### [E-068] Supplements old-route cleanup (remove legacy aliases and redirects) (2026-03-21)
+
+- Linked request: Remove old supplement URLs from codebase and eliminate unnecessary redirects.
+- Status: Implemented
+
+#### Route cleanup
+
+- Removed legacy alias route files:
+  - `app/(dashboard)/supplements/me/page.tsx`
+  - `app/(dashboard)/supplements/[clientId]/page.tsx`
+- Canonical supplement routes are now only:
+  - `/supplements`
+  - `/supplements/assigned`
+  - `/supplements/assigned/me`
+  - `/supplements/assigned/[clientId]`
+
+#### Action cleanup
+
+- Removed stale revalidation paths that referenced deleted legacy aliases:
+  - removed `revalidatePath("/supplements/me")`
+  - removed `revalidatePath(\`/supplements/${subject.subject_client_id}\`)`
+- Kept only canonical assigned-route revalidation.
+
+#### Validation
+
+- `npm run -s typecheck` -> pass
+- `npm run -s lint` -> pass
+
+
+### [E-070] Supplements delete UX feedback (pending + completion toasts) (2026-03-21)
+
+- Linked request: Show request-in-progress feedback and deletion confirmation when deleting supplements.
+- Status: Implemented
+
+#### UX behavior changes
+
+- Added explicit pending/success/error toast lifecycle for delete flows:
+  - Assigned stack delete from `/supplements/assigned`
+  - Supplement row delete from `/supplements/assigned/me` and `/supplements/assigned/[clientId]`
+- User now sees:
+  - loading toast while delete request is in-flight
+  - success toast when delete completes
+  - error toast if delete fails
+
+#### Implementation notes
+
+- `components/supplements/supplements-roster-page.tsx`
+  - wrapped stack deletion mutation call in `toast.promise(...)`
+  - kept query invalidation in mutation `onSuccess`
+- `components/supplements/supplements-detail-page.tsx`
+  - added `removeAssignmentWithFeedback(...)` helper using `toast.promise(...)`
+  - used helper for both table action delete and edit-sheet delete action
+  - kept query invalidation in mutation `onSuccess`
+
+#### Validation
+
+- `npm run -s typecheck` -> pass
+- `npm run -s lint` -> pass
+
+
+### [E-071] Global update/delete mutation feedback pass (loading + success/error) (2026-03-21)
+
+- Linked request: Add in-progress and completion feedback for update/delete actions across the app (not only supplements).
+- Status: Implemented
+
+#### Shared infrastructure
+
+- Added reusable helper:
+  - `lib/ui/toast-feedback.ts`
+  - `withToastFeedback(promise, { loading, success, error })`
+  - `getActionErrorMessage(error, fallback)`
+- Helper behavior:
+  - starts toast lifecycle with loading state
+  - resolves to success toast on completion
+  - resolves to error toast on failure
+  - returns the original Promise so existing async/await mutation flows remain type-safe
+
+#### Coverage implemented in this pass
+
+- Support / Tickets:
+  - `app/(dashboard)/support/[id]/page.tsx`
+    - ticket update
+    - subscription update (subscribe/unsubscribe)
+    - comment update
+    - comment delete
+  - `app/(dashboard)/(admin)/admin/tickets/page.tsx`
+    - admin ticket status update
+    - admin ticket delete
+
+- Training / Programs / Exercises:
+  - `app/(dashboard)/(training)/programs/page.tsx`
+    - bulk delete programs
+  - `components/workout/workout-status-select.tsx`
+    - workout status update
+  - `components/program/program-timeline.tsx`
+    - remove item from program timeline
+  - `hooks/use-exercise.ts`
+    - create/update/delete mutations now run through shared feedback helper
+  - `components/exercises/exercises-actions.tsx`
+    - remove duplicate local delete toasts (feedback now unified from mutation layer)
+  - `hooks/use-workout.ts`
+    - update workout
+    - delete workout
+  - `components/workout/workout-form.tsx`
+    - adjusted catch handling to avoid duplicate failure toasts when mutation layer already surfaces error
+
+- Nutrition:
+  - `components/nutrition/manual-nutrition-diary.tsx`
+    - update meal item
+    - remove meal item
+    - toggle favorite state (update)
+  - `components/nutrition/meal-planner/meal-planner-page.tsx`
+    - update meal item
+    - update section notes
+    - delete meal item
+    - toggle favorite state (update)
+  - `components/nutrition/meal-groups/meal-group-detail.tsx`
+    - update meal group
+    - update day notes
+    - update meal item
+    - delete meal item
+    - toggle favorite state (update)
+
+- Coach tools:
+  - `components/coach-tools/client-goals-medical-tab.tsx`
+    - update goal
+    - update goal status
+    - delete goal
+  - `components/coach-tools/coach-payments-dashboard.tsx`
+    - update payment details
+    - delete payment
+  - `components/coach-tools/client-payment-logs.tsx`
+    - delete single session log
+    - delete selected session logs (bulk)
+  - `components/coach-tools/client-access-control.tsx`
+    - update username
+    - reset password
+    - update module access
+    - block access
+    - remove access
+  - `components/coach-tools/client-profile-hub.tsx`
+    - remove client
+    - update note
+    - update payment
+    - delete payment
+    - update module access
+    - reset password
+    - update username
+    - block/remove portal access
+  - `components/coach-tools/client-roster.tsx`
+    - upsert client (create/update)
+    - archive/remove client
+
+- Supplements:
+  - `components/supplements/supplements-detail-page.tsx`
+    - update assignment now includes loading/success/error lifecycle via shared helper
+  - `components/supplements/edit-supplement-dialog.tsx`
+    - update supplement now includes loading/success/error lifecycle via shared helper
+
+#### Validation
+
+- `npm run -s typecheck` -> pass
+- `npm run -s lint` -> pass
+
+
+### [E-072] Global mutation feedback completion pass (remaining update/delete surfaces) (2026-03-21)
+
+- Linked request: extend in-progress and completion feedback to remaining update/delete paths across the app.
+- Status: Implemented
+
+#### Additional coverage implemented in this pass
+
+- Client Portal:
+  - `components/client-portal/portal-modules.tsx`
+    - task completion status update
+    - diary item favorite update
+    - diary item delete
+    - steps update/save
+    - goals update/save
+
+- Nutrition:
+  - `components/nutrition/meal-groups/meal-groups-dashboard.tsx`
+    - meal group create/update and delete now show loading/success/error lifecycle
+  - `components/nutrition/meal-groups/meal-group-detail.tsx`
+    - assignment archive/reassign now show loading/success/error lifecycle
+  - `components/nutrition/meal-groups/assign-meal-group-dialog.tsx`
+    - assignment submit now uses loading/success/error lifecycle
+  - `components/nutrition/manual-nutrition-diary.tsx`
+    - section note update now uses loading/success/error lifecycle
+  - `app/(dashboard)/(nutrition-domain)/nutrition/[id]/page.tsx`
+    - meal order update
+    - meal delete (single + bulk)
+    - notes update
+    - program status update
+    - meal status update
+
+- Programs / Training:
+  - `components/program/program-assignee-dropdown.tsx`
+    - assignment update now uses loading/success/error lifecycle
+  - `components/program/program-builder.tsx`
+    - add workout save feedback
+    - program item order update feedback
+  - `app/(dashboard)/(training)/workouts/[id]/page.tsx`
+    - delete now awaits mutation completion before routing away to keep success/failure feedback accurate
+
+- Coach tools:
+  - `components/coach-tools/billing-plan-dialog.tsx`
+    - billing plan update/create now uses loading/success/error lifecycle
+
+- Account / Settings:
+  - `components/settings/profile-settings-form.tsx`
+    - profile update now uses loading/success/error lifecycle
+  - `components/settings/coaching-settings-form.tsx`
+    - coaching defaults update now uses loading/success/error lifecycle
+  - `components/settings/security-settings-panel.tsx`
+    - password update/set now uses loading/success/error lifecycle (with existing button spinner preserved)
+  - `components/settings/set-password-card.tsx`
+    - set password flow now uses loading/success/error lifecycle for password update step
+  - `components/auth/reset-password-form.tsx`
+    - reset password submit now uses loading/success/error lifecycle
+
+#### Validation
+
+- `npm run -s typecheck` -> pass
+- `npm run -s lint` -> pass
+- `npm run -s test -- tests/settings-goals-contract.test.ts` -> pass
+
+
+### [E-073] A-030 implementation — restore deactivate account flow in Settings Security tab (2026-03-21)
+
+- Linked architect item: A-030
+- Status: Implemented
+
+#### Changes made
+
+- `app/actions/settings.ts`
+  - `SettingsProfilePayload` extended with:
+    - `role: Database["public"]["Enums"]["user_role"]`
+  - `getSettingsProfile()` now selects `role` from `profiles`
+  - `getSettingsProfile()` now returns normalized role:
+    - `"sysadmin"` when profile role is sysadmin
+    - `"user"` otherwise
+
+- `app/(dashboard)/(account)/settings/security/page.tsx`
+  - Security panel now receives:
+    - `isAdmin={profile.role === "sysadmin"}`
+
+- `components/settings/security-settings-panel.tsx`
+  - imported and rendered:
+    - `<AccountDangerZone isAdmin={isAdmin} />`
+  - added optional prop:
+    - `isAdmin?: boolean`
+  - danger zone is rendered below sign-out section inside the main `stack-gap` layout
+
+#### Notes
+
+- No changes were made to:
+  - `components/settings/account-danger-zone.tsx`
+  - `app/actions/account-security.ts`
+  - restore account auth flow files
+- This matches A-030’s requirement to reconnect existing flow without changing underlying deletion logic.
+
+#### Validation
+
+- `npm run -s typecheck` -> pass
+- `npm run -s lint` -> pass
+
+
+### [E-074] Reset password recovery link handling hardening (2026-03-21)
+
+- Linked issue: reset-password links intermittently landing in `otp_expired`/`session missing` state on `/reset-password`.
+- Status: Implemented
+
+#### Root cause observed
+
+- `components/auth/reset-password-form.tsx` only checked `getSession()` and hash error fields.
+- Recovery links can arrive as either:
+  - `?code=...` (PKCE flow), or
+  - `#access_token=...&refresh_token=...` (implicit flow).
+- Without explicitly exchanging/applying these URL credentials first, valid recovery links could appear as missing session in the UI.
+
+#### Fix implemented
+
+- Updated `components/auth/reset-password-form.tsx` mount recovery logic to:
+  1. Read `code` from query string and call `supabase.auth.exchangeCodeForSession(code)` when present.
+  2. Otherwise read hash `access_token` + `refresh_token` and call `supabase.auth.setSession(...)`.
+  3. Clean URL (`history.replaceState`) after successful session establishment.
+  4. Fall back to `getSession()` only after normalization.
+
+- Existing error handling for `otp_expired` and invalid links remains in place.
+
+#### Validation
+
+- `npm run -s typecheck` -> pass
+- `npm run -s lint` -> pass
+
+
+### [E-075] /workouts page revamp (modern UI + real data + legacy cleanup) (2026-03-21)
+
+- Linked request: redesign `/workouts` to match reference style, keep real data only, optimize for page speed, and remove legacy page code.
+- Status: Implemented
+
+#### UI and behavior changes
+
+- `app/(dashboard)/(training)/workouts/page.tsx`
+  - rebuilt page layout to a modern sessions dashboard style:
+    - heading: `Workout Sessions`
+    - live subtitle count: `N workouts total`
+    - primary action: `New Workout`
+    - full-width search bar
+    - list/grid icon toggle
+    - status pill filters (`All`, `Draft`, `Active`, `Completed`, `Archived`)
+    - live filtered count label above results
+    - row design aligned to reference:
+      - workout icon
+      - workout name
+      - real metadata from DB (`date`, `strength_sets` count, `duration_minutes`)
+      - status text and inline status control
+      - detail chevron link
+    - `Load more (X remaining)` paging button based on real filtered result length
+  - removed old mixed header controls and old top status dropdown.
+  - no mock or hardcoded workout rows; all cards/rows are mapped from `useWorkouts().history.data`.
+
+- `components/workout/workout-status-select.tsx`
+  - removed `router.refresh()` on status update.
+  - switched to React Query invalidation:
+    - `trainingKeys.sessions()`
+    - `trainingKeys.session(workoutId)`
+  - keeps optimistic local UI update and now reverts on failure.
+  - reduces full-page refresh cost and improves interaction latency.
+
+#### Legacy cleanup (page-scoped)
+
+- deleted unused legacy view components previously used only by `/workouts`:
+  - `components/workout/workout-card.tsx`
+  - `components/workout/workout-list-item.tsx`
+
+#### Performance notes
+
+- kept lean source query (`id`, `name`, `status`, `date`, `duration_minutes`, `strength_sets(id)`) from existing `useWorkouts()` hook.
+- retained debounced search (`300ms`) and memoized filtering/slicing to avoid unnecessary recomputation.
+- removed full route refresh on status mutation in favor of targeted query invalidation.
+
+#### Validation
+
+- `npm run -s typecheck` -> pass
+- `npm run -s lint` -> pass
+
+
+### [E-076] /workouts visual parity + status dropdown reliability follow-up (2026-03-21)
+
+- Linked request: align `/workouts` UI closer to provided reference and fix non-working status dropdown behavior.
+- Status: Implemented
+
+#### Changes made
+
+- `app/(dashboard)/(training)/workouts/page.tsx`
+  - removed remaining oversized/extra-curved wrapper treatment around top controls.
+  - tightened visual parity with reference:
+    - flatter top section (no large shell card)
+    - session row corner radius and spacing tuned
+    - row icon changed to clipboard-style accent for closer visual match
+  - preserved real-data rendering and existing performance optimizations.
+
+- `components/workout/workout-status-select.tsx`
+  - switched trigger content to proper `SelectValue` usage with explicit status dot + label.
+  - improved dropdown content styling/visibility for clearer interaction state.
+  - kept optimistic update + targeted query invalidation (`sessions` + `session(id)`).
+
+#### Validation
+
+- `npm run -s typecheck` -> pass
+- `npm run -s lint` -> pass
+
+
+### [E-077] Exercise catalog parent muscle-category normalization (2026-03-21)
+
+- Linked request: all exercises must include the main muscle category in `muscle_groups` (example: `Air Squat` should include `legs` in addition to `quads/glutes/core`).
+- Status: Implemented
+
+#### Rule implemented
+
+- On exercise create/update, `muscle_groups` is normalized and augmented with a single inferred main category.
+- Main category candidates:
+  - `chest`
+  - `back`
+  - `legs`
+  - `shoulders`
+  - `arms`
+  - `core`
+  - `glutes`
+  - `cardio`
+- The inferred main category is prepended to the array (for example: `['legs', 'quads', 'glutes', 'core']`).
+
+#### Code changes
+
+- Added helper:
+  - `lib/exercises/muscle-groups.ts`
+  - exports `withParentMuscleGroups(muscleGroups, category)`
+  - behavior:
+    - normalizes tokens (`trim/lowercase`, spaces and hyphens to `_`)
+    - applies aliases (for example `quad -> quads`, `leg -> legs`)
+    - infers and prepends one main category
+    - removes duplicates while preserving deterministic order
+
+- Wired helper into server actions:
+  - `app/actions/exercises.ts`
+  - `createExercise`: now stores normalized `muscle_groups` with inferred main category
+  - `updateExercise`: same normalization before update
+
+#### Existing-data backfill
+
+- Added migration:
+  - `supabase/migrations/20260321201000_exercise_muscle_group_parent_normalization.sql`
+- Migration behavior:
+  - normalizes existing `exercise_catalog.muscle_groups`
+  - infers and prepends one main category based on current sub-muscle tags and category
+  - drops temporary SQL helper function after update
+
+#### Validation
+
+- `npm run -s typecheck` -> pass
+- `npm run -s lint` -> pass

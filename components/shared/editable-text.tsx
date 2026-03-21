@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Check, X, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import { withToastFeedback } from "@/lib/ui/toast-feedback";
 
 interface EditableTextProps {
   initialValue: string;
@@ -31,11 +32,17 @@ export function EditableText({ initialValue, onSave, className }: EditableTextPr
     }
     try {
       setIsLoading(true);
-      await onSave(value);
-      toast.success("Updated successfully");
+      const result = await withToastFeedback(onSave(value), {
+        loading: "Updating...",
+        success: "Updated successfully",
+        error: "Failed to update",
+      }).catch(() => null);
+      if (!result) {
+        setValue(initialValue);
+        return;
+      }
       setIsEditing(false);
-    } catch (error) {
-      toast.error("Failed to update");
+    } catch {
       setValue(initialValue);
     } finally {
       setIsLoading(false);

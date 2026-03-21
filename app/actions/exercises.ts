@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { runTrackedAction } from "@/lib/events/dispatcher";
 import { escapeLikePattern } from "@/lib/utils/search";
 import { ExerciseFormValues } from "@/lib/validations/exercise";
+import { withParentMuscleGroups } from "@/lib/exercises/muscle-groups";
 import { revalidatePath } from "next/cache";
 import { Database } from "@/types/database";
 
@@ -159,10 +160,12 @@ export async function createExercise(values: ExerciseFormValues) {
         throw new Error("Unauthorized");
     }
 
+    const normalizedMuscleGroups = withParentMuscleGroups(values.muscle_groups, values.category);
+
     const { error } = await supabase.from("exercise_catalog").insert({
         name: values.name,
         category: values.category,
-        muscle_groups: values.muscle_groups,
+        muscle_groups: normalizedMuscleGroups,
         equipment: values.equipment,
         description: values.description,
         video_url: values.video_url || null,
@@ -211,13 +214,14 @@ export async function updateExercise(id: string, values: ExerciseFormValues) {
         payload: { exercise_id: id, name: values.name, category: values.category },
         action: async () => {
     const supabase = await createClient();
+    const normalizedMuscleGroups = withParentMuscleGroups(values.muscle_groups, values.category);
 
     const { error, count } = await supabase
         .from("exercise_catalog")
         .update({
             name: values.name,
             category: values.category,
-            muscle_groups: values.muscle_groups,
+            muscle_groups: normalizedMuscleGroups,
             equipment: values.equipment,
             description: values.description,
             video_url: values.video_url || null,

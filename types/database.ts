@@ -1427,6 +1427,90 @@ export type Database = {
           },
         ]
       }
+      daily_macro_compliance: {
+        Row: {
+          actual_calories: number
+          actual_carbs_g: number
+          actual_fat_g: number
+          actual_protein_g: number
+          basis: string
+          calories_compliant: boolean | null
+          carbs_compliant: boolean | null
+          fat_compliant: boolean | null
+          id: string
+          overall_compliant: boolean | null
+          performed_on: string
+          protein_compliant: boolean | null
+          subject_client_id: string | null
+          subject_user_id: string | null
+          target_calories: number | null
+          target_carbs_g: number | null
+          target_fat_g: number | null
+          target_protein_g: number | null
+          target_source: string
+          updated_at: string
+        }
+        Insert: {
+          actual_calories?: number
+          actual_carbs_g?: number
+          actual_fat_g?: number
+          actual_protein_g?: number
+          basis: string
+          calories_compliant?: boolean | null
+          carbs_compliant?: boolean | null
+          fat_compliant?: boolean | null
+          id?: string
+          overall_compliant?: boolean | null
+          performed_on: string
+          protein_compliant?: boolean | null
+          subject_client_id?: string | null
+          subject_user_id?: string | null
+          target_calories?: number | null
+          target_carbs_g?: number | null
+          target_fat_g?: number | null
+          target_protein_g?: number | null
+          target_source: string
+          updated_at?: string
+        }
+        Update: {
+          actual_calories?: number
+          actual_carbs_g?: number
+          actual_fat_g?: number
+          actual_protein_g?: number
+          basis?: string
+          calories_compliant?: boolean | null
+          carbs_compliant?: boolean | null
+          fat_compliant?: boolean | null
+          id?: string
+          overall_compliant?: boolean | null
+          performed_on?: string
+          protein_compliant?: boolean | null
+          subject_client_id?: string | null
+          subject_user_id?: string | null
+          target_calories?: number | null
+          target_carbs_g?: number | null
+          target_fat_g?: number | null
+          target_protein_g?: number | null
+          target_source?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "daily_macro_compliance_subject_client_id_fkey"
+            columns: ["subject_client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "daily_macro_compliance_subject_user_id_fkey"
+            columns: ["subject_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       exercise_catalog: {
         Row: {
           aliases: string[] | null
@@ -2781,6 +2865,192 @@ export type Database = {
             columns: ["workout_id"]
             isOneToOne: false
             referencedRelation: "training_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      supplement_catalog: {
+        Row: {
+          brand: string | null
+          category: string
+          categories: string[]
+          created_at: string
+          id: string
+          is_global: boolean
+          name: string
+          nutrients: Json
+          owner_user_id: string | null
+          serving_label: string
+        }
+        Insert: {
+          brand?: string | null
+          category: string
+          categories?: string[]
+          created_at?: string
+          id?: string
+          is_global?: boolean
+          name: string
+          nutrients?: Json
+          owner_user_id?: string | null
+          serving_label: string
+        }
+        Update: {
+          brand?: string | null
+          category?: string
+          categories?: string[]
+          created_at?: string
+          id?: string
+          is_global?: boolean
+          name?: string
+          nutrients?: Json
+          owner_user_id?: string | null
+          serving_label?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "supplement_catalog_owner_user_id_fkey"
+            columns: ["owner_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      supplement_assignments: {
+        Row: {
+          assigned_by: string | null
+          created_at: string
+          default_servings: number
+          id: string
+          is_active: boolean
+          subject_profile_id: string
+          subject_client_id: string | null
+          subject_user_id: string | null
+          supplement_id: string
+          unit: string | null
+          updated_at: string
+        }
+        Insert: {
+          assigned_by?: string | null
+          created_at?: string
+          default_servings?: number
+          id?: string
+          is_active?: boolean
+          subject_profile_id: string
+          subject_client_id?: string | null
+          subject_user_id?: string | null
+          supplement_id: string
+          unit?: string | null
+          updated_at?: string
+        }
+        Update: {
+          assigned_by?: string | null
+          created_at?: string
+          default_servings?: number
+          id?: string
+          is_active?: boolean
+          subject_profile_id?: string
+          subject_client_id?: string | null
+          subject_user_id?: string | null
+          supplement_id?: string
+          unit?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "supplement_assignments_assigned_by_fkey"
+            columns: ["assigned_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplement_assignments_subject_client_id_fkey"
+            columns: ["subject_client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplement_assignments_subject_profile_id_fkey"
+            columns: ["subject_profile_id"]
+            isOneToOne: false
+            referencedRelation: "supplement_subject_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplement_assignments_subject_user_id_fkey"
+            columns: ["subject_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplement_assignments_supplement_id_fkey"
+            columns: ["supplement_id"]
+            isOneToOne: false
+            referencedRelation: "supplement_catalog"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      supplement_subject_profiles: {
+        Row: {
+          created_at: string
+          id: string
+          nutrition_program: string | null
+          status: string
+          subject_client_id: string | null
+          subject_user_id: string | null
+          title: string | null
+          updated_at: string
+          updated_by: string | null
+          workout_program: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          nutrition_program?: string | null
+          status?: string
+          subject_client_id?: string | null
+          subject_user_id?: string | null
+          title?: string | null
+          updated_at?: string
+          updated_by?: string | null
+          workout_program?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          nutrition_program?: string | null
+          status?: string
+          subject_client_id?: string | null
+          subject_user_id?: string | null
+          title?: string | null
+          updated_at?: string
+          updated_by?: string | null
+          workout_program?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "supplement_subject_profiles_subject_client_id_fkey"
+            columns: ["subject_client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplement_subject_profiles_subject_user_id_fkey"
+            columns: ["subject_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplement_subject_profiles_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]

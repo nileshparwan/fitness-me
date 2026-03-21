@@ -83,6 +83,7 @@ import {
 import { useDebounce } from "@/hooks/use-debounce";
 import { useCoachClientPortalMutations, useCoachClientPortalSettings } from "@/hooks/use-client-portal";
 import { CLIENT_MODULE_KEYS, type ClientModuleKey } from "@/lib/client-portal/constants";
+import { withToastFeedback } from "@/lib/ui/toast-feedback";
 import { Database } from "@/types/database";
 import { cn } from "@/utils";
 
@@ -594,14 +595,14 @@ export function ClientProfileHub({ clientId, initialTab = "overview" }: { client
   }, [filteredPaymentsRows.length, paymentsPagination.pageIndex, paymentsPagination.pageSize]);
 
   const onRemoveClient = async () => {
-    try {
-      await mutations.removeClient.mutateAsync({ client_id: clientId });
-      setRemoveOpen(false);
-      toast.success("Client removed");
-      router.push("/clients");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to remove client");
-    }
+    const result = await withToastFeedback(mutations.removeClient.mutateAsync({ client_id: clientId }), {
+      loading: "Removing client...",
+      success: "Client removed",
+      error: "Unable to remove client",
+    }).catch(() => null);
+    if (!result) return;
+    setRemoveOpen(false);
+    router.push("/clients");
   };
 
   const onLogSession = async () => {
@@ -639,13 +640,21 @@ export function ClientProfileHub({ clientId, initialTab = "overview" }: { client
 
     try {
       if (editingNoteId) {
-        await mutations.updateNote.mutateAsync({
-          note_id: editingNoteId,
-          client_id: clientId,
-          tag: noteTag,
-          content: noteContent.trim(),
-          visibility: noteVisibility,
-        });
+        const updated = await withToastFeedback(
+          mutations.updateNote.mutateAsync({
+            note_id: editingNoteId,
+            client_id: clientId,
+            tag: noteTag,
+            content: noteContent.trim(),
+            visibility: noteVisibility,
+          }),
+          {
+            loading: "Updating note...",
+            success: "Note updated",
+            error: "Unable to save note",
+          }
+        ).catch(() => null);
+        if (!updated) return;
       } else {
         await mutations.createNote.mutateAsync({
           client_id: clientId,
@@ -660,7 +669,7 @@ export function ClientProfileHub({ clientId, initialTab = "overview" }: { client
       setNoteContent("");
       setNoteTag("general");
       setNoteVisibility("private");
-      toast.success(editingNoteId ? "Note updated" : "Note saved");
+      if (!editingNoteId) toast.success("Note saved");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to save note");
     }
@@ -711,13 +720,13 @@ export function ClientProfileHub({ clientId, initialTab = "overview" }: { client
     const confirmed = typeof window === "undefined" ? true : window.confirm("Delete this payment permanently?");
     if (!confirmed) return;
 
-    try {
-      await mutations.deletePayment.mutateAsync({ id: selectedPayment.id });
-      toast.success("Payment deleted");
-      setSelectedPayment(null);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to delete payment");
-    }
+    const result = await withToastFeedback(mutations.deletePayment.mutateAsync({ id: selectedPayment.id }), {
+      loading: "Deleting payment...",
+      success: "Payment deleted",
+      error: "Unable to delete payment",
+    }).catch(() => null);
+    if (!result) return;
+    setSelectedPayment(null);
   };
 
   const onSavePaymentDetails = async () => {
@@ -728,40 +737,46 @@ export function ClientProfileHub({ clientId, initialTab = "overview" }: { client
     const normalizedNotes = clampToWordLimit(selectedPaymentNotes, PAYMENT_NOTES_WORD_LIMIT);
     const mergedNotes = [normalizedDescription, normalizedNotes].filter(Boolean).join("\n") || null;
 
-    try {
-      await mutations.updatePaymentDetails.mutateAsync({
+    const result = await withToastFeedback(
+      mutations.updatePaymentDetails.mutateAsync({
         id: selectedPayment.id,
         status: selectedPaymentStatus,
         method: selectedPaymentMethod,
         notes: mergedNotes,
-      });
-      setSelectedPayment((current) =>
-        current
-          ? {
-              ...current,
-              status: selectedPaymentStatus,
-              method: selectedPaymentMethod,
-              notes: mergedNotes,
-            }
-          : current
-      );
-      toast.success("Payment updated");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to update payment");
-    }
+      }),
+      {
+        loading: "Updating payment...",
+        success: "Payment updated",
+        error: "Unable to update payment",
+      }
+    ).catch(() => null);
+    if (!result) return;
+
+    setSelectedPayment((current) =>
+      current
+        ? {
+            ...current,
+            status: selectedPaymentStatus,
+            method: selectedPaymentMethod,
+            notes: mergedNotes,
+          }
+        : current
+    );
   };
 
   const onUpdateModuleAccess = async (moduleKey: ClientModuleKey, access: "disabled" | "read_only" | "enabled") => {
-    try {
-      await portalMutations.updateModuleAccess.mutateAsync({
+    await withToastFeedback(
+      portalMutations.updateModuleAccess.mutateAsync({
         client_id: clientId,
         module_key: moduleKey,
         access_level: access,
-      });
-      toast.success(`${MODULE_LABELS[moduleKey]} updated`);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to update permission");
-    }
+      }),
+      {
+        loading: "Updating permissions...",
+        success: `${MODULE_LABELS[moduleKey]} updated`,
+        error: "Unable to update permission",
+      }
+    ).catch(() => null);
   };
 
   const onResetPassword = async () => {
@@ -770,16 +785,48 @@ export function ClientProfileHub({ clientId, initialTab = "overview" }: { client
       return;
     }
 
-    try {
-      await portalMutations.resetPassword.mutateAsync({
+    const result = await withToastFeedback(
+      portalMutations.resetPassword.mutateAsync({
         client_id: clientId,
         new_password: portalResetPassword,
-      });
-      setPortalResetPassword("");
-      toast.success("Password reset");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to reset password");
-    }
+      }),
+      {
+        loading: "Resetting password...",
+        success: "Password reset",
+        error: "Unable to reset password",
+      }
+    ).catch(() => null);
+    if (!result) return;
+    setPortalResetPassword("");
+  };
+
+  const onUpdatePortalUsername = async () => {
+    const nextUsername = portalUsername.trim();
+    if (!nextUsername) return;
+    await withToastFeedback(
+      portalMutations.changeUsername.mutateAsync({ client_id: clientId, username: nextUsername }),
+      {
+        loading: "Updating username...",
+        success: "Username updated",
+        error: "Unable to update username",
+      }
+    ).catch(() => null);
+  };
+
+  const onBlockPortalAccess = async () => {
+    await withToastFeedback(portalMutations.blockAccess.mutateAsync(clientId), {
+      loading: "Blocking access...",
+      success: "Access blocked",
+      error: "Unable to block access",
+    }).catch(() => null);
+  };
+
+  const onRemovePortalAccess = async () => {
+    await withToastFeedback(portalMutations.removeAccess.mutateAsync(clientId), {
+      loading: "Removing access...",
+      success: "Access removed",
+      error: "Unable to remove access",
+    }).catch(() => null);
   };
 
   const onOpenClientPortal = () => {
@@ -801,9 +848,9 @@ export function ClientProfileHub({ clientId, initialTab = "overview" }: { client
   if (loading) {
     return (
       <div className="space-y-4 md:space-y-5">
-        <Skeleton className="h-28 w-full rounded-3xl" />
-        <Skeleton className="h-14 w-full rounded-2xl" />
-        <Skeleton className="h-96 w-full rounded-2xl" />
+        <Skeleton className="h-28 w-full rounded-[10px]" />
+        <Skeleton className="h-14 w-full rounded-[10px]" />
+        <Skeleton className="h-96 w-full rounded-[10px]" />
       </div>
     );
   }
@@ -824,7 +871,7 @@ export function ClientProfileHub({ clientId, initialTab = "overview" }: { client
           Clients
         </Link>
 
-        <div className="glass-surface rounded-2xl border border-border/60 p-4 md:p-5">
+        <div className="glass-surface rounded-[10px] border border-border/60 p-4 md:p-5">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="flex min-w-0 items-center gap-3">
               <div className="grid h-12 w-12 place-items-center rounded-xl bg-chart-1/90 text-base font-semibold text-black">
@@ -866,7 +913,7 @@ export function ClientProfileHub({ clientId, initialTab = "overview" }: { client
                     Remove Client
                   </Button>
                 </DialogTrigger>
-                <DialogContent className="rounded-2xl border-border/70 bg-card/95 sm:max-w-md">
+                <DialogContent className="rounded-[10px] border-border/70 bg-card/95 sm:max-w-md">
                   <DialogHeader>
                     <DialogTitle>Remove Client</DialogTitle>
                     <DialogDescription>
@@ -889,7 +936,7 @@ export function ClientProfileHub({ clientId, initialTab = "overview" }: { client
         </div>
       </section>
 
-      <section className="glass-surface rounded-2xl border border-border/60 p-2">
+      <section className="glass-surface rounded-[10px] border border-border/60 p-2">
         <div className="no-scrollbar flex gap-2 overflow-x-auto">
           {PROFILE_TABS.map((tab) => {
             const Icon = tab.icon;
@@ -914,7 +961,7 @@ export function ClientProfileHub({ clientId, initialTab = "overview" }: { client
 
       {activeTab === "overview" ? (
         <div className="space-y-3">
-          <section className="glass-surface rounded-2xl border border-border/60 p-4">
+          <section className="glass-surface rounded-[10px] border border-border/60 p-4">
             <h2 className="mb-2 text-base font-semibold">Client Details</h2>
             <div className="overflow-hidden rounded-xl border border-border/60 bg-background/30">
               <Table>
@@ -952,7 +999,7 @@ export function ClientProfileHub({ clientId, initialTab = "overview" }: { client
             </div>
           </section>
 
-          <section className="glass-surface rounded-2xl border border-border/60 p-4">
+          <section className="glass-surface rounded-[10px] border border-border/60 p-4">
             <h2 className="mb-2 text-base font-semibold">Assigned Nutrition Plan</h2>
             <div className="space-y-2">
               {nutritionAssignments.length === 0 ? (
@@ -978,7 +1025,7 @@ export function ClientProfileHub({ clientId, initialTab = "overview" }: { client
             </div>
           </section>
 
-          <section className="glass-surface rounded-2xl border border-border/60 p-4">
+          <section className="glass-surface rounded-[10px] border border-border/60 p-4">
             <h2 className="mb-2 text-base font-semibold">Active Assignments</h2>
             <div className="space-y-2">
               {activeAssignments.length === 0 ? (
@@ -1008,7 +1055,7 @@ export function ClientProfileHub({ clientId, initialTab = "overview" }: { client
             </div>
           </section>
 
-          <section className="glass-surface rounded-2xl border border-border/60 p-4">
+          <section className="glass-surface rounded-[10px] border border-border/60 p-4">
             <h2 className="mb-2 text-base font-semibold">Recent Activity</h2>
             <div className="divide-y divide-border/40 rounded-xl border border-border/60 bg-background/30">
               {overviewActivity.length === 0 ? (
@@ -1037,7 +1084,7 @@ export function ClientProfileHub({ clientId, initialTab = "overview" }: { client
 
       {activeTab === "training" ? (
         <div className="space-y-3">
-          <section className="glass-surface rounded-2xl border border-border/60 p-4">
+          <section className="glass-surface rounded-[10px] border border-border/60 p-4">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="text-base font-semibold">Today&apos;s Sessions</h2>
               <Dialog open={logOpen} onOpenChange={setLogOpen}>
@@ -1050,7 +1097,7 @@ export function ClientProfileHub({ clientId, initialTab = "overview" }: { client
                     Log Session
                   </Button>
                 </DialogTrigger>
-                <DialogContent className="rounded-2xl border-border/70 bg-card/95 sm:max-w-xl">
+                <DialogContent className="rounded-[10px] border-border/70 bg-card/95 sm:max-w-xl">
                   <DialogHeader>
                     <DialogTitle>Log Session</DialogTitle>
                     <DialogDescription>Add a workout session for today.</DialogDescription>
@@ -1145,7 +1192,7 @@ export function ClientProfileHub({ clientId, initialTab = "overview" }: { client
             </div>
           </section>
 
-          <section className="glass-surface rounded-2xl border border-border/60 p-4">
+          <section className="glass-surface rounded-[10px] border border-border/60 p-4">
             <h2 className="mb-3 text-base font-semibold">Plan History</h2>
             <div className="divide-y divide-border/40 rounded-xl border border-border/60 bg-background/30">
               {(assignmentsQuery.data || []).length === 0 ? (
@@ -1188,7 +1235,7 @@ export function ClientProfileHub({ clientId, initialTab = "overview" }: { client
                   Add Note
                 </Button>
               </DialogTrigger>
-              <DialogContent className="rounded-2xl border-border/70 bg-card/95 sm:max-w-lg">
+              <DialogContent className="rounded-[10px] border-border/70 bg-card/95 sm:max-w-lg">
                 <DialogHeader>
                   <DialogTitle>{editingNoteId ? "Edit Coach Note" : "New Coach Note"}</DialogTitle>
                 </DialogHeader>
@@ -1268,10 +1315,10 @@ export function ClientProfileHub({ clientId, initialTab = "overview" }: { client
 
           <section className="space-y-2">
             {(notesQuery.data || []).length === 0 ? (
-              <p className="glass-surface rounded-2xl border border-border/60 px-4 py-8 text-center text-sm text-muted-foreground">No notes yet.</p>
+              <p className="glass-surface rounded-[10px] border border-border/60 px-4 py-8 text-center text-sm text-muted-foreground">No notes yet.</p>
             ) : (
               (notesQuery.data || []).map((note) => (
-                <article key={note.id} className="glass-surface rounded-2xl border border-border/60 p-4">
+                <article key={note.id} className="glass-surface rounded-[10px] border border-border/60 p-4">
                   <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
                       <span>{dateLabel(note.created_at.slice(0, 10))}</span>
@@ -1314,12 +1361,12 @@ export function ClientProfileHub({ clientId, initialTab = "overview" }: { client
             </div>
             <Dialog open={paymentOpen} onOpenChange={setPaymentOpen}>
               <DialogTrigger asChild>
-                <Button className="h-12 rounded-2xl bg-chart-1 px-5 text-base font-medium text-white hover:bg-chart-1/90">
+                <Button className="h-12 rounded-[10px] bg-chart-1 px-5 text-base font-medium text-white hover:bg-chart-1/90">
                   <Plus className="mr-2 h-4 w-4" />
                   Record
                 </Button>
               </DialogTrigger>
-              <DialogContent className="rounded-2xl border-border/70 bg-card/95 sm:max-w-2xl">
+              <DialogContent className="rounded-[10px] border-border/70 bg-card/95 sm:max-w-2xl">
                 <DialogHeader>
                   <DialogTitle className="text-2xl">Record Payment</DialogTitle>
                 </DialogHeader>
@@ -1332,7 +1379,7 @@ export function ClientProfileHub({ clientId, initialTab = "overview" }: { client
                       onChange={(event) =>
                         setPaymentDescription(clampToWordLimit(event.target.value, PAYMENT_DESCRIPTION_WORD_LIMIT))
                       }
-                      className="h-12 rounded-2xl border-border/60 bg-muted/20"
+                      className="h-12 rounded-[10px] border-border/60 bg-muted/20"
                       placeholder="e.g. Monthly coaching - April"
                     />
                     <p className="text-xs text-muted-foreground">
@@ -1340,7 +1387,7 @@ export function ClientProfileHub({ clientId, initialTab = "overview" }: { client
                     </p>
                   </div>
 
-                  <div className="rounded-2xl border border-border/60 bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+                  <div className="rounded-[10px] border border-border/60 bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
                     Amount, status, and date are auto-filled from the latest client payment pattern and current date.
                   </div>
 
@@ -1350,7 +1397,7 @@ export function ClientProfileHub({ clientId, initialTab = "overview" }: { client
                       value={paymentNotes}
                       onChange={(event) => setPaymentNotes(clampToWordLimit(event.target.value, PAYMENT_NOTES_WORD_LIMIT))}
                       rows={3}
-                      className="rounded-2xl border-border/60 bg-muted/20"
+                      className="rounded-[10px] border-border/60 bg-muted/20"
                       placeholder="Any additional details..."
                     />
                     <p className="text-xs text-muted-foreground">
@@ -1361,10 +1408,10 @@ export function ClientProfileHub({ clientId, initialTab = "overview" }: { client
 
                 <DialogFooter>
                   <div className="grid w-full grid-cols-2 gap-3">
-                    <Button variant="outline" className="h-12 rounded-2xl border-border/60 bg-muted/30" onClick={() => setPaymentOpen(false)}>
+                    <Button variant="outline" className="h-12 rounded-[10px] border-border/60 bg-muted/30" onClick={() => setPaymentOpen(false)}>
                       Cancel
                     </Button>
-                    <Button className="h-12 rounded-2xl bg-chart-1 text-base font-medium text-white hover:bg-chart-1/90" onClick={() => void onRecordPayment()} disabled={mutations.recordPayment.isPending}>
+                    <Button className="h-12 rounded-[10px] bg-chart-1 text-base font-medium text-white hover:bg-chart-1/90" onClick={() => void onRecordPayment()} disabled={mutations.recordPayment.isPending}>
                       {mutations.recordPayment.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                       Save Payment
                     </Button>
@@ -1375,7 +1422,7 @@ export function ClientProfileHub({ clientId, initialTab = "overview" }: { client
           </section>
 
           {(paymentsQuery.data?.alerts || []).length > 0 ? (
-            <section className="glass-surface rounded-2xl border border-destructive/35 bg-destructive/[0.07] p-4">
+            <section className="glass-surface rounded-[10px] border border-destructive/35 bg-destructive/[0.07] p-4">
               <div className="flex items-start gap-3">
                 <div className="mt-0.5 grid h-5 w-5 place-items-center rounded-full border border-destructive/50 bg-destructive/10">
                   <AlertCircle className="h-3.5 w-3.5 text-destructive" />
@@ -1388,7 +1435,7 @@ export function ClientProfileHub({ clientId, initialTab = "overview" }: { client
             </section>
           ) : null}
 
-          <section className="glass-surface rounded-2xl border border-border/60 p-3 md:p-4">
+          <section className="glass-surface rounded-[10px] border border-border/60 p-3 md:p-4">
             <div className="mb-3 flex flex-col gap-2 md:flex-row md:items-center">
               <div className="relative flex-1">
                 <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -1454,7 +1501,7 @@ export function ClientProfileHub({ clientId, initialTab = "overview" }: { client
               </DropdownMenu>
             </div>
 
-            <div className="hidden overflow-hidden rounded-2xl border border-border/60 md:block">
+            <div className="hidden overflow-hidden rounded-[10px] border border-border/60 md:block">
               <Table>
                 <TableHeader>
                   {paymentsTable.getHeaderGroups().map((headerGroup) => (
@@ -1575,7 +1622,7 @@ export function ClientProfileHub({ clientId, initialTab = "overview" }: { client
               if (!open) setSelectedPayment(null);
             }}
           >
-            <DialogContent className="rounded-2xl border-border/70 bg-card/95 sm:max-w-lg">
+            <DialogContent className="rounded-[10px] border-border/70 bg-card/95 sm:max-w-lg">
               <DialogHeader>
                 <DialogTitle>Payment Details</DialogTitle>
                 <DialogDescription>{clientName}</DialogDescription>
@@ -1686,7 +1733,7 @@ export function ClientProfileHub({ clientId, initialTab = "overview" }: { client
 
       {activeTab === "access" ? (
         <div className="space-y-3">
-          <section className="glass-surface rounded-2xl border border-border/60 p-4">
+          <section className="glass-surface rounded-[10px] border border-border/60 p-4">
             <h2 className="mb-3 text-base font-semibold">Portal Access</h2>
 
             <div className="rounded-xl border border-border/60 bg-background/30 p-3">
@@ -1725,7 +1772,7 @@ export function ClientProfileHub({ clientId, initialTab = "overview" }: { client
               <Label>Username</Label>
               <Input value={portalUsername} onChange={(event) => setPortalUsername(event.target.value)} className="rounded-xl border-border/60 bg-muted/20" placeholder="client_username" />
               <div className="flex gap-2">
-                <Button variant="outline" className="rounded-xl border-border/60" onClick={() => void portalMutations.changeUsername.mutateAsync({ client_id: clientId, username: portalUsername.trim() }).then(() => toast.success("Username updated")).catch((error) => toast.error(error instanceof Error ? error.message : "Unable to update username"))} disabled={portalMutations.changeUsername.isPending || !portalUsername.trim()}>
+                <Button variant="outline" className="rounded-xl border-border/60" onClick={() => void onUpdatePortalUsername()} disabled={portalMutations.changeUsername.isPending || !portalUsername.trim()}>
                   {portalMutations.changeUsername.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                   Update Username
                 </Button>
@@ -1744,7 +1791,7 @@ export function ClientProfileHub({ clientId, initialTab = "overview" }: { client
             </div>
           </section>
 
-          <section className="glass-surface rounded-2xl border border-border/60 p-4">
+          <section className="glass-surface rounded-[10px] border border-border/60 p-4">
             <h2 className="mb-3 text-base font-semibold">Security Controls</h2>
 
             <div className="space-y-2">
@@ -1758,10 +1805,7 @@ export function ClientProfileHub({ clientId, initialTab = "overview" }: { client
                     checked={settingsQuery.data?.status === "blocked"}
                     onCheckedChange={(checked) => {
                       if (checked) {
-                        void portalMutations.blockAccess
-                          .mutateAsync(clientId)
-                          .then(() => toast.success("Access blocked"))
-                          .catch((error) => toast.error(error instanceof Error ? error.message : "Unable to block access"));
+                        void onBlockPortalAccess();
                         return;
                       }
                       toast.info("Use reset password or set credentials to re-enable access.");
@@ -1783,10 +1827,7 @@ export function ClientProfileHub({ clientId, initialTab = "overview" }: { client
                         toast.info("Set credentials again to restore access.");
                         return;
                       }
-                      void portalMutations.removeAccess
-                        .mutateAsync(clientId)
-                        .then(() => toast.success("Access removed"))
-                        .catch((error) => toast.error(error instanceof Error ? error.message : "Unable to remove access"));
+                      void onRemovePortalAccess();
                     }}
                   />
                 </div>
@@ -1794,7 +1835,7 @@ export function ClientProfileHub({ clientId, initialTab = "overview" }: { client
             </div>
           </section>
 
-          <section className="glass-surface rounded-2xl border border-border/60 p-4">
+          <section className="glass-surface rounded-[10px] border border-border/60 p-4">
             <h2 className="mb-3 text-base font-semibold">Module Permissions</h2>
             <div className="space-y-2">
               {CLIENT_MODULE_KEYS.map((moduleKey) => {

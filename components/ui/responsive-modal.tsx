@@ -146,7 +146,7 @@ function ResponsiveModalContent({
     <BaseDialogContent
       showCloseButton={false}
       className={cn(
-        "w-[calc(100vw-1.5rem)] max-h-[90svh] overflow-y-auto rounded-2xl border border-border/70 bg-card/96 p-6 shadow-[0_30px_70px_-38px_rgba(0,0,0,0.85)] backdrop-blur-xl",
+        "w-[calc(100vw-1.5rem)] max-h-[90svh] overflow-y-auto rounded-[10px] border border-border/70 bg-card/96 p-6 shadow-[0_30px_70px_-38px_rgba(0,0,0,0.85)] backdrop-blur-xl",
         "grid gap-4",
         tabletWidthClass(resolvedSize.tablet),
         desktopWidthClass(resolvedSize.desktop),

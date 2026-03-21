@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { updateDisplayPreferences, type SettingsProfilePayload } from "@/app/actions/settings";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { withToastFeedback } from "@/lib/ui/toast-feedback";
 import { useSettingsStore } from "@/stores/use-settings-store";
 
 type DisplaySettingsFormProps = {
@@ -39,13 +40,12 @@ export function DisplaySettingsForm({ profile }: DisplaySettingsFormProps) {
           onCheckedChange={(checked) => {
             setCompactMode(checked);
             startTransition(async () => {
-              try {
-                await updateDisplayPreferences({ compact_mode: checked });
-                toast.success("Display preference updated");
-              } catch (error) {
-                setCompactMode(!checked);
-                toast.error(error instanceof Error ? error.message : "Unable to update display preference");
-              }
+              const result = await withToastFeedback(updateDisplayPreferences({ compact_mode: checked }), {
+                loading: "Updating display preference...",
+                success: "Display preference updated",
+                error: "Unable to update display preference",
+              }).catch(() => null);
+              if (!result) setCompactMode(!checked);
             });
           }}
         />

@@ -19,6 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { useMediaQuery } from "@/hooks/use-media-query";
+import { withToastFeedback } from "@/lib/ui/toast-feedback";
 import { cn } from "@/utils";
 
 type Props = {
@@ -104,8 +105,8 @@ export function AssignMealGroupDialog({
       toast.error("Start and end dates are required.");
       return;
     }
-    try {
-      await mutations.assignGroup.mutateAsync({
+    const result = await withToastFeedback(
+      mutations.assignGroup.mutateAsync({
         meal_group_id: mealGroupId,
         subject: {
           subject_user_id: selectedSubject.subject_user_id,
@@ -114,12 +115,15 @@ export function AssignMealGroupDialog({
         start_date: startDate,
         end_date: endDate,
         notes: notes.trim() || null,
-      });
-      toast.success("Meal group assigned.");
-      onOpenChange(false);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to assign meal group.");
-    }
+      }),
+      {
+        loading: "Assigning meal group...",
+        success: "Meal group assigned.",
+        error: "Unable to assign meal group.",
+      }
+    ).catch(() => null);
+    if (!result) return;
+    onOpenChange(false);
   };
 
   return (

@@ -45,6 +45,7 @@ import { useSupportTicketsRealtimeSync } from "@/hooks/use-support-tickets-realt
 import { useTicketSubscriptionMutations, useTicketSubscriptionState } from "@/hooks/use-ticket-subscriptions";
 import { useTicketDetail, useTicketMutations } from "@/hooks/use-tickets";
 import { Skeleton } from "@/components/ui/skeleton";
+import { withToastFeedback } from "@/lib/ui/toast-feedback";
 
 const CommentComposer = dynamic(
   () => import("@/components/support/comment-composer").then((module) => module.CommentComposer),
@@ -117,11 +118,7 @@ export default function SupportTicketDetailPage() {
   const updateTicketMutation = useMutation({
     mutationFn: updateTicketContentAction,
     onSuccess: () => {
-      toast.success("Ticket updated");
       void ticketQuery.refetch();
-    },
-    onError: (error) => {
-      toast.error(error instanceof Error ? error.message : "Failed to update ticket");
     },
   });
 
@@ -164,29 +161,38 @@ export default function SupportTicketDetailPage() {
   const onSaveTicket = () => {
     if (!ticket) return;
     startTicketTransition(async () => {
-      await updateTicketMutation.mutateAsync({
-        ticket_id: ticket.id,
-        title: editTitle,
-        description: editDescription,
-      });
+      await withToastFeedback(
+        updateTicketMutation.mutateAsync({
+          ticket_id: ticket.id,
+          title: editTitle,
+          description: editDescription,
+        }),
+        {
+          loading: "Updating ticket...",
+          success: "Ticket updated",
+          error: "Failed to update ticket",
+        }
+      );
       setIsEditTicketOpen(false);
     });
   };
 
   const onSubscriptionClick = async () => {
     if (!ticket) return;
-    try {
-      if (isSubscribed) {
-        if (isReporter) return;
-        await subscriptionMutations.unsubscribe.mutateAsync();
-        toast.success("Unsubscribed from ticket");
-        return;
-      }
-      await subscriptionMutations.subscribe.mutateAsync();
-      toast.success("Subscribed to ticket updates");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to update subscription");
+    if (isSubscribed) {
+      if (isReporter) return;
+      await withToastFeedback(subscriptionMutations.unsubscribe.mutateAsync(), {
+        loading: "Updating subscription...",
+        success: "Unsubscribed from ticket",
+        error: "Failed to update subscription",
+      });
+      return;
     }
+    await withToastFeedback(subscriptionMutations.subscribe.mutateAsync(), {
+      loading: "Updating subscription...",
+      success: "Subscribed to ticket updates",
+      error: "Failed to update subscription",
+    });
   };
 
   const onStartEdit = () => {
@@ -205,32 +211,29 @@ export default function SupportTicketDetailPage() {
     if (!editingCommentId) return;
     const content = editingCommentText.trim();
     if (!content) return;
-    try {
-      await commentMutations.updateComment.mutateAsync({
+    await withToastFeedback(
+      commentMutations.updateComment.mutateAsync({
         commentId: editingCommentId,
         content,
-      });
-      setEditingCommentId(null);
-      setEditingCommentText("");
-      toast.success("Comment updated");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to update comment");
-    }
+      }),
+      {
+        loading: "Updating comment...",
+        success: "Comment updated",
+        error: "Failed to update comment",
+      }
+    );
+    setEditingCommentId(null);
+    setEditingCommentText("");
   };
 
   const onDeleteComment = async () => {
     if (!deleteTarget) return;
-    try {
-      const result = await commentMutations.deleteComment.mutateAsync(deleteTarget.id);
-      setDeleteTarget(null);
-      if (result?.no_op) {
-        toast.info("Comment was already removed");
-      } else {
-        toast.success("Comment deleted");
-      }
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to delete comment");
-    }
+    const result = await withToastFeedback(commentMutations.deleteComment.mutateAsync(deleteTarget.id), {
+      loading: "Deleting comment...",
+      success: (value) => (value?.no_op ? "Comment was already removed" : "Comment deleted"),
+      error: "Failed to delete comment",
+    });
+    setDeleteTarget(null);
   };
 
   const pageState = useMemo(() => {

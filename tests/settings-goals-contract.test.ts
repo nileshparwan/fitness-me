@@ -41,9 +41,15 @@ test("listClientGoalsAction excludes personal goals", () => {
   assert.match(match[0], /\.eq\("is_personal_goal",\s*false\)/);
 });
 
-test("/settings/account redirects to /settings/security", () => {
-  const accountPage = read("app/(dashboard)/(account)/settings/account/page.tsx");
-  assert.match(accountPage, /redirect\("\/settings\/security"\)/);
+test("legacy settings alias routes are removed", () => {
+  assert.equal(
+    fs.existsSync(path.join(process.cwd(), "app/(dashboard)/(account)/settings/account/page.tsx")),
+    false
+  );
+  assert.equal(
+    fs.existsSync(path.join(process.cwd(), "app/(dashboard)/(account)/settings/goals/page.tsx")),
+    false
+  );
 });
 
 test("settings profile read keeps profiles->metadata transition fallback", () => {

@@ -3,7 +3,7 @@
 import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getExercises, createExercise, updateExercise, deleteExercise } from "@/app/actions/exercises";
 import { ExerciseFormValues } from "@/lib/validations/exercise";
-import { toast } from "sonner"; 
+import { withToastFeedback } from "@/lib/ui/toast-feedback";
 
 // Centralized keys ensure consistency across your app
 const exerciseKeys = {
@@ -33,31 +33,39 @@ export function useExerciseMutations() {
   };
 
   const create = useMutation({
-    mutationFn: createExercise,
+    mutationFn: (values: ExerciseFormValues) =>
+      withToastFeedback(createExercise(values), {
+        loading: "Creating exercise...",
+        success: "Exercise created",
+        error: "Unable to create exercise",
+      }),
     onSuccess: () => {
       invalidateExercises();
-      toast.success("Exercise created");
     },
-    onError: (error) => toast.error(error.message),
   });
 
   const update = useMutation({
     mutationFn: ({ id, values }: { id: string; values: ExerciseFormValues }) =>
-      updateExercise(id, values),
+      withToastFeedback(updateExercise(id, values), {
+        loading: "Updating exercise...",
+        success: "Exercise updated",
+        error: "Unable to update exercise",
+      }),
     onSuccess: () => {
       invalidateExercises();
-      toast.success("Exercise updated");
     },
-    onError: (error) => toast.error(error.message),
   });
 
   const remove = useMutation({
-    mutationFn: deleteExercise,
+    mutationFn: (id: string) =>
+      withToastFeedback(deleteExercise(id), {
+        loading: "Deleting exercise...",
+        success: "Exercise deleted",
+        error: "Unable to delete exercise",
+      }),
     onSuccess: () => {
       invalidateExercises();
-      toast.success("Exercise deleted");
     },
-    onError: (error) => toast.error(error.message),
   });
 
   return { create, update, remove };

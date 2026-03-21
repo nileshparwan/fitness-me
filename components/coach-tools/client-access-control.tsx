@@ -14,6 +14,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useCoachClientPortalMutations, useCoachClientPortalSettings } from "@/hooks/use-client-portal";
 import { CLIENT_MODULE_KEYS, type ClientModuleKey } from "@/lib/client-portal/constants";
 import { coachKeys } from "@/lib/query-keys-coach";
+import { withToastFeedback } from "@/lib/ui/toast-feedback";
 import { cn } from "@/utils";
 
 const MODULE_LABELS: Record<ClientModuleKey, string> = {
@@ -70,8 +71,8 @@ export function ClientAccessControl({ clientId }: { clientId: string }) {
   if (loading && !clientQuery.data) {
     return (
       <div className="space-y-4">
-        <Skeleton className="h-20 w-full rounded-3xl" />
-        <Skeleton className="h-80 w-full rounded-3xl" />
+        <Skeleton className="h-20 w-full rounded-[10px]" />
+        <Skeleton className="h-80 w-full rounded-[10px]" />
       </div>
     );
   }
@@ -94,17 +95,20 @@ export function ClientAccessControl({ clientId }: { clientId: string }) {
       return;
     }
 
-    try {
-      await mutations.setCredentials.mutateAsync({
+    const result = await withToastFeedback(
+      mutations.setCredentials.mutateAsync({
         client_id: clientId,
         username: username.trim(),
         password,
-      });
-      setPassword("");
-      toast.success("Client portal credentials saved");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to save credentials");
-    }
+      }),
+      {
+        loading: "Saving credentials...",
+        success: "Client portal credentials saved",
+        error: "Unable to save credentials",
+      }
+    ).catch(() => null);
+    if (!result) return;
+    setPassword("");
   };
 
   const updateUsername = async () => {
@@ -113,15 +117,17 @@ export function ClientAccessControl({ clientId }: { clientId: string }) {
       return;
     }
 
-    try {
-      await mutations.changeUsername.mutateAsync({
+    await withToastFeedback(
+      mutations.changeUsername.mutateAsync({
         client_id: clientId,
         username: username.trim(),
-      });
-      toast.success("Username updated");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to update username");
-    }
+      }),
+      {
+        loading: "Updating username...",
+        success: "Username updated",
+        error: "Unable to update username",
+      }
+    ).catch(() => null);
   };
 
   const applyPasswordReset = async () => {
@@ -130,32 +136,53 @@ export function ClientAccessControl({ clientId }: { clientId: string }) {
       return;
     }
 
-    try {
-      await mutations.resetPassword.mutateAsync({
+    const result = await withToastFeedback(
+      mutations.resetPassword.mutateAsync({
         client_id: clientId,
         new_password: resetPassword,
-      });
-      setResetPassword("");
-      toast.success("Portal password reset");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to reset password");
-    }
+      }),
+      {
+        loading: "Resetting password...",
+        success: "Portal password reset",
+        error: "Unable to reset password",
+      }
+    ).catch(() => null);
+    if (!result) return;
+    setResetPassword("");
   };
 
   const updateModuleAccess = async (
     moduleKey: ClientModuleKey,
     accessLevel: "disabled" | "read_only" | "enabled"
   ) => {
-    try {
-      await mutations.updateModuleAccess.mutateAsync({
+    await withToastFeedback(
+      mutations.updateModuleAccess.mutateAsync({
         client_id: clientId,
         module_key: moduleKey,
         access_level: accessLevel,
-      });
-      toast.success(`${MODULE_LABELS[moduleKey]} updated`);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to update module access");
-    }
+      }),
+      {
+        loading: "Updating module access...",
+        success: `${MODULE_LABELS[moduleKey]} updated`,
+        error: "Unable to update module access",
+      }
+    ).catch(() => null);
+  };
+
+  const onBlockAccess = async () => {
+    await withToastFeedback(mutations.blockAccess.mutateAsync(clientId), {
+      loading: "Blocking access...",
+      success: "Client access blocked",
+      error: "Unable to block access",
+    }).catch(() => null);
+  };
+
+  const onRemoveAccess = async () => {
+    await withToastFeedback(mutations.removeAccess.mutateAsync(clientId), {
+      loading: "Removing access...",
+      success: "Client portal access removed",
+      error: "Unable to remove access",
+    }).catch(() => null);
   };
 
   return (
@@ -212,17 +239,17 @@ export function ClientAccessControl({ clientId }: { clientId: string }) {
           </Button>
         </div>
 
-        <div className="rounded-2xl border border-destructive/30 bg-destructive/10 p-3">
+        <div className="rounded-[10px] border border-destructive/30 bg-destructive/10 p-3">
           <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-destructive">
             <AlertTriangle className="h-4 w-4" />
             Access actions
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" className="rounded-xl border-chart-4/40 bg-chart-4/10 text-chart-4 hover:bg-chart-4/20" onClick={() => void mutations.blockAccess.mutateAsync(clientId).then(() => toast.success("Client access blocked")).catch((error) => toast.error(error instanceof Error ? error.message : "Unable to block access"))} disabled={mutations.blockAccess.isPending}>
+            <Button variant="outline" className="rounded-xl border-chart-4/40 bg-chart-4/10 text-chart-4 hover:bg-chart-4/20" onClick={() => void onBlockAccess()} disabled={mutations.blockAccess.isPending}>
               {mutations.blockAccess.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               Block Access
             </Button>
-            <Button variant="outline" className="rounded-xl border-destructive/40 bg-destructive/10 text-destructive hover:bg-destructive/20" onClick={() => void mutations.removeAccess.mutateAsync(clientId).then(() => toast.success("Client portal access removed")).catch((error) => toast.error(error instanceof Error ? error.message : "Unable to remove access"))} disabled={mutations.removeAccess.isPending}>
+            <Button variant="outline" className="rounded-xl border-destructive/40 bg-destructive/10 text-destructive hover:bg-destructive/20" onClick={() => void onRemoveAccess()} disabled={mutations.removeAccess.isPending}>
               {mutations.removeAccess.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               Remove Access
             </Button>

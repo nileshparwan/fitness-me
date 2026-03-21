@@ -178,9 +178,9 @@ export function ClientWorkoutHub({ clientId }: { clientId: string }) {
   if (loading) {
     return (
       <div className="space-y-4 md:space-y-5">
-        <Skeleton className="h-28 w-full rounded-3xl" />
-        <Skeleton className="h-24 w-full rounded-2xl" />
-        <Skeleton className="h-72 w-full rounded-2xl" />
+        <Skeleton className="h-28 w-full rounded-[10px]" />
+        <Skeleton className="h-24 w-full rounded-[10px]" />
+        <Skeleton className="h-72 w-full rounded-[10px]" />
       </div>
     );
   }
@@ -214,7 +214,7 @@ export function ClientWorkoutHub({ clientId }: { clientId: string }) {
                 Log Session
               </Button>
             </DialogTrigger>
-            <DialogContent className="rounded-2xl border-border/70 bg-card/95 sm:max-w-xl">
+            <DialogContent className="rounded-[10px] border-border/70 bg-card/95 sm:max-w-xl">
               <DialogHeader>
                 <DialogTitle>Log Session</DialogTitle>
                 <DialogDescription>Add a completed or in-progress workout session for this client.</DialogDescription>
@@ -272,7 +272,7 @@ export function ClientWorkoutHub({ clientId }: { clientId: string }) {
         </div>
       </section>
 
-      <section className="glass-surface rounded-2xl border border-border/60 p-4">
+      <section className="glass-surface rounded-[10px] border border-border/60 p-4">
         <div className="flex items-center justify-between gap-2">
           <div>
             <p className="text-lg font-semibold">{activeAssignment?.assignment.name || "No active plan"}</p>
@@ -289,19 +289,19 @@ export function ClientWorkoutHub({ clientId }: { clientId: string }) {
       </section>
 
       <section className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <div className="glass-surface rounded-2xl border border-border/60 p-4">
+        <div className="glass-surface rounded-[10px] border border-border/60 p-4">
           <p className="text-2xl font-semibold">{completedCount}</p>
           <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Completed</p>
         </div>
-        <div className="glass-surface rounded-2xl border border-border/60 p-4">
+        <div className="glass-surface rounded-[10px] border border-border/60 p-4">
           <p className="text-2xl font-semibold">{minutesToDuration(totalDurationMinutes)}</p>
           <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Duration</p>
         </div>
-        <div className="glass-surface rounded-2xl border border-border/60 p-4">
+        <div className="glass-surface rounded-[10px] border border-border/60 p-4">
           <p className="text-2xl font-semibold">{avgRpe}</p>
           <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Avg RPE</p>
         </div>
-        <div className="glass-surface rounded-2xl border border-border/60 p-4">
+        <div className="glass-surface rounded-[10px] border border-border/60 p-4">
           <p className="text-2xl font-semibold">{streak}d</p>
           <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Streak</p>
         </div>
@@ -328,10 +328,10 @@ export function ClientWorkoutHub({ clientId }: { clientId: string }) {
 
         <div className="space-y-2">
           {sessionsForSelectedDay.length === 0 ? (
-            <p className="glass-surface rounded-2xl border border-border/60 px-4 py-8 text-center text-sm text-muted-foreground">No sessions logged for this day.</p>
+            <p className="glass-surface rounded-[10px] border border-border/60 px-4 py-8 text-center text-sm text-muted-foreground">No sessions logged for this day.</p>
           ) : (
             sessionsForSelectedDay.map((session) => (
-              <article key={session.id} className="glass-surface rounded-2xl border border-border/60 p-4">
+              <article key={session.id} className="glass-surface rounded-[10px] border border-border/60 p-4">
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <p className="text-base font-semibold">{session.name || session.session_label || "Session"}</p>
@@ -351,7 +351,7 @@ export function ClientWorkoutHub({ clientId }: { clientId: string }) {
         </div>
       </section>
 
-      <section className="glass-surface rounded-2xl border border-border/60 p-4">
+      <section className="glass-surface rounded-[10px] border border-border/60 p-4">
         <h2 className="mb-3 text-lg font-semibold">Plan History</h2>
         <div className="space-y-2">
           {(assignmentsQuery.data || []).length === 0 ? (

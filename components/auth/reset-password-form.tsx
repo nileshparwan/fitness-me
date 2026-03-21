@@ -13,6 +13,7 @@ import { resetPasswordSchema } from "@/lib/validations/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { withToastFeedback } from "@/lib/ui/toast-feedback";
 
 type ResetPasswordValues = z.infer<typeof resetPasswordSchema>;
 
@@ -38,8 +39,45 @@ export function ResetPasswordForm() {
     const resolveRecoveryState = async () => {
       const hash = typeof window !== "undefined" ? window.location.hash.replace(/^#/, "") : "";
       const hashParams = new URLSearchParams(hash);
+      const searchParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : new URLSearchParams();
+      const authCode = searchParams.get("code");
+      const accessToken = hashParams.get("access_token");
+      const refreshToken = hashParams.get("refresh_token");
       const errorCode = hashParams.get("error_code");
       const errorDescription = hashParams.get("error_description");
+
+      // Recovery links can arrive in two shapes:
+      // 1) `?code=...` (PKCE exchange)
+      // 2) `#access_token=...&refresh_token=...` (implicit session payload)
+      // We normalize both into an authenticated session before checking `getSession()`.
+      if (authCode) {
+        const { error } = await supabase.auth.exchangeCodeForSession(authCode);
+        if (!active) return;
+        if (error) {
+          setSessionError(error.message || "This reset link is invalid or has expired. Request a new one.");
+          setSessionReady(false);
+          setCheckingSession(false);
+          return;
+        }
+        if (typeof window !== "undefined") {
+          window.history.replaceState({}, document.title, window.location.pathname);
+        }
+      } else if (accessToken && refreshToken) {
+        const { error } = await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        });
+        if (!active) return;
+        if (error) {
+          setSessionError(error.message || "This reset link is invalid or has expired. Request a new one.");
+          setSessionReady(false);
+          setCheckingSession(false);
+          return;
+        }
+        if (typeof window !== "undefined") {
+          window.history.replaceState({}, document.title, window.location.pathname);
+        }
+      }
 
       if (errorCode === "otp_expired") {
         if (!active) return;
@@ -94,16 +132,21 @@ export function ResetPasswordForm() {
     }
 
     setIsLoading(true);
-    try {
-      const { error } = await supabase.auth.updateUser({ password: data.password });
-      if (error) throw error;
-      toast.success("Password updated successfully");
-      router.push("/login");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to update password");
-    } finally {
-      setIsLoading(false);
-    }
+    const updated = await withToastFeedback(
+      (async () => {
+        const { error } = await supabase.auth.updateUser({ password: data.password });
+        if (error) throw error;
+        return true;
+      })(),
+      {
+        loading: "Updating password...",
+        success: "Password updated successfully",
+        error: "Failed to update password",
+      }
+    ).catch(() => null);
+    setIsLoading(false);
+    if (!updated) return;
+    router.push("/login");
   }
 
   return (

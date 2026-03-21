@@ -2,207 +2,204 @@
 
 import { useRouter } from "next/navigation";
 import { useState, useMemo, useCallback } from "react";
-import {
-    flexRender,
-    getCoreRowModel,
-    useReactTable,
-    ColumnDef,
-} from "@tanstack/react-table";
-import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Plus, Search, Dumbbell, Loader2 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { useDebounce } from "@/hooks/use-debounce";
 import { ExerciseActions } from "./exercises-actions";
 import { ExerciseSheet } from "./exercises-sheet";
 import { useInfiniteQueryExercises } from "@/hooks/use-exercise";
+import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/utils";
+
+const muscleFilters = ["all", "chest", "back", "legs", "shoulders", "arms", "core", "glutes", "cardio"] as const;
+type MuscleFilter = (typeof muscleFilters)[number];
+
+type ExerciseRow = {
+  id: string;
+  name: string;
+  category: string | null;
+  muscle_groups: string[] | null;
+};
+
+function normalizeText(value: string | null | undefined) {
+  return (value || "").trim().toLowerCase();
+}
+
+function filterLabel(filter: MuscleFilter) {
+  return filter === "all" ? "All" : `${filter.charAt(0).toUpperCase()}${filter.slice(1)}`;
+}
+
+function matchesMuscleFilter(exercise: ExerciseRow, filter: MuscleFilter) {
+  if (filter === "all") return true;
+  const target = normalizeText(filter);
+  const category = normalizeText(exercise.category);
+  const muscles = (exercise.muscle_groups || []).map((entry) => normalizeText(entry));
+
+  if (target === "cardio") {
+    return category.includes("cardio") || muscles.some((entry) => entry.includes("cardio"));
+  }
+
+  return category.includes(target) || muscles.some((entry) => entry.includes(target));
+}
 
 export function ExercisesList() {
-    const router = useRouter();
-    const [search, setSearch] = useState("");
-    const debouncedSearch = useDebounce(search, 500);
+  const router = useRouter();
+  const [search, setSearch] = useState("");
+  const [selectedMuscle, setSelectedMuscle] = useState<MuscleFilter>("all");
+  const debouncedSearch = useDebounce(search, 350);
 
-    const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading } = useInfiniteQueryExercises(debouncedSearch);
+  const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading, isFetching } = useInfiniteQueryExercises(debouncedSearch);
 
-    const [isSheetOpen, setIsSheetOpen] = useState(false);
-    const [editingExercise, setEditingExercise] = useState<any | null>(null);
+  const [isSheetOpen, setIsSheetOpen] = useState(false);
+  const [editingExercise, setEditingExercise] = useState<ExerciseRow | null>(null);
 
-    const exercises = useMemo(() =>
-        data?.pages.flatMap((page) => page.data) || [],
-        [data]);
+  const exercises = useMemo(
+    () => ((data?.pages.flatMap((page) => page.data) || []) as ExerciseRow[]),
+    [data]
+  );
+  const totalLibraryCount = data?.pages?.[0]?.total ?? exercises.length;
 
-    const handleEdit = useCallback((exercise: any) => {
-        setEditingExercise(exercise);
-        setIsSheetOpen(true);
-    }, []);
+  const filteredExercises = useMemo(
+    () => exercises.filter((exercise) => matchesMuscleFilter(exercise, selectedMuscle)),
+    [exercises, selectedMuscle]
+  );
 
-    const handleCreate = useCallback(() => {
-        setEditingExercise(null);
-        setIsSheetOpen(true);
-    }, []);
+  const handleEdit = useCallback((exercise: ExerciseRow) => {
+    setEditingExercise(exercise);
+    setIsSheetOpen(true);
+  }, []);
 
-    const columns = useMemo<ColumnDef<any>[]>(() => [
-        {
-            accessorKey: "name",
-            header: "Name",
-            cell: ({ row }) => (
-                <div className="flex flex-col">
-                    <span className="font-medium text-foreground">{row.original.name}</span>
-                    <span className="text-xs text-muted-foreground md:hidden">
-                        {row.original.muscle_groups?.join(", ")}
-                    </span>
-                </div>
-            ),
-        },
-        {
-            accessorKey: "category",
-            header: "Category",
-            cell: ({ row }) => (
-                <Badge variant="secondary" className="font-normal">
-                    {row.original.category}
-                </Badge>
-            ),
-        },
-        {
-            accessorKey: "muscle_groups",
-            header: "Muscles",
-            meta: { className: "hidden md:table-cell" },
-            cell: ({ row }) => (
-                <div className="flex flex-wrap gap-1">
-                    {row.original.muscle_groups?.slice(0, 2).map((m: string) => (
-                        <span key={m} className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">{m}</span>
-                    ))}
-                    {(row.original.muscle_groups?.length || 0) > 2 && (
-                        <span className="text-xs text-muted-foreground">+{(row.original.muscle_groups?.length || 0) - 2}</span>
-                    )}
-                </div>
-            ),
-        },
-        {
-            id: "actions",
-            // FIX: Added a wrapper div to stop propagation
-            cell: ({ row }) => (
-                <div onClick={(e) => e.stopPropagation()}>
-                    <ExerciseActions exercise={row.original} onEdit={handleEdit} />
-                </div>
-            ),
-        },
-    ], [handleEdit]); 
+  const handleCreate = useCallback(() => {
+    setEditingExercise(null);
+    setIsSheetOpen(true);
+  }, []);
 
-    const table = useReactTable({
-        data: exercises,
-        columns,
-        getCoreRowModel: getCoreRowModel(),
-    });
-
-    return (
-        <div className="space-y-4 h-full flex flex-col">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                <div className="relative w-full sm:w-72">
-                    <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                    <Input
-                        placeholder="Search exercises..."
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                        className="pl-8"
-                    />
-                </div>
-                <Button onClick={handleCreate} className="w-full sm:w-auto">
-                    <Plus className="mr-2 h-4 w-4" /> Add Exercise
-                </Button>
-            </div>
-
-            <div className="rounded-md border bg-card flex-1 overflow-hidden flex flex-col">
-                {isLoading ? (
-                    <div className="h-64 flex items-center justify-center">
-                        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                    </div>
-                ) : exercises.length === 0 ? (
-                    <div className="h-64 flex flex-col items-center justify-center text-muted-foreground">
-                        <Dumbbell className="h-12 w-12 mb-2 opacity-20" />
-                        <p>No exercises found.</p>
-                    </div>
-                ) : (
-                    <div className="relative w-full overflow-auto">
-                        <Table>
-                            <TableHeader>
-                                {table.getHeaderGroups().map((headerGroup) => (
-                                    <TableRow key={headerGroup.id}>
-                                        {headerGroup.headers.map((header) => {
-                                            const hiddenClass = (header.column.columnDef.meta as any)?.className || "";
-                                            return (
-                                                <TableHead key={header.id} className={hiddenClass}>
-                                                    {header.isPlaceholder
-                                                        ? null
-                                                        : flexRender(header.column.columnDef.header, header.getContext())}
-                                                </TableHead>
-                                            );
-                                        })}
-                                    </TableRow>
-                                ))}
-                            </TableHeader>
-                            <TableBody>
-                                {table.getRowModel().rows.map((row) => (
-                                    <TableRow
-                                        key={row.id}
-                                        className="cursor-pointer hover:bg-muted/50"
-                                        // This onClick handles the row navigation
-                                        onClick={(e) => {
-                                            // Defensive check: if the click somehow bubbled from a button/menu item, ignore it
-                                            const target = e.target as HTMLElement;
-                                            if (target.closest("button") || target.closest("[role='menuitem']")) return;
-                                            
-                                            router.push(`/exercises/${row.original.id}`);
-                                        }}
-                                    >
-                                        {row.getVisibleCells().map((cell) => {
-                                            const hiddenClass = (cell.column.columnDef.meta as any)?.className || "";
-                                            return (
-                                                <TableCell key={cell.id} className={`py-3 ${hiddenClass}`}>
-                                                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                                                </TableCell>
-                                            )
-                                        })}
-                                    </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
-                    </div>
-                )}
-            </div>
-
-            {hasNextPage && (
-                <div className="flex justify-center pt-2 pb-4">
-                    <Button
-                        variant="outline"
-                        onClick={() => fetchNextPage()}
-                        disabled={isFetchingNextPage}
-                        className="w-full sm:w-auto"
-                    >
-                        {isFetchingNextPage ? (
-                            <>
-                                <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading...
-                            </>
-                        ) : (
-                            "Load More"
-                        )}
-                    </Button>
-                </div>
-            )}
-
-            <ExerciseSheet
-                open={isSheetOpen}
-                onOpenChange={setIsSheetOpen}
-                exerciseToEdit={editingExercise}
-            />
+  return (
+    <div className="section-gap flex h-full flex-1 flex-col">
+      <section className="space-y-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="space-y-1">
+            <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">Exercise Library</h1>
+            <p className="text-sm text-muted-foreground">{totalLibraryCount} exercises in your library</p>
+          </div>
+          <Button type="button" className="accent-strong px-5 text-black" onClick={handleCreate}>
+            <Plus className="mr-2 h-4 w-4" />
+            Add Exercise
+          </Button>
         </div>
-    );
+
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3 top-3.5 h-5 w-5 text-muted-foreground" />
+          <Input
+            placeholder="Search exercises, muscles, aliases..."
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            className="h-12 border-border/60 bg-muted/20 pl-11 text-base"
+          />
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          {muscleFilters.map((filter) => (
+            <button
+              key={filter}
+              type="button"
+              className={cn(
+                "rounded-[10px] border px-4 py-2 text-sm font-medium transition-colors",
+                selectedMuscle === filter
+                  ? "border-chart-1/60 bg-chart-1/18 text-chart-1"
+                  : "border-border/60 bg-muted/30 text-muted-foreground hover:text-foreground"
+              )}
+              onClick={() => setSelectedMuscle(filter)}
+            >
+              {filterLabel(filter)}
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-muted-foreground">{filteredExercises.length} exercises found</p>
+        {isFetching && !isLoading ? (
+          <span className="inline-flex items-center gap-2 text-xs text-muted-foreground">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            Refreshing
+          </span>
+        ) : null}
+      </div>
+
+      <section className="glass-surface !rounded-[10px] flex flex-1 flex-col overflow-hidden border-border/60">
+        {isLoading ? (
+          <div className="space-y-3 p-4">
+            {Array.from({ length: 6 }).map((_, index) => (
+              <Skeleton key={index} className="h-[74px] w-full rounded-[10px]" />
+            ))}
+          </div>
+        ) : filteredExercises.length === 0 ? (
+          <div className="flex h-72 flex-col items-center justify-center px-4 text-center text-muted-foreground">
+            <Dumbbell className="mb-3 h-11 w-11 opacity-25" />
+            <p className="text-base font-medium">No exercises found.</p>
+            <p className="mt-1 text-sm">Try a different search term or muscle filter.</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-border/40">
+            {filteredExercises.map((exercise) => {
+              const muscles = exercise.muscle_groups || [];
+              return (
+                <div key={exercise.id} className="group flex items-center gap-3 px-4 py-3 hover:bg-muted/20">
+                  <button
+                    type="button"
+                    className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                    onClick={() => router.push(`/exercises/${exercise.id}`)}
+                  >
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-chart-1/18 text-chart-1">
+                      <Dumbbell className="h-4 w-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold md:text-base">{exercise.name}</p>
+                      <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                        <span className="uppercase tracking-[0.1em]">{exercise.category || "General"}</span>
+                        {muscles.slice(0, 3).map((muscle) => (
+                          <span key={muscle} className="rounded-[10px] border border-border/55 bg-muted/30 px-2 py-0.5">
+                            {muscle}
+                          </span>
+                        ))}
+                        {muscles.length > 3 ? <span>+{muscles.length - 3}</span> : null}
+                      </div>
+                    </div>
+                  </button>
+                  <div className="shrink-0" onClick={(event) => event.stopPropagation()}>
+                    <ExerciseActions exercise={exercise} onEdit={handleEdit} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      {hasNextPage ? (
+        <div className="flex justify-center pt-2 pb-4">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => fetchNextPage()}
+            disabled={isFetchingNextPage}
+            className="w-full border-border/60 bg-muted/20 sm:w-auto"
+          >
+            {isFetchingNextPage ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Loading...
+              </>
+            ) : (
+              "Load More"
+            )}
+          </Button>
+        </div>
+      ) : null}
+
+      <ExerciseSheet open={isSheetOpen} onOpenChange={setIsSheetOpen} exerciseToEdit={editingExercise} />
+    </div>
+  );
 }

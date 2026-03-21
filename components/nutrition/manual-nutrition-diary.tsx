@@ -55,6 +55,7 @@ import { useMediaQuery } from "@/hooks/use-media-query";
 import { normalizeMealUnit } from "@/lib/nutrition/meal-units";
 import type { NutritionSubject } from "@/lib/query-keys-nutrition";
 import { canNavigateDate, isMealGroupSelected, mealTypeOrderRank } from "@/lib/nutrition/meal-ui";
+import { withToastFeedback } from "@/lib/ui/toast-feedback";
 import { cn } from "@/utils";
 
 type DiaryMealSection =
@@ -560,21 +561,29 @@ export function ManualNutritionDiary({
 
     try {
       if (editingItemId) {
-        await mutations.updateItem.mutateAsync({
-          item_id: editingItemId,
-          item: {
-            item_name: normalizedName,
-            quantity: value.quantity,
-            unit: unitForSave,
-            calories: value.calories,
-            protein_g: value.protein_g,
-            carbs_g: value.carbs_g,
-            fat_g: value.fat_g,
-            fiber_g: value.fiber_g,
-            notes: value.notes,
-            consumed_time: value.planned_time,
-          },
-        });
+        const updated = await withToastFeedback(
+          mutations.updateItem.mutateAsync({
+            item_id: editingItemId,
+            item: {
+              item_name: normalizedName,
+              quantity: value.quantity,
+              unit: unitForSave,
+              calories: value.calories,
+              protein_g: value.protein_g,
+              carbs_g: value.carbs_g,
+              fat_g: value.fat_g,
+              fiber_g: value.fiber_g,
+              notes: value.notes,
+              consumed_time: value.planned_time,
+            },
+          }),
+          {
+            loading: "Updating meal item...",
+            success: "Meal item updated",
+            error: "Unable to save meal item",
+          }
+        ).catch(() => null);
+        if (!updated) return;
       } else {
         const recentItem = {
           item_name: normalizedName,
@@ -587,17 +596,25 @@ export function ManualNutritionDiary({
           fiber_g: value.fiber_g,
           notes: value.notes,
         };
-        await mutations.addItem.mutateAsync({
-          performed_on: performedOn,
-          meal_type: toActionMealType(section),
-          subject: resolvedSubject,
-          meal_group_id: selectedMealGroupId || undefined,
-          item: {
-            ...recentItem,
-            consumed_time: value.planned_time,
-            is_quick_add: itemEditorQuickMode,
-          },
-        });
+        const created = await withToastFeedback(
+          mutations.addItem.mutateAsync({
+            performed_on: performedOn,
+            meal_type: toActionMealType(section),
+            subject: resolvedSubject,
+            meal_group_id: selectedMealGroupId || undefined,
+            item: {
+              ...recentItem,
+              consumed_time: value.planned_time,
+              is_quick_add: itemEditorQuickMode,
+            },
+          }),
+          {
+            loading: "Adding meal item...",
+            success: "Meal item added",
+            error: "Unable to save meal item",
+          }
+        ).catch(() => null);
+        if (!created) return;
         rememberRecentItem(recentItem);
       }
 
@@ -638,7 +655,6 @@ export function ManualNutritionDiary({
         }
       }
 
-      toast.success(editingItemId ? "Meal item updated" : "Meal item added");
       setSelectedSection(section);
       setItemEditorOpen(false);
       resetItemEditor();
@@ -649,13 +665,13 @@ export function ManualNutritionDiary({
 
   const confirmDeleteItem = async () => {
     if (!deleteTarget) return;
-    try {
-      await mutations.removeItem.mutateAsync({ item_id: deleteTarget.id });
-      toast.success("Meal item removed");
-      setDeleteTarget(null);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to remove item");
-    }
+    const result = await withToastFeedback(mutations.removeItem.mutateAsync({ item_id: deleteTarget.id }), {
+      loading: "Removing meal item...",
+      success: "Meal item removed",
+      error: "Unable to remove item",
+    }).catch(() => null);
+    if (!result) return;
+    setDeleteTarget(null);
   };
 
   const onToggleFavorite = async (section: DiaryMealSection, item: {
@@ -672,22 +688,25 @@ export function ManualNutritionDiary({
     const normalizedUnit = normalizeMealUnit(item.unit);
     const key = favoriteItemKey(item.item_name, normalizedUnit);
     setFavoritesLookupEnabled(true);
-    try {
-      const result = await mutations.toggleFavorite.mutateAsync({
+    const result = await withToastFeedback(
+      mutations.toggleFavorite.mutateAsync({
         item: {
           ...item,
           unit: normalizedUnit,
         },
         meal_type: toActionMealType(section),
-      });
-      setFavoriteOverrides((previous) => ({
-        ...previous,
-        [key]: result.favorited,
-      }));
-      toast.success(result.favorited ? "Added to favorites" : "Removed from favorites");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to update favorites");
-    }
+      }),
+      {
+        loading: "Updating favorites...",
+        success: (value) => (value.favorited ? "Added to favorites" : "Removed from favorites"),
+        error: "Unable to update favorites",
+      }
+    ).catch(() => null);
+    if (!result) return;
+    setFavoriteOverrides((previous) => ({
+      ...previous,
+      [key]: result.favorited,
+    }));
   };
 
   const onDuplicateItem = async (section: DiaryMealSection, item: ManualDiaryItem) => {
@@ -951,9 +970,9 @@ export function ManualNutritionDiary({
 
       {diaryQuery.isLoading && !diaryQuery.data ? (
         <section className="space-y-4">
-          <Skeleton className="h-36 w-full rounded-3xl" />
-          <Skeleton className="h-36 w-full rounded-3xl" />
-          <Skeleton className="h-36 w-full rounded-3xl" />
+          <Skeleton className="h-36 w-full rounded-[10px]" />
+          <Skeleton className="h-36 w-full rounded-[10px]" />
+          <Skeleton className="h-36 w-full rounded-[10px]" />
         </section>
       ) : null}
 
@@ -1077,7 +1096,7 @@ export function ManualNutritionDiary({
             </div>
 
             {orderedVisibleSections.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-border/60 px-4 py-8 text-center text-sm text-muted-foreground">
+              <div className="rounded-[10px] border border-dashed border-border/60 px-4 py-8 text-center text-sm text-muted-foreground">
                 No meal types added for this date yet.
               </div>
             ) : null}
@@ -1225,17 +1244,25 @@ export function ManualNutritionDiary({
                             className="rounded-xl border-border/60"
                             disabled={mutations.saveNotes.isPending}
                             onClick={() =>
-                              void mutations.saveNotes
-                                .mutateAsync({ meal_log_id: log.id, notes: (mealNotesDraft[log.id] ?? log.notes) || null })
+                              void withToastFeedback(
+                                mutations.saveNotes.mutateAsync({
+                                  meal_log_id: log.id,
+                                  notes: (mealNotesDraft[log.id] ?? log.notes) || null,
+                                }),
+                                {
+                                  loading: "Saving section notes...",
+                                  success: "Section notes saved",
+                                  error: "Unable to save notes",
+                                }
+                              )
                                 .then(() => {
-                                  toast.success("Section notes saved");
                                   setMealNotesDraft((previous) => {
                                     const next = { ...previous };
                                     delete next[log.id];
                                     return next;
                                   });
                                 })
-                                .catch((error) => toast.error(error instanceof Error ? error.message : "Unable to save notes"))
+                                .catch(() => null)
                             }
                           >
                             {mutations.saveNotes.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}

@@ -7,6 +7,7 @@ import { useQuery } from "@tanstack/react-query";
 import { format, parseISO } from "date-fns";
 import { nutritionProgramKeys } from "@/lib/query-keys-nutrition-program";
 import { toast } from "sonner";
+import { withToastFeedback } from "@/lib/ui/toast-feedback";
 
 // Actions
 import { 
@@ -103,10 +104,15 @@ export default function ProgramPage({ params }: { params: Promise<{ id: string }
     const updatedWithPositions = newItems.map((item, idx) => ({ ...item, position: idx }));
     setOrderedMeals(updatedWithPositions);
 
-    try {
-      await updateMealPositions(updatedWithPositions.map((m) => ({ id: m.id, position: m.position! })), id);
-    } catch (err) {
-      toast.error("Failed to save order");
+    const saved = await withToastFeedback(
+      updateMealPositions(updatedWithPositions.map((m) => ({ id: m.id, position: m.position! })), id),
+      {
+        loading: "Saving meal order...",
+        success: "Meal order saved",
+        error: "Failed to save order",
+      }
+    ).catch(() => null);
+    if (!saved) {
       refetchMeals();
     }
   };
@@ -115,7 +121,15 @@ export default function ProgramPage({ params }: { params: Promise<{ id: string }
     if (confirm("Delete this meal?")) {
       setOrderedMeals(prev => prev.filter(m => m.id !== mealId));
       setSelectedIds(prev => prev.filter(id => id !== mealId));
-      await deleteMeal(mealId);
+      const deleted = await withToastFeedback(deleteMeal(mealId), {
+        loading: "Deleting meal...",
+        success: "Meal deleted",
+        error: "Unable to delete meal",
+      }).catch(() => null);
+      if (!deleted) {
+        refetchMeals();
+        return;
+      }
       refetchMeals();
     }
   };
@@ -126,14 +140,16 @@ export default function ProgramPage({ params }: { params: Promise<{ id: string }
     const idsToDelete = [...selectedIds];
     setSelectedIds([]);
 
-    try {
-      await Promise.all(idsToDelete.map(id => deleteMeal(id)));
-      toast.success("Items deleted");
+    const deleted = await withToastFeedback(Promise.all(idsToDelete.map(id => deleteMeal(id))), {
+      loading: "Deleting selected meals...",
+      success: "Items deleted",
+      error: "Error deleting items",
+    }).catch(() => null);
+    if (!deleted) {
       refetchMeals();
-    } catch(e) {
-      toast.error("Error deleting items");
-      refetchMeals();
+      return;
     }
+    refetchMeals();
   };
 
   const handleSelect = (id: string, checked: boolean) => {
@@ -142,15 +158,23 @@ export default function ProgramPage({ params }: { params: Promise<{ id: string }
   };
 
   const handleSaveNotes = async () => {
-    await updateProgramNotes(id, notesBuffer);
-    toast.success("Notes saved");
+    const saved = await withToastFeedback(updateProgramNotes(id, notesBuffer), {
+      loading: "Saving notes...",
+      success: "Notes saved",
+      error: "Unable to save notes",
+    }).catch(() => null);
+    if (!saved) return;
     setIsNotesOpen(false);
   };
 
   const handleStatusChange = async (val: string) => {
-    await updateProgramStatus(id, val);
+    const updated = await withToastFeedback(updateProgramStatus(id, val), {
+      loading: "Updating program status...",
+      success: `Status updated to ${val}`,
+      error: "Unable to update program status",
+    }).catch(() => null);
+    if (!updated) return;
     refetchProg();
-    toast.success(`Status updated to ${val}`);
   };
 
   const handleMealStatusChange = async (mealId: string, newStatus: 'active' | 'draft') => {
@@ -159,14 +183,16 @@ export default function ProgramPage({ params }: { params: Promise<{ id: string }
       m.id === mealId ? { ...m, status: newStatus } : m
     ));
     
-    try {
-      await updateMealStatus(mealId, newStatus);
-      toast.success(`Meal marked as ${newStatus}`);
-      refetchMeals(); // Sync with server to be safe
-    } catch (error) {
-      toast.error("Failed to update status");
-      refetchMeals(); // Revert
+    const updated = await withToastFeedback(updateMealStatus(mealId, newStatus), {
+      loading: "Updating meal status...",
+      success: `Meal marked as ${newStatus}`,
+      error: "Failed to update status",
+    }).catch(() => null);
+    if (!updated) {
+      refetchMeals();
+      return;
     }
+    refetchMeals(); // Sync with server to be safe
   };
 
   // --- RENDER HELPERS ---

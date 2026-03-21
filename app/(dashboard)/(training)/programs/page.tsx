@@ -8,7 +8,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card"; // Removed unused imports
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/responsive-modal";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -20,6 +19,7 @@ import { trainingKeys } from "@/lib/query-keys-training";
 import { cn } from "@/utils"; 
 import { useQueryClient } from "@tanstack/react-query";
 import { ProgramListItem } from "@/components/program/program-list-item";
+import { withToastFeedback } from "@/lib/ui/toast-feedback";
 
 // --- Extracted Grid Card Component ---
 // This prevents re-creation on every render and keeps the main component clean.
@@ -84,6 +84,7 @@ export default function ProgramsPage() {
   const programs = useInfinitePrograms();
   const queryClient = useQueryClient();
   const programRows = programs.data?.pages.flatMap((page) => page.data) || [];
+  const totalPrograms = programs.data?.pages?.[0]?.total ?? programRows.length;
 
   // State
   const [view, setView] = useState<"grid" | "list">("grid"); // Defaulted to grid to show changes
@@ -110,13 +111,19 @@ export default function ProgramsPage() {
 
     setIsDeleting(true);
     try {
-      await deletePrograms(selectedIds);
-      await queryClient.invalidateQueries({ queryKey: trainingKeys.plans() });
+      await withToastFeedback(
+        (async () => {
+          await deletePrograms(selectedIds);
+          await queryClient.invalidateQueries({ queryKey: trainingKeys.plans() });
+        })(),
+        {
+          loading: "Deleting programs...",
+          success: "Deleted successfully",
+          error: "Delete failed",
+        }
+      );
       setSelectedIds([]); 
       setIsSelectionMode(false);
-      toast.success("Deleted successfully");
-    } catch {
-      toast.error("Delete failed");
     } finally {
       setIsDeleting(false);
     }
@@ -165,11 +172,11 @@ export default function ProgramsPage() {
   return (
     <div className="page-shell section-gap pb-24 md:pb-12">
       {/* HEADER BAR */}
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between min-h-[3.5rem]">
+      <div className="flex min-h-[3.5rem] flex-col gap-4">
         
         {/* SELECTION HEADER */}
         {isSelectionMode ? (
-          <div className="w-full bg-primary/10 border border-primary/20 rounded-lg p-3 flex items-center justify-between animate-in fade-in slide-in-from-top-2">
+          <div className="flex w-full items-center justify-between rounded-[10px] border border-primary/20 bg-primary/10 p-3 animate-in fade-in slide-in-from-top-2">
             <div className="flex items-center gap-3">
               <Button variant="ghost" size="icon" onClick={toggleSelectionMode} className="h-8 w-8">
                 <X className="h-5 w-5" />
@@ -195,50 +202,58 @@ export default function ProgramsPage() {
         ) : (
           /* STANDARD HEADER */
           <>
-            <div className="flex flex-col md:flex-row md:items-center justify-between w-full gap-4">
-              <div className="flex items-center justify-between">
+            <div className="flex w-full flex-wrap items-start justify-between gap-3">
+              <div>
                 <div>
-                  <h2 className="text-2xl font-bold tracking-tight">Programs</h2>
-                  <p className="text-muted-foreground text-sm">Manage your training schedules.</p>
+                  <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">Program Timelines</h1>
+                  <p className="text-sm text-muted-foreground">{totalPrograms} programs</p>
                 </div>
-                 {/* Mobile Select Button */}
-                 <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    className="md:hidden text-primary" 
-                    onClick={toggleSelectionMode}
-                  >
-                    Select
-                  </Button>
               </div>
 
               <div className="flex items-center gap-2">
-                 {/* VIEW TOGGLE TAB */}
-                 <Tabs value={view} onValueChange={(v) => setView(v as "grid" | "list")} className="w-auto">
-                    <TabsList className="grid w-[100px] grid-cols-2">
-                      <TabsTrigger value="grid" title="Grid View"><LayoutGrid className="h-4 w-4"/></TabsTrigger>
-                      <TabsTrigger value="list" title="List View"><List className="h-4 w-4"/></TabsTrigger>
-                    </TabsList>
-                 </Tabs>
-
-                 {/* DESKTOP SELECT */}
-                 <Button variant="outline" className="hidden md:flex" onClick={toggleSelectionMode}>
+                 {/* SELECT MODE */}
+                 <Button type="button" variant="outline" className="border-border/60 bg-muted/20 px-4 text-muted-foreground hover:text-foreground" onClick={toggleSelectionMode}>
                     <CheckSquare className="mr-2 h-4 w-4" /> Select
                  </Button>
 
                  {/* CREATE ACTION */}
                  <Dialog open={isOpen} onOpenChange={setIsOpen}>
                   <DialogTrigger asChild>
-                    <Button className="hidden md:inline-flex"><Plus className="mr-2 h-4 w-4" /> New</Button>
+                    <Button className="accent-strong hidden px-5 text-black md:inline-flex"><Plus className="mr-2 h-4 w-4" /> New Program</Button>
                   </DialogTrigger>
                   <DialogTrigger asChild>
-                    <Button size="icon" className="h-10 w-10 md:hidden"><Plus className="h-5 w-5" /></Button>
+                    <Button className="accent-strong px-4 text-black md:hidden"><Plus className="mr-2 h-4 w-4" /> New Program</Button>
                   </DialogTrigger>
                   <DialogContent size={{ tablet: "md", desktop: "md" }}>
                     <DialogHeader><DialogTitle>Create New Program</DialogTitle></DialogHeader>
                     <CreateProgramForm />
                   </DialogContent>
                  </Dialog>
+              </div>
+            </div>
+
+            <div className="flex justify-end">
+              <div className="inline-flex rounded-[10px] border border-border/60 bg-muted/20 p-1">
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="ghost"
+                  className={cn("h-8 w-8", view === "list" ? "bg-chart-5/15 text-chart-5" : "text-muted-foreground")}
+                  onClick={() => setView("list")}
+                  aria-label="List view"
+                >
+                  <List className="h-4 w-4" />
+                </Button>
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="ghost"
+                  className={cn("h-8 w-8", view === "grid" ? "bg-chart-1/18 text-chart-1" : "text-muted-foreground")}
+                  onClick={() => setView("grid")}
+                  aria-label="Grid view"
+                >
+                  <LayoutGrid className="h-4 w-4" />
+                </Button>
               </div>
             </div>
           </>
@@ -250,7 +265,7 @@ export default function ProgramsPage() {
       {/* CONTENT AREA */}
       {programs.isLoading ? (
          <div className="space-y-4">
-            {[1, 2, 3].map(i => <Skeleton key={i} className="h-24 w-full rounded-xl" />)}
+            {[1, 2, 3].map(i => <Skeleton key={i} className="h-24 w-full rounded-[10px]" />)}
          </div>
       ) : (
         <>
@@ -298,7 +313,7 @@ export default function ProgramsPage() {
 
           {/* Empty State */}
           {programRows.length === 0 && (
-            <div className="text-center py-12 border-2 border-dashed rounded-xl opacity-50">
+            <div className="py-12 text-center opacity-50 rounded-[10px] border-2 border-dashed">
                <Folder className="h-10 w-10 mx-auto mb-3" />
                <p>No programs yet.</p>
             </div>

@@ -3,9 +3,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { Check, ChevronDown, Loader2, Search } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { toast } from "sonner";
 
 import { flattenProgramAssigneePages, useProgramAssigneeMutation, useProgramAssignees } from "@/hooks/use-program";
+import { withToastFeedback } from "@/lib/ui/toast-feedback";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -35,8 +35,8 @@ export function ProgramAssigneeDropdown({ programId, currentClientId, currentCli
   const items = useMemo(() => flattenProgramAssigneePages(query.data), [query.data]);
 
   const onAssign = async (input: { id: string; name: string; isSelf: boolean }) => {
-    try {
-      const result = await mutation.mutateAsync(
+    const result = await withToastFeedback(
+      mutation.mutateAsync(
         input.isSelf
           ? {
               program_id: programId,
@@ -47,16 +47,19 @@ export function ProgramAssigneeDropdown({ programId, currentClientId, currentCli
               client_id: input.id,
               self: false,
             }
-      );
-      setSelectedId(input.id);
-      setSelectedName(result.client_name || input.name);
-      setOpen(false);
-      setSearch("");
-      toast.success(`Assigned to ${result.client_name || input.name}`);
-      router.refresh();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to assign program.");
-    }
+      ),
+      {
+        loading: `Assigning to ${input.name}...`,
+        success: (value) => `Assigned to ${value.client_name || input.name}`,
+        error: "Unable to assign program.",
+      }
+    ).catch(() => null);
+    if (!result) return;
+    setSelectedId(input.id);
+    setSelectedName(result.client_name || input.name);
+    setOpen(false);
+    setSearch("");
+    router.refresh();
   };
 
   return (

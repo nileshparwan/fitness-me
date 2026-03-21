@@ -14,6 +14,7 @@ const AUTH_ONLY_PREFIXES = [
   "/programs",
   "/exercises",
   "/nutrition",
+  "/supplements",
   "/progress",
   "/goals",
   "/settings",
@@ -29,6 +30,7 @@ const USER_PREFIXES = [
   "/programs",
   "/exercises",
   "/nutrition",
+  "/supplements",
   "/progress",
   "/goals",
   "/support",
@@ -85,7 +87,8 @@ export type SidebarItemConfig = {
     | "users"
     | "message"
     | "building"
-    | "bell";
+    | "bell"
+    | "pill";
   children?: SidebarItemConfig[];
 };
 
@@ -118,15 +121,25 @@ const USER_WORKSPACE_SECTIONS: SidebarSectionConfig[] = [
   {
     label: "Nutrition",
     items: [
-      { title: "Nutrition Dashboard", href: "/nutrition/dashboard", icon: "home" },
+      { title: "Dashboard", href: "/nutrition/dashboard", icon: "home" },
       { title: "Meal Diary", href: "/nutrition/diary", icon: "book" },
       { title: "Meal Planner", href: "/nutrition/meal-planner", icon: "nutrition" },
       { title: "Meal Groups", href: "/nutrition/meal-groups", icon: "book" },
     ],
   },
   {
+    label: "Supplements",
+    items: [
+      { title: "Catalog", href: "/supplements", icon: "pill" },
+      { title: "Assigned", href: "/supplements/assigned", icon: "pill" },
+    ],
+  },
+  {
     label: "Insights",
-    items: [{ title: "Progress", href: "/progress", icon: "trend" }],
+    items: [
+      { title: "Progress", href: "/progress", icon: "trend" },
+      { title: "Nutrition", href: "/progress/nutrition", icon: "nutrition" },
+    ],
   },
   {
     label: "Support",

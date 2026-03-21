@@ -90,7 +90,7 @@ export function TodaysBoard({
 
   if (!featureAvailable) {
     return (
-      <div className="rounded-2xl border border-border/60 bg-background/35 p-6 text-center">
+      <div className="rounded-[10px] border border-border/60 bg-background/35 p-6 text-center">
         <p className="text-sm text-muted-foreground">
           {unavailableMessage ||
             "Daily session logging is unavailable until billing migrations are applied to this database."}
@@ -103,7 +103,7 @@ export function TodaysBoard({
     return (
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {Array.from({ length: 6 }).map((_, index) => (
-          <Skeleton key={`today-board-skeleton-${index}`} className="h-48 rounded-2xl" />
+          <Skeleton key={`today-board-skeleton-${index}`} className="h-48 rounded-[10px]" />
         ))}
       </div>
     );
@@ -111,7 +111,7 @@ export function TodaysBoard({
 
   if (mergedRows.length === 0) {
     return (
-      <div className="rounded-2xl border border-border/60 bg-background/35 p-6 text-center">
+      <div className="rounded-[10px] border border-border/60 bg-background/35 p-6 text-center">
         <p className="text-sm text-muted-foreground">Set up billing plans for your clients to use the daily payment log.</p>
         <Button asChild variant="outline" className="mt-3 rounded-xl border-border/60">
           <Link href="/clients">Go to Client Roster</Link>
@@ -122,7 +122,7 @@ export function TodaysBoard({
 
   return (
     <>
-      <div className="hidden overflow-hidden rounded-2xl border border-border/60 md:block">
+      <div className="hidden overflow-hidden rounded-[10px] border border-border/60 md:block">
         <Table>
           <TableHeader>
             <TableRow>
@@ -235,7 +235,7 @@ export function TodaysBoard({
           const packageWarn = isPackageType && plan.sessions_remaining > 0 && plan.sessions_remaining <= 2;
 
           return (
-            <article key={row.client_id} className={cn("rounded-2xl border border-border/60 bg-background/35 p-4", packageWarn ? "ring-1 ring-chart-4/40" : undefined)}>
+            <article key={row.client_id} className={cn("rounded-[10px] border border-border/60 bg-background/35 p-4", packageWarn ? "ring-1 ring-chart-4/40" : undefined)}>
               <div className="flex items-start justify-between gap-2">
                 <div>
                   <p className="text-sm font-semibold">{row.client_name}</p>

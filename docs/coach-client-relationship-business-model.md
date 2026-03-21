@@ -78,8 +78,8 @@
 - `/support/[id]` - ticket detail.
 - `/settings` - settings landing.
 - `/settings/profile` - profile settings.
-- `/settings/goals` - goals settings.
-- `/settings/account` - account/security settings.
+- `/goals` - goals management.
+- `/settings/security` - account/security settings.
 
 ### Coach tools pages
 - `/clients` - client roster, search/filter, client creation.

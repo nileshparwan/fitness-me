@@ -33,6 +33,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useDebounce } from "@/hooks/use-debounce";
 import { useAdminTickets, useTicketMutations, type TicketSortBy } from "@/hooks/use-tickets";
+import { withToastFeedback } from "@/lib/ui/toast-feedback";
 
 const STATUS_OPTIONS: TicketStatus[] = ["open", "in_progress", "resolved", "closed"];
 const CATEGORY_OPTIONS: TicketCategory[] = ["exercise_request", "feature_request", "bug_report", "other"];
@@ -71,24 +72,27 @@ export default function AdminTicketsPage() {
 
   const onUpdateStatus = async (row: AdminTicketRow, nextStatus: TicketStatus) => {
     if (row.status === nextStatus) return;
-    try {
-      await updateAdminStatus.mutateAsync({ id: row.id, status: nextStatus });
-      toast.success("Ticket status updated");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to update ticket");
-    }
+    await withToastFeedback(updateAdminStatus.mutateAsync({ id: row.id, status: nextStatus }), {
+      loading: "Updating ticket status...",
+      success: "Ticket status updated",
+      error: "Failed to update ticket",
+    });
   };
 
   const onDelete = async () => {
     if (!deleteTarget) return;
-    try {
-      await deleteTicketAction({ id: deleteTarget.id });
-      setDeleteTarget(null);
-      await query.refetch();
-      toast.success("Ticket deleted");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to delete ticket");
-    }
+    await withToastFeedback(
+      (async () => {
+        await deleteTicketAction({ id: deleteTarget.id });
+        setDeleteTarget(null);
+        await query.refetch();
+      })(),
+      {
+        loading: "Deleting ticket...",
+        success: "Ticket deleted",
+        error: "Failed to delete ticket",
+      }
+    );
   };
 
   const rows = query.data?.rows || [];

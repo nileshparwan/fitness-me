@@ -53,7 +53,7 @@
   --safe-right: env(safe-area-inset-right, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-left: env(safe-area-inset-left, 0px);
-  --radius: 1.15rem;
+  --radius: 0.625rem;
 
   --background: #040815;
   --foreground: #eff2ff;
@@ -378,7 +378,7 @@
 
   .native-surface,
   .desktop-surface {
-    @apply rounded-3xl border bg-card;
+    @apply rounded-[10px] border bg-card;
     border-color: color-mix(in srgb, var(--foreground) 10%, transparent);
     box-shadow: 0 20px 44px -30px rgba(0, 0, 0, 0.9), inset 0 1px 0 color-mix(in srgb, var(--foreground) 8%, transparent);
   }
@@ -428,7 +428,7 @@
   }
 
   .glass-surface {
-    @apply rounded-3xl border bg-card/80 backdrop-blur-xl;
+    @apply rounded-[10px] border bg-card/80 backdrop-blur-xl;
     border-color: color-mix(in srgb, var(--foreground) 12%, transparent);
     box-shadow:
       0 24px 50px -34px rgba(0, 0, 0, 0.92),
@@ -436,7 +436,7 @@
   }
 
   .glass-subtle {
-    @apply rounded-2xl border bg-card/70 backdrop-blur;
+    @apply rounded-[10px] border bg-card/70 backdrop-blur;
     border-color: color-mix(in srgb, var(--foreground) 10%, transparent);
     box-shadow:
       0 16px 34px -26px rgba(0, 0, 0, 0.86),
@@ -450,7 +450,7 @@
   }
 
   .segmented-tab {
-    @apply rounded-2xl border px-3 py-2 text-xs font-semibold tracking-wide transition-colors;
+    @apply rounded-[10px] border px-3 py-2 text-xs font-semibold tracking-wide transition-colors;
     border-color: color-mix(in srgb, var(--foreground) 10%, transparent);
     background: color-mix(in srgb, var(--card) 86%, transparent);
     color: color-mix(in srgb, var(--foreground) 72%, transparent);
@@ -461,6 +461,11 @@
     background: color-mix(in srgb, var(--chart-2) 85%, transparent);
     border-color: color-mix(in srgb, var(--chart-2) 45%, transparent);
     color: #041208;
+  }
+
+  button:not([role="switch"]),
+  [data-slot="button"] {
+    border-radius: 10px !important;
   }
 }
 

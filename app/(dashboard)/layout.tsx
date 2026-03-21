@@ -38,7 +38,7 @@ export default async function DashboardLayout({
         </header>
         
         <main className="flex flex-1 flex-col gap-4 px-safe px-3 pb-[calc(5rem+env(safe-area-inset-bottom))] md:gap-5 md:px-5 md:pb-5 lg:gap-6 lg:px-6 lg:pb-6">
-          <div className="min-h-[calc(100svh-3.5rem)] flex-1 rounded-2xl md:desktop-surface md:min-h-min overflow-hidden">
+          <div className="min-h-[calc(100svh-3.5rem)] flex-1 rounded-[10px] md:desktop-surface md:min-h-min overflow-hidden">
              {children}
           </div>
         </main>

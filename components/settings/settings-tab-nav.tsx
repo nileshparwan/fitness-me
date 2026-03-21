@@ -18,7 +18,7 @@ export function SettingsTabNav() {
 
   return (
     <nav className="w-full overflow-x-auto pb-1">
-      <div className="inline-flex min-w-full gap-2 rounded-2xl border border-border/60 bg-muted/20 p-1">
+      <div className="inline-flex min-w-full gap-2 rounded-[10px] border border-border/60 bg-muted/20 p-1">
         {SETTINGS_TABS.map((tab) => {
           const isActive = pathname === tab.href || pathname.startsWith(`${tab.href}/`);
           const Icon = tab.icon;

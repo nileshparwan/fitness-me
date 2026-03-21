@@ -78,7 +78,7 @@ export function PackageRenewalDialog({ open, onOpenChange, plan, clientName }: P
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="rounded-2xl border-border/70 bg-card/95 sm:max-w-lg">
+      <DialogContent className="rounded-[10px] border-border/70 bg-card/95 sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Renew Package</DialogTitle>
           <DialogDescription>{helper}</DialogDescription>

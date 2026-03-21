@@ -57,6 +57,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useExerciseSearch, useProgramSearch } from "@/hooks/use-goal-links";
 import { useClientFitnessGoalsRealtimeSync } from "@/hooks/use-fitness-goals-realtime";
 import { useClientGoals, useCoachToolMutations, useMyGoals } from "@/hooks/use-coach-tools";
+import { withToastFeedback } from "@/lib/ui/toast-feedback";
 import { cn } from "@/utils";
 
 const GOAL_STATUSES: GoalStatus[] = ["active", "on_track", "at_risk", "completed", "paused", "archived"];
@@ -605,58 +606,84 @@ export function ClientGoalsMedicalTab({
       linked_program_id: form.linked_program_id,
     } as const;
 
-    try {
-      if (editingGoal) {
-        if (mode === "self") {
-          await mutations.updateOwnGoal.mutateAsync({
-            ...payload,
-            goal_id: editingGoal.id,
-          });
-        } else {
-          await mutations.updateGoal.mutateAsync({
-            ...(payload as Omit<typeof payload, never> & { client_id: string }),
-            client_id: clientId || "",
-            goal_id: editingGoal.id,
-          });
-        }
-      } else {
-        if (mode === "self") {
-          await mutations.createOwnGoal.mutateAsync(payload);
-        } else {
-          await mutations.createGoal.mutateAsync({
-            ...(payload as Omit<typeof payload, never> & { client_id: string }),
-            client_id: clientId || "",
-          });
-        }
-      }
-      setDialogOpen(false);
-      setEditingGoal(null);
-      setForm(defaultFormState());
-      toast.success(editingGoal ? "Goal updated" : "Goal created");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to save goal");
-    }
+    const result = editingGoal
+      ? mode === "self"
+        ? await withToastFeedback(
+            mutations.updateOwnGoal.mutateAsync({
+              ...payload,
+              goal_id: editingGoal.id,
+            }),
+            {
+              loading: "Updating goal...",
+              success: "Goal updated",
+              error: "Unable to save goal",
+            }
+          ).catch(() => null)
+        : await withToastFeedback(
+            mutations.updateGoal.mutateAsync({
+              ...(payload as Omit<typeof payload, never> & { client_id: string }),
+              client_id: clientId || "",
+              goal_id: editingGoal.id,
+            }),
+            {
+              loading: "Updating goal...",
+              success: "Goal updated",
+              error: "Unable to save goal",
+            }
+          ).catch(() => null)
+      : mode === "self"
+        ? await withToastFeedback(mutations.createOwnGoal.mutateAsync(payload), {
+            loading: "Creating goal...",
+            success: "Goal created",
+            error: "Unable to save goal",
+          }).catch(() => null)
+        : await withToastFeedback(
+            mutations.createGoal.mutateAsync({
+              ...(payload as Omit<typeof payload, never> & { client_id: string }),
+              client_id: clientId || "",
+            }),
+            {
+              loading: "Creating goal...",
+              success: "Goal created",
+              error: "Unable to save goal",
+            }
+          ).catch(() => null);
+
+    if (!result) return;
+    setDialogOpen(false);
+    setEditingGoal(null);
+    setForm(defaultFormState());
   };
 
   const onStatusChange = useCallback(async (goal: ClientGoalItem, status: GoalStatus) => {
     if (goal.status === status) return;
     try {
       setActiveStatusGoalId(goal.id);
-      if (mode === "self") {
-        await mutations.updateOwnGoalStatus.mutateAsync({
-          goal_id: goal.id,
-          status,
-        });
-      } else {
-        await mutations.updateGoalStatus.mutateAsync({
-          client_id: clientId || "",
-          goal_id: goal.id,
-          status,
-        });
-      }
-      toast.success("Goal status updated");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to update goal status");
+      const result = mode === "self"
+        ? await withToastFeedback(
+            mutations.updateOwnGoalStatus.mutateAsync({
+              goal_id: goal.id,
+              status,
+            }),
+            {
+              loading: "Updating goal status...",
+              success: "Goal status updated",
+              error: "Unable to update goal status",
+            }
+          ).catch(() => null)
+        : await withToastFeedback(
+            mutations.updateGoalStatus.mutateAsync({
+              client_id: clientId || "",
+              goal_id: goal.id,
+              status,
+            }),
+            {
+              loading: "Updating goal status...",
+              success: "Goal status updated",
+              error: "Unable to update goal status",
+            }
+          ).catch(() => null);
+      if (!result) return;
     } finally {
       setActiveStatusGoalId(null);
     }
@@ -664,25 +691,33 @@ export function ClientGoalsMedicalTab({
 
   const onDeleteGoal = useCallback(async () => {
     if (!deletingGoal) return;
-    try {
-      if (mode === "self") {
-        await mutations.deleteOwnGoal.mutateAsync({
-          goal_id: deletingGoal.id,
-          goal_title: deletingGoal.goal,
-        });
-      } else {
-        await mutations.deleteGoal.mutateAsync({
-          client_id: clientId || "",
-          goal_id: deletingGoal.id,
-          goal_title: deletingGoal.goal,
-        });
-      }
-      toast.success("Goal deleted");
-      setDeleteDialogOpen(false);
-      setDeletingGoal(null);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to delete goal");
-    }
+    const result = mode === "self"
+      ? await withToastFeedback(
+          mutations.deleteOwnGoal.mutateAsync({
+            goal_id: deletingGoal.id,
+            goal_title: deletingGoal.goal,
+          }),
+          {
+            loading: "Deleting goal...",
+            success: "Goal deleted",
+            error: "Unable to delete goal",
+          }
+        ).catch(() => null)
+      : await withToastFeedback(
+          mutations.deleteGoal.mutateAsync({
+            client_id: clientId || "",
+            goal_id: deletingGoal.id,
+            goal_title: deletingGoal.goal,
+          }),
+          {
+            loading: "Deleting goal...",
+            success: "Goal deleted",
+            error: "Unable to delete goal",
+          }
+        ).catch(() => null);
+    if (!result) return;
+    setDeleteDialogOpen(false);
+    setDeletingGoal(null);
   }, [clientId, deletingGoal, mode, mutations.deleteGoal, mutations.deleteOwnGoal]);
 
   const isSaving =
@@ -1144,7 +1179,7 @@ export function ClientGoalsMedicalTab({
 
   return (
     <div className="min-w-0 space-y-4">
-      <section className="glass-surface overflow-hidden rounded-2xl border border-border/60 p-4">
+      <section className="glass-surface overflow-hidden rounded-[10px] border border-border/60 p-4">
         <div className="mb-4 flex min-w-0 flex-wrap items-center justify-between gap-2">
           <h2 className="text-base font-semibold">{title}</h2>
           <div className="flex items-center gap-2">
@@ -1164,7 +1199,7 @@ export function ClientGoalsMedicalTab({
                   New Goal
                 </Button>
               </DialogTrigger>
-              <DialogContent className="rounded-2xl border-border/70 bg-card/95 sm:max-w-2xl">
+              <DialogContent className="rounded-[10px] border-border/70 bg-card/95 sm:max-w-2xl">
                 <DialogHeader>
                   <DialogTitle>{editingGoal ? "Update Goal" : "Create Goal"}</DialogTitle>
                 </DialogHeader>
@@ -1504,7 +1539,7 @@ export function ClientGoalsMedicalTab({
                 setDeleteDialogOpen(open);
               }}
             >
-              <DialogContent className="rounded-2xl border-border/70 bg-card/95 sm:max-w-md">
+              <DialogContent className="rounded-[10px] border-border/70 bg-card/95 sm:max-w-md">
                 <DialogHeader>
                   <DialogTitle>Delete Goal</DialogTitle>
                 </DialogHeader>
@@ -1814,7 +1849,7 @@ export function ClientGoalsMedicalTab({
       </section>
 
       {mode !== "self" ? (
-        <section className="glass-surface rounded-2xl border border-border/60 p-4">
+        <section className="glass-surface rounded-[10px] border border-border/60 p-4">
           <h2 className="mb-3 text-base font-semibold">Medical Flags</h2>
           {(medicalFlags || []).length === 0 ? (
             <p className="text-sm text-muted-foreground">No medical flags recorded.</p>

@@ -119,7 +119,7 @@ function CalorieStat({
   valueClass?: string;
 }) {
   return (
-    <div className="glass-subtle flex flex-1 flex-col items-center gap-1 rounded-2xl px-3 py-3">
+    <div className="glass-subtle flex flex-1 flex-col items-center gap-1 rounded-[10px] px-3 py-3">
       <p className={cn("text-lg font-semibold tabular-nums leading-none", valueClass ?? "text-foreground")}>{value}</p>
       <p className="text-[11px] text-muted-foreground">{label}</p>
     </div>
@@ -265,7 +265,7 @@ function ActivitySection({ activities }: { activities: NutritionDashboardActivit
           View diary →
         </Link>
       </div>
-      <div className="rounded-2xl border border-border/60 bg-card/60 px-4">
+      <div className="rounded-[10px] border border-border/60 bg-card/60 px-4">
         {activities.length === 0 ? (
           <p className="py-6 text-sm text-muted-foreground">No recent nutrition activity yet.</p>
         ) : (

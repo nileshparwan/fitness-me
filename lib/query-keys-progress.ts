@@ -7,5 +7,6 @@ export const progressKeys = {
   muscleBalance: () => [...progressKeys.all, "muscle_balance"] as const,
   exerciseDetails: (exerciseName: string) =>
     [...progressKeys.all, "exercise_details", exerciseName] as const,
-  nutrition: () => [...progressKeys.all, "nutrition"] as const,
+  nutrition: (params: { range: number; subjectKey: string }) =>
+    [...progressKeys.all, "nutrition", params] as const,
 };

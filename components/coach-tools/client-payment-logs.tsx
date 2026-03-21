@@ -58,6 +58,7 @@ import {
   useClientPaymentLogs,
   useCoachToolMutations,
 } from "@/hooks/use-coach-tools";
+import { withToastFeedback } from "@/lib/ui/toast-feedback";
 import { useDebounce } from "@/hooks/use-debounce";
 import { formatCurrencyAmount } from "@/lib/clients/dashboard";
 import { cn } from "@/utils";
@@ -372,16 +373,18 @@ export function ClientPaymentLogsView({ clientId, initialData }: ClientPaymentLo
   const onDeleteLog = useCallback(async (log: PaymentLogRow) => {
     const confirmed = typeof window === "undefined" ? true : window.confirm("Delete this session log?");
     if (!confirmed) return;
-    try {
-      await mutations.deleteSessionLog.mutateAsync({
+    await withToastFeedback(
+      mutations.deleteSessionLog.mutateAsync({
         log_id: log.id,
         client_id: log.client_id,
         session_date: log.session_date,
-      });
-      toast.success("Session log deleted");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to delete log");
-    }
+      }),
+      {
+        loading: "Deleting session log...",
+        success: "Session log deleted",
+        error: "Unable to delete log",
+      }
+    ).catch(() => null);
   }, [mutations.deleteSessionLog]);
 
   const onDeleteSelected = async () => {
@@ -393,8 +396,8 @@ export function ClientPaymentLogsView({ clientId, initialData }: ClientPaymentLo
       typeof window === "undefined" ? true : window.confirm(`Delete ${selectedDeletableRows.length} selected log(s)?`);
     if (!confirmed) return;
 
-    try {
-      await Promise.all(
+    const result = await withToastFeedback(
+      Promise.all(
         selectedDeletableRows.map((row) =>
           mutations.deleteSessionLog.mutateAsync({
             log_id: row.id,
@@ -402,12 +405,15 @@ export function ClientPaymentLogsView({ clientId, initialData }: ClientPaymentLo
             session_date: row.session_date,
           })
         )
-      );
-      toast.success("Selected logs deleted");
-      setRowSelection({});
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to delete selected logs");
-    }
+      ),
+      {
+        loading: "Deleting selected logs...",
+        success: "Selected logs deleted",
+        error: "Unable to delete selected logs",
+      }
+    ).catch(() => null);
+    if (!result) return;
+    setRowSelection({});
   };
 
   const columns = useMemo<ColumnDef<PaymentLogRow>[]>(
@@ -786,7 +792,7 @@ export function ClientPaymentLogsView({ clientId, initialData }: ClientPaymentLo
         </Button>
       </section>
 
-      <section className="rounded-2xl border border-border/60 bg-background/35 p-4">
+      <section className="rounded-[10px] border border-border/60 bg-background/35 p-4">
         <div className="flex flex-wrap items-center gap-2">
           {activePlan ? (
             <>
@@ -810,22 +816,22 @@ export function ClientPaymentLogsView({ clientId, initialData }: ClientPaymentLo
 
       <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {isInitialLoading ? (
-          Array.from({ length: 4 }).map((_, index) => <Skeleton key={`stats-skeleton-${index}`} className="h-24 rounded-2xl" />)
+          Array.from({ length: 4 }).map((_, index) => <Skeleton key={`stats-skeleton-${index}`} className="h-24 rounded-[10px]" />)
         ) : (
           <>
-            <article className="rounded-2xl border border-border/60 bg-background/35 p-4">
+            <article className="rounded-[10px] border border-border/60 bg-background/35 p-4">
               <p className="text-2xl font-semibold tracking-tight">{statsQuery.data?.sessions_this_month ?? 0}</p>
               <p className="mt-1 text-xs uppercase tracking-[0.12em] text-muted-foreground">Sessions This Month</p>
             </article>
-            <article className="rounded-2xl border border-border/60 bg-background/35 p-4">
+            <article className="rounded-[10px] border border-border/60 bg-background/35 p-4">
               <p className="text-2xl font-semibold tracking-tight">{formatCurrencyAmount(revenueThisMonth, "USD")}</p>
               <p className="mt-1 text-xs uppercase tracking-[0.12em] text-muted-foreground">Revenue This Month</p>
             </article>
-            <article className="rounded-2xl border border-border/60 bg-background/35 p-4">
+            <article className="rounded-[10px] border border-border/60 bg-background/35 p-4">
               <p className="text-2xl font-semibold tracking-tight">{statsQuery.data?.total_sessions ?? 0}</p>
               <p className="mt-1 text-xs uppercase tracking-[0.12em] text-muted-foreground">Total Sessions</p>
             </article>
-            <article className="rounded-2xl border border-border/60 bg-background/35 p-4">
+            <article className="rounded-[10px] border border-border/60 bg-background/35 p-4">
               <p className="text-2xl font-semibold tracking-tight">
                 {activePlan && (activePlan.billing_type === "session_package" || activePlan.billing_type === "program")
                   ? activePlan.sessions_remaining
@@ -837,7 +843,7 @@ export function ClientPaymentLogsView({ clientId, initialData }: ClientPaymentLo
         )}
       </section>
 
-      <section className="rounded-2xl border border-border/60 p-3 md:p-4">
+      <section className="rounded-[10px] border border-border/60 p-3 md:p-4">
         <div className="mb-3 flex flex-col gap-2 md:flex-row md:items-center">
           <div className="relative flex-1">
             <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -956,7 +962,7 @@ export function ClientPaymentLogsView({ clientId, initialData }: ClientPaymentLo
           </div>
         ) : null}
 
-        <div className="hidden overflow-hidden rounded-2xl border border-border/60 md:block">
+        <div className="hidden overflow-hidden rounded-[10px] border border-border/60 md:block">
           <Table>
             <TableHeader>
               {table.getHeaderGroups().map((headerGroup) => (
@@ -1099,7 +1105,7 @@ export function ClientPaymentLogsView({ clientId, initialData }: ClientPaymentLo
         </section>
       </section>
 
-      <section className="rounded-2xl border border-border/60 p-4">
+      <section className="rounded-[10px] border border-border/60 p-4">
         <h2 className="mb-3 text-sm font-semibold uppercase tracking-[0.12em] text-muted-foreground">Billing Plan History</h2>
         <div className="mb-3 flex flex-col gap-2 md:flex-row md:items-center">
           <div className="relative flex-1">
@@ -1163,7 +1169,7 @@ export function ClientPaymentLogsView({ clientId, initialData }: ClientPaymentLo
           </DropdownMenu>
         </div>
 
-        <div className="hidden overflow-hidden rounded-2xl border border-border/60 md:block">
+        <div className="hidden overflow-hidden rounded-[10px] border border-border/60 md:block">
           <Table>
             <TableHeader>
               {historyTable.getHeaderGroups().map((headerGroup) => (

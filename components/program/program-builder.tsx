@@ -15,7 +15,6 @@ import {
   rectIntersection, // Use strict intersection for better drop detection
 } from "@dnd-kit/core";
 import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
-import { toast } from "sonner";
 import { useMediaQuery } from "@/hooks/use-media-query";
 
 import { ProgramTimeline } from "./program-timeline";
@@ -26,6 +25,7 @@ import { LayoutTemplate, PanelRightClose, PanelRightOpen } from "lucide-react";
 import { useProgramStore } from "@/stores/use-program-store";
 import { addWorkoutsToProgram, updateProgramItemOrder } from "@/app/actions/program";
 import { WorkoutPicker } from "../workout/workout-picker";
+import { withToastFeedback } from "@/lib/ui/toast-feedback";
 import { Database } from "@/types/database";
 
 type Workout = Database['public']['Tables']['training_sessions']['Row'];
@@ -102,12 +102,11 @@ export function ProgramBuilder({ program, allWorkouts }: ProgramBuilderProps) {
           workouts: workoutData,
         });
 
-        try {
-          await addWorkoutsToProgram(program.id, [rawId]);
-          toast.success("Added to program");
-        } catch (error) {
-          toast.error("Failed to save");
-        }
+        await withToastFeedback(addWorkoutsToProgram(program.id, [rawId]), {
+          loading: "Adding workout...",
+          success: "Added to program",
+          error: "Failed to save",
+        }).catch(() => null);
       }
       return;
     }
@@ -127,11 +126,11 @@ export function ProgramBuilder({ program, allWorkouts }: ProgramBuilderProps) {
         day_label: item.day_label,
       }));
 
-      try {
-        await updateProgramItemOrder(updates, program.id);
-      } catch (error) {
-        toast.error("Failed to save order");
-      }
+      await withToastFeedback(updateProgramItemOrder(updates, program.id), {
+        loading: "Saving program order...",
+        success: "Program order saved",
+        error: "Failed to save order",
+      }).catch(() => null);
     }
   };
 

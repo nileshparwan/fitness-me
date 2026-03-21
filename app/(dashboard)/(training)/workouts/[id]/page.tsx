@@ -168,9 +168,13 @@ export default function WorkoutDetailPage() {
     await updateWorkout.mutateAsync({ id, data: { name: nextName.trim() } });
   }
 
-  function handleDelete() {
-    deleteWorkout.mutate(id);
-    router.push("/workouts");
+  async function handleDelete() {
+    try {
+      await deleteWorkout.mutateAsync(id);
+      router.push("/workouts");
+    } catch {
+      // toast feedback is handled in the mutation layer
+    }
   }
 
   return (

@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { createWorkoutAction, deleteWorkoutAction, updateWorkoutAction, type WorkoutActionInput } from "@/app/actions/workout";
 import { trainingKeys } from "@/lib/query-keys-training";
 import { Database } from "@/types/database";
+import { withToastFeedback } from "@/lib/ui/toast-feedback";
 
 type TrainingSessionRow = Database["public"]["Tables"]["training_sessions"]["Row"];
 type StrengthSetId = Pick<Database["public"]["Tables"]["strength_sets"]["Row"], "id">;
@@ -85,24 +86,27 @@ export function useWorkouts() {
     mutationFn: async ({ id, data }: { id: string; data: Partial<WorkoutActionInput> }) => {
       // Pass data directly to server action
       // Handles both full updates (with exercises) and partial updates (name/status only)
-      await updateWorkoutAction(id, {
-        name: data.name,
-        date: data.date,
-        notes: data.notes,
-        status: data.status,
-        overall_rating: data.overall_rating,
-        ai_feedback: data.ai_feedback,
-        template_id: data.template_id,
-        exercises: data.exercises 
-      });
+      await withToastFeedback(
+        updateWorkoutAction(id, {
+          name: data.name,
+          date: data.date,
+          notes: data.notes,
+          status: data.status,
+          overall_rating: data.overall_rating,
+          ai_feedback: data.ai_feedback,
+          template_id: data.template_id,
+          exercises: data.exercises 
+        }),
+        {
+          loading: "Updating workout...",
+          success: "Workout updated!",
+          error: "Unable to update workout",
+        }
+      );
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: trainingKeys.sessions() });
       queryClient.invalidateQueries({ queryKey: trainingKeys.session(variables.id) });
-      toast.success("Workout updated!");
-    },
-    onError: (err) => {
-      toast.error(err.message);
     }
   });
 
@@ -110,18 +114,18 @@ export function useWorkouts() {
   const deleteWorkout = useMutation({
     // Updated to accept string array for bulk delete capability
     mutationFn: async (ids: string | string[]) => {
-      await deleteWorkoutAction(ids);
+      await withToastFeedback(deleteWorkoutAction(ids), {
+        loading: "Deleting workout...",
+        success: "Deleted successfully",
+        error: "Unable to delete workout",
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: trainingKeys.sessions() });
-      toast.success("Deleted successfully");
       // Optional: Only redirect if we were on the detail page, 
       // but if deleting from list, no redirect needed.
       // You might want to check pathname here or remove this line.
       // router.push("/workouts"); 
-    },
-    onError: (err) => {
-      toast.error(err.message);
     }
   });
 

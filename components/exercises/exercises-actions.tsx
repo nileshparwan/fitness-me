@@ -20,7 +20,6 @@ import {
 } from "@/components/ui/responsive-modal";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { useExerciseMutations } from "@/hooks/use-exercise";
-import { toast } from "sonner";
 
 interface ExerciseActionsProps {
   exercise: any;
@@ -36,9 +35,8 @@ export function ExerciseActions({ exercise, onEdit }: ExerciseActionsProps) {
     if (confirm("Delete this exercise?")) {
       try {
         await remove.mutateAsync(exercise.id);
-        toast.success("Exercise deleted");
-      } catch (error) {
-        toast.error("Failed to delete exercise");
+      } catch {
+        // Toast feedback is handled by the mutation layer.
       }
     }
   };

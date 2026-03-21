@@ -14,6 +14,7 @@ import { toast } from "sonner";
 import { useProgramStore } from "@/stores/use-program-store";
 import { removeItemsFromProgram } from "@/app/actions/program";
 import { Database } from "@/types/database";
+import { withToastFeedback } from "@/lib/ui/toast-feedback";
 
 type Workout = Database['public']['Tables']['training_sessions']['Row'];
 
@@ -92,10 +93,12 @@ const TimelineItem = memo(function TimelineItem({ item, index, programId }: { it
     
     try {
       // 2. Server Update
-      await removeItemsFromProgram([item.id], programId);
-      toast.success("Removed");
+      await withToastFeedback(removeItemsFromProgram([item.id], programId), {
+        loading: "Removing item...",
+        success: "Removed",
+        error: "Failed to remove",
+      });
     } catch {
-      toast.error("Failed to remove");
       // Ideally, you would revert the optimistic update here if needed
     }
   };

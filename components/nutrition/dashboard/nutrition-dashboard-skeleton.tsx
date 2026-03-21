@@ -28,9 +28,9 @@ export function NutritionHeroSkeleton() {
       </div>
 
       <div className="flex gap-3">
-        <Skeleton className="h-16 flex-1 rounded-2xl" />
-        <Skeleton className="h-16 flex-1 rounded-2xl" />
-        <Skeleton className="h-16 flex-1 rounded-2xl" />
+        <Skeleton className="h-16 flex-1 rounded-[10px]" />
+        <Skeleton className="h-16 flex-1 rounded-[10px]" />
+        <Skeleton className="h-16 flex-1 rounded-[10px]" />
       </div>
     </section>
   );
@@ -43,7 +43,7 @@ export function ActivitySectionSkeleton() {
         <Skeleton className="h-7 w-40 rounded-xl" />
         <Skeleton className="h-4 w-20 rounded-lg" />
       </div>
-      <div className="divide-y divide-border/30 rounded-2xl border border-border/60 bg-card/60">
+      <div className="divide-y divide-border/30 rounded-[10px] border border-border/60 bg-card/60">
         {Array.from({ length: 5 }).map((_, i) => (
           <div key={i} className="flex items-center gap-3 px-4 py-4">
             <Skeleton className="h-10 w-10 shrink-0 rounded-xl" />

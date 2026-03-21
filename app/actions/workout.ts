@@ -11,11 +11,51 @@ import { inngest } from "@/lib/inngest/client";
 type WorkoutInsert = Database['public']['Tables']['training_sessions']['Insert'];
 type WorkoutLogInsert = Database['public']['Tables']['strength_sets']['Insert'];
 type CardioLogInsert = Database['public']['Tables']['cardio_sessions']['Insert'];
+type WorkoutRow = Database["public"]["Tables"]["training_sessions"]["Row"];
+type StrengthSetRow = Database["public"]["Tables"]["strength_sets"]["Row"];
+
+type StrengthSetWithWorkout = Pick<
+  StrengthSetRow,
+  "exercise_name" | "weight" | "reps" | "set_number" | "workout_id"
+> & {
+  training_sessions: Pick<WorkoutRow, "id" | "date" | "performed_on" | "user_id"> | null;
+};
+
+export type WorkoutExerciseLastSession = {
+  exercise_name: string;
+  weight: number | null;
+  reps: number | null;
+  workout_id: string;
+  workout_date: string;
+  days_ago: number;
+  relative_label: string;
+};
 
 function toNullableNumber(value: number | string | undefined): number | null {
   if (value === undefined || value === null || value === "") return null;
   const num = Number(value);
   return Number.isFinite(num) ? num : null;
+}
+
+function toDateInput(date: Date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function parseDateInput(value: string) {
+  const [year, month, day] = value.split("-").map(Number);
+  return new Date(Date.UTC(year || 0, (month || 1) - 1, day || 1, 12, 0, 0));
+}
+
+function daysAgoFromDate(value: string) {
+  const target = parseDateInput(value).getTime();
+  const now = parseDateInput(toDateInput(new Date())).getTime();
+  return Math.max(0, Math.floor((now - target) / 86_400_000));
+}
+
+function formatRelativeLabel(daysAgo: number) {
+  if (daysAgo <= 0) return "today";
+  if (daysAgo === 1) return "1 day ago";
+  return `${daysAgo} days ago`;
 }
 
 // 2. FORM INPUT TYPE
@@ -183,6 +223,84 @@ function buildWorkoutLogs(
   });
 
   return { strengthLogs, cardioLogs };
+}
+
+export async function getWorkoutExerciseLastSessionAction(input: {
+  exercise_names: string[];
+  current_workout_id?: string;
+}) {
+  return runTrackedAction({
+    eventName: "workout.last-session.read",
+    payload: {
+      names_count: input.exercise_names?.length || 0,
+      has_current_workout_id: Boolean(input.current_workout_id),
+    },
+    action: async () => {
+      const supabase = await createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) throw new Error("Unauthorized");
+
+      const normalizedNames = Array.from(
+        new Set(
+          (input.exercise_names || [])
+            .map((name) => name?.trim())
+            .filter((name): name is string => Boolean(name))
+        )
+      );
+      if (normalizedNames.length === 0) {
+        return [] as WorkoutExerciseLastSession[];
+      }
+
+      let query = supabase
+        .from("strength_sets")
+        .select(
+          "exercise_name, weight, reps, set_number, workout_id, training_sessions!inner(id, date, performed_on, user_id)"
+        )
+        .in("exercise_name", normalizedNames)
+        .eq("training_sessions.user_id", user.id)
+        .order("date", { ascending: false, referencedTable: "training_sessions" })
+        .order("weight", { ascending: false })
+        .order("set_number", { ascending: true })
+        .limit(Math.max(60, normalizedNames.length * 25));
+
+      if (input.current_workout_id?.trim()) {
+        query = query.neq("workout_id", input.current_workout_id.trim());
+      }
+
+      const { data, error } = await query;
+      if (error) throw new Error(error.message);
+
+      const rows = (data || []) as StrengthSetWithWorkout[];
+      const bestByExercise = new Map<string, WorkoutExerciseLastSession>();
+
+      for (const row of rows) {
+        const key = row.exercise_name.trim().toLowerCase();
+        if (bestByExercise.has(key)) continue;
+        const workoutDate =
+          row.training_sessions?.performed_on ||
+          row.training_sessions?.date?.slice(0, 10) ||
+          toDateInput(new Date());
+        const daysAgo = daysAgoFromDate(workoutDate);
+
+        bestByExercise.set(key, {
+          exercise_name: row.exercise_name,
+          weight: row.weight,
+          reps: row.reps,
+          workout_id: row.workout_id,
+          workout_date: workoutDate,
+          days_ago: daysAgo,
+          relative_label: formatRelativeLabel(daysAgo),
+        });
+      }
+
+      return Array.from(bestByExercise.values()).sort((a, b) =>
+        a.exercise_name.localeCompare(b.exercise_name)
+      );
+    },
+  });
 }
 
 // ============================================================================

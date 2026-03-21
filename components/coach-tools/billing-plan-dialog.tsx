@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useCoachToolMutations } from "@/hooks/use-coach-tools";
+import { withToastFeedback } from "@/lib/ui/toast-feedback";
 
 type BillingPlanDialogProps = {
   open: boolean;
@@ -152,13 +153,13 @@ export function BillingPlanDialog({
       return;
     }
 
-    try {
-      const replacingPlan =
-        Boolean(existingPlan) &&
-        (existingPlan?.billing_type !== billingType || existingPlan?.currency !== normalizedCurrency);
+    const replacingPlan =
+      Boolean(existingPlan) &&
+      (existingPlan?.billing_type !== billingType || existingPlan?.currency !== normalizedCurrency);
 
-      if (resolvedMode === "edit" && existingPlan && !replacingPlan) {
-        await mutations.updateBillingPlan.mutateAsync({
+    if (resolvedMode === "edit" && existingPlan && !replacingPlan) {
+      const result = await withToastFeedback(
+        mutations.updateBillingPlan.mutateAsync({
           id: existingPlan.id,
           session_rate: parsedSessionRate,
           sessions_purchased: isPackageLike ? Math.trunc(parsedSessionsPurchased) : existingPlan.sessions_purchased,
@@ -167,40 +168,52 @@ export function BillingPlanDialog({
           payment_method: paymentMethod,
           notes: notes.trim() || null,
           is_active: true,
-        });
-      } else {
-        if (existingPlan?.is_active) {
-          const confirmed =
-            typeof window === "undefined"
-              ? true
-              : window.confirm("This will deactivate the current active plan and create a new one. Continue?");
-          if (!confirmed) return;
+        }),
+        {
+          loading: "Updating billing plan...",
+          success: "Billing plan saved",
+          error: "Unable to save billing plan",
         }
-        await mutations.createBillingPlan.mutateAsync({
-          client_id: clientId,
-          billing_type: billingType,
-          session_rate: parsedSessionRate,
-          currency: normalizedCurrency,
-          payment_method: paymentMethod,
-          sessions_purchased: isPackageLike ? Math.trunc(parsedSessionsPurchased) : 0,
-          monthly_amount: isMonthly ? parsedMonthlyAmount : null,
-          billing_cycle_day: isMonthly ? Math.trunc(parsedCycleDay || 1) : null,
-          program_start_date: isProgram ? (programStartDate || null) : null,
-          program_end_date: isProgram ? (programEndDate || null) : null,
-          notes: notes.trim() || null,
-        });
-      }
-
-      toast.success("Billing plan saved");
+      ).catch(() => null);
+      if (!result) return;
       onOpenChange(false);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to save billing plan");
+      return;
     }
+
+    if (existingPlan?.is_active) {
+      const confirmed =
+        typeof window === "undefined"
+          ? true
+          : window.confirm("This will deactivate the current active plan and create a new one. Continue?");
+      if (!confirmed) return;
+    }
+    const created = await withToastFeedback(
+      mutations.createBillingPlan.mutateAsync({
+        client_id: clientId,
+        billing_type: billingType,
+        session_rate: parsedSessionRate,
+        currency: normalizedCurrency,
+        payment_method: paymentMethod,
+        sessions_purchased: isPackageLike ? Math.trunc(parsedSessionsPurchased) : 0,
+        monthly_amount: isMonthly ? parsedMonthlyAmount : null,
+        billing_cycle_day: isMonthly ? Math.trunc(parsedCycleDay || 1) : null,
+        program_start_date: isProgram ? (programStartDate || null) : null,
+        program_end_date: isProgram ? (programEndDate || null) : null,
+        notes: notes.trim() || null,
+      }),
+      {
+        loading: "Creating billing plan...",
+        success: "Billing plan saved",
+        error: "Unable to save billing plan",
+      }
+    ).catch(() => null);
+    if (!created) return;
+    onOpenChange(false);
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="rounded-2xl border-border/70 bg-card/95 sm:max-w-xl">
+      <DialogContent className="rounded-[10px] border-border/70 bg-card/95 sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>

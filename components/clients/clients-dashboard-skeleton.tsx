@@ -1,7 +1,7 @@
 import { Skeleton } from "@/components/ui/skeleton";
 
 function DashboardCardSkeleton({ className = "" }: { className?: string }) {
-  return <Skeleton className={`w-full rounded-3xl ${className}`} />;
+  return <Skeleton className={`w-full rounded-[10px] ${className}`} />;
 }
 
 export function ClientsDashboardSkeleton() {

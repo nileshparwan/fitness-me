@@ -55,6 +55,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useDebounce } from "@/hooks/use-debounce";
 import { useCoachClients, useCoachToolMutations } from "@/hooks/use-coach-tools";
+import { withToastFeedback } from "@/lib/ui/toast-feedback";
 import { cn } from "@/utils";
 
 const STATUS_OPTIONS: Array<ClientStatus | "all"> = ["all", "active", "paused", "blocked", "archived"];
@@ -223,8 +224,8 @@ export function ClientRoster() {
       return false;
     }
 
-    try {
-      await mutations.upsertClient.mutateAsync({
+    const result = await withToastFeedback(
+      mutations.upsertClient.mutateAsync({
         id: form.id,
         first_name: form.first_name.trim(),
         last_name: normalizeOptional(form.last_name),
@@ -232,13 +233,14 @@ export function ClientRoster() {
         email: normalizeOptional(form.email),
         phone: normalizeOptional(form.phone),
         status: form.status,
-      });
-      toast.success(form.id ? "Client updated" : "Client created");
-      return true;
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to save client");
-      return false;
-    }
+      }),
+      {
+        loading: form.id ? "Updating client..." : "Creating client...",
+        success: form.id ? "Client updated" : "Client created",
+        error: "Unable to save client",
+      }
+    ).catch(() => null);
+    return Boolean(result);
   }, [mutations.upsertClient]);
 
   const onCreateClient = useCallback(async () => {
@@ -257,14 +259,17 @@ export function ClientRoster() {
 
   const onDeleteClient = useCallback(async () => {
     if (!deletingClient) return;
-    try {
-      await mutations.removeClient.mutateAsync({ client_id: deletingClient.id });
-      toast.success("Client archived");
-      setDeletingClient(null);
-      setIsDeleteDialogOpen(false);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to remove client");
-    }
+    const result = await withToastFeedback(
+      mutations.removeClient.mutateAsync({ client_id: deletingClient.id }),
+      {
+        loading: "Archiving client...",
+        success: "Client archived",
+        error: "Unable to remove client",
+      }
+    ).catch(() => null);
+    if (!result) return;
+    setDeletingClient(null);
+    setIsDeleteDialogOpen(false);
   }, [deletingClient, mutations.removeClient]);
 
   const columns = useMemo<ColumnDef<ClientRowItem>[]>(
@@ -533,7 +538,7 @@ export function ClientRoster() {
         <div className="glass-surface surface-pad text-center text-sm text-muted-foreground">No clients found for this filter.</div>
       ) : (
         <>
-          <div className="hidden overflow-hidden rounded-3xl border border-border/60 bg-card/60 md:block">
+          <div className="hidden overflow-hidden rounded-[10px] border border-border/60 bg-card/60 md:block">
             <Table>
               <TableHeader>
                 {table.getHeaderGroups().map((headerGroup) => (
@@ -565,7 +570,7 @@ export function ClientRoster() {
               const client = row.original;
               const name = displayClientName(client);
               return (
-                <article key={client.id} className="group glass-surface rounded-2xl border-border/60 p-3">
+                <article key={client.id} className="group glass-surface rounded-[10px] border-border/60 p-3">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
@@ -661,7 +666,7 @@ export function ClientRoster() {
       </section>
 
       <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-        <DialogContent className="rounded-2xl border-border/70 bg-card/95 sm:max-w-lg">
+        <DialogContent className="rounded-[10px] border-border/70 bg-card/95 sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Add Client</DialogTitle>
             <DialogDescription>Create a client profile. Account linking is optional.</DialogDescription>
@@ -841,7 +846,7 @@ export function ClientRoster() {
       ) : null}
 
       <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-        <DialogContent className="rounded-2xl border-border/70 bg-card/95 sm:max-w-md">
+        <DialogContent className="rounded-[10px] border-border/70 bg-card/95 sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Delete Client</DialogTitle>
             <DialogDescription>

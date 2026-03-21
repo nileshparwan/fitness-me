@@ -67,6 +67,7 @@ import { TodaysBoard } from "@/components/coach-tools/todays-board";
 import { useDebounce } from "@/hooks/use-debounce";
 import { useClientBillingPlan, useCoachClients, useCoachPaymentsDashboard, useCoachToolMutations } from "@/hooks/use-coach-tools";
 import { formatCurrencyAmount } from "@/lib/clients/dashboard";
+import { withToastFeedback } from "@/lib/ui/toast-feedback";
 import { cn } from "@/utils";
 
 const BillingPlanDialog = dynamic(() =>
@@ -270,7 +271,7 @@ function KpiCard({
   loading: boolean;
 }) {
   return (
-    <div className="glass-surface rounded-2xl border border-border/60 p-4">
+    <div className="glass-surface rounded-[10px] border border-border/60 p-4">
       <div className="mb-2 flex items-center gap-2">
         <div className={cn("grid h-7 w-7 place-items-center rounded-lg", tone)}>
           <Icon className="h-4 w-4" />
@@ -514,28 +515,32 @@ export function CoachPaymentsDashboard({ initialData }: { initialData?: CoachPay
     const normalizedNotes = clampToWordLimit(detailNotes, PAYMENT_NOTES_WORD_LIMIT);
     const mergedNotes = [normalizedDescription, normalizedNotes].filter(Boolean).join("\n") || null;
 
-    try {
-      await mutations.updatePaymentDetails.mutateAsync({
+    const result = await withToastFeedback(
+      mutations.updatePaymentDetails.mutateAsync({
         id: selectedTransaction.id,
         method: detailMethod,
         status: detailStatus,
         notes: mergedNotes,
-      });
-      setSelectedTransaction((current) =>
-        current && current.id === selectedTransaction.id
-          ? {
-              ...current,
-              method: detailMethod,
-              status: detailStatus,
-              notes: mergedNotes,
-              description: normalizedDescription,
-            }
-          : current
-      );
-      toast.success("Payment details updated");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to update payment");
-    }
+      }),
+      {
+        loading: "Updating payment details...",
+        success: "Payment details updated",
+        error: "Unable to update payment",
+      }
+    ).catch(() => null);
+    if (!result) return;
+
+    setSelectedTransaction((current) =>
+      current && current.id === selectedTransaction.id
+        ? {
+            ...current,
+            method: detailMethod,
+            status: detailStatus,
+            notes: mergedNotes,
+            description: normalizedDescription,
+          }
+        : current
+    );
   };
 
   const onDeletePayment = async () => {
@@ -545,13 +550,13 @@ export function CoachPaymentsDashboard({ initialData }: { initialData?: CoachPay
       return;
     }
 
-    try {
-      await mutations.deletePayment.mutateAsync({ id: selectedTransaction.id });
-      setSelectedTransaction(null);
-      toast.success("Payment deleted");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to delete payment");
-    }
+    const result = await withToastFeedback(mutations.deletePayment.mutateAsync({ id: selectedTransaction.id }), {
+      loading: "Deleting payment...",
+      success: "Payment deleted",
+      error: "Unable to delete payment",
+    }).catch(() => null);
+    if (!result) return;
+    setSelectedTransaction(null);
   };
 
   const transactionRows = useMemo(
@@ -893,7 +898,7 @@ export function CoachPaymentsDashboard({ initialData }: { initialData?: CoachPay
               New Invoice
             </Button>
           </DialogTrigger>
-          <DialogContent className="rounded-2xl border-border/70 bg-card/95 sm:max-w-xl">
+          <DialogContent className="rounded-[10px] border-border/70 bg-card/95 sm:max-w-xl">
             <DialogHeader>
               <DialogTitle>Record Payment</DialogTitle>
               <DialogDescription>Capture a payment for a client billing entry.</DialogDescription>
@@ -1031,7 +1036,7 @@ export function CoachPaymentsDashboard({ initialData }: { initialData?: CoachPay
         </div>
       ) : null}
 
-      <section className="glass-surface rounded-2xl border border-border/60 p-3 md:p-4">
+      <section className="glass-surface rounded-[10px] border border-border/60 p-3 md:p-4">
         <Tabs value={mode} onValueChange={(value) => setMode(value as ViewMode)}>
           <TabsList className="rounded-xl bg-muted/30">
             <TabsTrigger value="today" className="rounded-lg">Daily Log Board</TabsTrigger>
@@ -1095,7 +1100,7 @@ export function CoachPaymentsDashboard({ initialData }: { initialData?: CoachPay
               </DropdownMenu>
             </div>
 
-            <div className="hidden overflow-hidden rounded-2xl border border-border/60 md:block">
+            <div className="hidden overflow-hidden rounded-[10px] border border-border/60 md:block">
               <Table>
                 <TableHeader>
                   {table.getHeaderGroups().map((headerGroup) => (
@@ -1227,7 +1232,7 @@ export function CoachPaymentsDashboard({ initialData }: { initialData?: CoachPay
         ) : (
           <div className="mt-3 space-y-2">
             {paymentsQuery.isLoading && !paymentsQuery.data ? (
-              Array.from({ length: 3 }).map((_, index) => <Skeleton key={`billing-skeleton-${index}`} className="h-24 w-full rounded-2xl" />)
+              Array.from({ length: 3 }).map((_, index) => <Skeleton key={`billing-skeleton-${index}`} className="h-24 w-full rounded-[10px]" />)
             ) : !billingPlansAvailable ? (
               <p className="rounded-xl border border-border/60 bg-background/40 px-3 py-4 text-sm text-muted-foreground">
                 Billing plans are unavailable. Apply migration
@@ -1303,7 +1308,7 @@ export function CoachPaymentsDashboard({ initialData }: { initialData?: CoachPay
                   </DropdownMenu>
                 </div>
 
-                <div className="hidden overflow-hidden rounded-2xl border border-border/60 md:block">
+                <div className="hidden overflow-hidden rounded-[10px] border border-border/60 md:block">
                   <Table>
                     <TableHeader>
                       {billingTable.getHeaderGroups().map((headerGroup) => (

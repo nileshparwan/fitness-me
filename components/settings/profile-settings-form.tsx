@@ -3,7 +3,6 @@
 import { useTransition } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { toast } from "sonner";
 
 import { updateProfile, type SettingsProfilePayload } from "@/app/actions/settings";
 import { Button } from "@/components/ui/button";
@@ -17,6 +16,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { withToastFeedback } from "@/lib/ui/toast-feedback";
 import { profileSchema, type ProfileFormValues } from "@/lib/validations/settings";
 
 type ProfileSettingsFormProps = {
@@ -37,12 +37,11 @@ export function ProfileSettingsForm({ profile }: ProfileSettingsFormProps) {
 
   const onSubmit = (values: ProfileFormValues) => {
     startTransition(async () => {
-      try {
-        await updateProfile(values);
-        toast.success("Profile saved");
-      } catch (error) {
-        toast.error(error instanceof Error ? error.message : "Unable to save profile");
-      }
+      await withToastFeedback(updateProfile(values), {
+        loading: "Updating profile...",
+        success: "Profile saved",
+        error: "Unable to save profile",
+      }).catch(() => null);
     });
   };
 

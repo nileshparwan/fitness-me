@@ -41,6 +41,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { normalizeMealUnit } from "@/lib/nutrition/meal-units";
+import { withToastFeedback } from "@/lib/ui/toast-feedback";
 import type { Database } from "@/types/database";
 import { cn } from "@/utils";
 
@@ -234,9 +235,9 @@ export function MealGroupDetail({ mealGroupId }: { mealGroupId: string }) {
   if (detailQuery.isLoading && !data) {
     return (
       <div className="space-y-4">
-        <Skeleton className="h-44 w-full rounded-3xl" />
-        <Skeleton className="h-16 w-full rounded-2xl" />
-        <Skeleton className="h-96 w-full rounded-3xl" />
+        <Skeleton className="h-44 w-full rounded-[10px]" />
+        <Skeleton className="h-16 w-full rounded-[10px]" />
+        <Skeleton className="h-96 w-full rounded-[10px]" />
       </div>
     );
   }
@@ -255,8 +256,8 @@ export function MealGroupDetail({ mealGroupId }: { mealGroupId: string }) {
       return;
     }
 
-    try {
-      await mutations.upsertGroup.mutateAsync({
+    await withToastFeedback(
+      mutations.upsertGroup.mutateAsync({
         id: group.id,
         name: groupName.trim(),
         description: groupDescription.trim() || null,
@@ -264,24 +265,28 @@ export function MealGroupDetail({ mealGroupId }: { mealGroupId: string }) {
         start_date: groupStartDate || null,
         end_date: groupEndDate || null,
         status: groupStatus,
-      });
-      toast.success("Meal group updated");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to update meal group");
-    }
+      }),
+      {
+        loading: "Updating meal group...",
+        success: "Meal group updated",
+        error: "Unable to update meal group",
+      }
+    ).catch(() => null);
   };
 
   const savePlanNotes = async () => {
     if (!dayPlan) return;
-    try {
-      await mutations.updatePlanNote.mutateAsync({
+    await withToastFeedback(
+      mutations.updatePlanNote.mutateAsync({
         meal_plan_id: dayPlan.id,
         notes: dayNotesDraft.trim() || null,
-      });
-      toast.success("Day notes updated");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to update day notes");
-    }
+      }),
+      {
+        loading: "Updating day notes...",
+        success: "Day notes updated",
+        error: "Unable to update day notes",
+      }
+    ).catch(() => null);
   };
 
   const openCreateItem = (type: MealItemType, quickMode = false) => {
@@ -328,11 +333,32 @@ export function MealGroupDetail({ mealGroupId }: { mealGroupId: string }) {
     const fallbackTitle = MEAL_TYPE_LABELS[mealType];
     const normalizedTitle = value.title.trim() || (itemEditorQuickMode ? "Quick Add" : fallbackTitle);
 
-    try {
-      if (editingItemId) {
-        await mutations.updateItem.mutateAsync({
-          meal_item_id: editingItemId,
-          changes: {
+    const saved = editingItemId
+      ? await withToastFeedback(
+          mutations.updateItem.mutateAsync({
+            meal_item_id: editingItemId,
+            changes: {
+              type: mealType,
+              title: normalizedTitle,
+              quantity: value.quantity,
+              unit: value.unit,
+              calories: value.calories,
+              protein_g: value.protein_g,
+              carbs_g: value.carbs_g,
+              fat_g: value.fat_g,
+              notes: value.notes,
+              planned_time: value.planned_time,
+            },
+          }),
+          {
+            loading: "Updating meal item...",
+            success: "Meal item updated",
+            error: "Unable to save meal item",
+          }
+        ).catch(() => null)
+      : await withToastFeedback(
+          mutations.createItem.mutateAsync({
+            meal_plan_id: dayPlan.id,
             type: mealType,
             title: normalizedTitle,
             quantity: value.quantity,
@@ -343,43 +369,33 @@ export function MealGroupDetail({ mealGroupId }: { mealGroupId: string }) {
             fat_g: value.fat_g,
             notes: value.notes,
             planned_time: value.planned_time,
-          },
-        });
-        toast.success("Meal item updated");
-      } else {
-        await mutations.createItem.mutateAsync({
-          meal_plan_id: dayPlan.id,
-          type: mealType,
-          title: normalizedTitle,
-          quantity: value.quantity,
-          unit: value.unit,
-          calories: value.calories,
-          protein_g: value.protein_g,
-          carbs_g: value.carbs_g,
-          fat_g: value.fat_g,
-          notes: value.notes,
-          planned_time: value.planned_time,
-        });
-        toast.success("Meal item created");
-      }
-      setItemEditorOpen(false);
-      setItemEditorDefaultValue(null);
-      setEditingItemId(null);
-      setItemEditorQuickMode(false);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to save meal item");
-    }
+          }),
+          {
+            loading: "Creating meal item...",
+            success: "Meal item created",
+            error: "Unable to save meal item",
+          }
+        ).catch(() => null);
+
+    if (!saved) return;
+    setItemEditorOpen(false);
+    setItemEditorDefaultValue(null);
+    setEditingItemId(null);
+    setItemEditorQuickMode(false);
   };
 
   const confirmDeleteItem = async () => {
     if (!deleteTarget) return;
-    try {
-      await mutations.deleteItem.mutateAsync({ meal_item_id: deleteTarget.id });
-      toast.success("Meal item deleted");
-      setDeleteTarget(null);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to delete meal item");
-    }
+    const result = await withToastFeedback(
+      mutations.deleteItem.mutateAsync({ meal_item_id: deleteTarget.id }),
+      {
+        loading: "Deleting meal item...",
+        success: "Meal item deleted",
+        error: "Unable to delete meal item",
+      }
+    ).catch(() => null);
+    if (!result) return;
+    setDeleteTarget(null);
   };
 
   const duplicateItem = async (itemId: string) => {
@@ -473,8 +489,8 @@ export function MealGroupDetail({ mealGroupId }: { mealGroupId: string }) {
     const normalizedUnit = normalizeMealUnit(item.unit);
     const key = favoriteItemKey(normalizedName, normalizedUnit, type);
     setFavoritesLookupEnabled(true);
-    try {
-      const result = await nutritionMutations.toggleFavorite.mutateAsync({
+    const result = await withToastFeedback(
+      nutritionMutations.toggleFavorite.mutateAsync({
         item: {
           item_name: normalizedName,
           quantity: item.quantity,
@@ -487,15 +503,18 @@ export function MealGroupDetail({ mealGroupId }: { mealGroupId: string }) {
           notes: item.notes,
         },
         meal_type: type,
-      });
-      setFavoriteOverrides((previous) => ({
-        ...previous,
-        [key]: result.favorited,
-      }));
-      toast.success(result.favorited ? "Added to favorites" : "Removed from favorites");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to update favorites");
-    }
+      }),
+      {
+        loading: "Updating favorites...",
+        success: (value) => (value.favorited ? "Added to favorites" : "Removed from favorites"),
+        error: "Unable to update favorites",
+      }
+    ).catch(() => null);
+    if (!result) return;
+    setFavoriteOverrides((previous) => ({
+      ...previous,
+      [key]: result.favorited,
+    }));
   };
 
   const assignmentPending = mutations.assignGroup.isPending || mutations.archiveAssignment.isPending;
@@ -532,17 +551,32 @@ export function MealGroupDetail({ mealGroupId }: { mealGroupId: string }) {
     }
 
     if (activeAssignment) {
-      await mutations.archiveAssignment.mutateAsync({ assignment_id: activeAssignment.id });
+      const archived = await withToastFeedback(
+        mutations.archiveAssignment.mutateAsync({ assignment_id: activeAssignment.id }),
+        {
+          loading: "Updating assignment...",
+          success: "Previous assignment archived",
+          error: "Unable to update assignment",
+        }
+      );
+      if (!archived) return;
     }
 
-    await mutations.assignGroup.mutateAsync({
-      meal_group_id: group.id,
-      subject: nextSubject,
-      start_date: startDate,
-      end_date: endDate,
-      notes: activeAssignment?.notes || null,
-    });
-    toast.success(`Assigned to ${input.name}`);
+    const assigned = await withToastFeedback(
+      mutations.assignGroup.mutateAsync({
+        meal_group_id: group.id,
+        subject: nextSubject,
+        start_date: startDate,
+        end_date: endDate,
+        notes: activeAssignment?.notes || null,
+      }),
+      {
+        loading: `Assigning to ${input.name}...`,
+        success: `Assigned to ${input.name}`,
+        error: "Unable to update assignment",
+      }
+    );
+    if (!assigned) return;
   };
 
   return (
@@ -647,7 +681,7 @@ export function MealGroupDetail({ mealGroupId }: { mealGroupId: string }) {
               </div>
 
               {orderedVisibleSectionTypes.length === 0 ? (
-                <div className="rounded-2xl border border-dashed border-border/60 px-4 py-8 text-center text-sm text-muted-foreground">
+                <div className="rounded-[10px] border border-dashed border-border/60 px-4 py-8 text-center text-sm text-muted-foreground">
                   No meal types added for this day yet.
                 </div>
               ) : null}

@@ -13,6 +13,7 @@ import {
   LayoutDashboard,
   LogOut,
   Menu,
+  Pill,
   TrendingUp,
   UserRound,
   Users,
@@ -51,9 +52,13 @@ const iconMap: Record<MobileNavTabConfig["icon"] | SidebarItemConfig["icon"], Co
   message: BookOpen,
   building: Folder,
   bell: Goal,
+  pill: Pill,
 };
 
 function isRouteActive(pathname: string, href: string) {
+  if (href === "/supplements") {
+    return pathname === "/supplements";
+  }
   if (href === "/nutrition/meal-groups" && (pathname.startsWith("/nutrition/groups") || pathname.startsWith("/nutrition/meal-groups"))) {
     return true;
   }
@@ -211,7 +216,7 @@ export function MobileBottomNav() {
           </div>
 
           <div className="border-t border-border/60 bg-background/50 px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3">
-            <div className="flex items-center justify-between gap-3 rounded-2xl border border-border/70 bg-card/80 p-3">
+            <div className="flex items-center justify-between gap-3 rounded-[10px] border border-border/70 bg-card/80 p-3">
               <div className="flex min-w-0 items-center gap-3">
                 <Avatar className="h-10 w-10 rounded-xl">
                   <AvatarImage src={avatarUrl} alt={displayName} />

@@ -7,6 +7,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { runTrackedAction } from "@/lib/events/dispatcher";
 import { nextSequentialPosition } from "@/lib/nutrition/meal-ui";
 import { mealUnitInputSchema } from "@/lib/nutrition/meal-units";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { Database, Json } from "@/types/database";
 
@@ -30,6 +31,7 @@ type MealLogSectionRow = Database["public"]["Tables"]["meal_log_sections"]["Row"
 type MealLogSectionInsert = Database["public"]["Tables"]["meal_log_sections"]["Insert"];
 type FavoriteRow = Database["public"]["Tables"]["meal_item_favorites"]["Row"];
 type MealDayOfWeek = Database["public"]["Enums"]["meal_day_of_week"];
+type DailyMacroComplianceInsert = Database["public"]["Tables"]["daily_macro_compliance"]["Insert"];
 
 type ClientRow = Database["public"]["Tables"]["clients"]["Row"];
 
@@ -335,6 +337,282 @@ function isMissingColumnError(error: { code?: string; message?: string } | null)
 
 function safeNumber(input: number | null | undefined) {
   return Number(input ?? 0);
+}
+
+type ComplianceTargetSource = "plan_assignment" | "fitness_goal" | "none";
+type ComplianceBasis = "complete_log" | "partial_log" | "missing_target" | "no_log";
+
+type ComplianceTargetsSnapshot = {
+  target_calories: number | null;
+  target_protein_g: number | null;
+  target_carbs_g: number | null;
+  target_fat_g: number | null;
+  target_source: ComplianceTargetSource;
+};
+
+type ComplianceActualsSnapshot = {
+  actual_calories: number;
+  actual_protein_g: number;
+  actual_carbs_g: number;
+  actual_fat_g: number;
+  logged_meal_type_count: number;
+};
+
+function normalizeComplianceTarget(value: number | null | undefined) {
+  const normalized = Math.round(safeNumber(value));
+  return normalized > 0 ? normalized : null;
+}
+
+function hasCompleteMacroTargets(
+  snapshot: ComplianceTargetsSnapshot
+): snapshot is ComplianceTargetsSnapshot & {
+  target_calories: number;
+  target_protein_g: number;
+  target_carbs_g: number;
+  target_fat_g: number;
+} {
+  return (
+    snapshot.target_calories !== null &&
+    snapshot.target_protein_g !== null &&
+    snapshot.target_carbs_g !== null &&
+    snapshot.target_fat_g !== null
+  );
+}
+
+function isWithinComplianceThreshold(actual: number, target: number) {
+  return Math.abs(actual - target) / Math.max(target, 1) <= 0.15;
+}
+
+async function resolveComplianceTargetsForDate(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  subject: SubjectRef,
+  performedOn: string
+): Promise<ComplianceTargetsSnapshot> {
+  let assignmentQuery = supabase
+    .from("meal_plan_assignments")
+    .select("daily_calorie_target, daily_protein_target_g, daily_carbs_target_g, daily_fat_target_g")
+    .eq("status", "active")
+    .lte("start_date", performedOn)
+    .gte("end_date", performedOn)
+    .order("start_date", { ascending: false })
+    .limit(1);
+  assignmentQuery = applySubjectFilters(assignmentQuery, subject);
+
+  const { data: assignment, error: assignmentError } = await assignmentQuery.maybeSingle();
+  if (assignmentError) throw new Error(assignmentError.message);
+
+  if (assignment) {
+    const assignmentSnapshot: ComplianceTargetsSnapshot = {
+      target_calories: normalizeComplianceTarget(assignment.daily_calorie_target),
+      target_protein_g: normalizeComplianceTarget(assignment.daily_protein_target_g),
+      target_carbs_g: normalizeComplianceTarget(assignment.daily_carbs_target_g),
+      target_fat_g: normalizeComplianceTarget(assignment.daily_fat_target_g),
+      target_source: "plan_assignment",
+    };
+    if (hasCompleteMacroTargets(assignmentSnapshot)) {
+      return assignmentSnapshot;
+    }
+  }
+
+  let goalUserId = subject.subject_user_id;
+  if (!goalUserId && subject.subject_client_id) {
+    const { data: client, error: clientError } = await supabase
+      .from("clients")
+      .select("linked_user_id")
+      .eq("id", subject.subject_client_id)
+      .maybeSingle();
+    if (clientError) throw new Error(clientError.message);
+    goalUserId = client?.linked_user_id ?? null;
+  }
+
+  if (goalUserId) {
+    const { data: goal, error: goalError } = await supabase
+      .from("fitness_goals")
+      .select("daily_calories, protein_target, carbs_target, fat_target")
+      .eq("user_id", goalUserId)
+      .eq("status", "active")
+      .order("updated_at", { ascending: false })
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (goalError) throw new Error(goalError.message);
+
+    if (goal) {
+      const goalSnapshot: ComplianceTargetsSnapshot = {
+        target_calories: normalizeComplianceTarget(goal.daily_calories),
+        target_protein_g: normalizeComplianceTarget(goal.protein_target),
+        target_carbs_g: normalizeComplianceTarget(goal.carbs_target),
+        target_fat_g: normalizeComplianceTarget(goal.fat_target),
+        target_source: "fitness_goal",
+      };
+      if (hasCompleteMacroTargets(goalSnapshot)) {
+        return goalSnapshot;
+      }
+    }
+  }
+
+  return {
+    target_calories: null,
+    target_protein_g: null,
+    target_carbs_g: null,
+    target_fat_g: null,
+    target_source: "none",
+  };
+}
+
+async function resolveComplianceActualsForDate(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  subject: SubjectRef,
+  performedOn: string
+): Promise<ComplianceActualsSnapshot> {
+  let logsQuery = supabase
+    .from("meal_logs")
+    .select("id, meal_type, total_calories, total_protein_g, total_carbs_g, total_fat_g")
+    .eq("performed_on", performedOn);
+  logsQuery = applySubjectFilters(logsQuery, subject);
+
+  const { data: logsData, error: logsError } = await logsQuery;
+  if (logsError) throw new Error(logsError.message);
+
+  const logs = (logsData || []) as Array<
+    Pick<MealLogRow, "id" | "meal_type" | "total_calories" | "total_protein_g" | "total_carbs_g" | "total_fat_g">
+  >;
+  if (logs.length === 0) {
+    return {
+      actual_calories: 0,
+      actual_protein_g: 0,
+      actual_carbs_g: 0,
+      actual_fat_g: 0,
+      logged_meal_type_count: 0,
+    };
+  }
+
+  const totals = logs.reduce(
+    (acc, log) => {
+      acc.actual_calories += safeNumber(log.total_calories);
+      acc.actual_protein_g += safeNumber(log.total_protein_g);
+      acc.actual_carbs_g += safeNumber(log.total_carbs_g);
+      acc.actual_fat_g += safeNumber(log.total_fat_g);
+      return acc;
+    },
+    {
+      actual_calories: 0,
+      actual_protein_g: 0,
+      actual_carbs_g: 0,
+      actual_fat_g: 0,
+    }
+  );
+
+  const logIds = logs.map((log) => log.id);
+  const { data: itemsData, error: itemsError } = await supabase
+    .from("meal_log_items")
+    .select("meal_log_id")
+    .in("meal_log_id", logIds);
+  if (itemsError) throw new Error(itemsError.message);
+
+  const logIdsWithItems = new Set((itemsData || []).map((row) => row.meal_log_id));
+  const mealTypesWithItems = new Set<MealType>();
+  for (const log of logs) {
+    if (!logIdsWithItems.has(log.id)) continue;
+    mealTypesWithItems.add(normalizeMealType(log.meal_type));
+  }
+
+  return {
+    ...totals,
+    logged_meal_type_count: mealTypesWithItems.size,
+  };
+}
+
+async function upsertDailyCompliance(args: {
+  supabase: Awaited<ReturnType<typeof createClient>>;
+  subject: SubjectRef;
+  performedOn: string;
+}) {
+  const { supabase, subject, performedOn } = args;
+  const [targets, actuals] = await Promise.all([
+    resolveComplianceTargetsForDate(supabase, subject, performedOn),
+    resolveComplianceActualsForDate(supabase, subject, performedOn),
+  ]);
+
+  let basis: ComplianceBasis;
+  if (actuals.logged_meal_type_count === 0) {
+    basis = "no_log";
+  } else if (actuals.logged_meal_type_count < 2) {
+    basis = "partial_log";
+  } else if (targets.target_source === "none") {
+    basis = "missing_target";
+  } else {
+    basis = "complete_log";
+  }
+
+  let caloriesCompliant: boolean | null = null;
+  let proteinCompliant: boolean | null = null;
+  let carbsCompliant: boolean | null = null;
+  let fatCompliant: boolean | null = null;
+  let overallCompliant: boolean | null = null;
+
+  if (basis === "complete_log" && hasCompleteMacroTargets(targets)) {
+    caloriesCompliant = isWithinComplianceThreshold(actuals.actual_calories, targets.target_calories);
+    proteinCompliant = isWithinComplianceThreshold(actuals.actual_protein_g, targets.target_protein_g);
+    carbsCompliant = isWithinComplianceThreshold(actuals.actual_carbs_g, targets.target_carbs_g);
+    fatCompliant = isWithinComplianceThreshold(actuals.actual_fat_g, targets.target_fat_g);
+    overallCompliant = Boolean(caloriesCompliant && proteinCompliant && carbsCompliant && fatCompliant);
+  }
+
+  const payload: DailyMacroComplianceInsert = {
+    subject_user_id: subject.subject_user_id,
+    subject_client_id: subject.subject_client_id,
+    performed_on: performedOn,
+    target_calories: targets.target_calories,
+    target_protein_g: targets.target_protein_g,
+    target_carbs_g: targets.target_carbs_g,
+    target_fat_g: targets.target_fat_g,
+    target_source: targets.target_source,
+    actual_calories: actuals.actual_calories,
+    actual_protein_g: actuals.actual_protein_g,
+    actual_carbs_g: actuals.actual_carbs_g,
+    actual_fat_g: actuals.actual_fat_g,
+    calories_compliant: caloriesCompliant,
+    protein_compliant: proteinCompliant,
+    carbs_compliant: carbsCompliant,
+    fat_compliant: fatCompliant,
+    basis,
+    overall_compliant: overallCompliant,
+  };
+
+  const admin = createAdminClient();
+  let existingQuery = admin
+    .from("daily_macro_compliance")
+    .select("id")
+    .eq("performed_on", performedOn)
+    .limit(1);
+  existingQuery = applySubjectFilters(existingQuery, subject);
+  const { data: existingRows, error: existingError } = await existingQuery;
+  if (existingError) {
+    if (isMissingRelationError(existingError) || isMissingColumnError(existingError)) {
+      return;
+    }
+    throw new Error(existingError.message);
+  }
+
+  const existingId = existingRows?.[0]?.id;
+  if (existingId) {
+    const { error: updateError } = await admin
+      .from("daily_macro_compliance")
+      .update(payload)
+      .eq("id", existingId);
+    if (updateError) {
+      if (isMissingRelationError(updateError) || isMissingColumnError(updateError)) return;
+      throw new Error(updateError.message);
+    }
+    return;
+  }
+
+  const { error: insertError } = await admin.from("daily_macro_compliance").insert(payload);
+  if (insertError) {
+    if (isMissingRelationError(insertError) || isMissingColumnError(insertError)) return;
+    throw new Error(insertError.message);
+  }
 }
 
 type MealLogMacroSource = {
@@ -1307,6 +1585,12 @@ export async function logFromPlanAction(input: z.input<typeof logFromPlanSchema>
         insertedCount += logItemInserts.length;
       }
 
+      await upsertDailyCompliance({
+        supabase,
+        subject,
+        performedOn: payload.performed_on,
+      });
+
       activityContext = {
         meal_group_id: payload.meal_group_id,
         subject_user_id: subject.subject_user_id,
@@ -1404,6 +1688,11 @@ export async function addMealItemAction(input: z.input<typeof addMealItemSchema>
       }
 
       await syncMealLogTotals(supabase, log.id);
+      await upsertDailyCompliance({
+        supabase,
+        subject,
+        performedOn: payload.performed_on,
+      });
 
       activityContext = {
         item_name: item.item_name,
@@ -1456,6 +1745,17 @@ export async function updateMealItemAction(input: z.input<typeof updateMealItemS
         .eq("id", data.meal_log_id)
         .maybeSingle();
 
+      if (mealLog?.performed_on) {
+        await upsertDailyCompliance({
+          supabase,
+          subject: {
+            subject_user_id: mealLog.subject_user_id,
+            subject_client_id: mealLog.subject_client_id,
+          },
+          performedOn: mealLog.performed_on,
+        });
+      }
+
       activityContext = {
         item_name: data.item_name || payload.item.item_name || null,
         meal_type: mealLog?.meal_type ?? null,
@@ -1498,6 +1798,16 @@ export async function removeMealItemAction(input: z.input<typeof removeMealItemS
       if (error) throw new Error(error.message);
 
       await syncMealLogTotals(supabase, currentItem.meal_log_id);
+      if (mealLog?.performed_on) {
+        await upsertDailyCompliance({
+          supabase,
+          subject: {
+            subject_user_id: mealLog.subject_user_id,
+            subject_client_id: mealLog.subject_client_id,
+          },
+          performedOn: mealLog.performed_on,
+        });
+      }
 
       activityContext = {
         item_name: currentItem.item_name,
@@ -1646,6 +1956,12 @@ export async function copyMealsFromDateAction(input: z.input<typeof copyFromDate
         await setMealLogTotals(supabase, targetLog.id, deriveMealLogTotals(copiedRows));
         copiedCount += copiedRows.length;
       }
+
+      await upsertDailyCompliance({
+        supabase,
+        subject,
+        performedOn: payload.target_date,
+      });
 
       activityContext = {
         source_date: payload.source_date,

@@ -154,9 +154,9 @@ export function ClientNutritionWorkspace({ clientId }: { clientId: string }) {
   if (loading) {
     return (
       <div className="space-y-4 md:space-y-5">
-        <Skeleton className="h-28 w-full rounded-3xl" />
-        <Skeleton className="h-24 w-full rounded-2xl" />
-        <Skeleton className="h-72 w-full rounded-2xl" />
+        <Skeleton className="h-28 w-full rounded-[10px]" />
+        <Skeleton className="h-24 w-full rounded-[10px]" />
+        <Skeleton className="h-72 w-full rounded-[10px]" />
       </div>
     );
   }
@@ -195,7 +195,7 @@ export function ClientNutritionWorkspace({ clientId }: { clientId: string }) {
         </div>
       </section>
 
-      <section className={cn("rounded-2xl border px-4 py-3 text-sm", accessBannerTone(moduleAccess))}>
+      <section className={cn("rounded-[10px] border px-4 py-3 text-sm", accessBannerTone(moduleAccess))}>
         <div className="flex items-center gap-2 font-medium">
           <AlertTriangle className="h-4 w-4" />
           Meal logging is {moduleAccess === "read_only" ? "read-only" : moduleAccess === "disabled" ? "disabled" : "enabled"} for this client
@@ -209,7 +209,7 @@ export function ClientNutritionWorkspace({ clientId }: { clientId: string }) {
         </p>
       </section>
 
-      <section className="glass-surface rounded-2xl border border-border/60 p-4">
+      <section className="glass-surface rounded-[10px] border border-border/60 p-4">
         {assignmentsQuery.isLoading ? (
           <Skeleton className="h-20 w-full rounded-xl" />
         ) : (assignmentsQuery.data?.length || 0) === 0 ? (
@@ -270,22 +270,22 @@ export function ClientNutritionWorkspace({ clientId }: { clientId: string }) {
         </div>
 
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-          <div className="glass-surface rounded-2xl border border-border/60 p-4">
+          <div className="glass-surface rounded-[10px] border border-border/60 p-4">
             <p className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">Calories</p>
             <p className="mt-1 text-2xl font-semibold">{selectedDayPlan?.totals.calories || 0}</p>
             <p className="text-xs text-muted-foreground">/ 2200 kcal</p>
           </div>
-          <div className="glass-surface rounded-2xl border border-border/60 p-4">
+          <div className="glass-surface rounded-[10px] border border-border/60 p-4">
             <p className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">Protein</p>
             <p className="mt-1 text-2xl font-semibold">{selectedDayPlan?.totals.protein_g || 0}</p>
             <p className="text-xs text-muted-foreground">/ 160g</p>
           </div>
-          <div className="glass-surface rounded-2xl border border-border/60 p-4">
+          <div className="glass-surface rounded-[10px] border border-border/60 p-4">
             <p className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">Carbs</p>
             <p className="mt-1 text-2xl font-semibold">{selectedDayPlan?.totals.carbs_g || 0}</p>
             <p className="text-xs text-muted-foreground">/ 240g</p>
           </div>
-          <div className="glass-surface rounded-2xl border border-border/60 p-4">
+          <div className="glass-surface rounded-[10px] border border-border/60 p-4">
             <p className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">Fat</p>
             <p className="mt-1 text-2xl font-semibold">{selectedDayPlan?.totals.fat_g || 0}</p>
             <p className="text-xs text-muted-foreground">/ 65g</p>
@@ -293,7 +293,7 @@ export function ClientNutritionWorkspace({ clientId }: { clientId: string }) {
         </div>
 
         {mealRows.length === 0 ? (
-          <div className="glass-surface rounded-2xl border border-border/60 px-4 py-16 text-center">
+          <div className="glass-surface rounded-[10px] border border-border/60 px-4 py-16 text-center">
             <p className="text-lg font-medium">No meals planned</p>
             <p className="mt-1 text-sm text-muted-foreground">No meals added for {MEAL_DAY_LABELS[selectedDay]} yet.</p>
             <Button asChild className="accent-strong mt-4 rounded-xl text-black">
@@ -306,7 +306,7 @@ export function ClientNutritionWorkspace({ clientId }: { clientId: string }) {
         ) : (
           <div className="space-y-2">
             {mealRows.map((item) => (
-              <article key={item.id} className="glass-surface rounded-2xl border border-border/60 p-4">
+              <article key={item.id} className="glass-surface rounded-[10px] border border-border/60 p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">{item.type.replaceAll("_", " ")}</p>
@@ -324,7 +324,7 @@ export function ClientNutritionWorkspace({ clientId }: { clientId: string }) {
         )}
       </section>
 
-      <section className="glass-surface rounded-2xl border border-border/60 p-4">
+      <section className="glass-surface rounded-[10px] border border-border/60 p-4">
         <div className="mb-3 flex items-center justify-between gap-2">
           <h2 className="text-base font-semibold">Nutrition Notes</h2>
           <Dialog open={noteOpen} onOpenChange={setNoteOpen}>
@@ -334,7 +334,7 @@ export function ClientNutritionWorkspace({ clientId }: { clientId: string }) {
                 Add Note
               </Button>
             </DialogTrigger>
-            <DialogContent className="rounded-2xl border-border/70 bg-card/95 sm:max-w-lg">
+            <DialogContent className="rounded-[10px] border-border/70 bg-card/95 sm:max-w-lg">
               <DialogHeader>
                 <DialogTitle>New Nutrition Note</DialogTitle>
                 <DialogDescription>Save a note related to meal planning or compliance.</DialogDescription>

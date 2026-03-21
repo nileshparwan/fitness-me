@@ -33,9 +33,9 @@ export default function AdminUserDetailPage() {
 
       {isLoading ? (
         <div className="space-y-3">
-          <Skeleton className="h-28 w-full rounded-2xl" />
-          <Skeleton className="h-44 w-full rounded-2xl" />
-          <Skeleton className="h-44 w-full rounded-2xl" />
+          <Skeleton className="h-28 w-full rounded-[10px]" />
+          <Skeleton className="h-44 w-full rounded-[10px]" />
+          <Skeleton className="h-44 w-full rounded-[10px]" />
         </div>
       ) : (
         <>

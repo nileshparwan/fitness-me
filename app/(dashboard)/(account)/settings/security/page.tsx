@@ -16,7 +16,13 @@ async function SecuritySettingsSection() {
     redirect("/login");
   }
 
-  return <SecuritySettingsPanel email={profile.email} hasEmailIdentity={profile.has_email_identity} />;
+  return (
+    <SecuritySettingsPanel
+      email={profile.email}
+      hasEmailIdentity={profile.has_email_identity}
+      isAdmin={profile.role === "sysadmin"}
+    />
+  );
 }
 
 export default function SettingsSecurityPage() {

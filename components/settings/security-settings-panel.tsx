@@ -17,13 +17,16 @@ import {
 } from "@/components/ui/responsive-modal";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { withToastFeedback } from "@/lib/ui/toast-feedback";
+import { AccountDangerZone } from "@/components/settings/account-danger-zone";
 
 type SecuritySettingsPanelProps = {
   email: string;
   hasEmailIdentity: boolean;
+  isAdmin?: boolean;
 };
 
-export function SecuritySettingsPanel({ email, hasEmailIdentity }: SecuritySettingsPanelProps) {
+export function SecuritySettingsPanel({ email, hasEmailIdentity, isAdmin = false }: SecuritySettingsPanelProps) {
   const supabase = createClient();
   const router = useRouter();
 
@@ -67,13 +70,23 @@ export function SecuritySettingsPanel({ email, hasEmailIdentity }: SecuritySetti
         password_configured_at: new Date().toISOString(),
       };
 
-      const { error } = await supabase.auth.updateUser({
-        password: newPassword,
-        data: metadata,
-      });
-      if (error) throw error;
+      const updated = await withToastFeedback(
+        (async () => {
+          const { error } = await supabase.auth.updateUser({
+            password: newPassword,
+            data: metadata,
+          });
+          if (error) throw error;
+          return true;
+        })(),
+        {
+          loading: hasEmailIdentity ? "Updating password..." : "Setting password...",
+          success: hasEmailIdentity ? "Password updated." : "Password set.",
+          error: "Unable to update password.",
+        }
+      ).catch(() => null);
+      if (!updated) return;
 
-      toast.success(hasEmailIdentity ? "Password updated." : "Password set.");
       resetDialog();
       setOpen(false);
     } catch (error) {
@@ -139,6 +152,8 @@ export function SecuritySettingsPanel({ email, hasEmailIdentity }: SecuritySetti
           </Button>
         </div>
       </section>
+
+      <AccountDangerZone isAdmin={isAdmin} />
 
       <Dialog
         open={open}

@@ -88,7 +88,7 @@ export async function updateProgramStatus(programId: string, status: string) {
             const supabase = await createClient();
             await supabase.from("meal_plans").update({ status }).eq("id", programId);
             revalidatePath("/nutrition");
-            revalidatePath(`/nutrition/program/${programId}`);
+            revalidatePath(`/nutrition/${programId}`);
         },
     });
 }
@@ -100,7 +100,7 @@ export async function updateProgramNotes(programId: string, notes: string) {
         action: async () => {
             const supabase = await createClient();
             await supabase.from("meal_plans").update({ notes }).eq("id", programId);
-            revalidatePath(`/nutrition/program/${programId}`);
+            revalidatePath(`/nutrition/${programId}`);
         },
     });
 }
@@ -157,7 +157,7 @@ export async function addMeal(formData: FormData, programId: string) {
     const { error } = await supabase.from("meal_plan_meals").insert(mealData);
     if (error) throw new Error(error.message);
   
-    revalidatePath(`/nutrition/program/${programId}`);
+    revalidatePath(`/nutrition/${programId}`);
         },
     });
 }
@@ -184,7 +184,7 @@ export async function updateMeal(formData: FormData, mealId: string, programId: 
     const { error } = await supabase.from("meal_plan_meals").update(updates).eq("id", mealId);
     if (error) throw new Error(error.message);
     
-    revalidatePath(`/nutrition/program/${programId}`);
+    revalidatePath(`/nutrition/${programId}`);
         },
     });
 }
@@ -222,7 +222,7 @@ export async function copyMeal(originalMealId: string, targetProgramId: string) 
       position: (maxPos?.position ?? 0) + 1
     });
   
-    revalidatePath(`/nutrition/program/${targetProgramId}`);
+    revalidatePath(`/nutrition/${targetProgramId}`);
         },
     });
 }
@@ -264,7 +264,7 @@ export async function updateMealPositions(updates: { id: string; position: numbe
         )
     );
 
-    revalidatePath(`/nutrition/program/${programId}`);
+    revalidatePath(`/nutrition/${programId}`);
         },
     });
 }

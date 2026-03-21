@@ -3,7 +3,6 @@
 import { useTransition } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { toast } from "sonner";
 
 import { updateCoachingDefaults, type SettingsProfilePayload } from "@/app/actions/settings";
 import { Button } from "@/components/ui/button";
@@ -17,6 +16,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { withToastFeedback } from "@/lib/ui/toast-feedback";
 import { coachingDefaultsSchema, type CoachingDefaultsPayload } from "@/lib/validations/settings";
 import { useSettingsStore } from "@/stores/use-settings-store";
 import { useUnitLabels } from "@/stores/use-settings-store";
@@ -80,21 +80,21 @@ export function CoachingSettingsForm({ profile }: CoachingSettingsFormProps) {
 
   const onSubmit = (values: CoachingDefaultsPayload) => {
     startTransition(async () => {
-      try {
-        const result = await updateCoachingDefaults(values);
-        hydrate({
-          preferred_units: result.preferred_units,
-          default_macros: {
-            calories: result.default_calories,
-            protein: result.default_protein,
-            carbs: result.default_carbs,
-            fat: result.default_fat,
-          },
-        });
-        toast.success("Coaching defaults saved");
-      } catch (error) {
-        toast.error(error instanceof Error ? error.message : "Unable to save coaching defaults");
-      }
+      const result = await withToastFeedback(updateCoachingDefaults(values), {
+        loading: "Updating coaching defaults...",
+        success: "Coaching defaults saved",
+        error: "Unable to save coaching defaults",
+      }).catch(() => null);
+      if (!result) return;
+      hydrate({
+        preferred_units: result.preferred_units,
+        default_macros: {
+          calories: result.default_calories,
+          protein: result.default_protein,
+          carbs: result.default_carbs,
+          fat: result.default_fat,
+        },
+      });
     });
   };
 

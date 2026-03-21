@@ -8,14 +8,22 @@ import { useFieldArray, Control, useWatch } from "react-hook-form";
 import { SetInput } from "./set-input";
 import { WorkoutFormValues } from "@/types/workout";
 import { FormControl, FormField, FormItem } from "../ui/form";
+import type { WorkoutExerciseLastSession } from "@/app/actions/workout";
 
 interface ExerciseCardProps {
   index: number;
   remove: () => void;
   control: Control<WorkoutFormValues>;
+  lastSession?: WorkoutExerciseLastSession | null;
 }
 
-export function ExerciseCard({ index, remove, control }: ExerciseCardProps) {
+function formatWeight(weight: number | null) {
+  if (weight === null || weight === undefined) return "-";
+  const rounded = Number(weight.toFixed(2));
+  return Number.isInteger(rounded) ? String(rounded) : String(rounded);
+}
+
+export function ExerciseCard({ index, remove, control, lastSession }: ExerciseCardProps) {
   const [showNotes, setShowNotes] = useState(false);
   const { fields, append, remove: removeSet } = useFieldArray({
     control,
@@ -39,6 +47,11 @@ export function ExerciseCard({ index, remove, control }: ExerciseCardProps) {
       </div>
 
       <div className="p-0">
+        {lastSession ? (
+          <div className="border-b border-border/40 bg-muted/10 px-3 py-2 text-xs text-muted-foreground">
+            Last session ({lastSession.exercise_name}): {formatWeight(lastSession.weight)} kg × {lastSession.reps ?? "-"} ({lastSession.relative_label})
+          </div>
+        ) : null}
         <div className="grid grid-cols-8 gap-2 border-b px-3 py-2 text-center text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
           <div className="col-span-1">Set</div>
           <div className="col-span-3">kg</div>

@@ -20,6 +20,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { useDebounce } from "@/hooks/use-debounce";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { useNutritionGroupMutations, useNutritionMealGroups } from "@/hooks/use-nutrition-data";
+import { withToastFeedback } from "@/lib/ui/toast-feedback";
 import { useSetNutritionNavigationSource, useSetNutritionViewMode } from "@/stores/use-nutrition-ui-store";
 import { cn } from "@/utils";
 
@@ -112,8 +113,8 @@ export function MealGroupsDashboard() {
       toast.error("Group name is required.");
       return;
     }
-    try {
-      await mutations.upsertGroup.mutateAsync({
+    const result = await withToastFeedback(
+      mutations.upsertGroup.mutateAsync({
         id: draft.id,
         name: draft.name.trim(),
         description: draft.description.trim() || null,
@@ -121,20 +122,27 @@ export function MealGroupsDashboard() {
         start_date: draft.start_date || null,
         end_date: draft.end_date || null,
         status: draft.status,
-      });
-      toast.success(draft.id ? "Meal group updated" : "Meal group created");
-      setIsGroupDialogOpen(false);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to save meal group");
-    }
+      }),
+      {
+        loading: draft.id ? "Updating meal group..." : "Creating meal group...",
+        success: draft.id ? "Meal group updated" : "Meal group created",
+        error: "Unable to save meal group",
+      }
+    ).catch(() => null);
+    if (!result) return;
+    setIsGroupDialogOpen(false);
   };
 
   const deleteGroup = async (groupId: string) => {
     try {
-      await mutations.deleteGroup.mutateAsync({ meal_group_id: groupId });
-      toast.success("Meal group removed");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to delete meal group");
+      await withToastFeedback(mutations.deleteGroup.mutateAsync({ meal_group_id: groupId }), {
+        loading: "Deleting meal group...",
+        success: "Meal group removed",
+        error: "Unable to delete meal group",
+      });
+      return true;
+    } catch {
+      return false;
     }
   };
 
@@ -155,7 +163,8 @@ export function MealGroupsDashboard() {
 
   const confirmDeleteGroup = async () => {
     if (!deleteTarget) return;
-    await deleteGroup(deleteTarget.id);
+    const deleted = await deleteGroup(deleteTarget.id);
+    if (!deleted) return;
     setDeleteTarget(null);
   };
 
@@ -205,7 +214,7 @@ export function MealGroupsDashboard() {
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {query.isLoading && !query.data
-          ? Array.from({ length: 6 }).map((_, index) => <Skeleton key={index} className="h-52 w-full rounded-3xl" />)
+          ? Array.from({ length: 6 }).map((_, index) => <Skeleton key={index} className="h-52 w-full rounded-[10px]" />)
           : null}
 
         {!query.isLoading && rows.length === 0 ? (

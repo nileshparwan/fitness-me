@@ -130,7 +130,7 @@ function ActivityRow({ row }: { row: ClientsDashboardActivityItem }) {
   const Icon = activityIcon(row.type);
 
   return (
-    <div className="flex items-start gap-3 rounded-2xl border border-border/50 bg-background/30 px-3 py-2.5">
+    <div className="flex items-start gap-3 rounded-[10px] border border-border/50 bg-background/30 px-3 py-2.5">
       <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted/60">
         <Icon className="h-4 w-4 text-chart-3" />
       </div>
@@ -152,7 +152,7 @@ type KpiCardProps = {
 
 function KpiCard({ title, value, badge, Icon, iconClassName }: KpiCardProps) {
   return (
-    <Card className="glass-surface rounded-3xl border-border/60">
+    <Card className="glass-surface rounded-[10px] border-border/60">
       <CardContent className="space-y-3 p-4">
         <div className="flex items-center justify-between gap-2">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-background/40">
@@ -218,7 +218,7 @@ export function ClientsDashboard() {
 
   if (query.isError || !query.data) {
     return (
-      <section className="glass-surface surface-pad rounded-3xl border-border/60">
+      <section className="glass-surface surface-pad rounded-[10px] border-border/60">
         <div className="space-y-3">
           <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
           <p className="text-sm text-muted-foreground">
@@ -248,7 +248,7 @@ export function ClientsDashboard() {
               New Client
             </Button>
           </DialogTrigger>
-          <DialogContent className="rounded-2xl border-border/70 bg-card/95 sm:max-w-lg">
+          <DialogContent className="rounded-[10px] border-border/70 bg-card/95 sm:max-w-lg">
             <DialogHeader>
               <DialogTitle>New Client</DialogTitle>
               <DialogDescription>Create a client profile.</DialogDescription>
@@ -350,7 +350,7 @@ export function ClientsDashboard() {
 
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)]">
         <div className="space-y-4">
-          <Card className="glass-surface rounded-3xl border-border/60">
+          <Card className="glass-surface rounded-[10px] border-border/60">
             <CardContent className="space-y-3 p-4 md:p-5">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -363,14 +363,14 @@ export function ClientsDashboard() {
               </div>
               <div className="space-y-2">
                 {data.needs_attention.length === 0 ? (
-                  <p className="rounded-2xl border border-border/50 bg-background/25 px-3 py-4 text-sm text-muted-foreground">
+                  <p className="rounded-[10px] border border-border/50 bg-background/25 px-3 py-4 text-sm text-muted-foreground">
                     No urgent items right now.
                   </p>
                 ) : (
                   data.needs_attention.map((item) => (
                     <div
                       key={item.id}
-                      className="flex items-center gap-3 rounded-2xl border border-border/50 bg-background/30 px-3 py-2.5"
+                      className="flex items-center gap-3 rounded-[10px] border border-border/50 bg-background/30 px-3 py-2.5"
                     >
                       <Avatar className="h-9 w-9 rounded-xl">
                         <AvatarFallback className="rounded-xl bg-chart-1/20 text-xs font-semibold text-chart-1">
@@ -389,7 +389,7 @@ export function ClientsDashboard() {
             </CardContent>
           </Card>
 
-          <Card className="glass-surface rounded-3xl border-border/60">
+          <Card className="glass-surface rounded-[10px] border-border/60">
             <CardContent className="space-y-3 p-4 md:p-5">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -402,14 +402,14 @@ export function ClientsDashboard() {
               </div>
               <div className="space-y-2">
                 {data.today_sessions.length === 0 ? (
-                  <p className="rounded-2xl border border-border/50 bg-background/25 px-3 py-4 text-sm text-muted-foreground">
+                  <p className="rounded-[10px] border border-border/50 bg-background/25 px-3 py-4 text-sm text-muted-foreground">
                     No sessions scheduled for today.
                   </p>
                 ) : (
                   data.today_sessions.map((row) => (
                     <div
                       key={row.id}
-                      className="flex items-center gap-3 rounded-2xl border border-border/50 bg-background/30 px-3 py-2.5"
+                      className="flex items-center gap-3 rounded-[10px] border border-border/50 bg-background/30 px-3 py-2.5"
                     >
                       <div className={cn("h-2.5 w-2.5 rounded-full", sessionDotClass(row.status))} />
                       <div className="min-w-0 flex-1">
@@ -425,7 +425,7 @@ export function ClientsDashboard() {
             </CardContent>
           </Card>
 
-          <Card className="glass-surface rounded-3xl border-border/60">
+          <Card className="glass-surface rounded-[10px] border-border/60">
             <CardContent className="space-y-3 p-4 md:p-5">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -439,7 +439,7 @@ export function ClientsDashboard() {
               </div>
               <div className="space-y-2">
                 {data.live_activity.length === 0 ? (
-                  <p className="rounded-2xl border border-border/50 bg-background/25 px-3 py-4 text-sm text-muted-foreground">
+                  <p className="rounded-[10px] border border-border/50 bg-background/25 px-3 py-4 text-sm text-muted-foreground">
                     No recent activity yet.
                   </p>
                 ) : (
@@ -451,7 +451,7 @@ export function ClientsDashboard() {
         </div>
 
         <div className="space-y-4">
-          <Card className="glass-surface rounded-3xl border-border/60">
+          <Card className="glass-surface rounded-[10px] border-border/60">
             <CardContent className="space-y-3 p-4 md:p-5">
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
@@ -472,12 +472,12 @@ export function ClientsDashboard() {
               </div>
               <div className="space-y-2">
                 {data.client_goals.length === 0 ? (
-                  <p className="rounded-2xl border border-border/50 bg-background/25 px-3 py-4 text-sm text-muted-foreground">
+                  <p className="rounded-[10px] border border-border/50 bg-background/25 px-3 py-4 text-sm text-muted-foreground">
                     No goals require attention right now.
                   </p>
                 ) : (
                   data.client_goals.map((row, index) => (
-                    <div key={row.id} className="rounded-2xl border border-border/50 bg-background/25 px-3 py-2">
+                    <div key={row.id} className="rounded-[10px] border border-border/50 bg-background/25 px-3 py-2">
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0 space-y-0.5">
                           <p className="truncate text-sm font-medium leading-tight">{row.client_name}</p>
@@ -527,7 +527,7 @@ export function ClientsDashboard() {
             </CardContent>
           </Card>
 
-          <Card className="glass-surface rounded-3xl border-border/60">
+          <Card className="glass-surface rounded-[10px] border-border/60">
             <CardContent className="space-y-3 p-4 md:p-5">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -540,14 +540,14 @@ export function ClientsDashboard() {
               </div>
               <div className="space-y-2">
                 {data.recent_notes.length === 0 ? (
-                  <p className="rounded-2xl border border-border/50 bg-background/25 px-3 py-4 text-sm text-muted-foreground">
+                  <p className="rounded-[10px] border border-border/50 bg-background/25 px-3 py-4 text-sm text-muted-foreground">
                     No notes recorded yet.
                   </p>
                 ) : (
                   data.recent_notes.map((row) => (
                     <div
                       key={row.id}
-                      className="space-y-1 rounded-2xl border border-border/50 bg-background/30 px-3 py-2.5"
+                      className="space-y-1 rounded-[10px] border border-border/50 bg-background/30 px-3 py-2.5"
                     >
                       <div className="flex items-center justify-between gap-2">
                         <p className="truncate text-sm font-medium">{row.client_name}</p>
@@ -566,7 +566,7 @@ export function ClientsDashboard() {
             </CardContent>
           </Card>
 
-          <Card className="glass-surface rounded-3xl border-border/60">
+          <Card className="glass-surface rounded-[10px] border-border/60">
             <CardContent className="space-y-3 p-4 md:p-5">
               <div className="flex items-center gap-2">
                 <CreditCard className="h-4 w-4 text-chart-4" />
@@ -574,14 +574,14 @@ export function ClientsDashboard() {
               </div>
               <div className="space-y-2">
                 {data.payment_alerts.length === 0 ? (
-                  <p className="rounded-2xl border border-border/50 bg-background/25 px-3 py-4 text-sm text-muted-foreground">
+                  <p className="rounded-[10px] border border-border/50 bg-background/25 px-3 py-4 text-sm text-muted-foreground">
                     No payment alerts.
                   </p>
                 ) : (
                   data.payment_alerts.map((row) => (
                     <div
                       key={row.id}
-                      className="flex items-center justify-between gap-3 rounded-2xl border border-border/50 bg-background/30 px-3 py-2.5"
+                      className="flex items-center justify-between gap-3 rounded-[10px] border border-border/50 bg-background/30 px-3 py-2.5"
                     >
                       <div className="min-w-0">
                         <p className="truncate text-sm font-medium">{row.client_name}</p>
@@ -599,29 +599,29 @@ export function ClientsDashboard() {
             </CardContent>
           </Card>
 
-          <Card className="glass-surface rounded-3xl border-border/60">
+          <Card className="glass-surface rounded-[10px] border-border/60">
             <CardContent className="space-y-3 p-4 md:p-5">
               <h2 className="text-base font-semibold md:text-lg">Quick Access</h2>
               <div className="grid grid-cols-2 gap-2.5">
-                <Button asChild variant="outline" className="h-20 rounded-2xl border-border/60 bg-background/30 hover:bg-accent/35">
+                <Button asChild variant="outline" className="h-20 rounded-[10px] border-border/60 bg-background/30 hover:bg-accent/35">
                   <Link href="/clients" className="flex flex-col items-center justify-center gap-2 text-sm">
                     <Users2 className="h-4 w-4 text-chart-1" />
                     Clients
                   </Link>
                 </Button>
-                <Button asChild variant="outline" className="h-20 rounded-2xl border-border/60 bg-background/30 hover:bg-accent/35">
+                <Button asChild variant="outline" className="h-20 rounded-[10px] border-border/60 bg-background/30 hover:bg-accent/35">
                   <Link href="/nutrition/meal-planner" className="flex flex-col items-center justify-center gap-2 text-sm">
                     <UtensilsCrossed className="h-4 w-4 text-chart-2" />
                     Meal Plans
                   </Link>
                 </Button>
-                <Button asChild variant="outline" className="h-20 rounded-2xl border-border/60 bg-background/30 hover:bg-accent/35">
+                <Button asChild variant="outline" className="h-20 rounded-[10px] border-border/60 bg-background/30 hover:bg-accent/35">
                   <Link href="/nutrition/diary" className="flex flex-col items-center justify-center gap-2 text-sm">
                     <Activity className="h-4 w-4 text-chart-3" />
                     Meal Diary
                   </Link>
                 </Button>
-                <Button asChild variant="outline" className="h-20 rounded-2xl border-border/60 bg-background/30 hover:bg-accent/35">
+                <Button asChild variant="outline" className="h-20 rounded-[10px] border-border/60 bg-background/30 hover:bg-accent/35">
                   <Link href="/goals" className="flex flex-col items-center justify-center gap-2 text-sm">
                     <Settings className="h-4 w-4 text-chart-5" />
                     Settings
