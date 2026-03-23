@@ -30,6 +30,7 @@ export function ProfileSettingsForm({ profile }: ProfileSettingsFormProps) {
     defaultValues: {
       full_name: profile.full_name || "",
       phone: profile.phone || null,
+      date_of_birth: profile.date_of_birth || null,
       bio: profile.bio || null,
       avatar_url: profile.avatar_url || null,
     },
@@ -93,6 +94,24 @@ export function ProfileSettingsForm({ profile }: ProfileSettingsFormProps) {
               )}
             />
           </div>
+
+          <FormField
+            control={form.control}
+            name="date_of_birth"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Date of Birth</FormLabel>
+                <FormControl>
+                  <Input
+                    type="date"
+                    value={field.value || ""}
+                    onChange={(event) => field.onChange(event.target.value || null)}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
 
           <FormField
             control={form.control}

@@ -25,6 +25,9 @@ type MealAssignmentRow = Database["public"]["Tables"]["meal_group_assignments"][
 type MealAssignmentInsert = Database["public"]["Tables"]["meal_group_assignments"]["Insert"];
 type ClientRow = Database["public"]["Tables"]["clients"]["Row"];
 type ProfileRow = Database["public"]["Tables"]["profiles"]["Row"];
+type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
+type AssigneeClientLookupRow = Pick<ClientRow, "id" | "display_name" | "first_name" | "last_name" | "linked_user_id">;
+type AssigneeProfileLookupRow = Pick<ProfileRow, "id" | "full_name">;
 
 export type MealGroupStatus = Database["public"]["Enums"]["meal_group_status"];
 export type MealItemType = Database["public"]["Enums"]["meal_item_type"];
@@ -310,7 +313,7 @@ async function requireActor() {
 }
 
 async function requireMealGroupAccess(mealGroupId: string): Promise<{
-  supabase: Awaited<ReturnType<typeof createClient>>;
+  supabase: SupabaseServerClient;
   user: { id: string };
   group: Pick<MealGroupRow, "id" | "owner_user_id" | "start_date" | "end_date" | "is_snapshot">;
 }> {
@@ -323,6 +326,49 @@ async function requireMealGroupAccess(mealGroupId: string): Promise<{
   if (groupError) throw new Error(groupError.message);
   if (!group) throw new Error("Meal group not found or unauthorized.");
   return { supabase, user: { id: user.id }, group };
+}
+
+function revalidateAssignmentMealGroupPaths(
+  assignment: Pick<MealAssignmentRow, "template_group_id" | "meal_group_id" | "subject_client_id">
+) {
+  revalidateMealGroupPaths(assignment.template_group_id, assignment.subject_client_id);
+  revalidateMealGroupPaths(assignment.meal_group_id, assignment.subject_client_id);
+}
+
+function buildAssignmentActivityContext(
+  assignment: Pick<MealAssignmentRow, "id" | "template_group_id" | "subject_user_id" | "subject_client_id">
+) {
+  return {
+    assignment_id: assignment.id,
+    meal_group_id: assignment.template_group_id,
+    subject_user_id: assignment.subject_user_id,
+    subject_client_id: assignment.subject_client_id,
+  };
+}
+
+async function loadAssigneeLookupMaps(
+  supabase: SupabaseServerClient,
+  clientIds: string[],
+  userIds: string[]
+): Promise<{
+  clientsById: Map<string, AssigneeClientLookupRow>;
+  profilesById: Map<string, AssigneeProfileLookupRow>;
+}> {
+  const [clientsRes, profilesRes] = await Promise.all([
+    clientIds.length > 0
+      ? supabase.from("clients").select("id, display_name, first_name, last_name, linked_user_id").in("id", clientIds)
+      : Promise.resolve({ data: [] as AssigneeClientLookupRow[], error: null }),
+    userIds.length > 0
+      ? supabase.from("profiles").select("id, full_name").in("id", userIds)
+      : Promise.resolve({ data: [] as AssigneeProfileLookupRow[], error: null }),
+  ]);
+  if (clientsRes.error) throw new Error(clientsRes.error.message);
+  if (profilesRes.error) throw new Error(profilesRes.error.message);
+
+  return {
+    clientsById: new Map((clientsRes.data || []).map((client) => [client.id, client] as const)),
+    profilesById: new Map((profilesRes.data || []).map((profile) => [profile.id, profile] as const)),
+  };
 }
 
 function isRlsInsertError(error: { code?: string; message?: string } | null) {
@@ -549,27 +595,11 @@ export async function listMealGroupsAction(input: z.input<typeof listMealGroupsS
         if (row.subject_user_id) userIds.add(row.subject_user_id);
       }
 
-      const clientIdList = [...clientIds];
-      const userIdList = [...userIds];
-      const [clientsResult, profilesResult] = await Promise.all([
-        clientIdList.length > 0
-          ? supabase.from("clients").select("id, display_name, first_name, last_name").in("id", clientIdList)
-          : Promise.resolve({
-              data: [] as Array<Pick<ClientRow, "id" | "display_name" | "first_name" | "last_name">>,
-              error: null,
-            }),
-        userIdList.length > 0
-          ? supabase.from("profiles").select("id, full_name").in("id", userIdList)
-          : Promise.resolve({
-              data: [] as Array<Pick<ProfileRow, "id" | "full_name">>,
-              error: null,
-            }),
-      ]);
-      if (clientsResult.error) throw new Error(clientsResult.error.message);
-      if (profilesResult.error) throw new Error(profilesResult.error.message);
-
-      const clientsById = new Map((clientsResult.data || []).map((client) => [client.id, client]));
-      const profilesById = new Map((profilesResult.data || []).map((profile) => [profile.id, profile]));
+      const { clientsById, profilesById } = await loadAssigneeLookupMaps(
+        supabase,
+        Array.from(clientIds),
+        Array.from(userIds)
+      );
 
       const rows: MealGroupListRow[] = groups.map((group) => ({
         ...group,
@@ -1339,8 +1369,11 @@ export async function assignMealGroupToSubjectAction(input: z.input<typeof assig
         start_date: payload.start_date,
         end_date: payload.end_date,
       };
-      revalidateMealGroupPaths(payload.meal_group_id, subject.subject_client_id);
-      revalidateMealGroupPaths(snapshot.id, subject.subject_client_id);
+      revalidateAssignmentMealGroupPaths({
+        template_group_id: payload.meal_group_id,
+        meal_group_id: snapshot.id,
+        subject_client_id: subject.subject_client_id,
+      });
       return {
         assignment,
         snapshot_group_id: snapshot.id,
@@ -1375,14 +1408,8 @@ export async function updateMealGroupAssignmentAction(input: z.input<typeof upda
         }
         throw new Error(error.message);
       }
-      activityContext = {
-        assignment_id: data.id,
-        meal_group_id: data.template_group_id,
-        subject_user_id: data.subject_user_id,
-        subject_client_id: data.subject_client_id,
-      };
-      revalidateMealGroupPaths(data.template_group_id, data.subject_client_id);
-      revalidateMealGroupPaths(data.meal_group_id, data.subject_client_id);
+      activityContext = buildAssignmentActivityContext(data);
+      revalidateAssignmentMealGroupPaths(data);
       return data as MealAssignmentRow;
     },
   });
@@ -1404,14 +1431,8 @@ export async function archiveMealGroupAssignmentAction(input: z.input<typeof arc
         .select("*")
         .single();
       if (error) throw new Error(error.message);
-      activityContext = {
-        assignment_id: data.id,
-        meal_group_id: data.template_group_id,
-        subject_user_id: data.subject_user_id,
-        subject_client_id: data.subject_client_id,
-      };
-      revalidateMealGroupPaths(data.template_group_id, data.subject_client_id);
-      revalidateMealGroupPaths(data.meal_group_id, data.subject_client_id);
+      activityContext = buildAssignmentActivityContext(data);
+      revalidateAssignmentMealGroupPaths(data);
       return { success: true };
     },
   });
@@ -1439,20 +1460,15 @@ export async function listMealGroupAssignmentsAction(input: z.input<typeof listA
       const clientIds = Array.from(new Set(assignments.map((row) => row.subject_client_id).filter((value): value is string => Boolean(value))));
       const userIds = Array.from(new Set(assignments.map((row) => row.subject_user_id).filter((value): value is string => Boolean(value))));
 
-      const [groupsRes, clientsRes, usersRes] = await Promise.all([
+      const [groupsRes] = await Promise.all([
         mealGroupIds.length
           ? supabase.from("meal_groups").select("id, name, status, start_date, end_date, is_snapshot, source_group_id").in("id", mealGroupIds)
           : Promise.resolve({ data: [], error: null }),
-        clientIds.length ? supabase.from("clients").select("id, display_name, first_name, last_name, linked_user_id").in("id", clientIds) : Promise.resolve({ data: [], error: null }),
-        userIds.length ? supabase.from("profiles").select("id, full_name").in("id", userIds) : Promise.resolve({ data: [], error: null }),
       ]);
       if (groupsRes.error) throw new Error(groupsRes.error.message);
-      if (clientsRes.error) throw new Error(clientsRes.error.message);
-      if (usersRes.error) throw new Error(usersRes.error.message);
 
       const groupsById = new Map((groupsRes.data || []).map((group) => [group.id, group]));
-      const clientsById = new Map((clientsRes.data || []).map((client) => [client.id, client]));
-      const usersById = new Map((usersRes.data || []).map((profile) => [profile.id, profile]));
+      const { clientsById, profilesById: usersById } = await loadAssigneeLookupMaps(supabase, clientIds, userIds);
 
       const rows: MealAssignmentView[] = assignments.map((assignment) => ({
         ...assignment,

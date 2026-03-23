@@ -1,331 +1,121 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
+import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
+import { Download, Share2 } from "lucide-react";
+
 import {
-  getAvailableExercises,
-  getExerciseMetrics,
-  getUserProfile,
-  getMuscleBalance,
-  getExerciseDetails,
-  type CardioChartPoint,
-  type StrengthChartPoint,
-} from "@/app/actions/progress";
-import { progressKeys } from "@/lib/query-keys-progress";
-import { Database } from "@/types/database";
-
-// UI Components
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Skeleton } from "@/components/ui/skeleton";
-
-// UNIFIED COMPONENTS
-// Note: Adjusted paths to standard naming conventions based on previous components
-import { ExerciseProfile } from "@/components/progress/exercise-profile";
-import { AnalyticsPanel } from "@/components/progress/analytics-panel";
-import { PersonalRecords } from "@/components/progress/personal-records";
-import { HistoryTable } from "@/components/progress/history-table";
-import { AthleteRadar } from "@/components/progress/athlete-radar";
-
-
-// CARDIO COMPONENTS
-import { CardioCharts } from "@/components/progress/cardio-charts";
-import { CardioGuidance } from "@/components/progress/cardio-guidance";
-import { CardioAnalytics } from "@/components/progress/cardio-analytics";
-
-import { ProgressCharts } from "@/components/progress/progress-chart";
-import { PhysioChart } from "@/components/progress/physical-chart";
-import { AdvancedGuidance } from "@/components/progress/advanced-guidance";
-import { CardioInsightsBoard, StrengthInsightsBoard } from "@/components/progress/insights-board";
-import { ExerciseProfileSkeleton, ProgressCoreSkeleton } from "./_components/progress-section-skeletons";
-
-type WorkoutLogRow = Database['public']['Tables']['strength_sets']['Row'];
-type CardioLogRow = Database['public']['Tables']['cardio_sessions']['Row'];
-type RadarDatum = { muscle: string; score: number };
+  getProgressOverviewBundle,
+  type ProgressRange,
+  type ProgressTrainingType,
+} from "@/app/actions/progress-overview";
+import { Button } from "@/components/ui/button";
+import { ProgressFilterBar } from "@/components/progress/overview/progress-filter-bar";
+import { ProgressStatsBar } from "@/components/progress/overview/progress-stats-bar";
+import { ProgressInsights } from "@/components/progress/overview/progress-insights";
+import { BodyCompositionCard } from "@/components/progress/overview/body-composition-card";
+import { StrengthProgressCard } from "@/components/progress/overview/strength-progress-card";
+import { CardioProgressCard } from "@/components/progress/overview/cardio-progress-card";
+import { ComplianceRecoveryCard } from "@/components/progress/overview/compliance-recovery-card";
+import { TrainingLoadCard } from "@/components/progress/overview/training-load-card";
+import { MuscleFocusCard } from "@/components/progress/overview/muscle-focus-card";
+import { WorkoutCalendarCard } from "@/components/progress/overview/workout-calendar-card";
+import { progressOverviewKeys } from "@/lib/query-keys-progress";
 
 export default function ProgressPage() {
-  const [exercise, setExercise] = useState<string>("");
-  const [range, setRange] = useState("6M");
+  const [range, setRange] = useState<ProgressRange>("30d");
+  const [trainingType, setTrainingType] = useState<ProgressTrainingType>("mixed");
+  const [compare, setCompare] = useState(false);
 
-  // 1. Fetch Exercises List
-  const { data: exercises, isLoading: loadingExercises } = useQuery({
-    queryKey: progressKeys.availableExercises(),
-    queryFn: getAvailableExercises,
-    staleTime: 1000 * 60 * 10, // Cache for 10 mins
+  const overviewQuery = useQuery({
+    queryKey: progressOverviewKeys.bundle(range, trainingType, compare),
+    queryFn: () => getProgressOverviewBundle(range, trainingType, compare),
+    staleTime: 1000 * 60 * 5,
   });
-
-  const selectedExercise = exercise || exercises?.[0] || "";
-
-  // 2. Fetch Metrics (metrics wait for 'exercise' to be set)
-  const { data: metrics, isLoading: loadingMetrics, isFetching: fetchingMetrics } = useQuery({
-    queryKey: progressKeys.exerciseMetrics(selectedExercise, range),
-    queryFn: () => getExerciseMetrics(selectedExercise, range),
-    enabled: !!selectedExercise,
-    placeholderData: (previous) => previous,
-  });
-
-  // 3. Parallel Data Fetching
-  const { data: profile } = useQuery({
-    queryKey: progressKeys.userProfile(),
-    queryFn: getUserProfile,
-    staleTime: 1000 * 60 * 30,
-  });
-
-  const { data: radarData, isLoading: loadingRadar } = useQuery<RadarDatum[]>({
-    queryKey: progressKeys.muscleBalance(),
-    queryFn: getMuscleBalance,
-    staleTime: 1000 * 60 * 10,
-  });
-
-  const { data: exDetails, isLoading: loadingExerciseDetails } = useQuery({
-    queryKey: progressKeys.exerciseDetails(selectedExercise),
-    queryFn: () => getExerciseDetails(selectedExercise),
-    enabled: !!selectedExercise,
-    staleTime: 1000 * 60 * 30,
-  });
-
-  const isCardio = metrics?.type === "cardio";
-  const currentExerciseName = selectedExercise || "Loading...";
-  const hasRadarData = (radarData?.length || 0) > 0;
-  const cardioLogs: CardioLogRow[] = useMemo(
-    () => (metrics?.type === "cardio" ? metrics.logs : []),
-    [metrics],
-  );
-  const strengthLogs: WorkoutLogRow[] = useMemo(
-    () => (metrics?.type === "strength" ? metrics.logs : []),
-    [metrics],
-  );
-  const cardioChartData: CardioChartPoint[] = useMemo(
-    () => (metrics?.type === "cardio" ? metrics.chartData : []),
-    [metrics],
-  );
-  const strengthChartData: StrengthChartPoint[] = useMemo(
-    () => (metrics?.type === "strength" ? metrics.chartData : []),
-    [metrics],
-  );
-
-  const strengthSummary = useMemo(() => {
-    if (strengthLogs.length === 0 || strengthChartData.length === 0) {
-      return {
-        sessions: 0,
-        avgSessionsPerWeek: 0,
-        latest1RM: 0,
-        oneRmChangePercent: 0,
-        relativeStrength: null,
-        avgVolumePerSession: 0,
-        avgRestSeconds: null,
-        workSetRatio: 0,
-      };
-    }
-
-    const sessionDays = new Set(
-      strengthLogs
-        .map((log) => log.created_at?.split("T")[0])
-        .filter((day): day is string => Boolean(day)),
-    );
-    const sessions = sessionDays.size;
-    const sortedDates = Array.from(sessionDays).sort();
-    const firstDay = new Date(sortedDates[0]);
-    const lastDay = new Date(sortedDates[sortedDates.length - 1]);
-    const spanWeeks = Math.max(1, (lastDay.getTime() - firstDay.getTime()) / (1000 * 60 * 60 * 24 * 7) + 1 / 7);
-
-    const latest1RM = strengthChartData[strengthChartData.length - 1]?.estimated_1rm || 0;
-    const baseline1RM = strengthChartData[0]?.estimated_1rm || 0;
-    const oneRmChangePercent = baseline1RM > 0 ? ((latest1RM - baseline1RM) / baseline1RM) * 100 : 0;
-
-    const avgVolumePerSession =
-      strengthChartData.reduce((acc, point) => acc + point.volume, 0) / Math.max(strengthChartData.length, 1);
-
-    const restValues = strengthLogs.map((log) => log.rest_seconds).filter((rest): rest is number => Boolean(rest));
-    const avgRestSeconds =
-      restValues.length > 0 ? restValues.reduce((acc, rest) => acc + rest, 0) / restValues.length : null;
-
-    const workSetCount = strengthLogs.filter((log) => !log.is_warmup).length;
-    const warmupCount = strengthLogs.filter((log) => Boolean(log.is_warmup)).length;
-    const workSetRatio = workSetCount / Math.max(workSetCount + warmupCount, 1);
-
-    const latestBodyWeight =
-      [...strengthChartData].reverse().find((point) => point.bodyWeight && point.bodyWeight > 0)?.bodyWeight || null;
-    const relativeStrength = latestBodyWeight ? latest1RM / latestBodyWeight : null;
-
-    return {
-      sessions,
-      avgSessionsPerWeek: sessions / spanWeeks,
-      latest1RM,
-      oneRmChangePercent,
-      relativeStrength,
-      avgVolumePerSession,
-      avgRestSeconds,
-      workSetRatio,
-    };
-  }, [strengthLogs, strengthChartData]);
-
-  const cardioSummary = useMemo(() => {
-    if (cardioLogs.length === 0) {
-      return {
-        sessions: 0,
-        avgSessionsPerWeek: 0,
-        totalDistanceKm: 0,
-        avgPaceMinPerKm: 0,
-        paceImprovementPercent: 0,
-        avgHeartRate: null,
-        weeklyDistanceKm: 0,
-        totalElevationM: 0,
-      };
-    }
-
-    const totalDistanceKm = cardioLogs.reduce((acc, log) => acc + (log.distance_km || 0), 0);
-    const totalDurationMin = cardioLogs.reduce((acc, log) => acc + (log.duration_minutes || 0), 0);
-    const avgPaceMinPerKm = totalDistanceKm > 0 ? totalDurationMin / totalDistanceKm : 0;
-
-    const paced = cardioLogs
-      .map((log) => ({
-        pace: log.distance_km && log.distance_km > 0 ? log.duration_minutes / log.distance_km : 0,
-        date: new Date(log.date).getTime(),
-      }))
-      .filter((entry) => entry.pace > 0)
-      .sort((a, b) => a.date - b.date);
-    const firstPace = paced[0]?.pace || 0;
-    const latestPace = paced[paced.length - 1]?.pace || 0;
-    const paceImprovementPercent = firstPace > 0 ? ((firstPace - latestPace) / firstPace) * 100 : 0;
-
-    const hrValues = cardioLogs
-      .map((log) => log.average_heart_rate)
-      .filter((hr): hr is number => Boolean(hr && hr > 0));
-    const avgHeartRate = hrValues.length ? hrValues.reduce((acc, hr) => acc + hr, 0) / hrValues.length : null;
-
-    const sessionDays = new Set(cardioLogs.map((log) => log.date.split("T")[0]));
-    const sortedDates = Array.from(sessionDays).sort();
-    const firstDay = new Date(sortedDates[0]);
-    const lastDay = new Date(sortedDates[sortedDates.length - 1]);
-    const spanWeeks = Math.max(1, (lastDay.getTime() - firstDay.getTime()) / (1000 * 60 * 60 * 24 * 7) + 1 / 7);
-
-    return {
-      sessions: sessionDays.size,
-      avgSessionsPerWeek: sessionDays.size / spanWeeks,
-      totalDistanceKm,
-      avgPaceMinPerKm,
-      paceImprovementPercent,
-      avgHeartRate,
-      weeklyDistanceKm: totalDistanceKm / spanWeeks,
-      totalElevationM: cardioLogs.reduce((acc, log) => acc + (log.elevation_gain_m || 0), 0),
-    };
-  }, [cardioLogs]);
-
-  const showMetricsSkeleton = loadingExercises || loadingMetrics || (!metrics && fetchingMetrics);
-
-  if (exercises && exercises.length === 0) {
-    return (
-      <div className="page-shell flex min-h-screen flex-col items-center justify-center text-center text-muted-foreground">
-        <h2 className="text-2xl font-semibold mb-2">No Data Found</h2>
-        <p>Complete a workout to see your progress analytics here.</p>
-      </div>
-    );
-  }
+  const overview = overviewQuery.data;
+  const isLoadingOverview = overviewQuery.isLoading;
 
   return (
-    <div className="page-shell max-w-[1600px] mx-auto section-gap pb-24 min-h-screen animate-in fade-in duration-500">
-
-      {/* HEADER */}
-      <div className="native-surface md:desktop-surface surface-pad flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Progress Hub</h1>
-          <p className="text-muted-foreground">Deep analysis of your {isCardio ? "endurance" : "strength"} journey.</p>
+    <div className="page-shell section-gap overflow-x-hidden pb-16">
+      <header className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+        <section className="space-y-1">
+          <h1 className="text-3xl font-bold tracking-tight">My Progress</h1>
+          <p className="text-sm text-muted-foreground">Track your training, body, and habits</p>
+        </section>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button asChild variant="outline" size="sm" className="rounded-[10px]">
+            <Link href="/progress/nutrition">Nutrients</Link>
+          </Button>
+          <Button variant="ghost" size="icon" disabled className="rounded-[10px]">
+            <Share2 className="h-4 w-4" />
+          </Button>
+          <Button variant="ghost" size="icon" disabled className="rounded-[10px]">
+            <Download className="h-4 w-4" />
+          </Button>
         </div>
+      </header>
 
-        <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
-          <Select value={selectedExercise} onValueChange={setExercise} disabled={loadingExercises}>
-            <SelectTrigger className="w-full md:w-[240px]">
-              <SelectValue placeholder="Select Movement" />
-            </SelectTrigger>
-            <SelectContent>
-              {exercises?.map(ex => <SelectItem key={ex} value={ex}>{ex}</SelectItem>)}
-            </SelectContent>
-          </Select>
+      <ProgressFilterBar
+        range={range}
+        onRangeChange={setRange}
+        trainingType={trainingType}
+        onTrainingTypeChange={setTrainingType}
+        compare={compare}
+        onCompareChange={setCompare}
+      />
 
-          <Tabs value={range} onValueChange={setRange} className="rounded-md border p-1 shadow-sm bg-background/80">
-            <TabsList className="h-9">
-              <TabsTrigger value="1M">1M</TabsTrigger>
-              <TabsTrigger value="6M">6M</TabsTrigger>
-              <TabsTrigger value="1Y">1Y</TabsTrigger>
-              <TabsTrigger value="ALL">All</TabsTrigger>
-            </TabsList>
-          </Tabs>
-        </div>
-      </div>
+      <ProgressStatsBar data={overview?.summary} isLoading={isLoadingOverview} trainingType={trainingType} />
 
-      {!isCardio &&
-        (loadingExerciseDetails && !exDetails ? (
-          <ExerciseProfileSkeleton />
-        ) : (
-          <ExerciseProfile details={exDetails || null} />
-        ))}
+      <TrainingLoadCard
+        data={overview?.training_load.current}
+        compareData={overview?.training_load.compare ?? undefined}
+        compare={compare}
+        isLoading={isLoadingOverview}
+      />
 
-      {showMetricsSkeleton ? (
-        <ProgressCoreSkeleton />
-      ) : isCardio ? (
-        // === CARDIO VIEW ===
-        <div className="space-y-6 animate-in slide-in-from-bottom-2 duration-500">
-          <CardioInsightsBoard summary={cardioSummary} />
-          <CardioAnalytics logs={cardioLogs} />
+      <ProgressInsights insights={overview?.insights ?? []} isLoading={isLoadingOverview} />
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-auto">
-            <CardioCharts data={cardioChartData} exerciseName={currentExerciseName} />
+      <section className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+        <BodyCompositionCard
+          series={overview?.body_composition.current ?? []}
+          compareSeries={overview?.body_composition.compare ?? []}
+          compare={compare}
+          isLoading={isLoadingOverview}
+        />
+        <StrengthProgressCard
+          data={overview?.strength.current}
+          compareData={overview?.strength.compare ?? undefined}
+          compare={compare}
+          isLoading={isLoadingOverview}
+          latestWeightKg={overview?.summary?.latest_weight_kg ?? null}
+        />
+      </section>
 
-            <div className="col-span-1 h-full">
-              {loadingRadar && !hasRadarData ? (
-                <Skeleton className="h-[360px] w-full rounded-xl" />
-              ) : (
-                <AthleteRadar data={radarData || []} />
-              )}
-            </div>
-          </div>
+      <section className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+        <CardioProgressCard
+          data={overview?.cardio.current ?? { series: [], activity_breakdown: [], hr_zones_summary: null }}
+          compareData={overview?.cardio.compare ?? undefined}
+          compare={compare}
+          isLoading={isLoadingOverview}
+          vo2maxEstimate={overview?.summary?.vo2max_estimate ?? null}
+        />
+        <ComplianceRecoveryCard
+          data={overview?.compliance.current}
+          compareData={overview?.compliance.compare ?? undefined}
+          compare={compare}
+          isLoading={isLoadingOverview}
+        />
+      </section>
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <CardioGuidance logs={cardioLogs} birthDate={profile?.birth_date} />
-          </div>
-
-          <div className="grid grid-cols-1">
-            <HistoryTable logs={cardioLogs} />
-          </div>
-        </div>
-      ) : (
-        // === STRENGTH VIEW ===
-        <div className="space-y-6 animate-in slide-in-from-bottom-2 duration-500">
-          <StrengthInsightsBoard summary={strengthSummary} />
-          <AnalyticsPanel logs={strengthLogs} />
-
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-auto">
-            <ProgressCharts
-              data={strengthChartData}
-              exerciseName={currentExerciseName}
-              timeRange={range}
-            />
-            <div className="col-span-1 h-full">
-              {loadingRadar && !hasRadarData ? (
-                <Skeleton className="h-[360px] w-full rounded-xl" />
-              ) : (
-                <AthleteRadar data={radarData || []} />
-              )}
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1">
-            <PhysioChart data={strengthChartData} />
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <AdvancedGuidance logs={strengthLogs} exerciseName={currentExerciseName} />
-            <div className="col-span-1 h-full">
-              <PersonalRecords logs={strengthLogs} />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1">
-            <HistoryTable logs={strengthLogs} />
-          </div>
-        </div>
-      )}
+      <section className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+        <MuscleFocusCard
+          focusDistribution={overview?.strength.current?.focus_distribution ?? []}
+          muscleVolume={overview?.strength.current?.muscle_volume ?? []}
+          isLoading={isLoadingOverview}
+        />
+        <WorkoutCalendarCard rows={overview?.compliance.current?.workout_calendar ?? []} isLoading={isLoadingOverview} />
+      </section>
     </div>
   );
 }

@@ -5056,6 +5056,11 @@ List unresolved issues that block engineering or increase design risk.
 
 - [Q-001] ~~Should legacy rows with `assigned_by_id IS NULL` be auto-flagged as personal?~~ **RESOLVED 2026-03-15** — Leave as false. See Decision Log.
 - [Q-002] Two A-006 migrations are pending push to target DB — `20260315120000_performance_indexes.sql` (view + indexes) and `20260315123000_## 17) Final QA Validation (A-007)
+- [Q-003] ~~A-031 scope conflict: PART I defines migration with only `hips_cm` + `chest_cm`, but Part VII-A requires 6 additional columns.~~ **RESOLVED 2026-03-21** — Implement **one combined migration** with all 8 columns (`hips_cm`, `chest_cm`, `neck_cm`, `bicep_left_cm`, `bicep_right_cm`, `thigh_left_cm`, `thigh_right_cm`, `calf_cm`). PART I was an early draft; Part VII-A is the authoritative column list. Single migration, single `types/database.ts` update. Do not stage.
+- [Q-004] ~~A-031 training filter semantics conflict: `all` vs `mixed` undefined.~~ **RESOLVED 2026-03-21** — Four distinct values: `”all”` = every session regardless of type (no filter). `”strength”` = sessions that have strength sets only. `”cardio”` = sessions that have cardio entries only. `”mixed”` = sessions that contain both strength sets AND cardio entries in the same session. Apply filter at the `training_sessions` join level when querying. Stats bar: `volume_kg` and `avg_rpe` are suppressed (show `—`) when `trainingType = “cardio”`; `cardio_time_minutes` is suppressed when `trainingType = “strength”`. Default remains `”mixed”`.
+- [Q-005] ~~A-031 schema naming mismatch: `fitness_goals.is_personal` vs `is_personal_goal`.~~ **RESOLVED 2026-03-21** — Use `is_personal_goal`. That is the authoritative column name confirmed in `types/database.ts` and in the A-003 migration. The `is_personal` reference in the A-031 compliance action spec (line 11083) is a typo in the spec — correct it to `is_personal_goal` when implementing.
+- [Q-006] ~~A-031 compare scope ambiguity: chart-only vs full tile/insights delta update.~~ **RESOLVED 2026-03-21** — **Chart overlay only.** When compare is toggled on, each chart renders the prior-period series as a lighter/dashed line. The KPI tiles and insights section do not change — they always show the current period. The weight tile already has green/red delta coloring baked in; no further changes needed. Adding prior-period deltas to every stat tile would clutter the header without adding clarity.
+- [Q-007] ~~A-031 chart dot conflict: `dot={false}` vs `dot={{ r: 2.5 }}`.~~ **RESOLVED 2026-03-21** — Use `dot={{ r: 2.5, fill: <lineColor>, strokeWidth: 0 }}` with `activeDot={{ r: 4 }}` on **all** `<Line>` components in A-031. `dot={false}` alone causes the Recharts isolation bug (sparse data points become invisible when both neighbours are null), as fixed in A-027. The instruction “`dot={false}` with isolated point fix” means the **fix IS the explicit dot object**. Apply the pattern uniformly — do not use `dot={false}` anywhere in A-031.
 
 ### [QA-VAL-001] Implementation Verification: Goal Auto-Sync & Linking
 - **Status:** PASS
@@ -10841,20 +10846,22 @@ In `components/settings/security-settings-panel.tsx`:
 
 - Priority: High
 - Depends on: None — independent of other queued work
-- Status: Queued
-- Files:
-  - REWRITE: `app/(dashboard)/(insights)/progress/page.tsx`
-  - NEW: `app/actions/progress-overview.ts`
-  - NEW: `supabase/migrations/YYYYMMDD_body_measurements_hips_chest.sql`
-  - NEW: `components/progress/overview/progress-filter-bar.tsx`
-  - NEW: `components/progress/overview/progress-stats-bar.tsx`
-  - NEW: `components/progress/overview/progress-insights.tsx`
-  - NEW: `components/progress/overview/body-composition-card.tsx`
-  - NEW: `components/progress/overview/strength-progress-card.tsx`
-  - NEW: `components/progress/overview/cardio-progress-card.tsx`
-  - NEW: `components/progress/overview/compliance-recovery-card.tsx`
-  - UPDATE: `lib/query-keys-progress.ts` — add new query keys
-  - KEEP (do not delete): all existing `components/progress/*.tsx` files
+- Status: Implemented ✓ (all 5 fixes delivered — see A-031-FIX and E-079)
+- Files delivered:
+  - REWRITE: `app/(dashboard)/(insights)/progress/page.tsx` ✓
+  - NEW: `app/actions/progress-overview.ts` ✓
+  - NEW: `supabase/migrations/20260321224500_progress_overview_body_measurements.sql` ✓
+  - NEW: `components/progress/overview/progress-filter-bar.tsx` ✓
+  - NEW: `components/progress/overview/progress-stats-bar.tsx` ✓
+  - NEW: `components/progress/overview/progress-insights.tsx` ✓
+  - NEW: `components/progress/overview/body-composition-card.tsx` ✓
+  - NEW: `components/progress/overview/strength-progress-card.tsx` ✓
+  - NEW: `components/progress/overview/cardio-progress-card.tsx` ✓
+  - NEW: `components/progress/overview/compliance-recovery-card.tsx` ✓
+  - NEW: `components/progress/overview/training-load-card.tsx` ✓
+  - NEW: `components/progress/overview/muscle-focus-card.tsx` ✓
+  - NEW: `components/progress/overview/workout-calendar-card.tsx` ✓
+  - UPDATE: `lib/query-keys-progress.ts` ✓
 
 ---
 
@@ -11075,7 +11082,7 @@ export type ComplianceRecoveryData = {
 Count consecutive days ending today where `training_sessions` has at least 1 completed session for `user_id`. Walk backward from today.
 
 **Task completion:**
-Count `fitness_goals` rows for `user_id` where `is_personal = true` and goal is active in range. `completed` = goals with a check-in (`goal_checkins`) in the range. `total` = total active personal goals in range.
+Count `fitness_goals` rows for `user_id` where `is_personal_goal = true` and goal is active in range. `completed` = goals with a check-in (`goal_checkins`) in the range. `total` = total active personal goals in range.
 
 **Recovery score (derived):**
 Compute per day from last 14 days:
@@ -11898,6 +11905,1037 @@ The following items were reviewed and confirmed as genuinely not implementable w
 
 **Insights:**
 - [ ] `getProgressInsights` extended: 8 additional rules (sleep debt, RHR, muscle imbalance, training load, detraining, weight goal, pace, VO2)
+
+---
+
+### [A-031-FIX] Progress Page — Architect-Mandated Fixes
+
+- Priority: High
+- Depends on: A-031 (delivered)
+- Status: Implemented ✓ (see E-079)
+- Files:
+  - FIX: `app/actions/progress-overview.ts` — Issues 1, 2, 3
+  - FIX: `supabase/migrations/20260321224500_progress_overview_body_measurements.sql` OR new migration — Issue 4
+  - FIX: `app/(dashboard)/(insights)/progress/page.tsx` — Issue 5
+  - FIX: `components/progress/overview/training-load-card.tsx` — Issue 3 (if training load warning moved here)
+
+---
+
+#### FIX 1 — RHR stored as max instead of min
+
+**File:** `app/actions/progress-overview.ts` — `getComplianceRecovery`
+
+Find the `rhrByDate` population block and change:
+```ts
+if (!current || rhr > current) rhrByDate.set(date, rhr);
+```
+to:
+```ts
+if (!current || rhr < current) rhrByDate.set(date, rhr);
+```
+Resting heart rate should be the lowest value recorded in a day (taken at rest / on waking). The current code stores the highest, which is the opposite of "resting".
+
+---
+
+#### FIX 2 — Unbounded historical session fetch in PR detection
+
+**File:** `app/actions/progress-overview.ts` — `getProgressInsights`, PR detection block
+
+Find the two queries that fetch all sessions before `currentWindow.startDate`:
+```ts
+supabase
+  .from("training_sessions")
+  .select("id")
+  .eq("user_id", userId)
+  .lt("performed_on", currentWindow.startDate)
+```
+Add a 2-year lower bound to both:
+```ts
+supabase
+  .from("training_sessions")
+  .select("id")
+  .eq("user_id", userId)
+  .gte("performed_on", subtractDays(currentWindow.startDate, 730))
+  .lt("performed_on", currentWindow.startDate)
+```
+Without this, users with years of history will hit Supabase's 1000-item `IN` limit on the subsequent strength sets query.
+
+---
+
+#### FIX 3 — Remove `computeTrainingLoadDataInternal` from inside `getProgressInsights`
+
+**File:** `app/actions/progress-overview.ts` — `getProgressInsights`, training load insight block (~line 1262)
+
+**Problem:** `getProgressInsights` calls `computeTrainingLoadDataInternal` as a sequential nested call, which fetches 42 days of sessions + strength + cardio + profile — adding ~5 extra queries and doubling latency of the insights action.
+
+**Fix:** Delete the training load insight from `getProgressInsights` entirely. Move it into `TrainingLoadCard` as a local derived rule — the component already receives `fatigue_score` and `fitness_score` via props:
+
+In `components/progress/overview/training-load-card.tsx`, derive and render the warning inline:
+```tsx
+{data && data.fitness_score > 0 && data.fatigue_score > data.fitness_score * 1.5 ? (
+  <p className="mt-2 rounded-[10px] border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
+    ⚠ Acute load is well above your chronic base. A deload week may prevent overtraining.
+  </p>
+) : null}
+```
+
+Remove from `getProgressInsights`:
+- The `const trainingLoad = await computeTrainingLoadDataInternal(...)` call
+- The `withInsight(...)` block that uses it
+
+---
+
+#### FIX 4 — Migration: add `arms_cm → bicep_left/right_cm` backfill
+
+The existing migration backfills thigh and calf from legacy columns but not bicep. If the migration **has not yet been pushed to production**, edit `20260321224500_progress_overview_body_measurements.sql` to add `bicep_left_cm` and `bicep_right_cm` to the `update` block:
+
+```sql
+update public.body_measurements
+set
+  bicep_left_cm  = coalesce(bicep_left_cm, arms_cm),
+  bicep_right_cm = coalesce(bicep_right_cm, arms_cm),
+  thigh_left_cm  = coalesce(thigh_left_cm, thighs_cm),
+  thigh_right_cm = coalesce(thigh_right_cm, thighs_cm),
+  calf_cm        = coalesce(calf_cm, calves_cm)
+where
+  bicep_left_cm  is null
+  or bicep_right_cm is null
+  or thigh_left_cm  is null
+  or thigh_right_cm is null
+  or calf_cm        is null;
+```
+
+If the migration **has already been pushed**, create a new migration file `supabase/migrations/YYYYMMDD_backfill_bicep_from_arms.sql`:
+```sql
+update public.body_measurements
+set
+  bicep_left_cm  = coalesce(bicep_left_cm, arms_cm),
+  bicep_right_cm = coalesce(bicep_right_cm, arms_cm)
+where
+  arms_cm is not null
+  and (bicep_left_cm is null or bicep_right_cm is null);
+```
+
+---
+
+#### FIX 5 — Stabilise `muscleBalance` query key
+
+**File:** `app/(dashboard)/(insights)/progress/page.tsx`
+
+`getMuscleBalance()` ignores range but the query key includes `range`, causing unnecessary refetches on every range switch.
+
+Change:
+```ts
+queryKey: progressOverviewKeys.muscleBalance(range),
+```
+to:
+```ts
+queryKey: progressOverviewKeys.muscleBalance("all"),
+```
+
+---
+
+#### Checklist
+
+- [ ] FIX 1: `rhrByDate` uses `rhr < current` (min per day)
+- [ ] FIX 2: PR detection queries include `.gte("performed_on", subtractDays(currentWindow.startDate, 730))`
+- [ ] FIX 3: `computeTrainingLoadDataInternal` removed from `getProgressInsights`; training load warning rendered in `TrainingLoadCard`
+- [ ] FIX 4: `arms_cm → bicep_left/right_cm` backfill added (edit existing or new migration as appropriate)
+- [ ] FIX 5: `muscleBalance` query key uses stable `"all"` instead of `range`
+- [ ] `npm run typecheck && npm run lint` → pass
+- [ ] Manual QA: compliance recovery card shows correct (lower) RHR values
+- [ ] Manual QA: insights load in <2 seconds on 30d range
+
+---
+
+### [A-031-ARCHITECT-REVIEW] Progress Page — Architect Review (2026-03-21)
+
+**Overall verdict: Strong implementation. Structure, patterns, and spec coverage are correct. Five targeted fixes required before merge.**
+
+| # | Severity | Area | Issue |
+|---|----------|------|-------|
+| 1 | Critical | `getComplianceRecovery` | RHR stored as **max** per day — should be **min** |
+| 2 | Critical | `getProgressInsights` PR detection | Historical session fetch has **no lower date bound** — unbounded `IN` query |
+| 3 | Significant | `getProgressInsights` training load check | Calls `computeTrainingLoadDataInternal` inside insights — 5+ redundant queries |
+| 4 | Minor | Migration backfill | `arms_cm → bicep_left/right_cm` backfill missing from migration (only done at query time) |
+| 5 | Minor | `muscleBalance` query key | Key includes `range` but `getMuscleBalance()` ignores range — wastes refetches |
+
+---
+
+#### Issue 1 — RHR stored as max per day (Critical)
+
+**File:** `app/actions/progress-overview.ts` — `getComplianceRecovery`, lines ~1974–1977
+
+**Problem:**
+```ts
+if (!current || rhr > current) rhrByDate.set(date, rhr);  // ← stores MAX
+```
+`resting_heart_rate` should be the **minimum** value logged in a day (physiologically: lowest = most rested). Storing the maximum is the opposite of resting HR. HRV correctly uses max (higher HRV = better).
+
+**Fix:** Change `rhr > current` to `rhr < current`:
+```ts
+if (!current || rhr < current) rhrByDate.set(date, rhr);
+```
+
+---
+
+#### Issue 2 — Unbounded historical session fetch in PR detection (Critical)
+
+**File:** `app/actions/progress-overview.ts` — `getProgressInsights`, lines ~956–985
+
+**Problem:**
+```ts
+supabase
+  .from("training_sessions")
+  .select("id")
+  .eq("user_id", userId)
+  .lt("performed_on", currentWindow.startDate)   // ← no lower bound
+```
+For users with years of history this returns thousands of session IDs. The subsequent `.in("workout_id", priorSessionIds)` query then breaks at Supabase's 1000-item `IN` limit and may time out.
+
+**Fix:** Add a lower bound — 2 years back is sufficient for PR comparison:
+```ts
+.gte("performed_on", subtractDays(currentWindow.startDate, 730))
+.lt("performed_on", currentWindow.startDate)
+```
+
+---
+
+#### Issue 3 — `computeTrainingLoadDataInternal` called inside `getProgressInsights` (Significant)
+
+**File:** `app/actions/progress-overview.ts` — `getProgressInsights`, line ~1263
+
+**Problem:**
+```ts
+const trainingLoad = await computeTrainingLoadDataInternal(userId, range, 0);
+```
+This is a sequential call at the **end** of the already-expensive insights action. `computeTrainingLoadDataInternal` fetches 42 days of sessions, strength rows, cardio rows, and calls `getProfileBirthDate` — adding ~5 extra queries that run after all other insight logic completes. This roughly doubles the latency of `getProgressInsights`.
+
+**Fix:** In the page, the `trainingLoadQuery` already fetches `TrainingLoadData` independently. Use its result to derive the training load insight in the UI component, or pass the load check values as parameters to `getProgressInsights`. For the simplest fix: move the training load insight check into `TrainingLoadCard` as a derived local rule — it already has `fatigue_score` and `fitness_score` — so no server action change is needed.
+
+Alternatively, pass `fatigueScore` and `fitnessScore` as optional params into `getProgressInsights` so the page can supply them from the already-fetched `trainingLoadQuery.data`.
+
+---
+
+#### Issue 4 — Migration missing `arms_cm` backfill for bicep columns (Minor)
+
+**File:** `supabase/migrations/20260321224500_progress_overview_body_measurements.sql`
+
+**Problem:** The migration backfills `thigh_left/right_cm` from `thighs_cm` and `calf_cm` from `calves_cm`, but does **not** backfill `bicep_left/right_cm` from the legacy `arms_cm` column. The action handles it at query time (`row.bicep_left_cm ?? row.arms_cm`), but the DB columns stay null for existing rows.
+
+**Fix:** Add to the migration's `update` block:
+```sql
+update public.body_measurements
+set
+  bicep_left_cm  = coalesce(bicep_left_cm, arms_cm),
+  bicep_right_cm = coalesce(bicep_right_cm, arms_cm),
+  thigh_left_cm  = coalesce(thigh_left_cm, thighs_cm),
+  thigh_right_cm = coalesce(thigh_right_cm, thighs_cm),
+  calf_cm        = coalesce(calf_cm, calves_cm)
+where
+  bicep_left_cm  is null
+  or bicep_right_cm is null
+  or thigh_left_cm  is null
+  or thigh_right_cm is null
+  or calf_cm        is null;
+```
+
+Note: If the migration has already run in production, add a new migration file rather than editing the existing one.
+
+---
+
+#### Issue 5 — `muscleBalance` query key includes range but function ignores it (Minor)
+
+**File:** `app/(dashboard)/(insights)/progress/page.tsx`, line ~115–119
+
+**Problem:**
+```ts
+const muscleBalanceQuery = useQuery({
+  queryKey: progressOverviewKeys.muscleBalance(range),   // ← range changes key
+  queryFn: getMuscleBalance,                             // ← getMuscleBalance ignores range
+```
+When the user switches from 7d → 30d → 90d, three separate cache entries are created and `getMuscleBalance` is refetched three times, each returning identical data.
+
+**Fix:** Use a stable key:
+```ts
+queryKey: progressOverviewKeys.muscleBalance("all"),
+```
+Or remove the `range` parameter from `progressOverviewKeys.muscleBalance` entirely.
+
+---
+
+#### What the engineer got right
+
+- All 7 server actions implemented, correctly scoped to `auth.uid()`, with Zod input validation
+- `filterSessionIdsByTrainingType` correctly handles all four states: `all`, `strength`, `cardio`, `mixed` (Q-004 ✓)
+- `is_personal_goal` used throughout — not `is_personal` (Q-005 ✓)
+- Compare mode is chart-overlay only — KPI tiles unchanged (Q-006 ✓)
+- All `<Line>` components use `dot={{ r: 2.5, fill: color, strokeWidth: 0 }}` + `activeDot={{ r: 4 }}` — no `dot={false}` anywhere (Q-007 ✓)
+- Single combined migration for all 8 body measurement columns (Q-003 ✓)
+- `isMissingSchemaDependencyError` gracefully swallows missing optional tables (`daily_activity`, `vitals_log`, `sleep_log`, `daily_biofeedback`) — prevents crashes on environments where those tables haven't been migrated yet
+- Legacy field fallback at query time (`arms_cm`, `thighs_cm`, `calves_cm`) is the right approach
+- Compare queries gated with `enabled: compare` — no wasted fetches when compare is off
+- TRIMP-based training load (EWMA 42/7 day fitness/fatigue/form) correctly implemented
+- Progress Photos placeholder: disabled button, no upload logic, correct spec ✓
+- All 8 `getProgressInsights` rules implemented; returns `[]` if <3 sessions ✓
+
+---
+
+#### Execution order
+
+1. Fix Issue 1 — RHR min (5 min)
+2. Fix Issue 2 — PR detection lower bound (5 min)
+3. Fix Issue 3 — Remove `computeTrainingLoadDataInternal` from inside insights; derive the training load warning in `TrainingLoadCard` or pass values as params
+4. Fix Issue 4 — Migration backfill (add new migration if prod already ran, edit existing if not yet pushed)
+5. Fix Issue 5 — Stabilise `muscleBalance` query key
+6. `npm run typecheck && npm run lint` → pass
+7. Manual QA: all 4 filter modes, compare toggle on/off, stats bar suppression, insights section with <3 and ≥3 sessions
+
+---
+
+### [A-034] Body Measurements — Dedicated Page
+
+- Priority: High
+- Depends on: A-031 (progress page must be live)
+- Status: Queued
+- Files:
+  - NEW: `app/(dashboard)/measurements/page.tsx` — dedicated measurements page
+  - NEW: `app/actions/body-measurements.ts` — CRUD actions with subject pattern
+  - NEW: `components/measurements/log-measurement-dialog.tsx` — log/edit dialog
+  - NEW: `components/measurements/measurements-table.tsx` — TanStack table component
+  - UPDATE: `lib/auth/route-access.ts` — add `/measurements` to prefixes + sidebar; add `"ruler"` to icon union
+  - UPDATE: `components/layout/app-sidebar.tsx` — add `ruler: Ruler` to `iconMap`
+  - NEW: `supabase/migrations/YYYYMMDD_body_measurements_subject.sql` — add subject columns
+
+---
+
+#### Context
+
+`body_measurements` currently uses only `user_id`. Coaches must be able to log for clients, so we need to add the **subject pattern** (`subject_user_id` + `subject_client_id`) identical to all other coach-aware tables. A migration is required.
+
+The page is a dedicated route at `/measurements`. **Non-blocking layout rule:** page header and controls (title, subject selector, range filter, Log button) render immediately with no skeleton. Only the `<MeasurementsTable>` area shows a skeleton while data loads.
+
+---
+
+#### PART I — Migration (`supabase/migrations/YYYYMMDD_body_measurements_subject.sql`)
+
+```sql
+-- Add subject pattern columns
+ALTER TABLE body_measurements
+  ADD COLUMN subject_user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE,
+  ADD COLUMN subject_client_id uuid REFERENCES clients(id) ON DELETE CASCADE;
+
+-- Backfill existing rows
+UPDATE body_measurements SET subject_user_id = user_id WHERE subject_user_id IS NULL;
+
+-- Exactly one of the two must be set
+ALTER TABLE body_measurements
+  ADD CONSTRAINT body_measurements_subject_check CHECK (
+    (subject_user_id IS NOT NULL AND subject_client_id IS NULL) OR
+    (subject_user_id IS NULL AND subject_client_id IS NOT NULL)
+  );
+
+-- Indexes for fast subject lookups
+CREATE INDEX body_measurements_subject_user_idx
+  ON body_measurements (subject_user_id, date DESC);
+CREATE INDEX body_measurements_subject_client_idx
+  ON body_measurements (subject_client_id, date DESC);
+
+-- Drop old user-only RLS policy if it exists, then add subject-aware policy
+DROP POLICY IF EXISTS "body_measurements_user_access" ON body_measurements;
+CREATE POLICY "body_measurements_subject_access" ON body_measurements
+  USING (has_nutrition_subject_access(subject_user_id, subject_client_id));
+```
+
+---
+
+#### PART II — Server Actions (`app/actions/body-measurements.ts`)
+
+Use the `SupplementSubject` pattern from `app/actions/supplements.ts` verbatim.
+
+```ts
+"use server";
+import { z } from "zod";
+import { runTrackedAction } from "@/lib/run-tracked-action";
+import { createClient } from "@/lib/supabase/server";
+import { getServerUser } from "@/lib/auth/server";
+
+export type MeasurementSubject = { type: "me" } | { type: "client"; id: string };
+
+const subjectSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("me") }),
+  z.object({ type: z.literal("client"), id: z.string().uuid() }),
+]);
+
+type SubjectRef = { subject_user_id: string | null; subject_client_id: string | null };
+
+function resolveSubject(subject: MeasurementSubject, actorUserId: string): SubjectRef {
+  if (subject.type === "me") return { subject_user_id: actorUserId, subject_client_id: null };
+  return { subject_user_id: null, subject_client_id: subject.id };
+}
+```
+
+**`logBodyMeasurementAction(subject, input)`**
+
+```ts
+export type LogBodyMeasurementInput = {
+  date: string;              // YYYY-MM-DD
+  weight?: number | null;
+  body_fat_percent?: number | null;
+  waist_cm?: number | null;
+  hips_cm?: number | null;
+  chest_cm?: number | null;
+  neck_cm?: number | null;
+  bicep_left_cm?: number | null;
+  bicep_right_cm?: number | null;
+  thigh_left_cm?: number | null;
+  thigh_right_cm?: number | null;
+  calf_cm?: number | null;
+  notes?: string | null;
+};
+
+export async function logBodyMeasurementAction(
+  subject: MeasurementSubject,
+  input: LogBodyMeasurementInput
+): Promise<void>
+```
+
+- Validate `input.date` is `YYYY-MM-DD` via Zod. Validate at least one measurement field is non-null.
+- Resolve subject ref via `resolveSubject`.
+- **Upsert** by `(subject_user_id, date)` or `(subject_client_id, date)` depending on subject type — use `.upsert({ ...subjectRef, ...input })` with the appropriate `onConflict` target. Verify the unique constraint name after running the migration.
+- Wrap in `runTrackedAction("body_measurements.log")`.
+
+**`getBodyMeasurements(subject, range)`**
+
+```ts
+export type BodyMeasurementRow = {
+  id: string;
+  date: string;
+  weight: number | null;
+  body_fat_percent: number | null;
+  waist_cm: number | null;
+  hips_cm: number | null;
+  chest_cm: number | null;
+  neck_cm: number | null;
+  bicep_left_cm: number | null;
+  bicep_right_cm: number | null;
+  thigh_left_cm: number | null;
+  thigh_right_cm: number | null;
+  calf_cm: number | null;
+  notes: string | null;
+};
+
+export async function getBodyMeasurements(
+  subject: MeasurementSubject,
+  range: "30d" | "90d" | "180d" | "1y" | "all"
+): Promise<BodyMeasurementRow[]>
+```
+
+- Resolve subject ref, filter with the same two-column pattern from supplements (`.eq("subject_user_id", ...).is("subject_client_id", null)` or vice versa).
+- Apply date range: `"all"` → no date filter; others → `.gte("date", startDate)`.
+- Order by `date DESC`.
+
+**`getBodyMeasurementForDate(subject, date)`** — returns a single row or `null` for pre-populating the edit dialog.
+
+---
+
+#### PART III — Dedicated Page (`app/(dashboard)/measurements/page.tsx`)
+
+```
+Route: /measurements
+```
+
+```tsx
+"use client";
+import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Button } from "@/components/ui/button";
+import { MeasurementsTable } from "@/components/measurements/measurements-table";
+import { LogMeasurementDialog } from "@/components/measurements/log-measurement-dialog";
+import { SubjectSelector } from "@/components/shared/subject-selector";  // reuse or create
+import type { MeasurementSubject, BodyMeasurementRow } from "@/app/actions/body-measurements";
+import { getBodyMeasurements } from "@/app/actions/body-measurements";
+
+export default function MeasurementsPage() {
+  const [subject, setSubject] = useState<MeasurementSubject>({ type: "me" });
+  const [range, setRange] = useState<"30d" | "90d" | "180d" | "1y" | "all">("90d");
+  const [logOpen, setLogOpen] = useState(false);
+  const [editRow, setEditRow] = useState<BodyMeasurementRow | null>(null);
+  const queryClient = useQueryClient();
+
+  const { data, isLoading } = useQuery({
+    queryKey: ["body-measurements", subject, range],
+    queryFn: () => getBodyMeasurements(subject, range),
+    staleTime: 1000 * 60 * 5,
+  });
+
+  return (
+    <div className="page-shell section-gap">
+      {/* Header — renders immediately, no skeleton */}
+      <header className="flex flex-col gap-1">
+        <h1 className="text-3xl font-bold tracking-tight">Body Measurements</h1>
+        <p className="text-sm text-muted-foreground">
+          Track weight, body fat, and circumferences over time.
+        </p>
+      </header>
+
+      {/* Controls row — renders immediately */}
+      <div className="flex flex-wrap items-center gap-3">
+        <SubjectSelector subject={subject} onSubjectChange={setSubject} />
+        <RangeSelect value={range} onChange={setRange} />
+        <Button size="sm" className="rounded-[10px]" onClick={() => { setEditRow(null); setLogOpen(true); }}>
+          + Log Measurement
+        </Button>
+      </div>
+
+      {/* Table — skeleton while isLoading */}
+      <MeasurementsTable
+        data={data ?? []}
+        isLoading={isLoading}
+        onEdit={(row) => { setEditRow(row); setLogOpen(true); }}
+      />
+
+      <LogMeasurementDialog
+        open={logOpen}
+        subject={subject}
+        prefillRow={editRow}
+        onClose={() => { setLogOpen(false); setEditRow(null); }}
+        onSaved={() => {
+          setLogOpen(false);
+          setEditRow(null);
+          void queryClient.invalidateQueries({ queryKey: ["body-measurements", subject, range] });
+        }}
+      />
+    </div>
+  );
+}
+```
+
+**`SubjectSelector` component:** A `<Select>` dropdown listing "Myself" + active coach clients. **Do not gate visibility on role** — `user_role` is only `"sysadmin" | "user"` and has no `"coach"` value. Instead, call `listCoachClientsAction({ status: "active", page_size: 50 })` on mount; if the result returns zero clients, return `null` (don't render). If clients exist, render the selector. Default value: `{ type: "me" }`. Import `listCoachClientsAction` from `@/app/actions/coach-tools` (or wherever it lives — search the codebase). Do **not** use `useCoachClients` here; it's an infinite query designed for the paginated client table, not a flat dropdown.
+
+**`RangeSelect` component:** Simple select with options `30d | 90d | 180d | 1y | all`. Can be inline or a shared component.
+
+---
+
+#### PART IV — TanStack Table (`components/measurements/measurements-table.tsx`)
+
+```tsx
+import {
+  useReactTable,
+  getCoreRowModel,
+  getSortedRowModel,
+  getPaginationRowModel,
+  type ColumnDef,
+} from "@tanstack/react-table";
+import { Skeleton } from "@/components/ui/skeleton";
+import type { BodyMeasurementRow } from "@/app/actions/body-measurements";
+
+const columns: ColumnDef<BodyMeasurementRow>[] = [
+  { accessorKey: "date", header: "Date", cell: (i) => formatDate(i.getValue<string>()) },
+  { accessorKey: "weight", header: "Weight", cell: (i) => fmtCm(i.getValue(), "kg") },
+  { accessorKey: "body_fat_percent", header: "Body Fat", cell: (i) => fmtPct(i.getValue()) },
+  { accessorKey: "waist_cm", header: "Waist", cell: (i) => fmtCm(i.getValue(), "cm") },
+  { accessorKey: "hips_cm", header: "Hips", cell: (i) => fmtCm(i.getValue(), "cm") },
+  { accessorKey: "chest_cm", header: "Chest", cell: (i) => fmtCm(i.getValue(), "cm") },
+  { accessorKey: "notes", header: "Notes", cell: (i) => truncate(i.getValue<string | null>(), 40) },
+  { id: "actions", header: "", cell: ({ row }) => <EditButton onClick={() => onEdit(row.original)} /> },
+];
+```
+
+- Default sort: `date` descending (`sorting: [{ id: "date", desc: true }]`).
+- Pagination: `pageSize: 20`, show prev/next buttons below the table.
+- **Skeleton state:** when `isLoading`, render the table header + 8 rows of `<Skeleton className="h-10 rounded" />` cells — do not hide the column headers.
+- Format helpers: `fmtCm(v, unit)` → `v == null ? "—" : \`${v} ${unit}\``; `fmtPct(v)` → `v == null ? "—" : \`${v}%\``.
+
+---
+
+#### PART V — Log Measurement Dialog (`components/measurements/log-measurement-dialog.tsx`)
+
+```
+Log Measurement
+
+Date: [2026-03-21 ▾]   (defaults to today; locked to prefillRow.date when editing)
+
+── Core ────────────────────────────────
+Weight (kg)       [      ]
+Body Fat (%)      [      ]
+
+── Circumferences ──────────────────────
+Waist (cm)        [      ]
+Hips (cm)         [      ]
+Chest (cm)        [      ]
+
+[+ More measurements ▾]   (collapsible, default collapsed)
+  Neck (cm)           [      ]
+  Bicep Left (cm)     [      ]
+  Bicep Right (cm)    [      ]
+  Thigh Left (cm)     [      ]
+  Thigh Right (cm)    [      ]
+  Calf (cm)           [      ]
+
+Notes             [                    ]
+
+[Cancel]   [Save Measurement]
+```
+
+- All measurement fields are `<Input type="number" step="0.1" min="0">`.
+- `+ More measurements` is a `useState`-driven collapsible (default collapsed).
+- On open: if `prefillRow` is set, populate from it; otherwise call `getBodyMeasurementForDate(subject, date)` to pre-populate any existing entry for that date.
+- Save button disabled until at least one numeric field is non-empty.
+- On success: `toast.success("Measurement saved.")`, call `onSaved()`.
+- Use `Dialog` from `@/components/ui/responsive-modal`.
+
+---
+
+#### PART VI — Sidebar Nav
+
+**`lib/auth/route-access.ts`:**
+
+1. Add `"ruler"` to the `SidebarItemConfig` icon union.
+2. Add `"/measurements"` to both `AUTH_ONLY_PREFIXES` and `USER_PREFIXES`.
+3. Add to the `"Insights"` section in `USER_WORKSPACE_SECTIONS`:
+
+```ts
+{ title: "Measurements", href: "/measurements", icon: "ruler" },
+```
+
+**`components/layout/app-sidebar.tsx`:**
+
+```ts
+// Add to iconMap:
+ruler: Ruler,   // import { Ruler } from "lucide-react"
+```
+
+---
+
+#### Checklist
+
+- [ ] Migration: `subject_user_id` + `subject_client_id` on `body_measurements`; backfill from `user_id`; check constraint; indexes; RLS updated
+- [ ] `logBodyMeasurementAction(subject, input)`: Zod validation, resolve subject, upsert
+- [ ] `getBodyMeasurements(subject, range)`: subject filter + date range filter, ordered `date DESC`
+- [ ] `getBodyMeasurementForDate(subject, date)`: single-row pre-population lookup
+- [ ] `/measurements` page: header + controls render immediately (no skeleton); only table area skeletons
+- [ ] `SubjectSelector`: hidden when user has 0 active clients (not role-gated); defaults to "Myself"; populated via `listCoachClientsAction({ status: "active", page_size: 50 })` from `app/actions/coach-tools.ts`
+- [ ] `MeasurementsTable`: TanStack table, 8 columns, sort `date DESC`, page size 20, skeleton on load (headers still visible)
+- [ ] `LogMeasurementDialog`: pre-populates from `prefillRow` or date lookup; collapsible advanced fields; disabled save if all empty; toast on success
+- [ ] `lib/auth/route-access.ts`: `/measurements` in prefixes + sidebar entry; `"ruler"` in icon union
+- [ ] `app-sidebar.tsx`: `ruler: Ruler` added to `iconMap`
+- [ ] `npm run typecheck && npm run lint` → pass
+- [ ] Manual QA: log weight + waist → row appears in table; Body Composition card on `/progress` still works
+- [ ] Manual QA (coach): switch to client → log measurement → appears only in that client's history
+
+---
+
+### [A-035] Daily Health Check-in — Dedicated Page
+
+- Priority: High
+- Depends on: A-031 (progress page must be live)
+- Status: Queued
+- Files:
+  - NEW: `app/(dashboard)/check-in/page.tsx` — dedicated check-in page
+  - NEW: `app/actions/daily-health-log.ts` — upsert actions with subject pattern
+  - NEW: `components/check-in/log-health-dialog.tsx` — log/edit dialog
+  - NEW: `components/check-in/health-log-table.tsx` — TanStack table component
+  - UPDATE: `lib/auth/route-access.ts` — add `/check-in` to prefixes + sidebar; add `"activity"` to icon union
+  - UPDATE: `components/layout/app-sidebar.tsx` — add `activity: Activity` to `iconMap`
+  - NEW: `supabase/migrations/YYYYMMDD_health_tables_subject.sql` — add subject columns to `sleep_log`, `vitals_log`, `daily_activity`
+
+---
+
+#### Context
+
+Three tables exist from the monitoring overhaul migration (`sleep_log`, `vitals_log`, `daily_activity`) but have **no UI entry point**. These tables power the Recovery Score, Sleep, HRV, RHR, and Steps/Day tiles on the progress page.
+
+**Critical — two constraints the engineer must respect:**
+
+1. These tables are **not in `types/database.ts`** — types were not regenerated after the migration. All actions must use `supabase as any`, identical to the pattern in `progress-overview.ts`.
+2. Coaches must be able to log for clients: a migration adds `subject_user_id` + `subject_client_id` to all three tables.
+
+---
+
+#### PART I — Migration (`supabase/migrations/YYYYMMDD_health_tables_subject.sql`)
+
+Run the same subject-column pattern for each of the three tables:
+
+```sql
+-- ── sleep_log ─────────────────────────────────────────────────────────────
+ALTER TABLE sleep_log
+  ADD COLUMN subject_user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE,
+  ADD COLUMN subject_client_id uuid REFERENCES clients(id) ON DELETE CASCADE;
+UPDATE sleep_log SET subject_user_id = user_id WHERE subject_user_id IS NULL;
+ALTER TABLE sleep_log ADD CONSTRAINT sleep_log_subject_check CHECK (
+  (subject_user_id IS NOT NULL AND subject_client_id IS NULL) OR
+  (subject_user_id IS NULL AND subject_client_id IS NOT NULL)
+);
+DROP POLICY IF EXISTS "sleep_log_user_access" ON sleep_log;
+CREATE POLICY "sleep_log_subject_access" ON sleep_log
+  USING (has_nutrition_subject_access(subject_user_id, subject_client_id));
+
+-- ── vitals_log ────────────────────────────────────────────────────────────
+ALTER TABLE vitals_log
+  ADD COLUMN subject_user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE,
+  ADD COLUMN subject_client_id uuid REFERENCES clients(id) ON DELETE CASCADE;
+UPDATE vitals_log SET subject_user_id = user_id WHERE subject_user_id IS NULL;
+ALTER TABLE vitals_log ADD CONSTRAINT vitals_log_subject_check CHECK (
+  (subject_user_id IS NOT NULL AND subject_client_id IS NULL) OR
+  (subject_user_id IS NULL AND subject_client_id IS NOT NULL)
+);
+DROP POLICY IF EXISTS "vitals_log_user_access" ON vitals_log;
+CREATE POLICY "vitals_log_subject_access" ON vitals_log
+  USING (has_nutrition_subject_access(subject_user_id, subject_client_id));
+
+-- ── daily_activity ────────────────────────────────────────────────────────
+ALTER TABLE daily_activity
+  ADD COLUMN subject_user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE,
+  ADD COLUMN subject_client_id uuid REFERENCES clients(id) ON DELETE CASCADE;
+UPDATE daily_activity SET subject_user_id = user_id WHERE subject_user_id IS NULL;
+ALTER TABLE daily_activity ADD CONSTRAINT daily_activity_subject_check CHECK (
+  (subject_user_id IS NOT NULL AND subject_client_id IS NULL) OR
+  (subject_user_id IS NULL AND subject_client_id IS NOT NULL)
+);
+DROP POLICY IF EXISTS "daily_activity_user_access" ON daily_activity;
+CREATE POLICY "daily_activity_subject_access" ON daily_activity
+  USING (has_nutrition_subject_access(subject_user_id, subject_client_id));
+```
+
+---
+
+#### PART II — Server Actions (`app/actions/daily-health-log.ts`)
+
+Use the same `resolveSubject` / `subjectSchema` pattern as supplements and A-034.
+
+```ts
+"use server";
+
+export type HealthSubject = { type: "me" } | { type: "client"; id: string };
+// resolveSubject — identical pattern to supplements.ts
+
+export type DailyHealthLogInput = {
+  date: string;                     // YYYY-MM-DD
+  // Sleep
+  sleep_hours?: number | null;
+  sleep_score?: number | null;      // 1–5 (UI) → stored as score * 20 in sleep_log.sleep_score
+  // Vitals
+  hrv_ms?: number | null;
+  resting_heart_rate?: number | null;
+  // Activity
+  steps?: number | null;
+  energy_level?: number | null;     // 1–5 scale
+};
+```
+
+**`logDailyHealthAction(subject, input)`**
+
+- Resolve subject via `resolveSubject`.
+- Run up to three upserts in parallel via `Promise.all`. **Only upsert into a table if at least one of its fields is non-null** (skip the table entirely otherwise).
+- Use `supabase as any` for all three tables. Wrap each with `isMissingSchemaDependencyError` (copy the helper from `progress-overview.ts`) — if a table is missing, skip silently.
+- Table field mappings:
+  - `sleep_log`: `{ ...subjectRef, date, total_duration_minutes: sleep_hours * 60, sleep_score: sleep_score * 20 }` — upsert on `(subject_user_id, date)` or `(subject_client_id, date)`.
+  - `vitals_log`: check if a row exists for `(subjectRef, date prefix on recorded_at)`; if yes update, else insert with `recorded_at = \`${date}T07:00:00.000Z\``. Fields: `hrv_ms`, `resting_heart_rate`.
+  - `daily_activity`: `{ ...subjectRef, date, steps, energy_level, sleep_hours }` — upsert on `(subject_user_id, date)` or `(subject_client_id, date)`.
+- Wrap in `runTrackedAction("daily_health.log")`.
+
+**`getHealthCheckIns(subject, range)`**
+
+```ts
+export type HealthCheckInRow = {
+  date: string;
+  sleep_hours: number | null;
+  sleep_score: number | null;       // stored 0–100; display as Math.round(score / 20) → 1–5
+  hrv_ms: number | null;
+  resting_heart_rate: number | null;
+  steps: number | null;
+  energy_level: number | null;
+};
+
+export async function getHealthCheckIns(
+  subject: HealthSubject,
+  range: "7d" | "30d" | "90d" | "all"
+): Promise<HealthCheckInRow[]>
+```
+
+- Query all three tables for the subject and date range.
+- Merge rows by date: for each date, combine the fields from whichever tables have an entry.
+- Use `supabase as any`. Wrap schema errors with `isMissingSchemaDependencyError` — return `[]` if tables don't exist yet.
+- Order results by `date DESC`.
+
+**`getHealthCheckInForDate(subject, date)`** — returns a single merged `HealthCheckInRow | null` for pre-populating the edit dialog.
+
+---
+
+#### PART III — Dedicated Page (`app/(dashboard)/check-in/page.tsx`)
+
+```
+Route: /check-in
+```
+
+```tsx
+"use client";
+import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Button } from "@/components/ui/button";
+import { HealthLogTable } from "@/components/check-in/health-log-table";
+import { LogHealthDialog } from "@/components/check-in/log-health-dialog";
+import { SubjectSelector } from "@/components/shared/subject-selector";
+import type { HealthSubject, HealthCheckInRow } from "@/app/actions/daily-health-log";
+import { getHealthCheckIns } from "@/app/actions/daily-health-log";
+
+export default function CheckInPage() {
+  const [subject, setSubject] = useState<HealthSubject>({ type: "me" });
+  const [range, setRange] = useState<"7d" | "30d" | "90d" | "all">("30d");
+  const [logOpen, setLogOpen] = useState(false);
+  const [editRow, setEditRow] = useState<HealthCheckInRow | null>(null);
+  const queryClient = useQueryClient();
+
+  const { data, isLoading } = useQuery({
+    queryKey: ["health-checkins", subject, range],
+    queryFn: () => getHealthCheckIns(subject, range),
+    staleTime: 1000 * 60 * 5,
+  });
+
+  return (
+    <div className="page-shell section-gap">
+      {/* Header — renders immediately, no skeleton */}
+      <header className="flex flex-col gap-1">
+        <h1 className="text-3xl font-bold tracking-tight">Daily Health Check-in</h1>
+        <p className="text-sm text-muted-foreground">
+          Log sleep, vitals, and activity. Powers recovery scores on the progress page.
+        </p>
+      </header>
+
+      {/* Controls — renders immediately */}
+      <div className="flex flex-wrap items-center gap-3">
+        <SubjectSelector subject={subject} onSubjectChange={setSubject} />
+        <RangeSelect value={range} onChange={setRange} />
+        <Button size="sm" className="rounded-[10px]" onClick={() => { setEditRow(null); setLogOpen(true); }}>
+          + Log Today
+        </Button>
+      </div>
+
+      {/* Table — skeleton while isLoading */}
+      <HealthLogTable
+        data={data ?? []}
+        isLoading={isLoading}
+        onEdit={(row) => { setEditRow(row); setLogOpen(true); }}
+      />
+
+      <LogHealthDialog
+        open={logOpen}
+        subject={subject}
+        prefillRow={editRow}
+        onClose={() => { setLogOpen(false); setEditRow(null); }}
+        onSaved={() => {
+          setLogOpen(false);
+          setEditRow(null);
+          void queryClient.invalidateQueries({ queryKey: ["health-checkins", subject, range] });
+        }}
+      />
+    </div>
+  );
+}
+```
+
+---
+
+#### PART IV — TanStack Table (`components/check-in/health-log-table.tsx`)
+
+```tsx
+import {
+  useReactTable,
+  getCoreRowModel,
+  getSortedRowModel,
+  getPaginationRowModel,
+  type ColumnDef,
+} from "@tanstack/react-table";
+import { Skeleton } from "@/components/ui/skeleton";
+import type { HealthCheckInRow } from "@/app/actions/daily-health-log";
+
+const columns: ColumnDef<HealthCheckInRow>[] = [
+  { accessorKey: "date",               header: "Date",    cell: (i) => formatDate(i.getValue<string>()) },
+  { accessorKey: "sleep_hours",        header: "Sleep",   cell: (i) => fmtNum(i.getValue(), "h") },
+  { accessorKey: "sleep_score",        header: "Quality", cell: (i) => fmtSleepScore(i.getValue()) },  // stored 0-100, display ÷20
+  { accessorKey: "hrv_ms",             header: "HRV",     cell: (i) => fmtNum(i.getValue(), "ms") },
+  { accessorKey: "resting_heart_rate", header: "RHR",     cell: (i) => fmtNum(i.getValue(), "bpm") },
+  { accessorKey: "steps",              header: "Steps",   cell: (i) => fmtSteps(i.getValue()) },
+  { accessorKey: "energy_level",       header: "Energy",  cell: (i) => fmtEnergyLevel(i.getValue()) },  // stored 1-5, display as-is
+  { id: "actions", header: "", cell: ({ row }) => <EditButton onClick={() => onEdit(row.original)} /> },
+];
+```
+
+- Default sort: `date DESC`.
+- Pagination: `pageSize: 20`.
+- **Skeleton state:** render column headers + 8 skeleton rows (do not hide the header row).
+- Format helpers:
+  - `fmtNum(v, unit)` → `v == null ? "—" : \`${v} ${unit}\``
+  - `fmtSleepScore(v)` → `v == null ? "—" : String(Math.round(v / 20))` — `sleep_score` is stored as 0–100; divide by 20 to display as 1–5
+  - `fmtEnergyLevel(v)` → `v == null ? "—" : String(v)` — `energy_level` is stored as 1–5 directly; do **not** divide
+  - `fmtSteps(v)` → `v == null ? "—" : v.toLocaleString()`
+
+---
+
+#### PART V — Log Health Dialog (`components/check-in/log-health-dialog.tsx`)
+
+```
+Log Today                              [✕]
+
+Date: [2026-03-21 ▾]
+
+── Sleep ───────────────────────────────
+Hours slept         [7.5   ] h
+Sleep quality       [1] [2] [3] [4] [5]   (5-button radio, optional)
+
+── Vitals ──────────────────────────────
+HRV                 [      ] ms           (optional)
+Resting Heart Rate  [      ] bpm          (optional)
+
+── Activity ────────────────────────────
+Steps               [      ]              (optional)
+Energy level        [1] [2] [3] [4] [5]   (5-button radio, optional)
+
+[Cancel]   [Save]
+```
+
+- All fields optional. Save button enabled when at least one field is filled.
+- Sleep quality and energy level use a 5-button radio group (not a slider) — one `<button>` per value, visually toggled.
+- On open: if `prefillRow` is set, populate from it; otherwise call `getHealthCheckInForDate(subject, today)`.
+- On success: `toast.success("Health check-in saved.")`, call `onSaved()`.
+- Use `Dialog` from `@/components/ui/responsive-modal`.
+
+---
+
+#### PART VI — Sidebar Nav
+
+**`lib/auth/route-access.ts`:**
+
+1. Add `"activity"` to the `SidebarItemConfig` icon union.
+2. Add `"/check-in"` to both `AUTH_ONLY_PREFIXES` and `USER_PREFIXES`.
+3. Add to the `"Insights"` section in `USER_WORKSPACE_SECTIONS`:
+
+```ts
+{ title: "Health Check-in", href: "/check-in", icon: "activity" },
+```
+
+**`components/layout/app-sidebar.tsx`:**
+
+```ts
+// Add to iconMap:
+activity: Activity,   // import { Activity } from "lucide-react"
+```
+
+---
+
+#### Checklist
+
+- [ ] Migration: `subject_user_id` + `subject_client_id` added to `sleep_log`, `vitals_log`, `daily_activity`; backfill from `user_id`; check constraint; RLS updated
+- [ ] `logDailyHealthAction(subject, input)`: parallel upserts; skips tables with no filled fields; `supabase as any`; `isMissingSchemaDependencyError` guard on each
+- [ ] `getHealthCheckIns(subject, range)`: merges rows from all three tables by date; `supabase as any`; returns `[]` if tables missing
+- [ ] `getHealthCheckInForDate(subject, date)`: single merged row for pre-population
+- [ ] `/check-in` page: header + controls render immediately (no skeleton); only table area skeletons
+- [ ] `SubjectSelector`: hidden when user has 0 active clients (same component as A-034, shared in `components/shared/subject-selector`)
+- [ ] `HealthLogTable`: TanStack table, 8 columns, sort `date DESC`, page size 20, skeleton on load (headers visible)
+- [ ] `LogHealthDialog`: 5-button radio for quality/energy; pre-populates from `prefillRow` or date lookup; save disabled if all empty; toast on success
+- [ ] `lib/auth/route-access.ts`: `/check-in` in prefixes + sidebar entry; `"activity"` in icon union
+- [ ] `app-sidebar.tsx`: `activity: Activity` added to `iconMap`
+- [ ] `npm run typecheck && npm run lint` → pass
+- [ ] Manual QA: log 7.5h sleep + HRV 62ms → row appears in table; `/progress` Recovery tile updates
+- [ ] Manual QA (coach): switch to client → log check-in → appears under that client's history only
+
+### [A-036] Habit Goals
+
+- Priority: Medium
+- Depends on: A-031 (compliance card must be live)
+- Status: Queued
+- Files:
+  - UPDATE: `components/coach-tools/client-goals-medical-tab.tsx` — add "habit" to goal categories
+  - NEW: `app/actions/habit-checkin.ts` — check-in action
+  - UPDATE: `components/progress/overview/compliance-recovery-card.tsx` — inline check-in UI
+
+---
+
+#### Context
+
+The progress page's Compliance card already reads `habits` from `getComplianceRecovery`. The `habits` array is populated from `fitness_goals` rows where `goal_type = "habit"` and `is_personal_goal = true`. The `completed_today` boolean and `streak_days` are already computed server-side. The only missing pieces are:
+
+1. A way to **create** a habit goal (add `"habit"` to the goal categories in the existing goals form)
+2. A way to **check in** daily (a button/checkbox in the Compliance card)
+
+**No migration required.** `goal_progress_history` already supports this — a check-in is just an insert with `progress_percent: 100`, `source: "manual"`, `snapshot_at: today`.
+
+---
+
+#### PART I — Add "habit" goal type to creation form
+
+**File:** `components/coach-tools/client-goals-medical-tab.tsx`
+
+Change:
+```ts
+const GOAL_CATEGORIES = ["weight", "muscle_gain", "strength", "performance", "nutrition", "custom"] as const;
+```
+to:
+```ts
+const GOAL_CATEGORIES = ["weight", "muscle_gain", "strength", "performance", "nutrition", "habit", "custom"] as const;
+```
+
+**UX note for habit goals in the form:** When `goal_type === "habit"`, the `custom_description` field becomes the habit name ("Drink 2L water", "Stretch 10 mins", etc.). The `start_value`, `target_value`, and `unit` fields should be hidden — habits don't have numeric targets. Show only: name (`custom_description`), notes, start date. Conditionally hide the value fields when `goal_type === "habit"` is selected in the form.
+
+---
+
+#### PART II — Check-in Action (`app/actions/habit-checkin.ts`)
+
+```ts
+"use server";
+
+export async function checkInHabitAction(
+  goalId: string,
+  date: string   // YYYY-MM-DD
+): Promise<void>
+```
+
+- Verify the goal belongs to `auth.uid()` and `goal_type = "habit"`.
+- Check if a `goal_progress_history` row already exists for `(goal_id, date prefix on snapshot_at)` — if yes, do nothing (idempotent).
+- If no existing row, insert:
+
+```ts
+{
+  goal_id: goalId,
+  user_id: userId,
+  recorded_by_user_id: userId,
+  snapshot_at: `${date}T12:00:00.000Z`,
+  progress_percent: 100,
+  source: "manual",
+  status: "active",
+}
+```
+
+- Wrap in `runTrackedAction` with event name `"habit.checkin"`.
+
+---
+
+#### PART III — Inline check-in in `ComplianceRecoveryCard`
+
+The `habits` array already contains `{ id, name, completed_today, streak_days, completion_pct_range }`. Update the habit row UI to include a check-in button:
+
+```
+[✓]  Drink 2L water     🔥 5-day streak     83% this period
+[○]  Stretch 10 mins    🔥 0-day streak     40% this period
+```
+
+- `[✓]` = green filled checkbox (completed today) — disabled, non-interactive
+- `[○]` = empty checkbox — on click calls `checkInHabitAction(habit.id, today)`
+- After check-in: optimistically set `completed_today = true` in local state + invalidate `complianceRecovery` query in background
+- If `habits` array is empty: show empty state — `"No habit goals yet."` with a link to `/goals` (`<Link href="/goals">Set up habits →</Link>`)
+
+---
+
+#### Checklist
+
+- [ ] `GOAL_CATEGORIES` updated to include `"habit"` — goal form conditionally hides value fields when habit type selected
+- [ ] `app/actions/habit-checkin.ts`: `checkInHabitAction` — idempotent insert to `goal_progress_history`
+- [ ] `ComplianceRecoveryCard`: habit rows show check-in button; completed today shows filled indicator; empty state with link to goals
+- [ ] Optimistic update on check-in + background query invalidation
+- [ ] `npm run typecheck && npm run lint` → pass
+- [ ] Manual QA: create a habit goal from goals page → appears in Compliance card habits section
+- [ ] Manual QA: tap check-in → checkbox fills immediately, streak increments on next load
 
 ---
 
@@ -15404,3 +16442,1202 @@ Once the migrations above are finalized and the schema is stable, remove all `is
 
 - `npm run -s typecheck` -> pass
 - `npm run -s lint` -> pass
+
+### [E-078] A-031 implementation — My Progress overview dashboard revamp (2026-03-21)
+
+- Linked architect item: A-031
+- Status: Implemented
+
+#### Scope implemented
+
+- Replaced legacy `/progress` drill-down page with the new overview dashboard architecture:
+  - Header + actions (`Nutrients`, disabled Share/Export)
+  - Filter bar (`7d/30d/90d`, training type select, compare toggle)
+  - Stats bar (8 tiles including VO2 Max)
+  - Training Load & Status full-width card
+  - Insights full-width section
+  - Row 1: Body Composition + Strength Progress
+  - Row 2: Cardio Progress + Compliance & Recovery
+  - Row 3: Muscle Focus + Workout Calendar
+
+- Added new server-action module:
+  - `app/actions/progress-overview.ts`
+  - Implemented actions:
+    - `getProgressSummaryStats(range, trainingType)`
+    - `getProgressInsights(range, trainingType)`
+    - `getBodyCompositionSeries(range, offsetPeriods)`
+    - `getStrengthProgressSeries(range, offsetPeriods)`
+    - `getCardioProgressSeries(range, trainingType, offsetPeriods)`
+    - `getComplianceRecovery(range)`
+    - `getTrainingLoad(range)`
+  - Included compare-period support via `offsetPeriods` for chart overlays.
+  - Applied resolved Q-004 semantics for training filters (`all/strength/cardio/mixed`) at session-join classification level.
+
+- Added all A-031 overview components:
+  - `components/progress/overview/progress-filter-bar.tsx`
+  - `components/progress/overview/progress-stats-bar.tsx`
+  - `components/progress/overview/progress-insights.tsx`
+  - `components/progress/overview/body-composition-card.tsx`
+  - `components/progress/overview/strength-progress-card.tsx`
+  - `components/progress/overview/cardio-progress-card.tsx`
+  - `components/progress/overview/compliance-recovery-card.tsx`
+  - `components/progress/overview/training-load-card.tsx`
+  - `components/progress/overview/muscle-focus-card.tsx`
+  - `components/progress/overview/workout-calendar-card.tsx`
+
+- Updated query keys:
+  - `lib/query-keys-progress.ts`
+  - Added `progressOverviewKeys` namespace for all new overview queries.
+
+#### DB + types
+
+- Added combined body-measurement migration (Q-003 resolution):
+  - `supabase/migrations/20260321224500_progress_overview_body_measurements.sql`
+  - Columns ensured with `if not exists`:
+    - `hips_cm`, `chest_cm`, `neck_cm`, `bicep_left_cm`, `bicep_right_cm`, `thigh_left_cm`, `thigh_right_cm`, `calf_cm`
+  - Included safe backfill for new thigh/calf split fields from existing aggregate columns (`thighs_cm`, `calves_cm`).
+
+- Updated `types/database.ts` for `body_measurements` Row/Insert/Update:
+  - Added: `bicep_left_cm`, `bicep_right_cm`, `thigh_left_cm`, `thigh_right_cm`, `calf_cm`
+
+#### Important implementation notes
+
+- Q-005 applied: all personal-goal logic uses `fitness_goals.is_personal_goal`.
+- Q-006 applied: compare mode is chart overlay only; KPI tiles and insight card generation remain current-period focused.
+- Q-007 applied: all Recharts `<Line>` use explicit dot objects (`dot={{ r: 2.5, ... }}` + `activeDot={{ r: 4 }}`), avoiding isolated-point disappearance.
+
+- Monitoring-table resilience:
+  - Current DB branch contains historical migrations that dropped some monitoring tables (`daily_activity`, `sleep_log`, `vitals_log`, `daily_biofeedback`) in earlier cleanup phases.
+  - The implementation therefore uses graceful fallback behavior:
+    - if table exists -> real values are used;
+    - if missing schema dependency is detected -> returns `null`/empty-state values without throwing.
+
+#### Validation
+
+- `npm run -s typecheck` -> pass
+- `npm run -s lint` -> pass
+- `npm run -s test` -> pass (36/36)
+
+### [E-079] A-031-FIX implementation — architect-mandated progress fixes (2026-03-21)
+
+- Linked architect item: A-031-FIX
+- Status: Implemented
+
+#### Fixes delivered
+
+- FIX 1 (RHR min-per-day):
+  - `app/actions/progress-overview.ts`
+  - updated `getComplianceRecovery` vitals aggregation from max-per-day to min-per-day:
+    - `if (!current || rhr < current) ...`
+
+- FIX 2 (bounded PR history window):
+  - `app/actions/progress-overview.ts`
+  - updated `getProgressInsights` PR-detection prior sessions query:
+    - added `.gte("performed_on", subtractDays(currentWindow.startDate, 730))`
+    - kept upper bound `.lt("performed_on", currentWindow.startDate)`
+
+- FIX 3 (remove nested training-load fetch from insights):
+  - `app/actions/progress-overview.ts`
+  - removed from `getProgressInsights`:
+    - `computeTrainingLoadDataInternal(...)` call
+    - "High Training Load" insight block using nested load fetch
+  - `components/progress/overview/training-load-card.tsx`
+  - added local derived warning banner when:
+    - `fitness_score > 0` and `fatigue_score > fitness_score * 1.5`
+
+- FIX 4 (migration bicep backfill):
+  - `supabase/migrations/20260321224500_progress_overview_body_measurements.sql`
+  - added:
+    - `bicep_left_cm = coalesce(bicep_left_cm, arms_cm)`
+    - `bicep_right_cm = coalesce(bicep_right_cm, arms_cm)`
+  - expanded `where` clause null checks to include bicep columns.
+
+- FIX 5 (stable muscle-balance query key):
+  - `app/(dashboard)/(insights)/progress/page.tsx`
+  - changed query key from `progressOverviewKeys.muscleBalance(range)` to `progressOverviewKeys.muscleBalance("all")`.
+
+#### Validation
+
+- `npm run -s typecheck` -> pass
+- `npm run -s lint` -> pass
+
+### [E-080] Exercise category + muscle focus alignment and real workout-based progress focus (2026-03-21)
+
+- Linked request: include muscle focus (`Push`/`Pull`/`Legs`/`Core`) in exercise catalog category presentation and ensure `/progress` Muscle Focus uses real workout data.
+- Status: Implemented
+
+#### Exercise catalog updates
+
+- `lib/exercises/muscle-groups.ts`
+  - added reusable focus classifier:
+    - `inferMuscleFocus({ category, muscleGroups, exerciseName })`
+    - `formatCategoryWithMuscleFocus({ category, muscleGroups, exerciseName })`
+  - upgraded `withParentMuscleGroups(...)`:
+    - still injects parent anatomy group (`chest/back/legs/...`)
+    - now also appends normalized focus tag (`push/pull/legs/core`) when inferable.
+
+- `components/exercises/exercises-list.tsx`
+  - category label now displays category + focus (example: `Chest · Push`) in the catalog rows.
+
+- `app/(dashboard)/(training)/exercises/[id]/page.tsx`
+  - exercise detail category/type now uses the same category+focus formatter for consistency with catalog.
+
+#### Progress Muscle Focus (real data) updates
+
+- `app/actions/progress-overview.ts`
+  - `StrengthProgressData` now includes `focus_distribution`.
+  - `getStrengthProgressSeries(...)` now computes workout-derived focus split from real `strength_sets`:
+    - joins exercise metadata (`category`, `muscle_groups`) from `exercise_catalog`
+    - classifies each set with `inferMuscleFocus(...)`
+    - aggregates focus score by `Push/Pull/Legs/Core`
+    - computes `%` distribution for the active period.
+
+- `app/(dashboard)/(insights)/progress/page.tsx`
+  - removed dependency on legacy `getMuscleBalance()` query.
+  - `MuscleFocusCard` now receives focus distribution from `strengthQuery.data.focus_distribution` (same active filter/range as the page).
+
+- `lib/query-keys-progress.ts`
+  - removed unused legacy `muscleBalance` query keys after the `/progress` refactor.
+
+- `components/progress/overview/muscle-focus-card.tsx`
+  - refactored to render:
+    - focus split bars (`Push/Pull/Legs/Core`) from real workout distribution
+    - top muscle groups from period volume
+  - keeps safe fallback derivation from muscle-volume rows when needed.
+
+#### Performance impact
+
+- removed one extra `/progress` query (`getMuscleBalance`) and reused existing strength query payload.
+- ensures muscle focus visualization is period-aligned with current filters and derived from actual workout sets.
+
+#### Validation
+
+- `npm run -s typecheck` -> pass
+- `npm run -s lint` -> pass
+
+### [E-081] Exercise muscle-focus source-of-truth hardening (2026-03-22)
+
+- Linked request: store focus directly in `exercise_catalog.muscle_groups` (`push`, `pull`, `core`, `leg`) and remove runtime remapping from progress.
+- Status: Implemented
+
+#### Data model + backfill
+
+- Added migration:
+  - `supabase/migrations/20260322090500_exercise_muscle_focus_backfill.sql`
+  - behavior:
+    - normalizes existing `muscle_groups` tokens (lowercase/trim)
+    - backfills one explicit focus tag (`push`/`pull`/`leg`/`core`) for rows missing focus
+    - deduplicates final array values.
+
+#### Server-side write path
+
+- `app/actions/exercises.ts`
+  - create/update now enforce focus-tag presence for non-cardio exercises:
+    - requires one of `push`, `pull`, `core`, `leg` in `muscle_groups`
+    - throws explicit validation error if missing.
+
+- `lib/exercises/muscle-groups.ts`
+  - removed focus inference regex/keyword scoring logic.
+  - added direct helpers based on stored tags only:
+    - `extractMuscleFocusTag({ muscleGroups })`
+    - `hasMuscleFocusTag(muscleGroups)`
+  - `formatCategoryWithMuscleFocus` now reads focus strictly from stored `muscle_groups` tags.
+  - `withParentMuscleGroups` keeps normalization/parent-group behavior but no longer infers or injects focus via mapping logic.
+
+#### Progress page (no runtime remap)
+
+- `app/actions/progress-overview.ts`
+  - `focus_distribution.focus` type moved to lowercase canonical tags: `push|pull|leg|core`.
+  - focus split aggregation now reads only explicit focus tags from `exercise_catalog.muscle_groups` via `extractMuscleFocusTag`.
+  - removed category/name-based fallback mapping from the aggregation path.
+
+- `components/progress/overview/muscle-focus-card.tsx`
+  - removed regex fallback derivation from muscle-volume labels.
+  - card now renders focus chart from `focus_distribution` only.
+  - shows guidance message when focus data is missing.
+
+- `app/actions/progress.ts`
+  - removed legacy `getMuscleBalance()` action (old regex-based focus remap path).
+
+#### Exercise UI
+
+- `components/exercises/exercises-sheet.tsx`
+  - updated muscle-group helper text and placeholder to require explicit focus tag input for strength exercises.
+
+#### Validation
+
+- `npm run -s typecheck` -> pass
+- `npm run -s lint` -> pass
+
+### [E-082] Muscle-group canonicalization: `legs` only (2026-03-22)
+
+- Linked request: remove `leg`/`legs` inconsistency in `exercise_catalog.muscle_groups` and use one canonical value platform-wide.
+- Status: Implemented
+
+#### Canonical decision
+
+- Canonical focus token is now: `legs` (plural).
+- Supported focus set: `push`, `pull`, `legs`, `core`.
+
+#### Code updates
+
+- `lib/exercises/muscle-groups.ts`
+  - canonical focus order changed to `push|pull|legs|core`.
+  - normalization alias `leg -> legs` added so user input is normalized consistently.
+
+- `app/actions/progress-overview.ts`
+  - `focus_distribution.focus` type updated to `push|pull|legs|core`.
+  - focus aggregation map/series keys updated from `leg` to `legs`.
+
+- `components/progress/overview/muscle-focus-card.tsx`
+  - focus row type updated to `legs`.
+  - UI guidance and labels updated to show `legs`.
+
+- `app/actions/exercises.ts`
+  - validation messages updated to require `push|pull|core|legs`.
+
+- `components/exercises/exercises-sheet.tsx`
+  - helper text updated from `leg` to `legs`.
+
+#### Database updates
+
+- Updated migration:
+  - `supabase/migrations/20260322090500_exercise_muscle_focus_backfill.sql`
+  - backfill now writes `legs` (not `leg`) and checks canonical focus set.
+
+- Added normalization migration:
+  - `supabase/migrations/20260322093000_normalize_exercise_focus_legs.sql`
+  - converts existing `leg` tokens to `legs` and deduplicates `muscle_groups`.
+
+#### Validation
+
+- `npm run -s typecheck` -> pass
+- `npm run -s lint` -> pass
+
+### [E-083] Remove hardcoded muscle-group inference mapping (DB-driven tags only) (2026-03-22)
+
+- Linked request: remove hardcoded category/muscle mapping and make behavior fully dynamic from DB values.
+- Status: Implemented
+
+#### Changes
+
+- `lib/exercises/muscle-groups.ts`
+  - removed hardcoded parent-group inference map (`MAIN_GROUP_CANDIDATES_BY_TAG`) and related constants.
+  - removed alias-based semantic mapping for muscle tags.
+  - `withParentMuscleGroups(...)` now only:
+    - normalizes token format (`trim`, lowercase, underscore format)
+    - deduplicates tags
+    - returns exactly DB-driven tags (no injected parent/focus tags).
+
+- Runtime effect:
+  - no code-side remapping of muscle intent.
+  - focus extraction now depends strictly on explicit stored focus tags in `exercise_catalog.muscle_groups` (`push|pull|legs|core`).
+  - taxonomy adjustments now require DB data updates only (no code mapping edits).
+
+#### Validation
+
+- `npm run -s typecheck` -> pass
+- `npm run -s lint` -> pass
+
+### [E-084] Cardio Progress correctness pass (date normalization + weighted daily calculations) (2026-03-22)
+
+- Linked request: verify Cardio Progress values against design expectations; ensure no hardcoded chart data and correct calculations.
+- Status: Implemented
+
+#### Issues found
+
+- Tooltip/X-axis were rendering full timestamp values when cardio date rows included time (`YYYY-MM-DDTHH:mm:ss...`).
+- Daily cardio metrics were computed with per-session averaging:
+  - distance as average distance/session/day
+  - pace as average of per-session paces
+  - HR as unweighted average of per-session HR
+  This can drift from expected daily performance values.
+
+#### Fixes applied
+
+- `app/actions/progress-overview.ts` (`getCardioProgressSeries`)
+  - normalized each cardio row date to day key with `toIsoDay(row.date)`.
+  - changed daily aggregation to:
+    - `distance_km`: **daily total distance**
+    - `pace_min_per_km`: **daily weighted pace** (`total_duration / total_distance`)
+    - `avg_hr_bpm`: **duration-weighted HR** (fallback to simple mean only if duration is missing).
+
+- `components/progress/overview/cardio-progress-card.tsx`
+  - hardened `formatDate(...)` for timestamp-safe formatting.
+  - added tooltip `labelFormatter` to show MM-DD instead of raw ISO timestamp.
+
+#### Data integrity note
+
+- Chart series values are sourced from real user data (`training_sessions` + `cardio_sessions`), not hardcoded point arrays.
+- Only deterministic constants remain (visual colors and formula thresholds), not static/mock metric values.
+
+#### Validation
+
+- `npm run -s typecheck` -> pass
+- `npm run -s lint` -> pass
+
+### [E-085] Workout execution model rollout (explicit adherence logging) (2026-03-22)
+
+- Linked request: implement explicit `Log workout today` model so streak/adherence no longer depends on workout status.
+- Status: Implemented (code + migration authored; migration pending apply in target DB).
+
+#### DB / migration
+
+- Added migration:
+  - `supabase/migrations/20260322123000_workout_execution_model.sql`
+- Includes:
+  - new `public.workout_executions`
+  - new `public.workout_execution_exercises`
+  - new `public.exercise_prs`
+  - new optional `execution_id` on `strength_sets` and `cardio_sessions`
+  - indexes for subject/date and execution joins
+  - quick-log dedupe unique index per template+subject+day
+  - RLS policies for all new tables (self/coach/sysadmin model)
+  - trigger-based PR materialization from `strength_sets`
+  - backfill from historical completed sessions into execution tables + PR table
+
+#### Workout actions
+
+- `app/actions/workout.ts`
+  - added `listWorkoutExecutionSubjectsAction(...)` (search + pagination for self/clients).
+  - added `logWorkoutExecutionAction(...)` (explicit quick-log execution create).
+  - `createWorkoutAction(...)` now creates execution rows only when workout contains logs.
+  - `updateWorkoutAction(...)` now creates an execution row when logs are added and none exists.
+  - set/cardio inserts now carry `execution_id` when available.
+  - execution exercise rollup sync added after log writes.
+  - dedupe logic for quick-log stabilized (null-safe subject matching).
+
+#### Workout UI / hooks
+
+- `hooks/use-workout.ts`
+  - added `useWorkoutExecutionSubjects(...)`
+  - added `useLogWorkoutExecutionMutation(...)`
+  - added `flattenWorkoutExecutionSubjectPages(...)`
+
+- `app/(dashboard)/(training)/workouts/[id]/page.tsx`
+  - added `Log Today` action (desktop button + mobile menu item).
+  - added responsive log modal with:
+    - assigned subject picker (search + load more)
+    - performed date
+    - optional notes
+  - mutation wired with loading/success/error toast feedback.
+
+#### Workflow status scoping
+
+- `components/workout/workout-status-select.tsx`
+  - status list reduced to workflow lifecycle: `draft`, `active`, `archived`.
+  - legacy `completed` values normalize to `active` for display/edits.
+
+- `app/(dashboard)/(training)/workouts/page.tsx`
+  - removed `completed` filter from list UI.
+  - legacy `completed` rows normalize into `active` bucket.
+
+#### Progress/adherence source switch
+
+- `app/actions/progress-overview.ts` (`getComplianceRecovery`)
+  - day streak source switched to `workout_executions.performed_on` when available.
+  - workouts-per-week source switched to execution dates when available.
+  - workout calendar now prefers execution + execution_exercises for strength/cardio flags.
+  - automatic fallback to legacy `training_sessions` logic if execution schema is missing.
+
+#### Workers
+
+- `lib/inngest/functions/sync-goal-from-workout.ts`
+  - now scopes strength-set fetch by `execution_id` when present (falls back to `workout_id`).
+  - avoids cross-run contamination when multiple executions share one workout template.
+
+- `lib/inngest/functions/send-reminders.ts`
+  - activity detection switched to `workout_executions` (with safe fallback to `training_sessions` if schema unavailable).
+
+#### Validation
+
+- `npm run build` -> pass
+
+### [E-101] Duplication removal pass (coach payments read/dashboard paths) (2026-03-23)
+
+- Linked request: continue autonomous dedupe sweep in coach-tools payment read paths.
+- Status: Implemented.
+
+#### 1) Reused shared billing/payment-log read helpers in dashboard flow
+
+- `app/actions/coach-tools.ts` (`listCoachPaymentsDashboardAction`)
+  - replaced duplicated raw table queries + per-query missing-table checks with existing shared helpers:
+    - `listCoachBillingPlans(...)`
+    - `listCoachPaymentLogsForDate(...)`
+    - `countCoachPaymentLogsSince(...)`
+  - fallback semantics preserved:
+    - billing plans missing -> `features.billing_plans_available = false`
+    - payment logs missing -> `features.payment_logs_available = false`
+    - count KPIs return `0` when payment logs table is unavailable.
+  - removed repeated error branching around `plansRes/todayLogsRes/week/month` results.
+
+#### 2) Reused shared today-log helper in today-log action
+
+- `app/actions/coach-tools.ts` (`getTodayLogsAction`)
+  - now calls `listCoachPaymentLogsForDate(...)` with `allowMissingTableFallback: true`.
+  - removed duplicated query + fallback branch for `payment_logs`.
+
+#### 3) Dead-code cleanup
+
+- `app/actions/coach-tools.ts`
+  - removed now-unused helper functions:
+    - `isMissingBillingPlansError(...)`
+    - `isMissingPaymentLogsError(...)`
+    - `shouldUseBillingPlansFallbackOrThrow(...)`
+
+#### 4) Behavior guarantee
+
+- No API contract changes.
+- No schema/database changes.
+- No route/URL changes.
+- Dashboard and today-log behavior preserved; duplication removed by reusing existing shared helpers.
+
+#### Validation
+
+- `npm run build` -> pass
+
+### [E-100] Duplication removal pass (coach payments mutation scaffolding) (2026-03-23)
+
+- Linked request: continue dedupe sweep in coach tooling payment mutations.
+- Status: Implemented.
+
+#### 1) Shared payment payload + row helpers
+
+- `app/actions/coach-tools.ts`
+  - added:
+    - `buildClientPaymentInsertPayload(...)`
+    - `buildClientPaymentDetailsUpdatePayload(...)`
+    - `insertClientPaymentRow(...)`
+    - `deleteClientPaymentRow(...)`
+    - `updateClientPaymentRow(...)`
+    - `revalidateCoachClientFromPayment(...)`
+
+#### 2) Rewired payment mutation actions
+
+- `recordClientPaymentAction(...)`
+  - now uses shared insert payload builder + row insert helper + client revalidate helper.
+
+- `deleteClientPaymentAction(...)`
+  - now uses shared delete-row helper + client revalidate helper.
+
+- `updateClientPaymentStatusAction(...)`
+  - now uses shared row update helper + client revalidate helper.
+
+- `updateClientPaymentDetailsAction(...)`
+  - now uses shared details-update payload builder + row update helper + client revalidate helper.
+
+#### 3) Behavior guarantee
+
+- No API contract changes.
+- No schema/database changes.
+- No route/URL changes.
+- Existing payment mutation behavior preserved.
+- Refactor only: duplicate mutation query/revalidate scaffolding centralized.
+
+#### Validation
+
+- `npm run build` -> pass
+
+### [E-099] Duplication removal pass (coach check-ins + notes mutation scaffolding) (2026-03-23)
+
+- Linked request: continue dedupe sweep on mutation scaffolding in coach tooling.
+- Status: Implemented.
+
+#### 1) Shared mutation payload builders + row helpers
+
+- `app/actions/coach-tools.ts`
+  - added check-in helpers:
+    - `assertCheckinSubjectTarget(...)`
+    - `buildCheckinInsertPayload(...)`
+    - `buildCheckinUpdatePayload(...)`
+    - `insertClientCheckinRow(...)`
+    - `updateClientCheckinRow(...)`
+    - `emitCheckinSubmitted(...)`
+  - added note helpers:
+    - `resolveCoachNoteVisibility(...)`
+    - `buildCoachNoteInsertPayload(...)`
+    - `buildCoachNoteUpdatePayload(...)`
+    - `insertCoachNoteRow(...)`
+    - `updateCoachNoteRow(...)`
+
+#### 2) Rewired check-in mutation actions
+
+- `createClientCheckinAction(...)`
+  - now uses shared subject validation, insert payload builder, row insert helper, and event emitter.
+
+- `updateClientCheckinAction(...)`
+  - now uses shared update payload builder + row update helper.
+
+#### 3) Rewired note mutation actions
+
+- `createCoachNoteAction(...)`
+  - now uses shared visibility resolution and insert payload/row helpers.
+
+- `updateCoachNoteAction(...)`
+  - now uses shared update payload builder + row update helper.
+
+#### 4) Behavior guarantee
+
+- No API contract changes.
+- No schema/database changes.
+- No route/URL changes.
+- Existing visibility/check-in status semantics preserved.
+- Refactor only: duplicate mutation payload/query/event scaffolding centralized.
+
+#### Validation
+
+- `npm run build` -> pass
+
+### [E-098] Duplication removal pass (coach check-ins + notes read paths) (2026-03-23)
+
+- Linked request: continue dedupe sweep in coach tooling read/list paths.
+- Status: Implemented.
+
+#### 1) Shared check-in and note row loaders
+
+- `app/actions/coach-tools.ts`
+  - added:
+    - `fetchClientCheckinsByClientId(...)`
+    - `fetchCoachNotesByClientId(...)`
+  - both helpers centralize:
+    - filter predicates by client
+    - ordering strategy
+    - query error handling
+
+#### 2) Rewired duplicated list actions
+
+- `listClientCheckinsAction(...)`
+  - now calls `fetchClientCheckinsByClientId(...)`.
+
+- `listCoachNotesAction(...)` (and alias `listClientNotesAction(...)`)
+  - now calls `fetchCoachNotesByClientId(...)`.
+
+#### 3) Behavior guarantee
+
+- No API contract changes.
+- No schema/database changes.
+- No route/URL changes.
+- Existing filtering and sort behavior preserved.
+- Refactor only: duplicate list query scaffolding centralized.
+
+#### Validation
+
+- `npm run build` -> pass
+
+### [E-097] Duplication removal pass (coach client workout session reads) (2026-03-23)
+
+- Linked request: continue dedupe sweep on coach workout/session paths.
+- Status: Implemented.
+
+#### 1) Shared coach client session-range helper
+
+- `app/actions/coach-tools.ts`
+  - added:
+    - `fetchClientSessionsByPerformedRange(...)`
+  - encapsulates shared query scaffolding for `training_sessions` by:
+    - `subject_client_id`
+    - `performed_on` date boundaries
+    - stable session ordering (`started_at`, optional `performed_on` sort)
+
+#### 2) Rewired duplicate read actions
+
+- `listClientTodaySessionsAction(...)`
+  - now reuses `fetchClientSessionsByPerformedRange(...)` with `startDate === endDate === today`.
+
+- `listClientSessionsByRangeAction(...)`
+  - now reuses `fetchClientSessionsByPerformedRange(...)` with explicit range + `performed_on` ascending sort.
+
+#### 3) Behavior guarantee
+
+- No API contract changes.
+- No schema/database changes.
+- No route/URL changes.
+- Existing session ordering and filters preserved.
+- Refactor only: duplicate query/error scaffolding centralized.
+
+#### Validation
+
+- `npm run build` -> pass
+
+### [E-096] Duplication removal pass (shared workout mutation module across files) (2026-03-23)
+
+- Linked request: continue dedupe sweep beyond local action files.
+- Status: Implemented.
+
+#### 1) New shared cross-file workout mutation helper module
+
+- Added:
+  - `lib/training/workout-mutation-helpers.ts`
+- Exposed shared helpers:
+  - `insertWorkoutExerciseRows(...)`
+  - `replaceWorkoutExerciseRows(...)`
+  - `revalidateTrainingWorkoutPaths(...)`
+  - `emitTrainingWorkoutCompleted(...)`
+
+#### 2) Reused shared helpers in `workout.ts`
+
+- `app/actions/workout.ts`
+  - removed local duplicate implementations for:
+    - strength/cardio row insertion
+    - row replacement (delete+insert)
+    - workout/goals/progress revalidate path fan-out
+    - `training/workout.completed` event payload emit
+  - now imports and uses shared module helpers in:
+    - `createWorkoutAction(...)`
+    - `updateWorkoutAction(...)`
+    - `logWorkoutExecutionAction(...)`
+    - `deleteWorkoutAction(...)`
+
+#### 3) Reused shared helpers in `coach-tools.ts`
+
+- `app/actions/coach-tools.ts`
+  - `logClientWorkoutAction(...)` now uses shared module helpers for:
+    - strength/cardio row insertion
+    - `training/workout.completed` event emit
+    - `/workouts` revalidation
+  - removed duplicated inline insertion/event/revalidate blocks in this path.
+
+#### 4) Behavior guarantee
+
+- No API contract changes.
+- No schema/database changes.
+- No route/URL changes.
+- Existing mutation behavior preserved; only shared scaffolding centralized across files.
+
+#### Validation
+
+- `npm run build` -> pass
+
+### [E-095] Duplication removal pass (workout actions scaffold) (2026-03-23)
+
+- Linked request: continue dedupe sweep after quick-actions refactor.
+- Status: Implemented.
+
+#### 1) Shared workout action helpers extracted
+
+- `app/actions/workout.ts`
+  - added:
+    - `requireWorkoutActor(...)`
+    - `insertWorkoutLogRows(...)`
+    - `replaceWorkoutLogRows(...)`
+    - `revalidateWorkoutMutationPaths(...)`
+    - `emitWorkoutCompletedEvent(...)`
+
+#### 2) Auth/bootstrap dedupe across workout actions
+
+- Replaced repeated `createClient()` + `auth.getUser()` blocks with `requireWorkoutActor(...)` in:
+  - `getWorkoutExerciseLastSessionAction(...)`
+  - `createWorkoutAction(...)`
+  - `updateWorkoutAction(...)`
+  - `listWorkoutExecutionSubjectsAction(...)`
+  - `logWorkoutExecutionAction(...)`
+  - `deleteWorkoutAction(...)`
+
+#### 3) Mutation scaffold dedupe (create/update/log/delete)
+
+- `createWorkoutAction(...)`
+  - reuses `insertWorkoutLogRows(...)` and `emitWorkoutCompletedEvent(...)`.
+  - revalidation now centralized via `revalidateWorkoutMutationPaths(...)`.
+
+- `updateWorkoutAction(...)`
+  - replaced manual delete+insert log flow with `replaceWorkoutLogRows(...)`.
+  - event emission now via `emitWorkoutCompletedEvent(...)`.
+  - revalidation now via `revalidateWorkoutMutationPaths(...)`.
+
+- `logWorkoutExecutionAction(...)`
+  - revalidation moved to shared helper.
+
+- `deleteWorkoutAction(...)`
+  - auth and base revalidation moved to shared helpers.
+
+#### 4) Behavior guarantee
+
+- No API contract changes.
+- No schema/database changes.
+- No URL/route changes.
+- Existing workout mutation behavior preserved; duplicate scaffolding centralized only.
+
+#### Validation
+
+- `npm run build` -> pass
+
+### [E-094] Duplication removal pass (workout quick actions) (2026-03-23)
+
+- Linked request: continue dedupe sweep and reduce heavy/redundant action calls.
+- Status: Implemented.
+
+#### 1) Shared quick-action helpers extracted
+
+- `app/actions/workout-quick-actions.ts`
+  - added:
+    - `requireQuickActor()`
+    - `ensureOwnedWorkout(...)`
+    - `insertExerciseIntoWorkout(...)`
+    - `revalidateQuickWorkoutPaths(...)`
+
+#### 2) Removed nested action duplication
+
+- `createWorkoutWithExercise(...)`
+  - no longer calls `addExerciseToWorkout(...)` (which previously re-entered a second tracked action + auth/ownership query path).
+  - now creates workout + inserts selected exercise in the same action context.
+  - reduced duplicated DB checks and removed redundant tracked action hop.
+
+#### 3) Reused shared helper flow in add-exercise action
+
+- `addExerciseToWorkout(...)`
+  - now uses:
+    - `requireQuickActor()`
+    - `ensureOwnedWorkout(...)`
+    - `insertExerciseIntoWorkout(...)`
+    - `revalidateQuickWorkoutPaths(...)`
+  - removed repeated inline auth, ownership query, insert branches, and repeated revalidate calls.
+
+#### 4) Behavior guarantee
+
+- No API contract changes.
+- No schema/database changes.
+- No route/URL changes.
+- Existing quick-add/create behavior preserved; refactor centralizes duplicated scaffolding.
+
+#### Validation
+
+- `npm run build` -> pass
+
+### [E-093] Duplication removal pass (coach-tools roster + assignment sessions) (2026-03-22)
+
+- Linked request: continue strict dedupe cleanup in `coach-tools` after billing/goal refactors.
+- Status: Implemented.
+
+#### 1) Reused shared assignment/session helpers in client roster flow
+
+- `app/actions/coach-tools.ts`
+  - `listCoachClientsAction(...)`
+    - removed inline chunked assignment query/count logic.
+    - now reuses shared helper:
+      - `countActiveAssignmentsByClientId(supabase, coachId, clientIds)`
+
+#### 2) Reused shared assignment-session loader in assignments list
+
+- `app/actions/coach-tools.ts`
+  - `listClientAssignmentsAction(...)`
+    - removed duplicated chunked `client_plan_assignment_sessions` fetch loop.
+    - now reuses shared helper:
+      - `listAssignmentSessionsByAssignmentIds(supabase, assignmentIds)`
+
+#### 3) Reused shared assignment-session loader in next-session resolver
+
+- `app/actions/coach-tools.ts`
+  - `getClientNextSessionAction(...)`
+    - removed standalone direct session query path.
+    - now reuses:
+      - `listAssignmentSessionsByAssignmentIds(supabase, [assignment.id])`
+    - next unresolved session selection behavior remains unchanged.
+
+#### 4) Behavior guarantee
+
+- No API contract changes.
+- No schema/database changes.
+- No route/URL changes.
+- No sort/filter behavior changes.
+- Refactor only: duplicate chunk/query scaffolding centralized.
+
+#### Validation
+
+- `npm run build` -> pass
+
+### [E-092] Duplication removal pass (coach-tools billing + payment logs) (2026-03-22)
+
+- Linked request: continue strict duplication cleanup in `coach-tools` payment/billing domain.
+- Status: Implemented.
+
+#### 1) Shared billing helpers
+
+- `app/actions/coach-tools.ts`
+  - added:
+    - `isMissingBillingPlansError(...)`
+    - `isMissingPaymentLogsError(...)`
+    - `shouldUseBillingPlansFallbackOrThrow(...)`
+    - `shouldUsePaymentLogsFallbackOrThrow(...)`
+  - added reusable data access helpers:
+    - `getBillingPlanByIdForCoach(...)`
+    - `getActiveBillingPlanForClient(...)`
+    - `listBillingPlansForClient(...)`
+
+#### 2) Billing actions deduped
+
+- `updateBillingPlanAction(...)`
+  - now reuses `getBillingPlanByIdForCoach(...)` for current-plan load.
+
+- `renewPackageAction(...)`
+  - now reuses `getBillingPlanByIdForCoach(...)`.
+
+- `getClientBillingPlanAction(...)`
+  - now reuses `getActiveBillingPlanForClient(...)` with missing-table fallback mode.
+
+- `listClientBillingPlanHistoryAction(...)`
+  - now reuses `listBillingPlansForClient(...)` with missing-table fallback mode.
+
+- `logSessionAction(...)`
+  - now reuses `getActiveBillingPlanForClient(...)` for active-plan load.
+
+#### 3) Payment log fallback dedupe
+
+- `getTodayLogsAction(...)`
+  - now uses `shouldUsePaymentLogsFallbackOrThrow(...)` for missing-table fallback.
+
+- `listClientPaymentLogsAction(...)`
+  - now uses `shouldUsePaymentLogsFallbackOrThrow(...)` for missing-table fallback.
+
+- `getClientPaymentLogStatsAction(...)`
+  - removed repeated 3-branch missing-table fallback blocks.
+  - now uses `shouldUsePaymentLogsFallbackOrThrow(...)` and a single `emptyStats` fallback object.
+
+- `listCoachPaymentsDashboardAction(...)`
+  - now uses `isMissingBillingPlansError(...)` and `isMissingPaymentLogsError(...)` for missing-table detection.
+
+#### 4) Behavior guarantee
+
+- No API contract changes.
+- No schema/database changes.
+- No route/URL changes.
+- Existing billing/payment behavior preserved; duplicate scaffolding centralized.
+
+#### Validation
+
+- `npm run build` -> pass
+
+### [E-091] Duplication removal pass (coach-tools goal flows) (2026-03-22)
+
+- Linked request: continue strict duplication cleanup in the application.
+- Status: Implemented.
+
+#### 1) Shared goal helper extraction
+
+- `app/actions/coach-tools.ts`
+  - added shared constants/types:
+    - `GOAL_SELECTED_COLUMNS`
+    - `GoalListFallbackMode`
+  - added shared helpers:
+    - `revalidatePersonalGoalPaths()`
+    - `queryGoalsWithFallback(...)`
+    - `buildGoalsPayload(...)`
+    - `insertGoalWithFallback(...)`
+    - `updateGoalWithFallback(...)`
+
+#### 2) Client goal flow dedupe
+
+- `listClientGoalsAction(...)`
+  - removed duplicated inline goal-query fallback logic.
+  - now uses `queryGoalsWithFallback(...)` + `buildGoalsPayload(...)`.
+
+- `createClientGoalAction(...)`
+  - removed duplicated insert-fallback loop.
+  - now uses `insertGoalWithFallback(...)` with `retryOnRls: true`.
+
+- `updateClientGoalAction(...)`
+  - removed duplicated update-fallback loop.
+  - now uses `updateGoalWithFallback(...)`.
+
+#### 3) Self goal flow dedupe
+
+- `listMyGoalsAction(...)`
+  - removed duplicated inline goal-query fallback logic.
+  - now uses `queryGoalsWithFallback(...)` + `buildGoalsPayload(...)`.
+
+- `createMyGoalAction(...)`
+  - removed duplicated insert-fallback loop.
+  - now uses `insertGoalWithFallback(...)`.
+
+- `updateMyGoalAction(...)`
+  - removed duplicated update-fallback loop.
+  - now uses `updateGoalWithFallback(...)`.
+
+- `createMyGoalAction(...)`, `updateMyGoalAction(...)`, `deleteMyGoalAction(...)`
+  - now share `revalidatePersonalGoalPaths()` instead of repeated direct `revalidatePath(...)` calls.
+
+#### 4) Behavior guarantee
+
+- No API contract changes.
+- No schema/database changes.
+- No route/URL changes.
+- Existing goal behavior preserved; logic centralized only.
+
+#### Validation
+
+- `npm run build` -> pass
+
+### [E-090] Duplication removal pass (meal-groups + nutrition-manual) (2026-03-22)
+
+- Linked request: continue dedupe sweep, keep behavior unchanged, and reduce repeated query blocks.
+- Status: Implemented.
+
+#### 1) Meal groups dedupe
+
+- `app/actions/meal-groups.ts`
+  - added shared helper types:
+    - `SupabaseServerClient`
+    - `AssigneeClientLookupRow`
+    - `AssigneeProfileLookupRow`
+  - added `loadAssigneeLookupMaps(...)`:
+    - centralizes repeated clients/profiles lookup loading for assignee rendering.
+    - now reused by:
+      - `listMealGroupsAction`
+      - `listMealGroupAssignmentsAction`
+  - added assignment-shared helpers:
+    - `revalidateAssignmentMealGroupPaths(...)`
+    - `buildAssignmentActivityContext(...)`
+  - removed duplicated assignment revalidation/activity context blocks in:
+    - `assignMealGroupToSubjectAction`
+    - `updateMealGroupAssignmentAction`
+    - `archiveMealGroupAssignmentAction`
+
+#### 2) Nutrition manual dedupe
+
+- `app/actions/nutrition-manual.ts`
+  - added reusable aliases and constants:
+    - `SupabaseServerClient`
+    - `MealLogActivitySnapshot`
+    - `MEAL_LOG_ACTIVITY_SELECT`
+  - added shared helpers for meal-log post-mutation flow:
+    - `mealLogSubject(...)`
+    - `upsertComplianceForMealLog(...)`
+    - `buildMealItemActivityContext(...)`
+  - replaced duplicated compliance/activity context logic in:
+    - `updateMealItemAction`
+    - `removeMealItemAction`
+  - reused `MEAL_LOG_ACTIVITY_SELECT` in:
+    - `updateMealItemAction`
+    - `removeMealItemAction`
+    - `updateMealLogNotesAction`
+  - standardized several internal helper signatures to `SupabaseServerClient` for consistency.
+
+#### 3) Behavior guarantee
+
+- No API contract changes.
+- No schema changes.
+- No URL/path changes.
+- Existing mutation semantics preserved (dedupe only).
+
+#### Validation
+
+- `npm run build` -> pass
+
+#### Strict cleanup proposal (post-rollout)
+
+1. Remove remaining status-based completion semantics from legacy modules (`progress.ts`, old dashboard summaries, client portal adapters).
+2. Remove `training/workout.completed` emission from paths that do not upsert real performance metrics.
+3. Replace remaining PR/history scans with `exercise_prs` reads where page SLA is sensitive.
+4. Add shared execution-domain helper (subject resolution + dedupe + authorization) to eliminate duplicated action logic.
+5. Add execution analytics views/materialized rollups for O(1) streak/weekly cards and reduce repeated range scans.
+6. After rollout stabilization, deprecate legacy completion fields from UI copy (keep DB columns only if backward compatibility is required).
+
+### [E-086] Legacy cleanup + API call reduction (execution-first progress) (2026-03-22)
+
+- Linked request: remove legacy code and reduce heavy API calls.
+- Status: Implemented.
+
+#### 1) Progress page API fan-out reduction
+
+- `app/(dashboard)/(insights)/progress/page.tsx`
+  - replaced 11 separate React Query server-action calls with **one bundled query**.
+  - now uses `getProgressOverviewBundle(range, trainingType, compare)`.
+  - reduced client/server action round-trips and simplified loading state coordination.
+
+- `app/actions/progress-overview.ts`
+  - added `getProgressOverviewBundle(...)` returning a single payload:
+    - summary
+    - insights
+    - body composition (current/compare)
+    - strength (current/compare)
+    - cardio (current/compare)
+    - compliance (current/compare)
+    - training load (current/compare)
+
+- `lib/query-keys-progress.ts`
+  - added `progressOverviewKeys.bundle(range, trainingType, compare)`.
+
+#### 2) Compliance source cleanup (removed legacy completion fallback)
+
+- `app/actions/progress-overview.ts` (`getComplianceRecovery`)
+  - removed legacy fallback to `training_sessions.status/completed_at`.
+  - day streak now derived from `workout_executions.performed_on` only.
+  - workouts-per-week now derived from execution dates only.
+  - workout calendar now derived from:
+    - `workout_executions`
+    - `workout_execution_exercises`
+  - removed session/cardio/strength calendar fallback branches.
+
+#### 3) Worker cleanup
+
+- `lib/inngest/functions/send-reminders.ts`
+  - removed fallback to `training_sessions`.
+  - active-user reminder suppression now uses `workout_executions` only.
+
+#### 4) Server lifecycle hardening
+
+- `app/actions/workout.ts`
+  - added lifecycle status normalization in server actions.
+  - `completed` no longer re-enters via old callers; only `draft|active|archived` are persisted for lifecycle.
+
+#### 5) Legacy file removal
+
+- deleted `app/actions/progress.ts` (no remaining imports/usages).
+
+#### Validation
+
+- `npm run build` -> pass
+
+#### Notes for QA
+
+1. `/progress` should load with a single overview request pattern (client action fan-out removed).
+2. compliance streak and calendar should reflect explicit execution logs (not workout status).
+3. reminders should treat users as active based on `workout_executions` only.
+
+### [E-087] Execution-first refactor for summary/insights/training-load (2026-03-22)
+
+- Linked request: continue strict cleanup; remove remaining legacy completion logic and reduce heavy progress calls.
+- Status: Implemented.
+
+#### 1) Shared execution window loader
+
+- `app/actions/progress-overview.ts`
+  - replaced legacy session loader with `fetchExecutionWindowData(...)`.
+  - data source is now `workout_executions` (+ linked-client executions), not `training_sessions.status/completed_at`.
+  - strength/cardio joins now use `execution_id`.
+
+#### 2) Summary metrics cleanup
+
+- `getProgressSummaryStats(...)`
+  - session count now equals execution count in scope.
+  - `completion_pct` now uses **active day consistency**:
+    - distinct execution days / days in period.
+  - removed scheduled/completed status denominator logic.
+
+#### 3) Training-load cleanup
+
+- `computeTrainingLoadDataInternal(...)`
+  - now built from execution-window rows only.
+  - removed status/completed filters and standalone cardio fallback branches.
+  - TRIMP now computed per execution using execution-linked cardio + strength volume/RPE.
+
+#### 4) Insights cleanup
+
+- `getProgressInsights(...)`
+  - switched execution filtering from `workout_id` to `execution_id`.
+  - removed status-based completed-session gating.
+  - PR comparison now uses execution-window historical strength sets (no extra session-status path).
+
+#### 5) Cardio progress optimization
+
+- `getCardioProgressSeries(...)`
+  - removed extra direct `cardio_sessions` query for range.
+  - now reuses execution-window cardio rows and filters by included execution ids.
+  - fewer DB calls and consistent subject scope.
+
+#### Validation
+
+- `npm run build` -> pass
+
+#### QA checks
+
+1. `/progress` still renders all sections with real data.
+2. sessions/completion cards should update when logging execution (without status edits).
+3. cardio series and HR zones should reflect execution-linked cardio rows.
+
+### [E-088] Duplication removal pass (execution scope + quick-log dedupe centralization) (2026-03-22)
+
+- Linked request: remove duplicated logic from application.
+- Status: Implemented high-impact DRY refactor on shared execution-domain paths.
+
+#### 1) New shared execution-scope helper
+
+- Added `lib/training/execution-scope.ts` with reusable helpers:
+  - `getLinkedClientIdsForUser(...)`
+  - `fetchExecutionRowsForUserScope(...)`
+- This removes duplicated subject-scope + execution query logic previously repeated across progress actions.
+
+#### 2) Progress overview dedupe
+
+- `app/actions/progress-overview.ts`
+  - refactored duplicated linked-client/execution fetch blocks in both:
+    - `fetchExecutionWindowData(...)`
+    - `getComplianceRecovery(...)`
+  - both now call shared helper functions.
+
+#### 3) Quick-log dedupe centralization
+
+- `app/actions/workout.ts`
+  - extracted duplicated quick-log lookup/filter logic into:
+    - `applyQuickLogSubjectFilter(...)`
+    - `findExistingQuickLogExecution(...)`
+  - `createWorkoutExecutionRecord(...)` now reuses these helpers for both pre-check and unique-violation retry path.
+
+#### 4) Execution-first consistency kept
+
+- `app/actions/progress-overview.ts`
+  - continued execution-first data path in summary/insights/training-load/cardio.
+  - removed remaining status-based completion semantics in these sections.
+
+#### Validation
+
+- `npm run build` -> pass
+
+#### Scope note
+
+- This pass removes major duplicated domain logic in the highest-traffic execution/progress paths.
+- A complete codebase-wide dedupe (all domains/pages) should be done incrementally to avoid large regression risk.
+
+### [E-089] Duplication removal pass (supplements + support tickets) (2026-03-22)
+
+- Linked request: continue dedupe sweep across domains; reduce repeated logic without behavior changes.
+- Status: Implemented.
+
+#### 1) Supplements action dedupe
+
+- `app/actions/supplements.ts`
+  - added shared server-client alias and lightweight actor row types:
+    - `SupabaseServerClient`, `ActorProfileLite`, `ClientLite`.
+  - added `loadActorProfileAndClients(...)`:
+    - replaces duplicated profile+clients fetch blocks used by:
+      - `listSupplementPeopleAction`
+      - `listSupplementSubjectsAction`
+  - added subject-ref helpers:
+    - `toSubjectRef(...)`
+    - `getAssignmentSubjectRefById(...)`
+    - `getSubjectProfileRefById(...)`
+  - replaced duplicated `select id, subject_user_id, subject_client_id` + not-found + revalidate blocks in:
+    - `updateSupplementAssignmentAction`
+    - `removeSupplementAssignmentAction`
+    - `removeSupplementStackAction`
+
+#### 2) Support tickets action dedupe
+
+- `app/actions/tickets.ts`
+  - added shared viewer/auth helpers:
+    - `requireViewer()`
+    - `requireViewerWithAdminFlag()`
+    - `isAdminRoleValue(...)`
+  - added shared listing helpers:
+    - `applyListFilters(...)`
+    - `sortAndPageList(...)`
+  - refactored duplicated list query wiring in:
+    - `listPublicTicketsAction`
+    - `listMyTicketsAction`
+  - added shared visibility guard helper:
+    - `getVisibleTicketForViewer(...)`
+  - refactored repeated ticket-visibility checks in:
+    - `getTicketDetailAction`
+    - `listTicketCommentsAction`
+    - `createTicketCommentAction`
+  - `toggleUpvoteTicketAction` and `createTicketAction` now reuse shared viewer auth helper.
+
+#### 3) Behavior guarantee
+
+- No API contract changes.
+- No schema changes.
+- No URL changes.
+- Logic preserved; only duplicate blocks were centralized.
+
+#### Validation
+
+- `npm run build` -> pass

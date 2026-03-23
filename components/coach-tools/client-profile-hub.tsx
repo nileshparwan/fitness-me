@@ -979,6 +979,10 @@ export function ClientProfileHub({ clientId, initialTab = "overview" }: { client
                     <TableCell className="text-sm">{client.phone || "No phone"}</TableCell>
                   </TableRow>
                   <TableRow className="border-border/40">
+                    <TableCell className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Date of Birth</TableCell>
+                    <TableCell className="text-sm">{client.date_of_birth ? dateLabel(client.date_of_birth) : "No date of birth"}</TableCell>
+                  </TableRow>
+                  <TableRow className="border-border/40">
                     <TableCell className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Status</TableCell>
                     <TableCell>
                       <span className={cn("inline-flex rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-[0.12em]", statusPill(client.status))}>

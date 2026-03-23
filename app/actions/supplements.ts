@@ -20,6 +20,9 @@ type SupplementSubjectProfileInsert = Database["public"]["Tables"]["supplement_s
 type SupplementSubjectProfileUpdate = Database["public"]["Tables"]["supplement_subject_profiles"]["Update"];
 type ProfileRow = Database["public"]["Tables"]["profiles"]["Row"];
 type ClientRow = Database["public"]["Tables"]["clients"]["Row"];
+type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
+type ActorProfileLite = Pick<ProfileRow, "id" | "full_name" | "avatar_url">;
+type ClientLite = Pick<ClientRow, "id" | "display_name" | "first_name" | "last_name">;
 
 export type SupplementCategory =
   | "vitamin"
@@ -230,6 +233,30 @@ async function requireActor() {
   return { supabase, user };
 }
 
+async function loadActorProfileAndClients(
+  supabase: SupabaseServerClient,
+  actorUserId: string,
+  clientLimit: number
+): Promise<{ profile: ActorProfileLite | null; clients: ClientLite[] }> {
+  const [{ data: profile, error: profileError }, { data: clients, error: clientsError }] = await Promise.all([
+    supabase.from("profiles").select("id, full_name, avatar_url").eq("id", actorUserId).maybeSingle(),
+    supabase
+      .from("clients")
+      .select("id, display_name, first_name, last_name")
+      .eq("is_archived", false)
+      .order("updated_at", { ascending: false })
+      .limit(clientLimit),
+  ]);
+
+  if (profileError) throw new Error(profileError.message);
+  if (clientsError) throw new Error(clientsError.message);
+
+  return {
+    profile: (profile || null) as ActorProfileLite | null,
+    clients: (clients || []) as ClientLite[],
+  };
+}
+
 function resolveSubject(subject: SupplementSubject, actorUserId: string): SubjectRef {
   if (subject.type === "me") {
     return {
@@ -261,8 +288,37 @@ function applySubjectFilters<T>(query: T, subject: SubjectRef): T {
   return builder.eq("subject_client_id", subject.subject_client_id).is("subject_user_id", null) as T;
 }
 
+function toSubjectRef(row: { subject_user_id: string | null; subject_client_id: string | null }): SubjectRef {
+  return {
+    subject_user_id: row.subject_user_id,
+    subject_client_id: row.subject_client_id,
+  };
+}
+
+async function getAssignmentSubjectRefById(supabase: SupabaseServerClient, assignmentId: string): Promise<SubjectRef> {
+  const { data: existing, error: existingError } = await supabase
+    .from("supplement_assignments")
+    .select("id, subject_user_id, subject_client_id")
+    .eq("id", assignmentId)
+    .maybeSingle();
+  if (existingError) throw new Error(existingError.message);
+  if (!existing) throw new Error("Supplement assignment not found");
+  return toSubjectRef(existing);
+}
+
+async function getSubjectProfileRefById(supabase: SupabaseServerClient, profileId: string): Promise<SubjectRef> {
+  const { data: existingProfile, error: existingProfileError } = await supabase
+    .from("supplement_subject_profiles")
+    .select("id, subject_user_id, subject_client_id")
+    .eq("id", profileId)
+    .maybeSingle();
+  if (existingProfileError) throw new Error(existingProfileError.message);
+  if (!existingProfile) throw new Error("Assigned supplement stack not found");
+  return toSubjectRef(existingProfile);
+}
+
 async function ensureSubjectProfile(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  supabase: SupabaseServerClient,
   actorUserId: string,
   subject: SubjectRef,
   input: {
@@ -498,18 +554,7 @@ export async function listSupplementPeopleAction(): Promise<SupplementPersonOpti
     eventName: "supplements.people.list",
     action: async () => {
       const { supabase, user } = await requireActor();
-      const [{ data: profile, error: profileError }, { data: clients, error: clientsError }] = await Promise.all([
-        supabase.from("profiles").select("id, full_name, avatar_url").eq("id", user.id).maybeSingle(),
-        supabase
-          .from("clients")
-          .select("id, display_name, first_name, last_name")
-          .eq("is_archived", false)
-          .order("updated_at", { ascending: false })
-          .limit(150),
-      ]);
-
-      if (profileError) throw new Error(profileError.message);
-      if (clientsError) throw new Error(clientsError.message);
+      const { profile, clients } = await loadActorProfileAndClients(supabase, user.id, 150);
 
       const rows: SupplementPersonOption[] = [
         {
@@ -632,18 +677,7 @@ export async function listSupplementSubjectsAction(): Promise<SupplementSubjectR
     eventName: "supplements.subjects.list",
     action: async () => {
       const { supabase, user } = await requireActor();
-
-      const [{ data: profile, error: profileError }, { data: clients, error: clientsError }] = await Promise.all([
-        supabase.from("profiles").select("id, full_name, avatar_url").eq("id", user.id).maybeSingle(),
-        supabase
-          .from("clients")
-          .select("id, display_name, first_name, last_name")
-          .eq("is_archived", false)
-          .order("updated_at", { ascending: false })
-          .limit(200),
-      ]);
-      if (profileError) throw new Error(profileError.message);
-      if (clientsError) throw new Error(clientsError.message);
+      const { profile, clients } = await loadActorProfileAndClients(supabase, user.id, 200);
 
       const [subjectProfileUserRes, subjectProfileClientRes] = await Promise.all([
         supabase
@@ -964,14 +998,7 @@ export async function updateSupplementAssignmentAction(
     payload: { id: payload.id },
     action: async () => {
       const { supabase } = await requireActor();
-
-      const { data: existing, error: existingError } = await supabase
-        .from("supplement_assignments")
-        .select("id, subject_user_id, subject_client_id")
-        .eq("id", payload.id)
-        .maybeSingle();
-      if (existingError) throw new Error(existingError.message);
-      if (!existing) throw new Error("Supplement assignment not found");
+      const subject = await getAssignmentSubjectRefById(supabase, payload.id);
 
       const updates: SupplementAssignmentUpdate = {};
       if (payload.default_servings !== undefined) updates.default_servings = payload.default_servings;
@@ -981,10 +1008,7 @@ export async function updateSupplementAssignmentAction(
       const { error } = await supabase.from("supplement_assignments").update(updates).eq("id", payload.id);
       if (error) throw new Error(error.message);
 
-      revalidateSupplementPaths({
-        subject_user_id: existing.subject_user_id,
-        subject_client_id: existing.subject_client_id,
-      });
+      revalidateSupplementPaths(subject);
     },
   });
 }
@@ -996,22 +1020,12 @@ export async function removeSupplementAssignmentAction(id: string): Promise<void
     payload: { id: assignmentId },
     action: async () => {
       const { supabase } = await requireActor();
-
-      const { data: existing, error: existingError } = await supabase
-        .from("supplement_assignments")
-        .select("id, subject_user_id, subject_client_id")
-        .eq("id", assignmentId)
-        .maybeSingle();
-      if (existingError) throw new Error(existingError.message);
-      if (!existing) throw new Error("Supplement assignment not found");
+      const subject = await getAssignmentSubjectRefById(supabase, assignmentId);
 
       const { error: deleteError } = await supabase.from("supplement_assignments").delete().eq("id", assignmentId);
       if (deleteError) throw new Error(deleteError.message);
 
-      revalidateSupplementPaths({
-        subject_user_id: existing.subject_user_id,
-        subject_client_id: existing.subject_client_id,
-      });
+      revalidateSupplementPaths(subject);
     },
   });
 }
@@ -1025,14 +1039,7 @@ export async function removeSupplementStackAction(
     payload,
     action: async () => {
       const { supabase } = await requireActor();
-
-      const { data: existingProfile, error: existingProfileError } = await supabase
-        .from("supplement_subject_profiles")
-        .select("id, subject_user_id, subject_client_id")
-        .eq("id", payload.profile_id)
-        .maybeSingle();
-      if (existingProfileError) throw new Error(existingProfileError.message);
-      if (!existingProfile) throw new Error("Assigned supplement stack not found");
+      const subject = await getSubjectProfileRefById(supabase, payload.profile_id);
 
       const { error: deleteError } = await supabase
         .from("supplement_subject_profiles")
@@ -1040,10 +1047,7 @@ export async function removeSupplementStackAction(
         .eq("id", payload.profile_id);
       if (deleteError) throw new Error(deleteError.message);
 
-      revalidateSupplementPaths({
-        subject_user_id: existingProfile.subject_user_id,
-        subject_client_id: existingProfile.subject_client_id,
-      });
+      revalidateSupplementPaths(subject);
     },
   });
 }

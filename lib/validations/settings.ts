@@ -4,6 +4,7 @@ export const profileSchema = z.object({
   full_name: z.string().trim().min(2).max(120),
   bio: z.string().trim().max(160).nullable().optional(),
   phone: z.string().trim().max(40).nullable().optional(),
+  date_of_birth: z.string().date().nullable().optional(),
   avatar_url: z.url().nullable().optional(),
 });
 

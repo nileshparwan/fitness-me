@@ -7,16 +7,16 @@ import { trainingKeys } from "@/lib/query-keys-training";
 import { withToastFeedback } from "@/lib/ui/toast-feedback";
 import { cn } from "@/utils";
 
-type WorkoutStatus = "draft" | "active" | "completed" | "archived";
+type WorkoutStatus = "draft" | "active" | "archived";
 
-const WORKOUT_STATUSES: WorkoutStatus[] = ["draft", "active", "completed", "archived"];
+const WORKOUT_STATUSES: WorkoutStatus[] = ["draft", "active", "archived"];
 
 function normalizeStatus(input: string): WorkoutStatus {
+  if (input === "completed") return "active";
   return WORKOUT_STATUSES.includes(input as WorkoutStatus) ? (input as WorkoutStatus) : "draft";
 }
 
 function statusLabel(status: WorkoutStatus) {
-  if (status === "completed") return "Completed";
   if (status === "archived") return "Archived";
   if (status === "active") return "Active";
   return "Draft";
@@ -24,7 +24,6 @@ function statusLabel(status: WorkoutStatus) {
 
 function statusDotClass(status: WorkoutStatus) {
   if (status === "active") return "bg-chart-2";
-  if (status === "completed") return "bg-chart-1";
   if (status === "archived") return "bg-muted-foreground";
   return "bg-chart-4";
 }
@@ -80,7 +79,6 @@ export function WorkoutStatusSelect({
       <SelectContent className="rounded-xl border-border/60 bg-popover/95 backdrop-blur">
         <SelectItem value="draft">Draft</SelectItem>
         <SelectItem value="active">Active</SelectItem>
-        <SelectItem value="completed">Completed</SelectItem>
         <SelectItem value="archived">Archived</SelectItem>
       </SelectContent>
     </Select>

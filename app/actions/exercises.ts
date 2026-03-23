@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { runTrackedAction } from "@/lib/events/dispatcher";
 import { escapeLikePattern } from "@/lib/utils/search";
 import { ExerciseFormValues } from "@/lib/validations/exercise";
-import { withParentMuscleGroups } from "@/lib/exercises/muscle-groups";
+import { hasMuscleFocusTag, withParentMuscleGroups } from "@/lib/exercises/muscle-groups";
 import { revalidatePath } from "next/cache";
 import { Database } from "@/types/database";
 
@@ -161,6 +161,10 @@ export async function createExercise(values: ExerciseFormValues) {
     }
 
     const normalizedMuscleGroups = withParentMuscleGroups(values.muscle_groups, values.category);
+    const normalizedCategory = (values.category || "").trim().toLowerCase();
+    if (normalizedCategory !== "cardio" && !hasMuscleFocusTag(normalizedMuscleGroups)) {
+      throw new Error("Muscle groups must include one focus tag: push, pull, core, or legs.");
+    }
 
     const { error } = await supabase.from("exercise_catalog").insert({
         name: values.name,
@@ -215,6 +219,10 @@ export async function updateExercise(id: string, values: ExerciseFormValues) {
         action: async () => {
     const supabase = await createClient();
     const normalizedMuscleGroups = withParentMuscleGroups(values.muscle_groups, values.category);
+    const normalizedCategory = (values.category || "").trim().toLowerCase();
+    if (normalizedCategory !== "cardio" && !hasMuscleFocusTag(normalizedMuscleGroups)) {
+      throw new Error("Muscle groups must include one focus tag: push, pull, core, or legs.");
+    }
 
     const { error, count } = await supabase
         .from("exercise_catalog")

@@ -1,65 +1,6 @@
-const PARENT_GROUP_ORDER = ["chest", "back", "legs", "shoulders", "arms", "core", "glutes", "cardio"] as const;
-type ParentGroup = (typeof PARENT_GROUP_ORDER)[number];
+const FOCUS_ORDER = ["push", "pull", "legs", "core"] as const;
 
-const TAG_ALIASES: Record<string, string> = {
-  quad: "quads",
-  leg: "legs",
-  shoulder: "shoulders",
-  arm: "arms",
-  ab: "abs",
-  lat: "lats",
-  delt: "delts",
-};
-
-const MAIN_GROUP_CANDIDATES_BY_TAG: Record<string, ParentGroup[]> = {
-  chest: ["chest"],
-  upper_chest: ["chest"],
-  lower_chest: ["chest"],
-  pecs: ["chest"],
-  pectorals: ["chest"],
-
-  back: ["back"],
-  upper_back: ["back"],
-  lower_back: ["back"],
-  lats: ["back"],
-  traps: ["back"],
-  rhomboids: ["back"],
-  erectors: ["back"],
-
-  shoulders: ["shoulders"],
-  front_delts: ["shoulders"],
-  side_delts: ["shoulders"],
-  rear_delts: ["shoulders"],
-  delts: ["shoulders"],
-  rotator_cuff: ["shoulders"],
-
-  arms: ["arms"],
-  biceps: ["arms"],
-  triceps: ["arms"],
-  forearms: ["arms"],
-  brachialis: ["arms"],
-
-  legs: ["legs"],
-  quads: ["legs"],
-  hamstrings: ["legs"],
-  calves: ["legs"],
-  adductors: ["legs"],
-  abductors: ["legs"],
-  hip_flexors: ["legs"],
-  glutes: ["legs", "glutes"],
-
-  core: ["core"],
-  abs: ["core"],
-  obliques: ["core"],
-  lower_abs: ["core"],
-  transverse_abdominis: ["core"],
-
-  cardio: ["cardio"],
-  cardiovascular: ["cardio"],
-  conditioning: ["cardio"],
-  endurance: ["cardio"],
-  coordination: ["cardio"],
-};
+export type ExerciseMuscleFocus = (typeof FOCUS_ORDER)[number];
 
 function normalizeToken(value: string | null | undefined) {
   const compact = (value || "")
@@ -69,36 +10,60 @@ function normalizeToken(value: string | null | undefined) {
     .replace(/_+/g, "_")
     .replace(/^_+|_+$/g, "");
   if (!compact) return "";
-  return TAG_ALIASES[compact] || compact;
+  return compact;
+}
+
+function normalizeMuscleGroups(values: string[] | null | undefined) {
+  const normalized: string[] = [];
+  const seen = new Set<string>();
+  for (const entry of values || []) {
+    const token = normalizeToken(entry);
+    if (!token || seen.has(token)) continue;
+    seen.add(token);
+    normalized.push(token);
+  }
+  return normalized;
+}
+
+function titleCase(value: string) {
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+export function extractMuscleFocusTag({
+  muscleGroups,
+}: {
+  muscleGroups?: string[] | null;
+}): ExerciseMuscleFocus | null {
+  const normalizedMuscles = new Set(normalizeMuscleGroups(muscleGroups));
+  for (const focus of FOCUS_ORDER) {
+    if (normalizedMuscles.has(focus)) {
+      return focus;
+    }
+  }
+  return null;
+}
+
+export function hasMuscleFocusTag(muscleGroups: string[] | null | undefined) {
+  return extractMuscleFocusTag({ muscleGroups }) !== null;
+}
+
+export function formatCategoryWithMuscleFocus({
+  category,
+  muscleGroups,
+}: {
+  category?: string | null;
+  muscleGroups?: string[] | null;
+}) {
+  const focus = extractMuscleFocusTag({ muscleGroups });
+  const baseCategory = (category || "").trim() || "General";
+  if (!focus) return baseCategory;
+
+  const focusLabel = titleCase(focus);
+  if (baseCategory.toLowerCase().includes(focus)) return baseCategory;
+  return `${baseCategory} · ${focusLabel}`;
 }
 
 export function withParentMuscleGroups(muscleGroups: string[] | null | undefined, category: string | null | undefined) {
-  const normalizedMuscles: string[] = [];
-  const seenMuscles = new Set<string>();
-
-  for (const entry of muscleGroups || []) {
-    const normalized = normalizeToken(entry);
-    if (!normalized || seenMuscles.has(normalized)) continue;
-    seenMuscles.add(normalized);
-    normalizedMuscles.push(normalized);
-  }
-
-  const normalizedCategory = normalizeToken(category);
-  let mainGroup: ParentGroup | null = null;
-
-  if ((PARENT_GROUP_ORDER as readonly string[]).includes(normalizedCategory)) {
-    mainGroup = normalizedCategory as ParentGroup;
-  } else {
-    const candidates = new Set<ParentGroup>();
-    for (const muscle of normalizedMuscles) {
-      for (const candidate of MAIN_GROUP_CANDIDATES_BY_TAG[muscle] || []) {
-        candidates.add(candidate);
-      }
-    }
-    mainGroup = PARENT_GROUP_ORDER.find((group) => candidates.has(group)) || null;
-  }
-
-  if (!mainGroup) return normalizedMuscles;
-  const remainder = normalizedMuscles.filter((muscle) => muscle !== mainGroup);
-  return [mainGroup, ...remainder];
+  void category;
+  return normalizeMuscleGroups(muscleGroups);
 }

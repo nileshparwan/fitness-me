@@ -13,7 +13,7 @@ import { WorkoutStatusSelect } from "@/components/workout/workout-status-select"
 import { useDebounce } from "@/hooks/use-debounce";
 import { cn } from "@/utils";
 
-const statusFilters = ["all", "draft", "active", "completed", "archived"] as const;
+const statusFilters = ["all", "draft", "active", "archived"] as const;
 const PAGE_SIZE = 12;
 type WorkoutStatusFilter = (typeof statusFilters)[number];
 type WorkoutStatus = Exclude<WorkoutStatusFilter, "all">;
@@ -28,14 +28,14 @@ type WorkoutRow = {
 };
 
 function normalizeWorkoutStatus(status: string | null | undefined): WorkoutStatus {
-  if (status === "active" || status === "completed" || status === "archived") return status;
+  if (status === "active" || status === "archived") return status;
+  if (status === "completed") return "active";
   return "draft";
 }
 
 function statusLabel(status: WorkoutStatusFilter) {
   if (status === "all") return "All";
   if (status === "active") return "Active";
-  if (status === "completed") return "Completed";
   if (status === "archived") return "Archived";
   return "Draft";
 }
@@ -48,7 +48,6 @@ function formatWorkoutDate(value: string | Date) {
 
 function statusPillClass(status: WorkoutStatus) {
   if (status === "active") return "border-chart-2/40 bg-chart-2/15 text-chart-2";
-  if (status === "completed") return "border-chart-1/40 bg-chart-1/15 text-chart-1";
   if (status === "archived") return "border-border/70 bg-muted/35 text-muted-foreground";
   return "border-chart-4/40 bg-chart-4/15 text-chart-4";
 }

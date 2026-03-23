@@ -15,6 +15,7 @@ import { ExerciseRecords } from "@/components/exercises/exercise-records"; // No
 import { AddToWorkoutButton } from "@/components/exercises/add-to-workout-button";
 import { ShareExerciseButton } from "@/components/exercises/share-exercise-button";
 import { getExerciseHistory } from "@/app/actions/exercises";
+import { formatCategoryWithMuscleFocus } from "@/lib/exercises/muscle-groups";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -39,6 +40,10 @@ export default async function ExerciseDetailPage({ params }: PageProps) {
   const formattedDate = new Date(exercise.created_at || Date.now()).toLocaleDateString("en-US", {
     month: "long",
     year: "numeric",
+  });
+  const categoryWithFocus = formatCategoryWithMuscleFocus({
+    category: exercise.category,
+    muscleGroups: exercise.muscle_groups,
   });
 
   return (
@@ -69,7 +74,7 @@ export default async function ExerciseDetailPage({ params }: PageProps) {
             </h1>
             <div className="flex flex-wrap gap-2 items-center text-sm text-muted-foreground">
               <Badge variant="secondary" className="text-xs uppercase tracking-wider">
-                {exercise.category || "General"}
+                {categoryWithFocus}
               </Badge>
               {exercise.aliases?.map((alias: string) => (
                 <span key={alias} className="italic bg-muted/50 px-1.5 rounded">
@@ -170,7 +175,7 @@ export default async function ExerciseDetailPage({ params }: PageProps) {
                 </div>
                 <div>
                   <span className="text-xs text-muted-foreground uppercase tracking-wider">Type</span>
-                  <p className="text-sm font-medium capitalize">{exercise.category || "Other"}</p>
+                  <p className="text-sm font-medium">{categoryWithFocus}</p>
                 </div>
               </div>
             </CardContent>

@@ -28,15 +28,17 @@ export const sendReminders = inngest.createFunction(
       const cutoffDate = new Date();
       cutoffDate.setDate(cutoffDate.getDate() - 3);
 
-      const { data: activeUserIds, error: workoutError } = await supabaseAdmin
-        .from("training_sessions")
-        .select("user_id")
-        .gte("date", cutoffDate.toISOString()); // Single query for all recent activity
-      
-      if (workoutError) throw workoutError;
+      const { data: executionRows, error: executionError } = await supabaseAdmin
+        .from("workout_executions")
+        .select("subject_user_id")
+        .gte("performed_on", cutoffDate.toISOString().slice(0, 10));
+      if (executionError) throw executionError;
+      const activeUserIds = ((executionRows || []) as Array<{ subject_user_id: string | null }>).map((row) => ({
+        user_id: row.subject_user_id,
+      }));
 
       // C. Create a Set of active IDs for O(1) lookups
-      const activeSet = new Set(activeUserIds?.map(u => u.user_id));
+      const activeSet = new Set((activeUserIds || []).map((u) => u.user_id).filter(Boolean));
 
       // D. Filter: The "At Risk" users are those NOT in the active set
       return users

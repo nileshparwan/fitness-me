@@ -32,6 +32,11 @@ type MealLogSectionInsert = Database["public"]["Tables"]["meal_log_sections"]["I
 type FavoriteRow = Database["public"]["Tables"]["meal_item_favorites"]["Row"];
 type MealDayOfWeek = Database["public"]["Enums"]["meal_day_of_week"];
 type DailyMacroComplianceInsert = Database["public"]["Tables"]["daily_macro_compliance"]["Insert"];
+type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
+type MealLogActivitySnapshot = Pick<
+  MealLogRow,
+  "subject_user_id" | "subject_client_id" | "meal_type" | "performed_on" | "meal_group_id"
+>;
 
 type ClientRow = Database["public"]["Tables"]["clients"]["Row"];
 
@@ -288,6 +293,8 @@ const summarySchema = z.object({
   end_date: isoDate.optional(),
 });
 
+const MEAL_LOG_ACTIVITY_SELECT = "subject_user_id, subject_client_id, meal_type, performed_on, meal_group_id";
+
 function normalizeMealType(input: string | null | undefined): MealType {
   if (!input) return "other";
   const value = input.toLowerCase();
@@ -384,7 +391,7 @@ function isWithinComplianceThreshold(actual: number, target: number) {
 }
 
 async function resolveComplianceTargetsForDate(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  supabase: SupabaseServerClient,
   subject: SubjectRef,
   performedOn: string
 ): Promise<ComplianceTargetsSnapshot> {
@@ -461,7 +468,7 @@ async function resolveComplianceTargetsForDate(
 }
 
 async function resolveComplianceActualsForDate(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  supabase: SupabaseServerClient,
   subject: SubjectRef,
   performedOn: string
 ): Promise<ComplianceActualsSnapshot> {
@@ -524,7 +531,7 @@ async function resolveComplianceActualsForDate(
 }
 
 async function upsertDailyCompliance(args: {
-  supabase: Awaited<ReturnType<typeof createClient>>;
+  supabase: SupabaseServerClient;
   subject: SubjectRef;
   performedOn: string;
 }) {
@@ -638,7 +645,7 @@ function deriveMealLogTotals(items: MealLogMacroSource[]): DailyTotals {
 }
 
 async function setMealLogTotals(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  supabase: SupabaseServerClient,
   mealLogId: string,
   totals: DailyTotals
 ) {
@@ -654,7 +661,7 @@ async function setMealLogTotals(
 }
 
 async function syncMealLogTotals(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  supabase: SupabaseServerClient,
   mealLogId: string
 ): Promise<DailyTotals> {
   const { data: items, error } = await supabase
@@ -775,8 +782,38 @@ function applyMealGroupFilter<T>(query: T, mealGroupId?: string | null): T {
   return query;
 }
 
+function mealLogSubject(mealLog: MealLogActivitySnapshot): SubjectRef {
+  return {
+    subject_user_id: mealLog.subject_user_id,
+    subject_client_id: mealLog.subject_client_id,
+  };
+}
+
+async function upsertComplianceForMealLog(
+  supabase: SupabaseServerClient,
+  mealLog: MealLogActivitySnapshot | null | undefined
+) {
+  if (!mealLog?.performed_on) return;
+  await upsertDailyCompliance({
+    supabase,
+    subject: mealLogSubject(mealLog),
+    performedOn: mealLog.performed_on,
+  });
+}
+
+function buildMealItemActivityContext(itemName: string | null | undefined, mealLog: MealLogActivitySnapshot | null | undefined) {
+  return {
+    item_name: itemName ?? null,
+    meal_type: mealLog?.meal_type ?? null,
+    performed_on: mealLog?.performed_on ?? null,
+    meal_group_id: mealLog?.meal_group_id ?? null,
+    subject_user_id: mealLog?.subject_user_id ?? null,
+    subject_client_id: mealLog?.subject_client_id ?? null,
+  };
+}
+
 async function ensureMealLogSections(args: {
-  supabase: Awaited<ReturnType<typeof createClient>>;
+  supabase: SupabaseServerClient;
   actorUserId: string;
   subject: SubjectRef;
   meal_group_id: string;
@@ -941,7 +978,7 @@ export async function getNutritionActivePlanForDateAction(
 }
 
 async function getOrCreateMealLog(args: {
-  supabase: Awaited<ReturnType<typeof createClient>>;
+  supabase: SupabaseServerClient;
   actorUserId: string;
   subject: SubjectRef;
   performed_on: string;
@@ -1741,29 +1778,13 @@ export async function updateMealItemAction(input: z.input<typeof updateMealItemS
 
       const { data: mealLog } = await supabase
         .from("meal_logs")
-        .select("subject_user_id, subject_client_id, meal_type, performed_on, meal_group_id")
+        .select(MEAL_LOG_ACTIVITY_SELECT)
         .eq("id", data.meal_log_id)
         .maybeSingle();
 
-      if (mealLog?.performed_on) {
-        await upsertDailyCompliance({
-          supabase,
-          subject: {
-            subject_user_id: mealLog.subject_user_id,
-            subject_client_id: mealLog.subject_client_id,
-          },
-          performedOn: mealLog.performed_on,
-        });
-      }
+      await upsertComplianceForMealLog(supabase, mealLog as MealLogActivitySnapshot | null);
 
-      activityContext = {
-        item_name: data.item_name || payload.item.item_name || null,
-        meal_type: mealLog?.meal_type ?? null,
-        performed_on: mealLog?.performed_on ?? null,
-        meal_group_id: mealLog?.meal_group_id ?? null,
-        subject_user_id: mealLog?.subject_user_id ?? null,
-        subject_client_id: mealLog?.subject_client_id ?? null,
-      };
+      activityContext = buildMealItemActivityContext(data.item_name || payload.item.item_name || null, mealLog as MealLogActivitySnapshot | null);
       revalidateNutritionPaths(mealLog?.subject_client_id ?? null);
       return data as MealLogItemRow;
     },
@@ -1789,7 +1810,7 @@ export async function removeMealItemAction(input: z.input<typeof removeMealItemS
 
       const { data: mealLog, error: mealLogError } = await supabase
         .from("meal_logs")
-        .select("subject_user_id, subject_client_id, meal_type, performed_on, meal_group_id")
+        .select(MEAL_LOG_ACTIVITY_SELECT)
         .eq("id", currentItem.meal_log_id)
         .maybeSingle();
       if (mealLogError) throw new Error(mealLogError.message);
@@ -1798,25 +1819,9 @@ export async function removeMealItemAction(input: z.input<typeof removeMealItemS
       if (error) throw new Error(error.message);
 
       await syncMealLogTotals(supabase, currentItem.meal_log_id);
-      if (mealLog?.performed_on) {
-        await upsertDailyCompliance({
-          supabase,
-          subject: {
-            subject_user_id: mealLog.subject_user_id,
-            subject_client_id: mealLog.subject_client_id,
-          },
-          performedOn: mealLog.performed_on,
-        });
-      }
+      await upsertComplianceForMealLog(supabase, mealLog as MealLogActivitySnapshot | null);
 
-      activityContext = {
-        item_name: currentItem.item_name,
-        meal_type: mealLog?.meal_type ?? null,
-        performed_on: mealLog?.performed_on ?? null,
-        meal_group_id: mealLog?.meal_group_id ?? null,
-        subject_user_id: mealLog?.subject_user_id ?? null,
-        subject_client_id: mealLog?.subject_client_id ?? null,
-      };
+      activityContext = buildMealItemActivityContext(currentItem.item_name, mealLog as MealLogActivitySnapshot | null);
       revalidateNutritionPaths(mealLog?.subject_client_id ?? null);
       return { success: true };
     },
@@ -1836,7 +1841,7 @@ export async function updateMealLogNotesAction(input: z.input<typeof diaryNotesS
         .from("meal_logs")
         .update({ notes: payload.notes })
         .eq("id", payload.meal_log_id)
-        .select("subject_user_id, subject_client_id, meal_type, performed_on, meal_group_id")
+        .select(MEAL_LOG_ACTIVITY_SELECT)
         .single();
       if (error) throw new Error(error.message);
       activityContext = {

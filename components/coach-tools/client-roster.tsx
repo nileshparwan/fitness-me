@@ -74,6 +74,7 @@ type ClientFormState = {
   last_name: string;
   email: string;
   phone: string;
+  date_of_birth: string;
   status: ClientStatus;
 };
 
@@ -83,6 +84,7 @@ type ClientRowItem = {
   last_name: string | null;
   email: string | null;
   phone: string | null;
+  date_of_birth: string | null;
   status: ClientStatus;
   active_plans_count: number;
   updated_at: string | null;
@@ -135,6 +137,7 @@ function emptyFormState(): ClientFormState {
     last_name: "",
     email: "",
     phone: "",
+    date_of_birth: "",
     status: "active",
   };
 }
@@ -146,6 +149,7 @@ function formStateFromRow(row: ClientRowItem): ClientFormState {
     last_name: row.last_name || "",
     email: row.email || "",
     phone: row.phone || "",
+    date_of_birth: row.date_of_birth || "",
     status: row.status,
   };
 }
@@ -232,6 +236,7 @@ export function ClientRoster() {
         display_name: null,
         email: normalizeOptional(form.email),
         phone: normalizeOptional(form.phone),
+        date_of_birth: normalizeOptional(form.date_of_birth),
         status: form.status,
       }),
       {
@@ -712,6 +717,16 @@ export function ClientRoster() {
             </div>
 
             <div className="space-y-2">
+              <Label>Date of Birth (optional)</Label>
+              <Input
+                type="date"
+                value={createForm.date_of_birth}
+                onChange={(event) => setCreateForm((current) => ({ ...current, date_of_birth: event.target.value }))}
+                className="rounded-xl border-border/60 bg-muted/20"
+              />
+            </div>
+
+            <div className="space-y-2">
               <Label>Status</Label>
               <Select
                 value={createForm.status}
@@ -804,6 +819,18 @@ export function ClientRoster() {
                     className="rounded-xl border-border/60 bg-muted/20"
                   />
                 </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Date of Birth (optional)</Label>
+                <Input
+                  type="date"
+                  value={editingForm.date_of_birth}
+                  onChange={(event) =>
+                    setEditingForm((current) => (current ? { ...current, date_of_birth: event.target.value } : current))
+                  }
+                  className="rounded-xl border-border/60 bg-muted/20"
+                />
               </div>
 
               <div className="space-y-2">

@@ -1,12 +1,21 @@
 "use client";
 
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
-import { createWorkoutAction, deleteWorkoutAction, updateWorkoutAction, type WorkoutActionInput } from "@/app/actions/workout";
+import {
+  createWorkoutAction,
+  deleteWorkoutAction,
+  listWorkoutExecutionSubjectsAction,
+  logWorkoutExecutionAction,
+  updateWorkoutAction,
+  type WorkoutActionInput,
+} from "@/app/actions/workout";
 import { trainingKeys } from "@/lib/query-keys-training";
+import { progressKeys } from "@/lib/query-keys-progress";
 import { Database } from "@/types/database";
 import { withToastFeedback } from "@/lib/ui/toast-feedback";
+import { useDebounce } from "@/hooks/use-debounce";
 
 type TrainingSessionRow = Database["public"]["Tables"]["training_sessions"]["Row"];
 type StrengthSetId = Pick<Database["public"]["Tables"]["strength_sets"]["Row"], "id">;
@@ -16,6 +25,14 @@ type WorkoutSummary = Pick<
   "id" | "name" | "status" | "date" | "duration_minutes" | "created_at"
 > & {
   strength_sets: StrengthSetId[];
+};
+
+const WORKOUT_EXECUTION_SUBJECTS_PAGE_SIZE = 15;
+
+type WorkoutExecutionSubject = {
+  id: string;
+  full_name: string;
+  is_self: boolean;
 };
 
 export function useWorkout(id: string) {
@@ -130,4 +147,55 @@ export function useWorkouts() {
   });
 
   return { history, createWorkout, updateWorkout, deleteWorkout };
+}
+
+export function useWorkoutExecutionSubjects(rawSearch: string, enabled = true) {
+  const search = useDebounce(rawSearch.trim(), 250);
+
+  return useInfiniteQuery({
+    queryKey: trainingKeys.executionSubjectsSearch(search),
+    enabled,
+    initialPageParam: 0,
+    queryFn: async ({ pageParam = 0 }) =>
+      listWorkoutExecutionSubjectsAction({
+        search: search || undefined,
+        page: pageParam,
+        page_size: WORKOUT_EXECUTION_SUBJECTS_PAGE_SIZE,
+      }),
+    getNextPageParam: (lastPage, allPages) => (lastPage.has_more ? allPages.length : undefined),
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
+  });
+}
+
+export function flattenWorkoutExecutionSubjectPages(
+  data: { pages: Array<{ items: WorkoutExecutionSubject[] }> } | undefined
+) {
+  if (!data) return [] as WorkoutExecutionSubject[];
+  const seen = new Set<string>();
+  const rows: WorkoutExecutionSubject[] = [];
+  for (const page of data.pages) {
+    for (const item of page.items || []) {
+      if (seen.has(item.id)) continue;
+      seen.add(item.id);
+      rows.push(item);
+    }
+  }
+  return rows;
+}
+
+export function useLogWorkoutExecutionMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: logWorkoutExecutionAction,
+    onSuccess: async (_result, payload) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: trainingKeys.sessions() }),
+        queryClient.invalidateQueries({ queryKey: trainingKeys.session(payload.workout_id) }),
+        queryClient.invalidateQueries({ queryKey: progressKeys.all }),
+      ]);
+    },
+  });
 }

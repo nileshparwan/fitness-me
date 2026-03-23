@@ -11,6 +11,7 @@ import { ExerciseSheet } from "./exercises-sheet";
 import { useInfiniteQueryExercises } from "@/hooks/use-exercise";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/utils";
+import { formatCategoryWithMuscleFocus } from "@/lib/exercises/muscle-groups";
 
 const muscleFilters = ["all", "chest", "back", "legs", "shoulders", "arms", "core", "glutes", "cardio"] as const;
 type MuscleFilter = (typeof muscleFilters)[number];
@@ -145,6 +146,10 @@ export function ExercisesList() {
           <div className="divide-y divide-border/40">
             {filteredExercises.map((exercise) => {
               const muscles = exercise.muscle_groups || [];
+              const categoryLabel = formatCategoryWithMuscleFocus({
+                category: exercise.category,
+                muscleGroups: muscles,
+              });
               return (
                 <div key={exercise.id} className="group flex items-center gap-3 px-4 py-3 hover:bg-muted/20">
                   <button
@@ -158,7 +163,7 @@ export function ExercisesList() {
                     <div className="min-w-0">
                       <p className="truncate text-sm font-semibold md:text-base">{exercise.name}</p>
                       <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                        <span className="uppercase tracking-[0.1em]">{exercise.category || "General"}</span>
+                        <span className="uppercase tracking-[0.1em]">{categoryLabel}</span>
                         {muscles.slice(0, 3).map((muscle) => (
                           <span key={muscle} className="rounded-[10px] border border-border/55 bg-muted/30 px-2 py-0.5">
                             {muscle}

@@ -2,17 +2,29 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { runTrackedAction } from "@/lib/events/dispatcher";
-import { revalidatePath } from "next/cache";
 import { Database } from "@/types/database";
 import { CardioSetMeta, serializeCardioNotes } from "@/utils/cardio-notes";
-import { inngest } from "@/lib/inngest/client";
+import {
+  emitTrainingWorkoutCompleted,
+  insertWorkoutExerciseRows,
+  replaceWorkoutExerciseRows,
+  revalidateTrainingWorkoutPaths,
+} from "@/lib/training/workout-mutation-helpers";
+import { z } from "zod";
 
 // 1. DERIVED TYPES FROM DATABASE
 type WorkoutInsert = Database['public']['Tables']['training_sessions']['Insert'];
-type WorkoutLogInsert = Database['public']['Tables']['strength_sets']['Insert'];
-type CardioLogInsert = Database['public']['Tables']['cardio_sessions']['Insert'];
+type WorkoutLogInsert = Database['public']['Tables']['strength_sets']['Insert'] & {
+  execution_id?: string | null;
+};
+type CardioLogInsert = Database['public']['Tables']['cardio_sessions']['Insert'] & {
+  execution_id?: string | null;
+};
 type WorkoutRow = Database["public"]["Tables"]["training_sessions"]["Row"];
 type StrengthSetRow = Database["public"]["Tables"]["strength_sets"]["Row"];
+type WorkoutExecutionSource = "quick_log" | "session_create" | "session_backfill" | "coach_log" | "client_portal";
+type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
+type WorkoutActor = { id: string };
 
 type StrengthSetWithWorkout = Pick<
   StrengthSetRow,
@@ -56,6 +68,241 @@ function formatRelativeLabel(daysAgo: number) {
   if (daysAgo <= 0) return "today";
   if (daysAgo === 1) return "1 day ago";
   return `${daysAgo} days ago`;
+}
+
+function normalizeWorkoutLifecycleStatus(
+  value: WorkoutInsert["status"] | undefined
+): WorkoutInsert["status"] {
+  if (value === "archived" || value === "draft" || value === "active") return value;
+  return "active";
+}
+
+function normalizeIsoDate(value: string | undefined) {
+  if (!value) return toDateInput(new Date());
+  return value.slice(0, 10);
+}
+
+function isUniqueViolation(error: { code?: string } | null | undefined) {
+  return error?.code === "23505";
+}
+
+function applyQuickLogSubjectFilter(
+  query: any,
+  subjectUserId: string | null,
+  subjectClientId: string | null
+) {
+  return subjectUserId !== null
+    ? query.eq("subject_user_id", subjectUserId).is("subject_client_id", null)
+    : query.eq("subject_client_id", subjectClientId).is("subject_user_id", null);
+}
+
+async function findExistingQuickLogExecution(input: {
+  supabaseAny: any;
+  templateWorkoutId: string;
+  performedOn: string;
+  subjectUserId: string | null;
+  subjectClientId: string | null;
+}) {
+  const query = applyQuickLogSubjectFilter(
+    input.supabaseAny
+      .from("workout_executions")
+      .select("id")
+      .eq("template_workout_id", input.templateWorkoutId)
+      .eq("performed_on", input.performedOn)
+      .eq("source", "quick_log"),
+    input.subjectUserId,
+    input.subjectClientId
+  );
+  const { data } = await query.maybeSingle();
+  return (data || null) as { id: string } | null;
+}
+
+async function createWorkoutExecutionRecord(input: {
+  supabase: Awaited<ReturnType<typeof createClient>>;
+  templateWorkoutId: string;
+  actorUserId: string;
+  subjectUserId: string | null;
+  subjectClientId: string | null;
+  performedOn: string;
+  source: WorkoutExecutionSource;
+  notes?: string | null;
+}) {
+  const supabaseAny = input.supabase as any;
+  const performedOn = normalizeIsoDate(input.performedOn);
+
+  if (input.source === "quick_log") {
+    const existing = await findExistingQuickLogExecution({
+      supabaseAny,
+      templateWorkoutId: input.templateWorkoutId,
+      performedOn,
+      subjectUserId: input.subjectUserId,
+      subjectClientId: input.subjectClientId,
+    });
+    if (existing?.id) return existing;
+  }
+
+  const insertPayload = {
+    template_workout_id: input.templateWorkoutId,
+    actor_user_id: input.actorUserId,
+    subject_user_id: input.subjectUserId,
+    subject_client_id: input.subjectClientId,
+    performed_on: performedOn,
+    source: input.source,
+    notes: input.notes || null,
+  };
+
+  const { data, error } = await supabaseAny
+    .from("workout_executions")
+    .insert(insertPayload)
+    .select("id")
+    .single();
+
+  if (error && isUniqueViolation(error) && input.source === "quick_log") {
+    const existing = await findExistingQuickLogExecution({
+      supabaseAny,
+      templateWorkoutId: input.templateWorkoutId,
+      performedOn,
+      subjectUserId: input.subjectUserId,
+      subjectClientId: input.subjectClientId,
+    });
+    if (existing?.id) return existing;
+  }
+
+  if (error) throw new Error(error.message);
+  return data as { id: string };
+}
+
+async function syncExecutionExercisesFromWorkout(input: {
+  supabase: Awaited<ReturnType<typeof createClient>>;
+  executionId: string;
+  workoutId: string;
+}) {
+  const supabaseAny = input.supabase as any;
+  const [{ data: strengthRows, error: strengthError }, { data: cardioRows, error: cardioError }] = await Promise.all([
+    supabaseAny
+      .from("strength_sets")
+      .select("exercise_id, exercise_name, weight, reps")
+      .eq("workout_id", input.workoutId),
+    supabaseAny
+      .from("cardio_sessions")
+      .select("activity_type, distance_km, duration_minutes")
+      .eq("workout_id", input.workoutId),
+  ]);
+
+  if (strengthError) throw new Error(strengthError.message);
+  if (cardioError) throw new Error(cardioError.message);
+
+  const strengthAgg = new Map<
+    string,
+    { exercise_id: string | null; exercise_name: string; volume_kg: number }
+  >();
+  for (const row of (strengthRows || []) as Array<{
+    exercise_id: string | null;
+    exercise_name: string | null;
+    weight: number | null;
+    reps: number | null;
+  }>) {
+    const name = (row.exercise_name || "").trim();
+    if (!name) continue;
+    const key = `${row.exercise_id || "name"}::${name.toLowerCase()}`;
+    const existing = strengthAgg.get(key) || {
+      exercise_id: row.exercise_id || null,
+      exercise_name: name,
+      volume_kg: 0,
+    };
+    existing.volume_kg += Math.max(0, Number(row.weight || 0) * Number(row.reps || 0));
+    strengthAgg.set(key, existing);
+  }
+
+  const cardioAgg = new Map<
+    string,
+    { exercise_name: string; distance_km: number; duration_minutes: number }
+  >();
+  for (const row of (cardioRows || []) as Array<{
+    activity_type: string | null;
+    distance_km: number | null;
+    duration_minutes: number | null;
+  }>) {
+    const name = (row.activity_type || "Cardio").trim() || "Cardio";
+    const key = name.toLowerCase();
+    const existing = cardioAgg.get(key) || {
+      exercise_name: name,
+      distance_km: 0,
+      duration_minutes: 0,
+    };
+    existing.distance_km += Math.max(0, Number(row.distance_km || 0));
+    existing.duration_minutes += Math.max(0, Math.round(Number(row.duration_minutes || 0)));
+    cardioAgg.set(key, existing);
+  }
+
+  const exerciseRows = [
+    ...Array.from(strengthAgg.values()).map((row) => ({
+      execution_id: input.executionId,
+      exercise_id: row.exercise_id,
+      exercise_name: row.exercise_name,
+      exercise_type: "strength",
+      volume_kg: row.volume_kg > 0 ? Number(row.volume_kg.toFixed(2)) : null,
+      distance_km: null,
+      duration_minutes: null,
+    })),
+    ...Array.from(cardioAgg.values()).map((row) => ({
+      execution_id: input.executionId,
+      exercise_id: null,
+      exercise_name: row.exercise_name,
+      exercise_type: "cardio",
+      volume_kg: null,
+      distance_km: row.distance_km > 0 ? Number(row.distance_km.toFixed(2)) : null,
+      duration_minutes: row.duration_minutes > 0 ? row.duration_minutes : null,
+    })),
+  ];
+
+  const { error: clearError } = await supabaseAny
+    .from("workout_execution_exercises")
+    .delete()
+    .eq("execution_id", input.executionId);
+  if (clearError) throw new Error(clearError.message);
+
+  if (exerciseRows.length > 0) {
+    const { error: insertError } = await supabaseAny.from("workout_execution_exercises").insert(exerciseRows);
+    if (insertError) throw new Error(insertError.message);
+  }
+}
+
+const listWorkoutExecutionSubjectsSchema = z.object({
+  search: z.string().trim().max(120).optional(),
+  page: z.number().int().min(0).default(0),
+  page_size: z.number().int().min(1).max(30).default(15),
+});
+
+const logWorkoutExecutionSchema = z.object({
+  workout_id: z.string().uuid(),
+  subject_client_id: z.string().uuid().nullable().optional(),
+  performed_on: z.string().date().optional(),
+  notes: z.string().trim().max(800).nullable().optional(),
+});
+
+function formatSubjectName(input: {
+  id: string;
+  display_name: string | null;
+  first_name: string | null;
+  last_name: string | null;
+}) {
+  if (input.display_name?.trim()) return input.display_name.trim();
+  const full = `${input.first_name || ""} ${input.last_name || ""}`.trim();
+  if (full) return full;
+  return `Client ${input.id.slice(0, 8)}`;
+}
+
+async function requireWorkoutActor(unauthorizedMessage = "Unauthorized"): Promise<{
+  supabase: SupabaseServerClient;
+  user: WorkoutActor;
+}> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error(unauthorizedMessage);
+  return { supabase, user: { id: user.id } };
 }
 
 // 2. FORM INPUT TYPE
@@ -124,7 +371,8 @@ function buildWorkoutLogs(
   exercises: WorkoutActionInput["exercises"] | undefined,
   workoutId: string,
   userId: string,
-  dateISO: string
+  dateISO: string,
+  executionId: string | null
 ) {
   const strengthLogs: WorkoutLogInsert[] = [];
   const cardioLogs: CardioLogInsert[] = [];
@@ -170,6 +418,7 @@ function buildWorkoutLogs(
 
       cardioLogs.push({
         workout_id: workoutId,
+        execution_id: executionId,
         user_id: userId,
         date: dateISO,
         entry_sequence: entryIndex,
@@ -199,6 +448,7 @@ function buildWorkoutLogs(
     ex.sets.forEach((set) => {
       strengthLogs.push({
         workout_id: workoutId,
+        execution_id: executionId,
         entry_sequence: entryIndex,
         exercise_id: ex.exercise_id || null,
         group_id: ex.group_id || null,
@@ -236,12 +486,7 @@ export async function getWorkoutExerciseLastSessionAction(input: {
       has_current_workout_id: Boolean(input.current_workout_id),
     },
     action: async () => {
-      const supabase = await createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      if (!user) throw new Error("Unauthorized");
+      const { supabase, user } = await requireWorkoutActor();
 
       const normalizedNames = Array.from(
         new Set(
@@ -311,68 +556,85 @@ export async function createWorkoutAction(data: WorkoutActionInput) {
     eventName: "workout.create",
     payload: { name: data.name, exercises_count: data.exercises?.length ?? 0 },
     action: async () => {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  
-  if (!user) throw new Error("Not authenticated");
+      const { supabase, user } = await requireWorkoutActor("Not authenticated");
 
-  // A. Insert Parent Workout
-  const workoutPayload: WorkoutInsert = {
-    user_id: user.id,
-    created_by_user_id: user.id,
-    subject_user_id: user.id,
-    subject_client_id: null,
-    name: data.name,
-    date: data.date.toISOString(),
-    performed_on: data.date.toISOString().slice(0, 10),
-    session_slot: "other",
-    sport_type: data.sport_type || null,
-    location: data.location || null,
-    perceived_exertion: data.perceived_exertion ?? null,
-    status: data.status || "active",
-    notes: data.notes || null,
-    overall_rating: data.overall_rating ?? null,
-    ai_feedback: data.ai_feedback || null,
-    template_id: data.template_id || null,
-  };
+      const workoutPayload: WorkoutInsert = {
+        user_id: user.id,
+        created_by_user_id: user.id,
+        subject_user_id: user.id,
+        subject_client_id: null,
+        name: data.name,
+        date: data.date.toISOString(),
+        performed_on: data.date.toISOString().slice(0, 10),
+        session_slot: "other",
+        sport_type: data.sport_type || null,
+        location: data.location || null,
+        perceived_exertion: data.perceived_exertion ?? null,
+        status: normalizeWorkoutLifecycleStatus(data.status),
+        notes: data.notes || null,
+        overall_rating: data.overall_rating ?? null,
+        ai_feedback: data.ai_feedback || null,
+        template_id: data.template_id || null,
+      };
 
-  const { data: workout, error: wError } = await supabase
-    .from("training_sessions")
-    .insert(workoutPayload)
-    .select()
-    .single();
+      const { data: workout, error: wError } = await supabase
+        .from("training_sessions")
+        .insert(workoutPayload)
+        .select()
+        .single();
+      if (wError) throw new Error(wError.message);
 
-  if (wError) throw new Error(wError.message);
+      const initialLogs = buildWorkoutLogs(data.exercises, workout.id, user.id, data.date.toISOString(), null);
+      const hasWorkoutLogs = initialLogs.strengthLogs.length > 0 || initialLogs.cardioLogs.length > 0;
 
-  const { strengthLogs, cardioLogs } = buildWorkoutLogs(
-    data.exercises,
-    workout.id,
-    user.id,
-    data.date.toISOString()
-  );
+      let executionId: string | null = null;
+      if (hasWorkoutLogs) {
+        const execution = await createWorkoutExecutionRecord({
+          supabase,
+          templateWorkoutId: workout.id,
+          actorUserId: user.id,
+          subjectUserId: workout.subject_user_id ?? user.id,
+          subjectClientId: workout.subject_client_id ?? null,
+          performedOn: workout.performed_on,
+          source: "session_create",
+          notes: data.notes || null,
+        });
+        executionId = execution.id;
+      }
 
-  if (strengthLogs.length > 0) {
-    const { error: strengthInsertError } = await supabase.from("strength_sets").insert(strengthLogs);
-    if (strengthInsertError) throw new Error(strengthInsertError.message);
-  }
-  if (cardioLogs.length > 0) {
-    const { error: cardioInsertError } = await supabase.from("cardio_sessions").insert(cardioLogs);
-    if (cardioInsertError) throw new Error(cardioInsertError.message);
-  }
+      const { strengthLogs, cardioLogs } = hasWorkoutLogs
+        ? buildWorkoutLogs(data.exercises, workout.id, user.id, data.date.toISOString(), executionId)
+        : initialLogs;
 
-  void inngest.send({
-    name: "training/workout.completed",
-    data: {
-      workout_id: workout.id,
-      user_id: user.id,
-      subject_user_id: workout.subject_user_id ?? null,
-      subject_client_id: workout.subject_client_id ?? null,
-    },
-  });
+      await insertWorkoutExerciseRows({
+        supabase,
+        strengthRows: strengthLogs,
+        cardioRows: cardioLogs,
+      });
 
-  revalidatePath("/workouts");
-  revalidatePath("/goals");
-  return workout;
+      if (executionId) {
+        await syncExecutionExercisesFromWorkout({
+          supabase,
+          executionId,
+          workoutId: workout.id,
+        });
+      }
+
+      if (strengthLogs.length > 0 || cardioLogs.length > 0) {
+        emitTrainingWorkoutCompleted({
+          workoutId: workout.id,
+          executionId,
+          userId: user.id,
+          subjectUserId: workout.subject_user_id ?? null,
+          subjectClientId: workout.subject_client_id ?? null,
+        });
+      }
+
+      revalidateTrainingWorkoutPaths({
+        includeGoals: true,
+        includeProgress: true,
+      });
+      return workout;
     },
   });
 }
@@ -385,80 +647,265 @@ export async function updateWorkoutAction(id: string, data: Partial<WorkoutActio
     eventName: "workout.update",
     payload: { workout_id: id, exercises_count: data.exercises?.length ?? 0 },
     action: async () => {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+      const { supabase, user } = await requireWorkoutActor();
 
-  if (!user) throw new Error("Unauthorized");
+      const { data: ownedWorkout } = await supabase
+        .from("training_sessions")
+        .select("id, subject_user_id, subject_client_id, performed_on")
+        .eq("id", id)
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (!ownedWorkout) throw new Error("Forbidden");
 
-  const { data: ownedWorkout } = await supabase
-    .from("training_sessions")
-    .select("id, subject_user_id, subject_client_id")
-    .eq("id", id)
-    .eq("user_id", user.id)
-    .maybeSingle();
-  if (!ownedWorkout) throw new Error("Forbidden");
+      const updateData: Database["public"]["Tables"]["training_sessions"]["Update"] = {};
+      if (data.name) updateData.name = data.name;
+      if (data.date) {
+        updateData.date = data.date.toISOString();
+        updateData.performed_on = data.date.toISOString().slice(0, 10);
+      }
+      if (data.sport_type !== undefined) updateData.sport_type = data.sport_type || null;
+      if (data.location !== undefined) updateData.location = data.location || null;
+      if (data.perceived_exertion !== undefined) updateData.perceived_exertion = data.perceived_exertion;
+      if (data.notes !== undefined) updateData.notes = data.notes;
+      if (data.status) updateData.status = normalizeWorkoutLifecycleStatus(data.status);
+      if (data.overall_rating !== undefined) updateData.overall_rating = data.overall_rating;
+      if (data.ai_feedback !== undefined) updateData.ai_feedback = data.ai_feedback || null;
+      if (data.template_id !== undefined) updateData.template_id = data.template_id || null;
 
-  // A. Update Header
-  const updateData: Database['public']['Tables']['training_sessions']['Update'] = {};
-  if (data.name) updateData.name = data.name;
-  if (data.date) {
-    updateData.date = data.date.toISOString();
-    updateData.performed_on = data.date.toISOString().slice(0, 10);
-  }
-  if (data.sport_type !== undefined) updateData.sport_type = data.sport_type || null;
-  if (data.location !== undefined) updateData.location = data.location || null;
-  if (data.perceived_exertion !== undefined) updateData.perceived_exertion = data.perceived_exertion;
-  if (data.notes !== undefined) updateData.notes = data.notes;
-  if (data.status) updateData.status = data.status;
-  if (data.overall_rating !== undefined) updateData.overall_rating = data.overall_rating;
-  if (data.ai_feedback !== undefined) updateData.ai_feedback = data.ai_feedback || null;
-  if (data.template_id !== undefined) updateData.template_id = data.template_id || null;
+      if (Object.keys(updateData).length > 0) {
+        const { error } = await supabase.from("training_sessions").update(updateData).eq("id", id).eq("user_id", user.id);
+        if (error) throw new Error(error.message);
+      }
 
-  if (Object.keys(updateData).length > 0) {
-    const { error } = await supabase
-      .from("training_sessions")
-      .update(updateData)
-      .eq("id", id)
-      .eq("user_id", user.id);
-    if (error) throw new Error(error.message);
-  }
+      if (data.exercises) {
+        const supabaseAny = supabase as any;
+        const { data: latestExecution } = await supabaseAny
+          .from("workout_executions")
+          .select("id")
+          .eq("template_workout_id", id)
+          .order("logged_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        let executionId = (latestExecution?.id as string | undefined) || null;
 
-  // B. Wipe & Rewrite Logs
-  if (data.exercises) {
-    // 1. Delete existing
-    const { error: deleteStrengthError } = await supabase.from("strength_sets").delete().eq("workout_id", id);
-    if (deleteStrengthError) throw new Error(deleteStrengthError.message);
-    const { error: deleteCardioError } = await supabase.from("cardio_sessions").delete().eq("workout_id", id);
-    if (deleteCardioError) throw new Error(deleteCardioError.message);
+        const dateStr = data.date ? data.date.toISOString() : new Date().toISOString();
+        const initialLogs = buildWorkoutLogs(data.exercises, id, user.id, dateStr, null);
+        const hasWorkoutLogs = initialLogs.strengthLogs.length > 0 || initialLogs.cardioLogs.length > 0;
+        if (!executionId && hasWorkoutLogs) {
+          const execution = await createWorkoutExecutionRecord({
+            supabase,
+            templateWorkoutId: id,
+            actorUserId: user.id,
+            subjectUserId: ownedWorkout.subject_user_id ?? user.id,
+            subjectClientId: ownedWorkout.subject_client_id ?? null,
+            performedOn: updateData.performed_on || ownedWorkout.performed_on || toDateInput(new Date()),
+            source: "session_create",
+            notes: data.notes || null,
+          });
+          executionId = execution.id;
+        }
 
-    // 2. Prepare new
-    const dateStr = data.date ? data.date.toISOString() : new Date().toISOString();
-    const { strengthLogs, cardioLogs } = buildWorkoutLogs(data.exercises, id, user.id, dateStr);
-    if (strengthLogs.length > 0) {
-      const { error: strengthInsertError } = await supabase.from("strength_sets").insert(strengthLogs);
-      if (strengthInsertError) throw new Error(strengthInsertError.message);
-    }
-    if (cardioLogs.length > 0) {
-      const { error: cardioInsertError } = await supabase.from("cardio_sessions").insert(cardioLogs);
-      if (cardioInsertError) throw new Error(cardioInsertError.message);
-    }
+        const { strengthLogs, cardioLogs } = hasWorkoutLogs
+          ? buildWorkoutLogs(data.exercises, id, user.id, dateStr, executionId)
+          : initialLogs;
 
-    void inngest.send({
-      name: "training/workout.completed",
-      data: {
-        workout_id: id,
-        user_id: user.id,
-        subject_user_id: ownedWorkout.subject_user_id ?? null,
-        subject_client_id: ownedWorkout.subject_client_id ?? null,
-      },
-    });
-  }
+        await replaceWorkoutExerciseRows({
+          supabase,
+          workoutId: id,
+          strengthRows: strengthLogs,
+          cardioRows: cardioLogs,
+        });
 
-  revalidatePath("/workouts");
-  revalidatePath("/goals");
-  revalidatePath(`/workouts/${id}`);
-  revalidatePath("/progress"); 
-  return { success: true };
+        if (executionId) {
+          await syncExecutionExercisesFromWorkout({
+            supabase,
+            executionId,
+            workoutId: id,
+          });
+        }
+
+        if (executionId && (strengthLogs.length > 0 || cardioLogs.length > 0)) {
+          emitTrainingWorkoutCompleted({
+            workoutId: id,
+            executionId,
+            userId: user.id,
+            subjectUserId: ownedWorkout.subject_user_id ?? null,
+            subjectClientId: ownedWorkout.subject_client_id ?? null,
+          });
+        }
+      }
+
+      revalidateTrainingWorkoutPaths({
+        workoutId: id,
+        includeGoals: true,
+        includeProgress: true,
+      });
+      return { success: true };
+    },
+  });
+}
+
+export async function listWorkoutExecutionSubjectsAction(input: z.input<typeof listWorkoutExecutionSubjectsSchema>) {
+  const payload = listWorkoutExecutionSubjectsSchema.parse(input);
+  return runTrackedAction({
+    eventName: "workout.execution.subjects.list",
+    payload: {
+      page: payload.page,
+      page_size: payload.page_size,
+      has_search: Boolean(payload.search?.trim()),
+    },
+    action: async () => {
+      const { supabase, user } = await requireWorkoutActor();
+
+      const { data: actorProfile, error: actorError } = await supabase
+        .from("profiles")
+        .select("full_name, role")
+        .eq("id", user.id)
+        .maybeSingle();
+      if (actorError) throw new Error(actorError.message);
+
+      const search = payload.search?.trim() || "";
+      let query = supabase
+        .from("clients")
+        .select("id, display_name, first_name, last_name, status, primary_coach_id, created_by_user_id")
+        .neq("status", "archived")
+        .order("display_name", { ascending: true, nullsFirst: false })
+        .order("first_name", { ascending: true, nullsFirst: false });
+
+      const actorIsSysadmin = actorProfile?.role === "sysadmin";
+      if (!actorIsSysadmin) {
+        query = query.or(`primary_coach_id.eq.${user.id},created_by_user_id.eq.${user.id}`);
+      }
+
+      if (search) {
+        const safe = search.replaceAll("%", "\\%").replaceAll("_", "\\_");
+        query = query.or(`display_name.ilike.%${safe}%,first_name.ilike.%${safe}%,last_name.ilike.%${safe}%`);
+      }
+
+      const from = payload.page * payload.page_size;
+      const to = from + payload.page_size;
+      const { data, error } = await query.range(from, to);
+      if (error) throw new Error(error.message);
+
+      const rows = (data || []) as Array<{
+        id: string;
+        display_name: string | null;
+        first_name: string | null;
+        last_name: string | null;
+      }>;
+
+      const hasMore = rows.length > payload.page_size;
+      const pageRows = hasMore ? rows.slice(0, payload.page_size) : rows;
+      const includeSelf = payload.page === 0;
+      const selfLabel = actorProfile?.full_name?.trim() || "Myself";
+
+      return {
+        items: [
+          ...(includeSelf
+            ? [
+                {
+                  id: "self",
+                  full_name: selfLabel,
+                  is_self: true,
+                },
+              ]
+            : []),
+          ...pageRows.map((row) => ({
+            id: row.id,
+            full_name: formatSubjectName(row),
+            is_self: false,
+          })),
+        ],
+        page: payload.page,
+        page_size: payload.page_size,
+        has_more: hasMore,
+      };
+    },
+  });
+}
+
+export async function logWorkoutExecutionAction(input: z.input<typeof logWorkoutExecutionSchema>) {
+  const payload = logWorkoutExecutionSchema.parse(input);
+  return runTrackedAction({
+    eventName: "workout.execution.log",
+    payload: {
+      workout_id: payload.workout_id,
+      subject_client_id: payload.subject_client_id ?? null,
+      performed_on: payload.performed_on ?? null,
+    },
+    action: async () => {
+      const { supabase, user } = await requireWorkoutActor();
+
+      const [{ data: actorProfile, error: actorError }, { data: workout, error: workoutError }] = await Promise.all([
+        supabase.from("profiles").select("role").eq("id", user.id).maybeSingle(),
+        supabase
+          .from("training_sessions")
+          .select("id, user_id, created_by_user_id, subject_user_id, subject_client_id, performed_on")
+          .eq("id", payload.workout_id)
+          .maybeSingle(),
+      ]);
+
+      if (actorError) throw new Error(actorError.message);
+      if (workoutError) throw new Error(workoutError.message);
+      if (!workout) throw new Error("Workout not found.");
+
+      const actorIsSysadmin = actorProfile?.role === "sysadmin";
+      const ownsWorkout =
+        workout.user_id === user.id ||
+        workout.created_by_user_id === user.id ||
+        workout.subject_user_id === user.id;
+
+      let subjectUserId: string | null = user.id;
+      let subjectClientId: string | null = null;
+
+      if (payload.subject_client_id) {
+        const { data: targetClient, error: targetClientError } = await supabase
+          .from("clients")
+          .select("id, primary_coach_id, created_by_user_id, status")
+          .eq("id", payload.subject_client_id)
+          .maybeSingle();
+        if (targetClientError) throw new Error(targetClientError.message);
+        if (!targetClient) throw new Error("Client not found.");
+        if (targetClient.status === "archived") throw new Error("Archived clients cannot be selected.");
+
+        const canAccessClient =
+          actorIsSysadmin ||
+          targetClient.primary_coach_id === user.id ||
+          targetClient.created_by_user_id === user.id;
+        if (!canAccessClient) throw new Error("Unauthorized client selection.");
+
+        subjectUserId = null;
+        subjectClientId = targetClient.id;
+      } else if (!ownsWorkout && !actorIsSysadmin) {
+        throw new Error("Unauthorized");
+      }
+
+      const execution = await createWorkoutExecutionRecord({
+        supabase,
+        templateWorkoutId: workout.id,
+        actorUserId: user.id,
+        subjectUserId,
+        subjectClientId,
+        performedOn: payload.performed_on || workout.performed_on || toDateInput(new Date()),
+        source: "quick_log",
+        notes: payload.notes || null,
+      });
+
+      await syncExecutionExercisesFromWorkout({
+        supabase,
+        executionId: execution.id,
+        workoutId: workout.id,
+      });
+
+      revalidateTrainingWorkoutPaths({
+        workoutId: payload.workout_id,
+        includeGoals: true,
+        includeProgress: true,
+      });
+
+      return {
+        execution_id: execution.id,
+      };
     },
   });
 }
@@ -471,20 +918,18 @@ export async function deleteWorkoutAction(ids: string | string[]) {
     eventName: "workout.delete",
     payload: { count: Array.isArray(ids) ? ids.length : 1 },
     action: async () => {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error("Unauthorized");
-  const idArray = Array.isArray(ids) ? ids : [ids];
+      const { supabase, user } = await requireWorkoutActor();
+      const idArray = Array.isArray(ids) ? ids : [ids];
 
-  const { error } = await supabase
-    .from("training_sessions")
-    .delete()
-    .eq("user_id", user.id)
-    .in("id", idArray);
-  if (error) throw new Error(error.message);
-  
-  revalidatePath("/workouts");
-  return { success: true };
+      const { error } = await supabase
+        .from("training_sessions")
+        .delete()
+        .eq("user_id", user.id)
+        .in("id", idArray);
+      if (error) throw new Error(error.message);
+
+      revalidateTrainingWorkoutPaths({});
+      return { success: true };
     },
   });
 }

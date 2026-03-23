@@ -169,9 +169,12 @@ export type Database = {
           ai_analysis: string | null
           ankle_cm: number | null
           arms_cm: number | null
+          bicep_left_cm: number | null
+          bicep_right_cm: number | null
           bmi: number | null
           body_fat_percent: number | null
           bone_density_score: number | null
+          calf_cm: number | null
           calves_cm: number | null
           chest_cm: number | null
           created_at: string | null
@@ -191,6 +194,8 @@ export type Database = {
           skinfold_abdomen_mm: number | null
           skinfold_chest_mm: number | null
           skinfold_thigh_mm: number | null
+          thigh_left_cm: number | null
+          thigh_right_cm: number | null
           thighs_cm: number | null
           updated_at: string | null
           user_id: string
@@ -203,9 +208,12 @@ export type Database = {
           ai_analysis?: string | null
           ankle_cm?: number | null
           arms_cm?: number | null
+          bicep_left_cm?: number | null
+          bicep_right_cm?: number | null
           bmi?: number | null
           body_fat_percent?: number | null
           bone_density_score?: number | null
+          calf_cm?: number | null
           calves_cm?: number | null
           chest_cm?: number | null
           created_at?: string | null
@@ -225,6 +233,8 @@ export type Database = {
           skinfold_abdomen_mm?: number | null
           skinfold_chest_mm?: number | null
           skinfold_thigh_mm?: number | null
+          thigh_left_cm?: number | null
+          thigh_right_cm?: number | null
           thighs_cm?: number | null
           updated_at?: string | null
           user_id: string
@@ -237,9 +247,12 @@ export type Database = {
           ai_analysis?: string | null
           ankle_cm?: number | null
           arms_cm?: number | null
+          bicep_left_cm?: number | null
+          bicep_right_cm?: number | null
           bmi?: number | null
           body_fat_percent?: number | null
           bone_density_score?: number | null
+          calf_cm?: number | null
           calves_cm?: number | null
           chest_cm?: number | null
           created_at?: string | null
@@ -259,6 +272,8 @@ export type Database = {
           skinfold_abdomen_mm?: number | null
           skinfold_chest_mm?: number | null
           skinfold_thigh_mm?: number | null
+          thigh_left_cm?: number | null
+          thigh_right_cm?: number | null
           thighs_cm?: number | null
           updated_at?: string | null
           user_id?: string

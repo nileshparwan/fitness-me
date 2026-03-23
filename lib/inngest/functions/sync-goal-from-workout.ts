@@ -96,10 +96,10 @@ export const syncGoalFromWorkout = inngest.createFunction(
     const admin = createAdminClient();
 
     const setsWithMaxWeightByExercise = await step.run("fetch-sets", async () => {
-      const { data, error } = await admin
-        .from("strength_sets")
-        .select("exercise_id, weight")
-        .eq("workout_id", event.data.workout_id);
+      const executionId = (event.data as { execution_id?: string | null }).execution_id;
+      let setsQuery = admin.from("strength_sets").select("exercise_id, weight");
+      setsQuery = executionId ? setsQuery.eq("execution_id", executionId) : setsQuery.eq("workout_id", event.data.workout_id);
+      const { data, error } = await setsQuery;
       if (error) throw new Error(error.message);
 
       const byExercise = new Map<string, number>();

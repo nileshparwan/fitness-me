@@ -18,6 +18,11 @@ import {
   type ClientGoalStatus,
   type ClientGoalTrend,
 } from "@/lib/clients/dashboard";
+import {
+  emitTrainingWorkoutCompleted,
+  insertWorkoutExerciseRows,
+  revalidateTrainingWorkoutPaths,
+} from "@/lib/training/workout-mutation-helpers";
 import { decodeCursor, encodeCursor } from "@/lib/utils/pagination";
 import { escapeLikePattern } from "@/lib/utils/search";
 import { createClient } from "@/lib/supabase/server";
@@ -29,11 +34,18 @@ type AssignmentSessionRow = Database["public"]["Tables"]["client_plan_assignment
 type TemplateRow = Database["public"]["Tables"]["coach_plan_templates"]["Row"];
 type TemplateSessionRow = Database["public"]["Tables"]["coach_plan_template_sessions"]["Row"];
 type WorkoutInsert = Database["public"]["Tables"]["training_sessions"]["Insert"];
+type WorkoutSessionRow = Database["public"]["Tables"]["training_sessions"]["Row"];
 type StrengthSetInsert = Database["public"]["Tables"]["strength_sets"]["Insert"];
 type CardioSessionInsert = Database["public"]["Tables"]["cardio_sessions"]["Insert"];
 type CheckinInsert = Database["public"]["Tables"]["client_checkins"]["Insert"];
+type CheckinRow = Database["public"]["Tables"]["client_checkins"]["Row"];
+type CheckinUpdate = Database["public"]["Tables"]["client_checkins"]["Update"];
 type CoachNoteInsert = Database["public"]["Tables"]["coach_notes"]["Insert"];
+type CoachNoteRow = Database["public"]["Tables"]["coach_notes"]["Row"];
+type CoachNoteUpdate = Database["public"]["Tables"]["coach_notes"]["Update"];
 type PaymentInsert = Database["public"]["Tables"]["client_payments"]["Insert"];
+type PaymentRow = Database["public"]["Tables"]["client_payments"]["Row"];
+type PaymentUpdate = Database["public"]["Tables"]["client_payments"]["Update"];
 type BillingPlanInsert = Database["public"]["Tables"]["client_billing_plans"]["Insert"];
 type BillingPlanUpdate = Database["public"]["Tables"]["client_billing_plans"]["Update"];
 type PaymentLogInsert = Database["public"]["Tables"]["payment_logs"]["Insert"];
@@ -116,6 +128,7 @@ const upsertClientSchema = z.object({
   display_name: z.string().trim().max(180).nullable().optional(),
   email: z.string().trim().email().nullable().optional(),
   phone: z.string().trim().max(40).nullable().optional(),
+  date_of_birth: z.string().date().nullable().optional(),
   status: z.enum(["active", "paused", "blocked", "archived"]).default("active"),
   linked_user_id: z.string().uuid().nullable().optional(),
   goals: z.string().trim().max(3000).nullable().optional(),
@@ -243,6 +256,226 @@ const updateNoteSchema = z
       value.visibility !== undefined,
     "At least one field must be provided."
   );
+
+function assertCheckinSubjectTarget(input: {
+  subjectClientId?: string | null;
+  subjectUserId?: string | null;
+}) {
+  if (!input.subjectClientId && !input.subjectUserId) {
+    throw new Error("A check-in must target a client or user.");
+  }
+  if (input.subjectClientId && input.subjectUserId) {
+    throw new Error("A check-in can target only one subject.");
+  }
+}
+
+function buildCheckinInsertPayload(input: {
+  payload: z.output<typeof createCheckinSchema>;
+  actorUserId: string;
+}): CheckinInsert {
+  return {
+    subject_client_id: input.payload.subject_client_id || null,
+    subject_user_id: input.payload.subject_user_id || null,
+    created_by_user_id: input.actorUserId,
+    urgent: input.payload.urgent,
+    notes: input.payload.notes || null,
+    checkin_data: (input.payload.checkin_data || {}) as Json,
+  };
+}
+
+function buildCheckinUpdatePayload(payload: z.output<typeof updateCheckinSchema>): CheckinUpdate {
+  const updates: CheckinUpdate = {
+    status: payload.status,
+  };
+  if (typeof payload.urgent === "boolean") updates.urgent = payload.urgent;
+  if (payload.notes !== undefined) updates.notes = payload.notes || null;
+  if (payload.status === "reviewed") updates.reviewed_at = new Date().toISOString();
+  if (payload.status === "actioned") updates.actioned_at = new Date().toISOString();
+  return updates;
+}
+
+async function insertClientCheckinRow(input: {
+  supabase: DbClient;
+  payload: CheckinInsert;
+}): Promise<CheckinRow> {
+  const { data, error } = await input.supabase.from("client_checkins").insert(input.payload).select("*").single();
+  if (error) throw new Error(error.message);
+  return data as CheckinRow;
+}
+
+async function updateClientCheckinRow(input: {
+  supabase: DbClient;
+  checkinId: string;
+  updates: CheckinUpdate;
+}): Promise<CheckinRow> {
+  const { data, error } = await input.supabase
+    .from("client_checkins")
+    .update(input.updates)
+    .eq("id", input.checkinId)
+    .select("*")
+    .single();
+  if (error) throw new Error(error.message);
+  return data as CheckinRow;
+}
+
+function resolveCoachNoteVisibility(input: {
+  visibility?: "private" | "visible_to_client";
+  isSharedWithLinkedUser: boolean;
+}) {
+  if (input.visibility !== undefined) {
+    return {
+      visibility: input.visibility,
+      is_shared_with_linked_user: input.visibility === "visible_to_client",
+    } as const;
+  }
+  const isShared = input.isSharedWithLinkedUser;
+  return {
+    visibility: (isShared ? "visible_to_client" : "private") as "private" | "visible_to_client",
+    is_shared_with_linked_user: isShared,
+  } as const;
+}
+
+function buildCoachNoteInsertPayload(input: {
+  payload: z.output<typeof createNoteSchema>;
+  actorUserId: string;
+}): CoachNoteInsert {
+  const visibilityFields = resolveCoachNoteVisibility({
+    visibility: input.payload.visibility,
+    isSharedWithLinkedUser: input.payload.is_shared_with_linked_user,
+  });
+  return {
+    client_id: input.payload.client_id,
+    coach_id: input.actorUserId,
+    tag: normalizeCoachNoteTag(input.payload.tag),
+    title: input.payload.title || null,
+    content: input.payload.content,
+    is_shared_with_linked_user: visibilityFields.is_shared_with_linked_user,
+    visibility: visibilityFields.visibility,
+  };
+}
+
+function buildCoachNoteUpdatePayload(payload: z.output<typeof updateNoteSchema>): CoachNoteUpdate {
+  const updates: CoachNoteUpdate = {};
+  if (payload.tag !== undefined) updates.tag = normalizeCoachNoteTag(payload.tag);
+  if (payload.title !== undefined) updates.title = payload.title || null;
+  if (payload.content !== undefined) updates.content = payload.content;
+  if (payload.visibility !== undefined) {
+    updates.visibility = payload.visibility;
+    updates.is_shared_with_linked_user = payload.visibility === "visible_to_client";
+  }
+  return updates;
+}
+
+async function insertCoachNoteRow(input: {
+  supabase: DbClient;
+  payload: CoachNoteInsert;
+}): Promise<CoachNoteRow> {
+  const { data, error } = await input.supabase.from("coach_notes").insert(input.payload).select("*").single();
+  if (error) throw new Error(error.message);
+  return data as CoachNoteRow;
+}
+
+async function updateCoachNoteRow(input: {
+  supabase: DbClient;
+  noteId: string;
+  clientId: string;
+  updates: CoachNoteUpdate;
+}): Promise<CoachNoteRow> {
+  const { data, error } = await input.supabase
+    .from("coach_notes")
+    .update(input.updates)
+    .eq("id", input.noteId)
+    .eq("client_id", input.clientId)
+    .select("*")
+    .single();
+  if (error) throw new Error(error.message);
+  return data as CoachNoteRow;
+}
+
+function emitCheckinSubmitted(input: {
+  checkinId: string;
+  createdByUserId: string;
+  subjectClientId: string | null;
+  subjectUserId: string | null;
+}) {
+  void inngest.send({
+    name: "coaching/checkin.submitted",
+    data: {
+      checkin_id: input.checkinId,
+      created_by_user_id: input.createdByUserId,
+      subject_client_id: input.subjectClientId,
+      subject_user_id: input.subjectUserId,
+    },
+  });
+}
+
+function buildClientPaymentInsertPayload(input: {
+  payload: z.output<typeof recordPaymentSchema>;
+  actorUserId: string;
+}): PaymentInsert {
+  return {
+    client_id: input.payload.client_id,
+    coach_id: input.actorUserId,
+    amount: input.payload.amount,
+    currency: input.payload.currency.toUpperCase(),
+    method: input.payload.method,
+    payment_date: input.payload.payment_date,
+    period_start: input.payload.period_start || null,
+    period_end: input.payload.period_end || null,
+    status: input.payload.status,
+    notes: input.payload.notes || null,
+  };
+}
+
+function buildClientPaymentDetailsUpdatePayload(payload: z.output<typeof updatePaymentDetailsSchema>): PaymentUpdate {
+  const changes: PaymentUpdate = {};
+  if (payload.method !== undefined) changes.method = payload.method;
+  if (payload.status !== undefined) changes.status = payload.status;
+  if (payload.notes !== undefined) changes.notes = payload.notes;
+  return changes;
+}
+
+async function insertClientPaymentRow(input: {
+  supabase: DbClient;
+  payload: PaymentInsert;
+}): Promise<PaymentRow> {
+  const { data, error } = await input.supabase.from("client_payments").insert(input.payload).select("*").single();
+  if (error) throw new Error(error.message);
+  return data as PaymentRow;
+}
+
+async function deleteClientPaymentRow(input: {
+  supabase: DbClient;
+  paymentId: string;
+}): Promise<Pick<PaymentRow, "id" | "client_id">> {
+  const { data, error } = await input.supabase
+    .from("client_payments")
+    .delete()
+    .eq("id", input.paymentId)
+    .select("id, client_id")
+    .single();
+  if (error) throw new Error(error.message);
+  return data as Pick<PaymentRow, "id" | "client_id">;
+}
+
+async function updateClientPaymentRow(input: {
+  supabase: DbClient;
+  paymentId: string;
+  changes: PaymentUpdate;
+}): Promise<Pick<PaymentRow, "id" | "client_id">> {
+  const { data, error } = await input.supabase
+    .from("client_payments")
+    .update(input.changes)
+    .eq("id", input.paymentId)
+    .select("id, client_id")
+    .single();
+  if (error) throw new Error(error.message);
+  return data as Pick<PaymentRow, "id" | "client_id">;
+}
+
+function revalidateCoachClientFromPayment(input: Pick<PaymentRow, "client_id">) {
+  revalidateCoachPaths(input.client_id);
+}
 
 const recordPaymentSchema = z.object({
   client_id: z.string().uuid(),
@@ -545,6 +778,115 @@ function chunkArray<T>(input: T[], size = 20) {
   return chunks;
 }
 
+async function listActiveAssignmentsByClientIds(
+  supabase: DbClient,
+  coachId: string,
+  clientIds: string[]
+): Promise<Array<Pick<AssignmentRow, "id" | "client_id">>> {
+  if (clientIds.length === 0) return [];
+  const assignmentRows: Array<Pick<AssignmentRow, "id" | "client_id">> = [];
+  for (const clientIdChunk of chunkArray(clientIds, 20)) {
+    const { data, error } = await supabase
+      .from("client_plan_assignments")
+      .select("id, client_id")
+      .in("client_id", clientIdChunk)
+      .eq("coach_id", coachId)
+      .eq("status", "active")
+      .order("assigned_at", { ascending: false });
+    if (error) throw new Error(error.message);
+    assignmentRows.push(...((data || []) as Array<Pick<AssignmentRow, "id" | "client_id">>));
+  }
+  return assignmentRows;
+}
+
+async function listAssignmentSessionsByAssignmentIds(
+  supabase: DbClient,
+  assignmentIds: string[]
+): Promise<Map<string, AssignmentSessionRow[]>> {
+  const sessionsByAssignment = new Map<string, AssignmentSessionRow[]>();
+  if (assignmentIds.length === 0) return sessionsByAssignment;
+
+  for (const assignmentIdChunk of chunkArray(assignmentIds, 20)) {
+    const { data: sessionsChunk, error: sessionsError } = await supabase
+      .from("client_plan_assignment_sessions")
+      .select("*")
+      .in("assignment_id", assignmentIdChunk)
+      .order("sequence_no", { ascending: true });
+    if (sessionsError) throw new Error(sessionsError.message);
+    for (const row of (sessionsChunk || []) as AssignmentSessionRow[]) {
+      const existing = sessionsByAssignment.get(row.assignment_id) || [];
+      existing.push(row);
+      sessionsByAssignment.set(row.assignment_id, existing);
+    }
+  }
+
+  return sessionsByAssignment;
+}
+
+async function countActiveAssignmentsByClientId(
+  supabase: DbClient,
+  coachId: string,
+  clientIds: string[]
+): Promise<Map<string, number>> {
+  const activePlansCountByClient = new Map<string, number>();
+  const assignmentRows = await listActiveAssignmentsByClientIds(supabase, coachId, clientIds);
+  for (const row of assignmentRows) {
+    activePlansCountByClient.set(row.client_id, (activePlansCountByClient.get(row.client_id) || 0) + 1);
+  }
+  return activePlansCountByClient;
+}
+
+async function fetchClientSessionsByPerformedRange(input: {
+  supabase: DbClient;
+  clientId: string;
+  startDate: string;
+  endDate: string;
+  includePerformedOnSort?: boolean;
+}): Promise<WorkoutSessionRow[]> {
+  let query = input.supabase
+    .from("training_sessions")
+    .select("*")
+    .eq("subject_client_id", input.clientId)
+    .gte("performed_on", input.startDate)
+    .lte("performed_on", input.endDate);
+
+  if (input.includePerformedOnSort) {
+    query = query.order("performed_on", { ascending: true });
+  }
+  query = query.order("started_at", { ascending: true, nullsFirst: true });
+
+  const { data, error } = await query;
+  if (error) throw new Error(error.message);
+  return (data || []) as WorkoutSessionRow[];
+}
+
+async function fetchClientCheckinsByClientId(input: {
+  supabase: DbClient;
+  clientId: string;
+}): Promise<CheckinRow[]> {
+  const { data, error } = await input.supabase
+    .from("client_checkins")
+    .select("*")
+    .eq("subject_client_id", input.clientId)
+    .order("submitted_at", { ascending: false });
+  if (error) throw new Error(error.message);
+  return (data || []) as CheckinRow[];
+}
+
+async function fetchCoachNotesByClientId(input: {
+  supabase: DbClient;
+  clientId: string;
+}): Promise<CoachNoteRow[]> {
+  const { data, error } = await input.supabase
+    .from("coach_notes")
+    .select("*")
+    .eq("client_id", input.clientId)
+    .is("archived_at", null)
+    .order("created_at", { ascending: false });
+  if (error) throw new Error(error.message);
+  return (data || []) as CoachNoteRow[];
+}
+
 function revalidateCoachPaths(clientId?: string) {
   revalidatePath("/coach/plans");
   revalidatePath("/clients");
@@ -688,6 +1030,32 @@ type GoalProgressHistorySlice = Pick<
   | "target_weight"
 >;
 type DbClient = SupabaseClient<Database>;
+type GoalListFallbackMode = "none" | "assigned_by_self";
+
+const GOAL_SELECTED_COLUMNS = [
+  "id",
+  "user_id",
+  "goal_type",
+  "custom_description",
+  "start_value",
+  "current_value",
+  "target_value",
+  "start_weight",
+  "current_weight",
+  "target_weight",
+  "unit",
+  "status",
+  "start_date",
+  "target_date",
+  "updated_at",
+  "created_at",
+  "notes",
+  "priority",
+  "goal_direction",
+  "check_in_interval_days",
+  "linked_exercise_id",
+  "linked_program_id",
+] as const;
 
 export type ClientGoalItem = {
   id: string;
@@ -1018,6 +1386,177 @@ function mapGoalRowToClientItem(input: {
   };
 }
 
+function revalidatePersonalGoalPaths() {
+  revalidatePath("/goals");
+  revalidatePath("/clients/dashboard");
+}
+
+async function queryGoalsWithFallback(input: {
+  supabase: DbClient;
+  userId: string;
+  status: GoalStatus | "all";
+  limit: number;
+  personalGoalFilter: boolean;
+  fallbackMode: GoalListFallbackMode;
+}): Promise<GoalRow[]> {
+  const runGoalsQuery = async (
+    columns: string[],
+    withPersonalFlagFilter: boolean
+  ): Promise<{ data: GoalRow[] | null; error: { message: string } | null }> => {
+    let query = (input.supabase.from("fitness_goals") as any)
+      .select(columns.join(", "))
+      .eq("user_id", input.userId)
+      .order("updated_at", { ascending: false })
+      .order("priority", { ascending: true })
+      .limit(input.limit);
+
+    if (withPersonalFlagFilter) {
+      query = query.eq("is_personal_goal", input.personalGoalFilter);
+    } else if (input.fallbackMode === "assigned_by_self") {
+      query = query.eq("assigned_by_id", input.userId);
+    }
+
+    if (input.status !== "all") {
+      query = query.eq("status", input.status);
+    }
+
+    const { data, error } = await query;
+    return {
+      data: (data || null) as GoalRow[] | null,
+      error: error ? { message: error.message } : null,
+    };
+  };
+
+  let activeColumns = [...GOAL_SELECTED_COLUMNS] as string[];
+  let usePersonalFlagFilter = true;
+  let { data, error } = await runGoalsQuery(activeColumns, usePersonalFlagFilter);
+  for (let attempt = 0; attempt < 8 && error; attempt += 1) {
+    const missingColumn = missingFitnessGoalsColumn(error.message);
+    if (missingColumn === "is_personal_goal" && usePersonalFlagFilter) {
+      usePersonalFlagFilter = false;
+      ({ data, error } = await runGoalsQuery(activeColumns, usePersonalFlagFilter));
+      continue;
+    }
+    if (!missingColumn || !activeColumns.includes(missingColumn)) break;
+    activeColumns = activeColumns.filter((column) => column !== missingColumn);
+    ({ data, error } = await runGoalsQuery(activeColumns, usePersonalFlagFilter));
+  }
+  if (error) throw new Error(error.message);
+  return (data || []) as GoalRow[];
+}
+
+async function buildGoalsPayload(input: {
+  supabase: DbClient;
+  rows: GoalRow[];
+  mappedClientId: string;
+  linkedUserId: string;
+}): Promise<ClientGoalsPayload> {
+  const historyByGoal = await listGoalHistoryByGoalIds(
+    input.supabase,
+    input.rows.map((row) => row.id),
+    2
+  );
+  const linkNames = await listGoalLinkNamesById(input.supabase, input.rows);
+
+  const goals = input.rows.map((row) =>
+    mapGoalRowToClientItem({
+      row,
+      clientId: input.mappedClientId,
+      historyRows: historyByGoal.get(row.id) || [],
+      linkedExerciseName: row.linked_exercise_id ? linkNames.exerciseNamesById.get(row.linked_exercise_id) || null : null,
+      linkedProgramName: row.linked_program_id ? linkNames.programNamesById.get(row.linked_program_id) || null : null,
+    })
+  );
+
+  const categories = Array.from(new Set(input.rows.map((row) => normalizeGoalCategory(row.goal_type || "custom")))).sort((a, b) =>
+    a.localeCompare(b)
+  );
+
+  return {
+    linked_user_id: input.linkedUserId,
+    categories,
+    goals,
+  };
+}
+
+async function insertGoalWithFallback(input: {
+  supabase: DbClient;
+  row: GoalInsert;
+  retryOnRls?: boolean;
+}): Promise<GoalRow> {
+  let attemptedInsert: GoalInsert = { ...input.row };
+  let insertResult = await input.supabase.from("fitness_goals").insert(attemptedInsert).select("*").single();
+
+  for (let attempt = 0; attempt < 6 && insertResult.error; attempt += 1) {
+    const missingColumn = missingFitnessGoalsColumn(insertResult.error.message);
+    if (!missingColumn || !(missingColumn in attemptedInsert)) break;
+    const fallbackPayload = { ...attemptedInsert } as Record<string, unknown>;
+    delete fallbackPayload[missingColumn];
+    attemptedInsert = fallbackPayload as GoalInsert;
+    insertResult = await input.supabase.from("fitness_goals").insert(attemptedInsert).select("*").single();
+  }
+
+  if (insertResult.error && isFitnessGoalStatusConstraintError(insertResult.error.message)) {
+    throw new Error(
+      "Goal status values are not fully supported in this database. Apply the latest goal-status migration and retry."
+    );
+  }
+
+  if (insertResult.error && input.retryOnRls && isRlsViolationError(insertResult.error)) {
+    insertResult = await input.supabase.from("fitness_goals").insert(attemptedInsert).select("*").single();
+  }
+
+  if (insertResult.error) throw new Error(insertResult.error.message);
+  return insertResult.data as GoalRow;
+}
+
+async function updateGoalWithFallback(input: {
+  supabase: DbClient;
+  goalId: string;
+  userId: string;
+  existing: GoalRow;
+  updates: GoalUpdate;
+}): Promise<GoalRow> {
+  let attemptedUpdates: GoalUpdate = { ...input.updates };
+  let updateResult =
+    Object.keys(attemptedUpdates).length === 0
+      ? { data: input.existing as GoalRow, error: null as null | { message: string } }
+      : await input.supabase
+          .from("fitness_goals")
+          .update(attemptedUpdates)
+          .eq("id", input.goalId)
+          .eq("user_id", input.userId)
+          .select("*")
+          .single();
+
+  for (let attempt = 0; attempt < 6 && updateResult.error; attempt += 1) {
+    const missingColumn = missingFitnessGoalsColumn(updateResult.error.message);
+    if (!missingColumn || !(missingColumn in attemptedUpdates)) break;
+    const fallbackPayload = { ...attemptedUpdates } as Record<string, unknown>;
+    delete fallbackPayload[missingColumn];
+    attemptedUpdates = fallbackPayload as GoalUpdate;
+    if (Object.keys(attemptedUpdates).length === 0) {
+      updateResult = { data: input.existing as GoalRow, error: null };
+      break;
+    }
+    updateResult = await input.supabase
+      .from("fitness_goals")
+      .update(attemptedUpdates)
+      .eq("id", input.goalId)
+      .eq("user_id", input.userId)
+      .select("*")
+      .single();
+  }
+
+  if (updateResult.error && isFitnessGoalStatusConstraintError(updateResult.error.message) && attemptedUpdates.status) {
+    throw new Error(
+      "Goal status values are not fully supported in this database. Apply the latest goal-status migration and retry."
+    );
+  }
+  if (updateResult.error) throw new Error(updateResult.error.message);
+  return updateResult.data as GoalRow;
+}
+
 async function resolveClientGoalSubject(
   supabase: DbClient,
   clientId: string,
@@ -1258,23 +1797,7 @@ export async function listCoachClientsAction(input: z.input<typeof listClientsSc
         };
       }
 
-      const assignmentRows: Array<Pick<AssignmentRow, "id" | "client_id">> = [];
-      for (const clientIdChunk of chunkArray(clientIds, 20)) {
-        const { data: assignmentsData, error: assignmentsError } = await supabase
-          .from("client_plan_assignments")
-          .select("id, client_id")
-          .in("client_id", clientIdChunk)
-          .eq("coach_id", user.id)
-          .eq("status", "active")
-          .order("assigned_at", { ascending: false });
-        if (assignmentsError) throw new Error(assignmentsError.message);
-        assignmentRows.push(...((assignmentsData || []) as Pick<AssignmentRow, "id" | "client_id">[]));
-      }
-
-      const activePlansCountByClient = new Map<string, number>();
-      for (const row of assignmentRows) {
-        activePlansCountByClient.set(row.client_id, (activePlansCountByClient.get(row.client_id) || 0) + 1);
-      }
+      const activePlansCountByClient = await countActiveAssignmentsByClientId(supabase, user.id, clientIds);
 
       const enriched: ClientRosterRow[] = rows.map((row) => ({
         ...row,
@@ -1322,6 +1845,7 @@ export async function upsertClientAction(input: z.input<typeof upsertClientSchem
         display_name: payload.display_name || null,
         email: payload.email || null,
         phone: payload.phone || null,
+        date_of_birth: payload.date_of_birth || null,
         status: payload.status,
         linked_user_id: payload.linked_user_id === undefined ? undefined : payload.linked_user_id,
         goals: payload.goals || null,
@@ -1402,6 +1926,7 @@ export async function upsertClientAction(input: z.input<typeof upsertClientSchem
           display_name: payload.display_name || null,
           email: payload.email || null,
           phone: payload.phone || null,
+          date_of_birth: payload.date_of_birth || null,
           status: payload.status,
           // Keep one-to-one mapping: auto-link to creator only when the creator
           // profile is not already linked to another client.
@@ -1511,99 +2036,21 @@ export async function listClientGoalsAction(input: z.input<typeof listClientGoal
           goals: [],
         };
       }
-      const linkedUserId = client.linked_user_id;
-
-      const selectedColumns = [
-        "id",
-        "user_id",
-        "goal_type",
-        "custom_description",
-        "start_value",
-        "current_value",
-        "target_value",
-        "start_weight",
-        "current_weight",
-        "target_weight",
-        "unit",
-        "status",
-        "start_date",
-        "target_date",
-        "updated_at",
-        "created_at",
-        "notes",
-        "priority",
-        "goal_direction",
-        "check_in_interval_days",
-        "linked_exercise_id",
-        "linked_program_id",
-      ];
-
-      const runGoalsQuery = async (
-        columns: string[],
-        withPersonalFlagFilter: boolean
-      ): Promise<{ data: GoalRow[] | null; error: { message: string } | null }> => {
-        let query = (supabase.from("fitness_goals") as any)
-          .select(columns.join(", "))
-          .eq("user_id", linkedUserId)
-          .order("updated_at", { ascending: false })
-          .order("priority", { ascending: true })
-          .limit(payload.limit);
-        if (withPersonalFlagFilter) {
-          query = query.eq("is_personal_goal", false);
-        }
-        if (payload.status !== "all") {
-          query = query.eq("status", payload.status);
-        }
-        const { data, error } = await query;
-        return {
-          data: (data || null) as GoalRow[] | null,
-          error: error ? { message: error.message } : null,
-        };
-      };
-
-      let activeColumns = [...selectedColumns];
-      let usePersonalFlagFilter = true;
-      let { data, error } = await runGoalsQuery(activeColumns, usePersonalFlagFilter);
-      for (let attempt = 0; attempt < 8 && error; attempt += 1) {
-        const missingColumn = missingFitnessGoalsColumn(error.message);
-        if (missingColumn === "is_personal_goal" && usePersonalFlagFilter) {
-          usePersonalFlagFilter = false;
-          ({ data, error } = await runGoalsQuery(activeColumns, usePersonalFlagFilter));
-          continue;
-        }
-        if (!missingColumn || !activeColumns.includes(missingColumn)) break;
-        activeColumns = activeColumns.filter((column) => column !== missingColumn);
-        ({ data, error } = await runGoalsQuery(activeColumns, usePersonalFlagFilter));
-      }
-      if (error) throw new Error(error.message);
-
-      const goalRows = (data || []) as GoalRow[];
-      const historyByGoal = await listGoalHistoryByGoalIds(
+      const goalRows = await queryGoalsWithFallback({
         supabase,
-        goalRows.map((row) => row.id),
-        2
-      );
-      const linkNames = await listGoalLinkNamesById(supabase, goalRows);
+        userId: client.linked_user_id,
+        status: payload.status,
+        limit: payload.limit,
+        personalGoalFilter: false,
+        fallbackMode: "none",
+      });
 
-      const goals = goalRows.map((row) =>
-        mapGoalRowToClientItem({
-          row,
-          clientId: payload.client_id,
-          historyRows: historyByGoal.get(row.id) || [],
-          linkedExerciseName: row.linked_exercise_id ? linkNames.exerciseNamesById.get(row.linked_exercise_id) || null : null,
-          linkedProgramName: row.linked_program_id ? linkNames.programNamesById.get(row.linked_program_id) || null : null,
-        })
-      );
-
-      const categories = Array.from(new Set(goalRows.map((row) => normalizeGoalCategory(row.goal_type || "custom")))).sort((a, b) =>
-        a.localeCompare(b)
-      );
-
-      return {
-        linked_user_id: client.linked_user_id,
-        categories,
-        goals,
-      };
+      return buildGoalsPayload({
+        supabase,
+        rows: goalRows,
+        mappedClientId: payload.client_id,
+        linkedUserId: client.linked_user_id,
+      });
     },
   });
 }
@@ -1659,31 +2106,11 @@ export async function createClientGoalAction(input: z.input<typeof createGoalSch
         linked_program_id: payload.linked_program_id ?? null,
       };
 
-      let attemptedInsert: GoalInsert = { ...insertPayload };
-      let insertResult = await supabase.from("fitness_goals").insert(attemptedInsert).select("*").single();
-
-      for (let attempt = 0; attempt < 6 && insertResult.error; attempt += 1) {
-        const missingColumn = missingFitnessGoalsColumn(insertResult.error.message);
-        if (!missingColumn || !(missingColumn in attemptedInsert)) break;
-        const fallbackPayload = { ...attemptedInsert } as Record<string, unknown>;
-        delete fallbackPayload[missingColumn];
-        attemptedInsert = fallbackPayload as GoalInsert;
-        insertResult = await supabase.from("fitness_goals").insert(attemptedInsert).select("*").single();
-      }
-
-      if (insertResult.error && isFitnessGoalStatusConstraintError(insertResult.error.message)) {
-        throw new Error(
-          "Goal status values are not fully supported in this database. Apply the latest goal-status migration and retry."
-        );
-      }
-
-      if (insertResult.error && isRlsViolationError(insertResult.error)) {
-        insertResult = await supabase.from("fitness_goals").insert(attemptedInsert).select("*").single();
-      }
-
-      if (insertResult.error) throw new Error(insertResult.error.message);
-
-      const goalRow = insertResult.data as GoalRow;
+      const goalRow = await insertGoalWithFallback({
+        supabase,
+        row: insertPayload,
+        retryOnRls: true,
+      });
       await writeGoalProgressSnapshot({
         supabase,
         goal: goalRow,
@@ -1764,46 +2191,13 @@ export async function updateClientGoalAction(input: z.input<typeof updateGoalSch
       if (payload.linked_exercise_id !== undefined) updates.linked_exercise_id = payload.linked_exercise_id;
       if (payload.linked_program_id !== undefined) updates.linked_program_id = payload.linked_program_id;
 
-      let attemptedUpdates: GoalUpdate = { ...updates };
-      let updateResult =
-        Object.keys(attemptedUpdates).length === 0
-          ? { data: existing as GoalRow, error: null as null | { message: string } }
-          : await supabase
-              .from("fitness_goals")
-              .update(attemptedUpdates)
-              .eq("id", payload.goal_id)
-              .eq("user_id", client.linked_user_id)
-              .select("*")
-              .single();
-
-      for (let attempt = 0; attempt < 6 && updateResult.error; attempt += 1) {
-        const missingColumn = missingFitnessGoalsColumn(updateResult.error.message);
-        if (!missingColumn || !(missingColumn in attemptedUpdates)) break;
-        const fallbackPayload = { ...attemptedUpdates } as Record<string, unknown>;
-        delete fallbackPayload[missingColumn];
-        attemptedUpdates = fallbackPayload as GoalUpdate;
-        if (Object.keys(attemptedUpdates).length === 0) {
-          updateResult = { data: existing as GoalRow, error: null };
-          break;
-        }
-        updateResult = await supabase
-          .from("fitness_goals")
-          .update(attemptedUpdates)
-          .eq("id", payload.goal_id)
-          .eq("user_id", client.linked_user_id)
-          .select("*")
-          .single();
-      }
-
-      if (updateResult.error && isFitnessGoalStatusConstraintError(updateResult.error.message) && attemptedUpdates.status) {
-        throw new Error(
-          "Goal status values are not fully supported in this database. Apply the latest goal-status migration and retry."
-        );
-      }
-
-      if (updateResult.error) throw new Error(updateResult.error.message);
-
-      const goalRow = updateResult.data as GoalRow;
+      const goalRow = await updateGoalWithFallback({
+        supabase,
+        goalId: payload.goal_id,
+        userId: client.linked_user_id,
+        existing: existing as GoalRow,
+        updates,
+      });
       await writeGoalProgressSnapshot({
         supabase,
         goal: goalRow,
@@ -1883,101 +2277,21 @@ export async function listMyGoalsAction(
     payload,
     action: async () => {
       const { supabase, user } = await requireActor();
-
-      const selectedColumns = [
-        "id",
-        "user_id",
-        "goal_type",
-        "custom_description",
-        "start_value",
-        "current_value",
-        "target_value",
-        "start_weight",
-        "current_weight",
-        "target_weight",
-        "unit",
-        "status",
-        "start_date",
-        "target_date",
-        "updated_at",
-        "created_at",
-        "notes",
-        "priority",
-        "goal_direction",
-        "check_in_interval_days",
-        "linked_exercise_id",
-        "linked_program_id",
-      ];
-
-      const runGoalsQuery = async (
-        columns: string[],
-        withPersonalFlagFilter: boolean
-      ): Promise<{ data: GoalRow[] | null; error: { message: string } | null }> => {
-        let query = (supabase.from("fitness_goals") as any)
-          .select(columns.join(", "))
-          .eq("user_id", user.id)
-          .order("updated_at", { ascending: false })
-          .order("priority", { ascending: true })
-          .limit(payload.limit);
-        if (withPersonalFlagFilter) {
-          query = query.eq("is_personal_goal", true);
-        } else {
-          // Legacy fallback before is_personal_goal existed.
-          query = query.eq("assigned_by_id", user.id);
-        }
-        if (payload.status !== "all") {
-          query = query.eq("status", payload.status);
-        }
-        const { data, error } = await query;
-        return {
-          data: (data || null) as GoalRow[] | null,
-          error: error ? { message: error.message } : null,
-        };
-      };
-
-      let activeColumns = [...selectedColumns];
-      let usePersonalFlagFilter = true;
-      let { data, error } = await runGoalsQuery(activeColumns, usePersonalFlagFilter);
-      for (let attempt = 0; attempt < 8 && error; attempt += 1) {
-        const missingColumn = missingFitnessGoalsColumn(error.message);
-        if (missingColumn === "is_personal_goal" && usePersonalFlagFilter) {
-          usePersonalFlagFilter = false;
-          ({ data, error } = await runGoalsQuery(activeColumns, usePersonalFlagFilter));
-          continue;
-        }
-        if (!missingColumn || !activeColumns.includes(missingColumn)) break;
-        activeColumns = activeColumns.filter((column) => column !== missingColumn);
-        ({ data, error } = await runGoalsQuery(activeColumns, usePersonalFlagFilter));
-      }
-      if (error) throw new Error(error.message);
-
-      const goalRows = (data || []) as GoalRow[];
-      const historyByGoal = await listGoalHistoryByGoalIds(
+      const goalRows = await queryGoalsWithFallback({
         supabase,
-        goalRows.map((row) => row.id),
-        2
-      );
-      const linkNames = await listGoalLinkNamesById(supabase, goalRows);
+        userId: user.id,
+        status: payload.status,
+        limit: payload.limit,
+        personalGoalFilter: true,
+        fallbackMode: "assigned_by_self",
+      });
 
-      const goals = goalRows.map((row) =>
-        mapGoalRowToClientItem({
-          row,
-          clientId: user.id,
-          historyRows: historyByGoal.get(row.id) || [],
-          linkedExerciseName: row.linked_exercise_id ? linkNames.exerciseNamesById.get(row.linked_exercise_id) || null : null,
-          linkedProgramName: row.linked_program_id ? linkNames.programNamesById.get(row.linked_program_id) || null : null,
-        })
-      );
-
-      const categories = Array.from(new Set(goalRows.map((row) => normalizeGoalCategory(row.goal_type || "custom")))).sort(
-        (a, b) => a.localeCompare(b)
-      );
-
-      return {
-        linked_user_id: user.id,
-        categories,
-        goals,
-      };
+      return buildGoalsPayload({
+        supabase,
+        rows: goalRows,
+        mappedClientId: user.id,
+        linkedUserId: user.id,
+      });
     },
   });
 }
@@ -2029,26 +2343,10 @@ export async function createMyGoalAction(input: z.input<typeof createMyGoalSchem
         linked_program_id: payload.linked_program_id ?? null,
       };
 
-      let attemptedInsert: GoalInsert = { ...insertPayload };
-      let insertResult = await supabase.from("fitness_goals").insert(attemptedInsert).select("*").single();
-
-      for (let attempt = 0; attempt < 6 && insertResult.error; attempt += 1) {
-        const missingColumn = missingFitnessGoalsColumn(insertResult.error.message);
-        if (!missingColumn || !(missingColumn in attemptedInsert)) break;
-        const fallbackPayload = { ...attemptedInsert } as Record<string, unknown>;
-        delete fallbackPayload[missingColumn];
-        attemptedInsert = fallbackPayload as GoalInsert;
-        insertResult = await supabase.from("fitness_goals").insert(attemptedInsert).select("*").single();
-      }
-
-      if (insertResult.error && isFitnessGoalStatusConstraintError(insertResult.error.message)) {
-        throw new Error(
-          "Goal status values are not fully supported in this database. Apply the latest goal-status migration and retry."
-        );
-      }
-      if (insertResult.error) throw new Error(insertResult.error.message);
-
-      const goalRow = insertResult.data as GoalRow;
+      const goalRow = await insertGoalWithFallback({
+        supabase,
+        row: insertPayload,
+      });
       await writeGoalProgressSnapshot({
         supabase,
         goal: goalRow,
@@ -2057,8 +2355,7 @@ export async function createMyGoalAction(input: z.input<typeof createMyGoalSchem
       const historyByGoal = await listGoalHistoryByGoalIds(supabase, [goalRow.id], 2);
       const linkNames = await listGoalLinkNamesById(supabase, [goalRow]);
 
-      revalidatePath("/goals");
-      revalidatePath("/clients/dashboard");
+      revalidatePersonalGoalPaths();
 
       return mapGoalRowToClientItem({
         row: goalRow,
@@ -2129,45 +2426,13 @@ export async function updateMyGoalAction(input: z.input<typeof updateMyGoalSchem
       if (payload.linked_exercise_id !== undefined) updates.linked_exercise_id = payload.linked_exercise_id;
       if (payload.linked_program_id !== undefined) updates.linked_program_id = payload.linked_program_id;
 
-      let attemptedUpdates: GoalUpdate = { ...updates };
-      let updateResult =
-        Object.keys(attemptedUpdates).length === 0
-          ? { data: existing as GoalRow, error: null as null | { message: string } }
-          : await supabase
-              .from("fitness_goals")
-              .update(attemptedUpdates)
-              .eq("id", payload.goal_id)
-              .eq("user_id", user.id)
-              .select("*")
-              .single();
-
-      for (let attempt = 0; attempt < 6 && updateResult.error; attempt += 1) {
-        const missingColumn = missingFitnessGoalsColumn(updateResult.error.message);
-        if (!missingColumn || !(missingColumn in attemptedUpdates)) break;
-        const fallbackPayload = { ...attemptedUpdates } as Record<string, unknown>;
-        delete fallbackPayload[missingColumn];
-        attemptedUpdates = fallbackPayload as GoalUpdate;
-        if (Object.keys(attemptedUpdates).length === 0) {
-          updateResult = { data: existing as GoalRow, error: null };
-          break;
-        }
-        updateResult = await supabase
-          .from("fitness_goals")
-          .update(attemptedUpdates)
-          .eq("id", payload.goal_id)
-          .eq("user_id", user.id)
-          .select("*")
-          .single();
-      }
-
-      if (updateResult.error && isFitnessGoalStatusConstraintError(updateResult.error.message) && attemptedUpdates.status) {
-        throw new Error(
-          "Goal status values are not fully supported in this database. Apply the latest goal-status migration and retry."
-        );
-      }
-      if (updateResult.error) throw new Error(updateResult.error.message);
-
-      const goalRow = updateResult.data as GoalRow;
+      const goalRow = await updateGoalWithFallback({
+        supabase,
+        goalId: payload.goal_id,
+        userId: user.id,
+        existing: existing as GoalRow,
+        updates,
+      });
       await writeGoalProgressSnapshot({
         supabase,
         goal: goalRow,
@@ -2176,8 +2441,7 @@ export async function updateMyGoalAction(input: z.input<typeof updateMyGoalSchem
       const historyByGoal = await listGoalHistoryByGoalIds(supabase, [goalRow.id], 2);
       const linkNames = await listGoalLinkNamesById(supabase, [goalRow]);
 
-      revalidatePath("/goals");
-      revalidatePath("/clients/dashboard");
+      revalidatePersonalGoalPaths();
 
       return mapGoalRowToClientItem({
         row: goalRow,
@@ -2225,8 +2489,7 @@ export async function deleteMyGoalAction(input: z.input<typeof deleteMyGoalSchem
         .eq("user_id", user.id);
       if (deleteError) throw new Error(deleteError.message);
 
-      revalidatePath("/goals");
-      revalidatePath("/clients/dashboard");
+      revalidatePersonalGoalPaths();
 
       return {
         goal_id: payload.goal_id,
@@ -2406,22 +2669,7 @@ export async function listClientAssignmentsAction(clientId: string) {
       if (assignmentsError) throw new Error(assignmentsError.message);
 
       const assignmentIds = (assignments || []).map((item) => item.id);
-      const sessionsByAssignment = new Map<string, AssignmentSessionRow[]>();
-      if (assignmentIds.length > 0) {
-        for (const assignmentIdChunk of chunkArray(assignmentIds, 20)) {
-          const { data: sessionsChunk, error: sessionsError } = await supabase
-            .from("client_plan_assignment_sessions")
-            .select("*")
-            .in("assignment_id", assignmentIdChunk)
-            .order("sequence_no", { ascending: true });
-          if (sessionsError) throw new Error(sessionsError.message);
-          for (const row of (sessionsChunk || []) as AssignmentSessionRow[]) {
-            const existing = sessionsByAssignment.get(row.assignment_id) || [];
-            existing.push(row);
-            sessionsByAssignment.set(row.assignment_id, existing);
-          }
-        }
-      }
+      const sessionsByAssignment = await listAssignmentSessionsByAssignmentIds(supabase, assignmentIds);
 
       return (assignments || []).map((assignment) => ({
         assignment: assignment as AssignmentRow,
@@ -2448,16 +2696,11 @@ export async function getClientNextSessionAction(clientId: string) {
       if (assignmentError) throw new Error(assignmentError.message);
       if (!assignment) return null;
 
-      const { data: sessions, error: sessionsError } = await supabase
-        .from("client_plan_assignment_sessions")
-        .select("*")
-        .eq("assignment_id", assignment.id)
-        .order("sequence_no", { ascending: true });
-      if (sessionsError) throw new Error(sessionsError.message);
+      const sessionsByAssignment = await listAssignmentSessionsByAssignmentIds(supabase, [assignment.id]);
+      const sessions = sessionsByAssignment.get(assignment.id) || [];
 
       const nextSession =
-        ((sessions || []) as AssignmentSessionRow[]).find((session) => !session.completed_at && !session.is_skipped) ||
-        null;
+        sessions.find((session) => !session.completed_at && !session.is_skipped) || null;
 
       return {
         assignment: assignment as AssignmentRow,
@@ -2526,11 +2769,6 @@ export async function logClientWorkoutAction(input: z.input<typeof logWorkoutSch
         notes: set.notes || null,
         entry_sequence: set.entry_sequence ?? index,
       }));
-      if (strengthRows.length > 0) {
-        const { error: strengthError } = await supabase.from("strength_sets").insert(strengthRows);
-        if (strengthError) throw new Error(strengthError.message);
-      }
-
       const cardioRows: CardioSessionInsert[] = (payload.cardio_sessions || []).map((cardio, index) => ({
         workout_id: workout.id,
         user_id: user.id,
@@ -2544,10 +2782,11 @@ export async function logClientWorkoutAction(input: z.input<typeof logWorkoutSch
         notes: cardio.notes || null,
         entry_sequence: cardio.entry_sequence ?? index,
       }));
-      if (cardioRows.length > 0) {
-        const { error: cardioError } = await supabase.from("cardio_sessions").insert(cardioRows);
-        if (cardioError) throw new Error(cardioError.message);
-      }
+      await insertWorkoutExerciseRows({
+        supabase,
+        strengthRows,
+        cardioRows,
+      });
 
       if (payload.mark_plan_session_resolved && payload.plan_session_id) {
         const { error: resolveError } = await supabase
@@ -2557,18 +2796,15 @@ export async function logClientWorkoutAction(input: z.input<typeof logWorkoutSch
         if (resolveError) throw new Error(resolveError.message);
       }
 
-      void inngest.send({
-        name: "training/workout.completed",
-        data: {
-          workout_id: workout.id,
-          user_id: user.id,
-          subject_user_id: workout.subject_user_id ?? null,
-          subject_client_id: workout.subject_client_id ?? null,
-        },
+      emitTrainingWorkoutCompleted({
+        workoutId: workout.id,
+        userId: user.id,
+        subjectUserId: workout.subject_user_id ?? null,
+        subjectClientId: workout.subject_client_id ?? null,
       });
 
       revalidateCoachPaths(payload.client_id);
-      revalidatePath("/workouts");
+      revalidateTrainingWorkoutPaths({});
       return workout;
     },
   });
@@ -2581,14 +2817,13 @@ export async function listClientTodaySessionsAction(clientId: string) {
     action: async () => {
       const { supabase } = await requireActor();
       const todayIso = new Date().toISOString().slice(0, 10);
-      const { data, error } = await supabase
-        .from("training_sessions")
-        .select("*")
-        .eq("subject_client_id", clientId)
-        .eq("performed_on", todayIso)
-        .order("started_at", { ascending: true, nullsFirst: true });
-      if (error) throw new Error(error.message);
-      return data || [];
+      return fetchClientSessionsByPerformedRange({
+        supabase,
+        clientId,
+        startDate: todayIso,
+        endDate: todayIso,
+        includePerformedOnSort: false,
+      });
     },
   });
 }
@@ -2600,53 +2835,41 @@ export async function listClientSessionsByRangeAction(input: z.input<typeof list
     payload,
     action: async () => {
       const { supabase } = await requireActor();
-      const { data, error } = await supabase
-        .from("training_sessions")
-        .select("*")
-        .eq("subject_client_id", payload.client_id)
-        .gte("performed_on", payload.start_date)
-        .lte("performed_on", payload.end_date)
-        .order("performed_on", { ascending: true })
-        .order("started_at", { ascending: true, nullsFirst: true });
-      if (error) throw new Error(error.message);
-      return data || [];
+      return fetchClientSessionsByPerformedRange({
+        supabase,
+        clientId: payload.client_id,
+        startDate: payload.start_date,
+        endDate: payload.end_date,
+        includePerformedOnSort: true,
+      });
     },
   });
 }
 
 export async function createClientCheckinAction(input: z.input<typeof createCheckinSchema>) {
   const payload = createCheckinSchema.parse(input);
-  if (!payload.subject_client_id && !payload.subject_user_id) {
-    throw new Error("A check-in must target a client or user.");
-  }
-  if (payload.subject_client_id && payload.subject_user_id) {
-    throw new Error("A check-in can target only one subject.");
-  }
+  assertCheckinSubjectTarget({
+    subjectClientId: payload.subject_client_id,
+    subjectUserId: payload.subject_user_id,
+  });
 
   return runTrackedAction({
     eventName: "coach.client.checkin.create",
     payload,
     action: async () => {
       const { supabase, user } = await requireActor();
-      const insertPayload: CheckinInsert = {
-        subject_client_id: payload.subject_client_id || null,
-        subject_user_id: payload.subject_user_id || null,
-        created_by_user_id: user.id,
-        urgent: payload.urgent,
-        notes: payload.notes || null,
-        checkin_data: (payload.checkin_data || {}) as Json,
-      };
-      const { data, error } = await supabase.from("client_checkins").insert(insertPayload).select("*").single();
-      if (error) throw new Error(error.message);
-
-      void inngest.send({
-        name: "coaching/checkin.submitted",
-        data: {
-          checkin_id: data.id,
-          created_by_user_id: user.id,
-          subject_client_id: payload.subject_client_id ?? null,
-          subject_user_id: payload.subject_user_id ?? null,
-        },
+      const data = await insertClientCheckinRow({
+        supabase,
+        payload: buildCheckinInsertPayload({
+          payload,
+          actorUserId: user.id,
+        }),
+      });
+      emitCheckinSubmitted({
+        checkinId: data.id,
+        createdByUserId: user.id,
+        subjectClientId: payload.subject_client_id ?? null,
+        subjectUserId: payload.subject_user_id ?? null,
       });
 
       revalidateCoachPaths(payload.subject_client_id || undefined);
@@ -2662,21 +2885,11 @@ export async function updateClientCheckinAction(input: z.input<typeof updateChec
     payload,
     action: async () => {
       const { supabase } = await requireActor();
-      const updates: Database["public"]["Tables"]["client_checkins"]["Update"] = {
-        status: payload.status,
-      };
-      if (typeof payload.urgent === "boolean") updates.urgent = payload.urgent;
-      if (payload.notes !== undefined) updates.notes = payload.notes || null;
-      if (payload.status === "reviewed") updates.reviewed_at = new Date().toISOString();
-      if (payload.status === "actioned") updates.actioned_at = new Date().toISOString();
-
-      const { data, error } = await supabase
-        .from("client_checkins")
-        .update(updates)
-        .eq("id", payload.id)
-        .select("*")
-        .single();
-      if (error) throw new Error(error.message);
+      const data = await updateClientCheckinRow({
+        supabase,
+        checkinId: payload.id,
+        updates: buildCheckinUpdatePayload(payload),
+      });
       revalidateCoachPaths(data.subject_client_id || undefined);
       return data;
     },
@@ -2689,13 +2902,10 @@ export async function listClientCheckinsAction(clientId: string) {
     payload: { client_id: clientId },
     action: async () => {
       const { supabase } = await requireActor();
-      const { data, error } = await supabase
-        .from("client_checkins")
-        .select("*")
-        .eq("subject_client_id", clientId)
-        .order("submitted_at", { ascending: false });
-      if (error) throw new Error(error.message);
-      return data || [];
+      return fetchClientCheckinsByClientId({
+        supabase,
+        clientId,
+      });
     },
   });
 }
@@ -2711,25 +2921,13 @@ export async function createCoachNoteAction(input: z.input<typeof createNoteSche
     },
     action: async () => {
       const { supabase, user } = await requireActor();
-      const insertPayload: CoachNoteInsert = {
-        client_id: payload.client_id,
-        coach_id: user.id,
-        tag: normalizeCoachNoteTag(payload.tag),
-        title: payload.title || null,
-        content: payload.content,
-        is_shared_with_linked_user:
-          payload.visibility !== undefined
-            ? payload.visibility === "visible_to_client"
-            : payload.is_shared_with_linked_user,
-        visibility:
-          payload.visibility !== undefined
-            ? payload.visibility
-            : payload.is_shared_with_linked_user
-              ? "visible_to_client"
-              : "private",
-      };
-      const { data, error } = await supabase.from("coach_notes").insert(insertPayload).select("*").single();
-      if (error) throw new Error(error.message);
+      const data = await insertCoachNoteRow({
+        supabase,
+        payload: buildCoachNoteInsertPayload({
+          payload,
+          actorUserId: user.id,
+        }),
+      });
       revalidateCoachPaths(payload.client_id);
       return data;
     },
@@ -2747,24 +2945,12 @@ export async function updateCoachNoteAction(input: z.input<typeof updateNoteSche
     },
     action: async () => {
       const { supabase } = await requireActor();
-      const updates: Database["public"]["Tables"]["coach_notes"]["Update"] = {};
-
-      if (payload.tag !== undefined) updates.tag = normalizeCoachNoteTag(payload.tag);
-      if (payload.title !== undefined) updates.title = payload.title || null;
-      if (payload.content !== undefined) updates.content = payload.content;
-      if (payload.visibility !== undefined) {
-        updates.visibility = payload.visibility;
-        updates.is_shared_with_linked_user = payload.visibility === "visible_to_client";
-      }
-
-      const { data, error } = await supabase
-        .from("coach_notes")
-        .update(updates)
-        .eq("id", payload.note_id)
-        .eq("client_id", payload.client_id)
-        .select("*")
-        .single();
-      if (error) throw new Error(error.message);
+      const data = await updateCoachNoteRow({
+        supabase,
+        noteId: payload.note_id,
+        clientId: payload.client_id,
+        updates: buildCoachNoteUpdatePayload(payload),
+      });
       revalidateCoachPaths(payload.client_id);
       return data;
     },
@@ -2777,14 +2963,10 @@ async function listCoachNotesAction(clientId: string) {
     payload: { client_id: clientId },
     action: async () => {
       const { supabase } = await requireActor();
-      const { data, error } = await supabase
-        .from("coach_notes")
-        .select("*")
-        .eq("client_id", clientId)
-        .is("archived_at", null)
-        .order("created_at", { ascending: false });
-      if (error) throw new Error(error.message);
-      return data || [];
+      return fetchCoachNotesByClientId({
+        supabase,
+        clientId,
+      });
     },
   });
 }
@@ -2806,21 +2988,14 @@ export async function recordClientPaymentAction(input: z.input<typeof recordPaym
     },
     action: async () => {
       const { supabase, user } = await requireActor();
-      const insertPayload: PaymentInsert = {
-        client_id: payload.client_id,
-        coach_id: user.id,
-        amount: payload.amount,
-        currency: payload.currency.toUpperCase(),
-        method: payload.method,
-        payment_date: payload.payment_date,
-        period_start: payload.period_start || null,
-        period_end: payload.period_end || null,
-        status: payload.status,
-        notes: payload.notes || null,
-      };
-      const { data, error } = await supabase.from("client_payments").insert(insertPayload).select("*").single();
-      if (error) throw new Error(error.message);
-      revalidateCoachPaths(payload.client_id);
+      const data = await insertClientPaymentRow({
+        supabase,
+        payload: buildClientPaymentInsertPayload({
+          payload,
+          actorUserId: user.id,
+        }),
+      });
+      revalidateCoachClientFromPayment(data);
       return data;
     },
   });
@@ -2833,14 +3008,11 @@ export async function deleteClientPaymentAction(input: z.input<typeof deletePaym
     payload,
     action: async () => {
       const { supabase } = await requireActor();
-      const { data, error } = await supabase
-        .from("client_payments")
-        .delete()
-        .eq("id", payload.id)
-        .select("id, client_id")
-        .single();
-      if (error) throw new Error(error.message);
-      revalidateCoachPaths(data.client_id);
+      const data = await deleteClientPaymentRow({
+        supabase,
+        paymentId: payload.id,
+      });
+      revalidateCoachClientFromPayment(data);
       return { success: true };
     },
   });
@@ -2853,14 +3025,12 @@ export async function updateClientPaymentStatusAction(input: z.input<typeof upda
     payload,
     action: async () => {
       const { supabase } = await requireActor();
-      const { data, error } = await supabase
-        .from("client_payments")
-        .update({ status: payload.status })
-        .eq("id", payload.id)
-        .select("id, client_id")
-        .single();
-      if (error) throw new Error(error.message);
-      revalidateCoachPaths(data.client_id);
+      const data = await updateClientPaymentRow({
+        supabase,
+        paymentId: payload.id,
+        changes: { status: payload.status },
+      });
+      revalidateCoachClientFromPayment(data);
       return { success: true };
     },
   });
@@ -2873,20 +3043,12 @@ export async function updateClientPaymentDetailsAction(input: z.input<typeof upd
     payload: { id: payload.id },
     action: async () => {
       const { supabase } = await requireActor();
-      const changes: Database["public"]["Tables"]["client_payments"]["Update"] = {};
-      if (payload.method !== undefined) changes.method = payload.method;
-      if (payload.status !== undefined) changes.status = payload.status;
-      if (payload.notes !== undefined) changes.notes = payload.notes;
-
-      const { data, error } = await supabase
-        .from("client_payments")
-        .update(changes)
-        .eq("id", payload.id)
-        .select("id, client_id")
-        .single();
-      if (error) throw new Error(error.message);
-
-      revalidateCoachPaths(data.client_id);
+      const data = await updateClientPaymentRow({
+        supabase,
+        paymentId: payload.id,
+        changes: buildClientPaymentDetailsUpdatePayload(payload),
+      });
+      revalidateCoachClientFromPayment(data);
       return { success: true };
     },
   });
@@ -2956,6 +3118,142 @@ function validateBillingPlanByType(input: {
   }
 }
 
+function shouldUsePaymentLogsFallbackOrThrow(error: { message: string } | null | undefined) {
+  if (!error) return false;
+  if (isPaymentLogsTableMissing(error.message)) return true;
+  throw new Error(error.message);
+}
+
+async function getBillingPlanByIdForCoach(
+  supabase: DbClient,
+  coachId: string,
+  billingPlanId: string
+): Promise<BillingPlanRow> {
+  const { data, error } = await supabase
+    .from("client_billing_plans")
+    .select("*")
+    .eq("id", billingPlanId)
+    .eq("coach_id", coachId)
+    .single();
+  if (error) throw new Error(normalizeBillingTablesError(error.message));
+  return data as BillingPlanRow;
+}
+
+async function getActiveBillingPlanForClient(input: {
+  supabase: DbClient;
+  coachId: string;
+  clientId: string;
+  allowMissingTableFallback?: boolean;
+}): Promise<BillingPlanRow | null> {
+  const { data, error } = await input.supabase
+    .from("client_billing_plans")
+    .select("*")
+    .eq("client_id", input.clientId)
+    .eq("coach_id", input.coachId)
+    .eq("is_active", true)
+    .order("created_at", { ascending: false })
+    .maybeSingle();
+
+  if (error) {
+    if (input.allowMissingTableFallback && isClientBillingPlansTableMissing(error.message)) {
+      return null;
+    }
+    throw new Error(normalizeBillingTablesError(error.message));
+  }
+
+  return data ? (data as BillingPlanRow) : null;
+}
+
+async function listBillingPlansForClient(input: {
+  supabase: DbClient;
+  coachId: string;
+  clientId: string;
+  allowMissingTableFallback?: boolean;
+}): Promise<BillingPlanRow[]> {
+  const { data, error } = await input.supabase
+    .from("client_billing_plans")
+    .select("*")
+    .eq("client_id", input.clientId)
+    .eq("coach_id", input.coachId)
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    if (input.allowMissingTableFallback && isClientBillingPlansTableMissing(error.message)) {
+      return [];
+    }
+    throw new Error(normalizeBillingTablesError(error.message));
+  }
+
+  return (data || []) as BillingPlanRow[];
+}
+
+async function listCoachBillingPlans(input: {
+  supabase: DbClient;
+  coachId: string;
+  allowMissingTableFallback?: boolean;
+}): Promise<{ rows: BillingPlanRow[]; missing: boolean }> {
+  const { data, error } = await input.supabase
+    .from("client_billing_plans")
+    .select("*")
+    .eq("coach_id", input.coachId)
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    if (input.allowMissingTableFallback && isClientBillingPlansTableMissing(error.message)) {
+      return { rows: [], missing: true };
+    }
+    throw new Error(normalizeBillingTablesError(error.message));
+  }
+
+  return { rows: (data || []) as BillingPlanRow[], missing: false };
+}
+
+async function listCoachPaymentLogsForDate(input: {
+  supabase: DbClient;
+  coachId: string;
+  sessionDate: string;
+  allowMissingTableFallback?: boolean;
+}): Promise<{ rows: PaymentLogRow[]; missing: boolean }> {
+  const { data, error } = await input.supabase
+    .from("payment_logs")
+    .select("*")
+    .eq("coach_id", input.coachId)
+    .eq("session_date", input.sessionDate)
+    .neq("status", "voided");
+
+  if (error) {
+    if (input.allowMissingTableFallback && isPaymentLogsTableMissing(error.message)) {
+      return { rows: [], missing: true };
+    }
+    throw new Error(normalizeBillingTablesError(error.message));
+  }
+
+  return { rows: (data || []) as PaymentLogRow[], missing: false };
+}
+
+async function countCoachPaymentLogsSince(input: {
+  supabase: DbClient;
+  coachId: string;
+  fromDate: string;
+  allowMissingTableFallback?: boolean;
+}): Promise<{ count: number; missing: boolean }> {
+  const { count, error } = await input.supabase
+    .from("payment_logs")
+    .select("id", { count: "exact", head: true })
+    .eq("coach_id", input.coachId)
+    .gte("session_date", input.fromDate)
+    .neq("status", "voided");
+
+  if (error) {
+    if (input.allowMissingTableFallback && isPaymentLogsTableMissing(error.message)) {
+      return { count: 0, missing: true };
+    }
+    throw new Error(normalizeBillingTablesError(error.message));
+  }
+
+  return { count: count ?? 0, missing: false };
+}
+
 export async function createBillingPlanAction(input: z.input<typeof createBillingPlanSchema>): Promise<ClientBillingPlanWithRemaining> {
   const payload = createBillingPlanSchema.parse(input);
   validateBillingPlanByType({
@@ -3022,17 +3320,11 @@ export async function updateBillingPlanAction(input: z.input<typeof updateBillin
     payload: { id: payload.id },
     action: async () => {
       const { supabase, user } = await requireActor();
-      const { data: currentPlan, error: currentPlanError } = await supabase
-        .from("client_billing_plans")
-        .select("*")
-        .eq("id", payload.id)
-        .eq("coach_id", user.id)
-        .single();
-      if (currentPlanError) throw new Error(normalizeBillingTablesError(currentPlanError.message));
+      const currentPlan = await getBillingPlanByIdForCoach(supabase, user.id, payload.id);
 
       if (
         payload.sessions_purchased !== undefined &&
-        payload.sessions_purchased < Number((currentPlan as BillingPlanRow).sessions_used || 0)
+        payload.sessions_purchased < Number(currentPlan.sessions_used || 0)
       ) {
         throw new Error("Sessions purchased cannot be lower than sessions already used.");
       }
@@ -3067,20 +3359,14 @@ export async function getClientBillingPlanAction(clientId: string): Promise<Clie
     payload: { client_id: clientId },
     action: async () => {
       const { supabase, user } = await requireActor();
-      const { data, error } = await supabase
-        .from("client_billing_plans")
-        .select("*")
-        .eq("client_id", clientId)
-        .eq("coach_id", user.id)
-        .eq("is_active", true)
-        .order("created_at", { ascending: false })
-        .maybeSingle();
-      if (error) {
-        if (isClientBillingPlansTableMissing(error.message)) return null;
-        throw new Error(error.message);
-      }
-      if (!data) return null;
-      return billingPlanWithRemaining(data as BillingPlanRow);
+      const activePlan = await getActiveBillingPlanForClient({
+        supabase,
+        coachId: user.id,
+        clientId,
+        allowMissingTableFallback: true,
+      });
+      if (!activePlan) return null;
+      return billingPlanWithRemaining(activePlan);
     },
   });
 }
@@ -3091,17 +3377,13 @@ export async function listClientBillingPlanHistoryAction(clientId: string): Prom
     payload: { client_id: clientId },
     action: async () => {
       const { supabase, user } = await requireActor();
-      const { data, error } = await supabase
-        .from("client_billing_plans")
-        .select("*")
-        .eq("client_id", clientId)
-        .eq("coach_id", user.id)
-        .order("created_at", { ascending: false });
-      if (error) {
-        if (isClientBillingPlansTableMissing(error.message)) return [];
-        throw new Error(error.message);
-      }
-      return ((data || []) as BillingPlanRow[]).map((row) => billingPlanWithRemaining(row));
+      const plans = await listBillingPlansForClient({
+        supabase,
+        coachId: user.id,
+        clientId,
+        allowMissingTableFallback: true,
+      });
+      return plans.map((row) => billingPlanWithRemaining(row));
     },
   });
 }
@@ -3117,14 +3399,7 @@ export async function renewPackageAction(input: z.input<typeof renewPackageSchem
     },
     action: async () => {
       const { supabase, user } = await requireActor();
-      const { data: currentPlan, error: currentPlanError } = await supabase
-        .from("client_billing_plans")
-        .select("*")
-        .eq("id", payload.billing_plan_id)
-        .eq("coach_id", user.id)
-        .single();
-      if (currentPlanError) throw new Error(normalizeBillingTablesError(currentPlanError.message));
-      const plan = currentPlan as BillingPlanRow;
+      const plan = await getBillingPlanByIdForCoach(supabase, user.id, payload.billing_plan_id);
       if (plan.billing_type !== "session_package" && plan.billing_type !== "program") {
         throw new Error("Renew package is only available for session package or program billing.");
       }
@@ -3174,18 +3449,14 @@ export async function getTodayLogsAction(): Promise<Record<string, PaymentLogRow
     action: async () => {
       const { supabase, user } = await requireActor();
       const todayIso = new Date().toISOString().slice(0, 10);
-      const { data, error } = await supabase
-        .from("payment_logs")
-        .select("*")
-        .eq("coach_id", user.id)
-        .eq("session_date", todayIso)
-        .neq("status", "voided");
-      if (error) {
-        if (isPaymentLogsTableMissing(error.message)) return {};
-        throw new Error(error.message);
-      }
+      const { rows } = await listCoachPaymentLogsForDate({
+        supabase,
+        coachId: user.id,
+        sessionDate: todayIso,
+        allowMissingTableFallback: true,
+      });
       const map: Record<string, PaymentLogRow> = {};
-      for (const row of (data || []) as PaymentLogRow[]) {
+      for (const row of rows) {
         map[row.client_id] = row;
       }
       return map;
@@ -3209,18 +3480,15 @@ export async function logSessionAction(input: z.input<typeof logSessionSchema>) 
         throw new Error("Session date cannot be more than 7 days in the past.");
       }
 
-      const { data: activePlan, error: activePlanError } = await supabase
-        .from("client_billing_plans")
-        .select("*")
-        .eq("client_id", payload.client_id)
-        .eq("coach_id", user.id)
-        .eq("is_active", true)
-        .maybeSingle();
-      if (activePlanError) throw new Error(normalizeBillingTablesError(activePlanError.message));
+      const activePlan = await getActiveBillingPlanForClient({
+        supabase,
+        coachId: user.id,
+        clientId: payload.client_id,
+      });
       if (!activePlan) {
         throw new Error("No active billing plan for this client.");
       }
-      const plan = activePlan as BillingPlanRow;
+      const plan = activePlan;
 
       const { data: existingLog, error: existingLogError } = await supabase
         .from("payment_logs")
@@ -3375,17 +3643,14 @@ export async function listClientPaymentLogsAction(
       }
 
       const { data, error, count } = await query;
-      if (error) {
-        if (isPaymentLogsTableMissing(error.message)) {
-          return {
-            rows: [],
-            total: 0,
-            page: payload.page,
-            page_size: payload.limit,
-            has_more: false,
-          };
-        }
-        throw new Error(error.message);
+      if (shouldUsePaymentLogsFallbackOrThrow(error)) {
+        return {
+          rows: [],
+          total: 0,
+          page: payload.page,
+          page_size: payload.limit,
+          has_more: false,
+        };
       }
       const rows = (data || []) as PaymentLogRow[];
       const total = count ?? rows.length;
@@ -3407,6 +3672,11 @@ export async function getClientPaymentLogStatsAction(clientId: string): Promise<
     action: async () => {
       const { supabase, user } = await requireActor();
       const monthStartIso = startOfMonthIso();
+      const emptyStats: ClientPaymentLogStats = {
+        sessions_this_month: 0,
+        revenue_this_month: 0,
+        total_sessions: 0,
+      };
 
       const [totalRes, monthSessionsRes, monthRevenueRes] = await Promise.all([
         supabase
@@ -3431,36 +3701,9 @@ export async function getClientPaymentLogStatsAction(clientId: string): Promise<
           .neq("status", "voided"),
       ]);
 
-      if (totalRes.error) {
-        if (isPaymentLogsTableMissing(totalRes.error.message)) {
-          return {
-            sessions_this_month: 0,
-            revenue_this_month: 0,
-            total_sessions: 0,
-          };
-        }
-        throw new Error(totalRes.error.message);
-      }
-      if (monthSessionsRes.error) {
-        if (isPaymentLogsTableMissing(monthSessionsRes.error.message)) {
-          return {
-            sessions_this_month: 0,
-            revenue_this_month: 0,
-            total_sessions: 0,
-          };
-        }
-        throw new Error(monthSessionsRes.error.message);
-      }
-      if (monthRevenueRes.error) {
-        if (isPaymentLogsTableMissing(monthRevenueRes.error.message)) {
-          return {
-            sessions_this_month: 0,
-            revenue_this_month: 0,
-            total_sessions: 0,
-          };
-        }
-        throw new Error(monthRevenueRes.error.message);
-      }
+      if (shouldUsePaymentLogsFallbackOrThrow(totalRes.error)) return emptyStats;
+      if (shouldUsePaymentLogsFallbackOrThrow(monthSessionsRes.error)) return emptyStats;
+      if (shouldUsePaymentLogsFallbackOrThrow(monthRevenueRes.error)) return emptyStats;
 
       const revenueThisMonth = ((monthRevenueRes.data || []) as Array<{ amount: number | null; status: string }>)
         .filter((row) => row.status !== "voided")
@@ -3688,10 +3931,10 @@ export async function listCoachPaymentsDashboardAction(
       const [
         transactionsRes,
         metricsRes,
-        plansRes,
-        todayLogsRes,
-        weekLogsCountRes,
-        monthLogsCountRes,
+        plansResult,
+        todayLogsResult,
+        weekLogsCountResult,
+        monthLogsCountResult,
       ] = await Promise.all([
         transactionsQuery,
         supabase
@@ -3700,47 +3943,37 @@ export async function listCoachPaymentsDashboardAction(
           .eq("coach_id", user.id)
           .order("payment_date", { ascending: false })
           .limit(payload.limit),
-        supabase
-          .from("client_billing_plans")
-          .select("*")
-          .eq("coach_id", user.id)
-          .order("created_at", { ascending: false }),
-        supabase
-          .from("payment_logs")
-          .select("*")
-          .eq("coach_id", user.id)
-          .eq("session_date", todayIso)
-          .neq("status", "voided"),
-        supabase
-          .from("payment_logs")
-          .select("id", { count: "exact", head: true })
-          .eq("coach_id", user.id)
-          .gte("session_date", weekStartIso)
-          .neq("status", "voided"),
-        supabase
-          .from("payment_logs")
-          .select("id", { count: "exact", head: true })
-          .eq("coach_id", user.id)
-          .gte("session_date", monthStartIso)
-          .neq("status", "voided"),
+        listCoachBillingPlans({
+          supabase,
+          coachId: user.id,
+          allowMissingTableFallback: true,
+        }),
+        listCoachPaymentLogsForDate({
+          supabase,
+          coachId: user.id,
+          sessionDate: todayIso,
+          allowMissingTableFallback: true,
+        }),
+        countCoachPaymentLogsSince({
+          supabase,
+          coachId: user.id,
+          fromDate: weekStartIso,
+          allowMissingTableFallback: true,
+        }),
+        countCoachPaymentLogsSince({
+          supabase,
+          coachId: user.id,
+          fromDate: monthStartIso,
+          allowMissingTableFallback: true,
+        }),
       ]);
 
       if (transactionsRes.error) throw new Error(transactionsRes.error.message);
       if (metricsRes.error) throw new Error(metricsRes.error.message);
 
-      const billingPlansMissing = Boolean(
-        plansRes.error && isClientBillingPlansTableMissing(plansRes.error.message)
-      );
-      const paymentLogsMissing = Boolean(
-        (todayLogsRes.error && isPaymentLogsTableMissing(todayLogsRes.error.message)) ||
-          (weekLogsCountRes.error && isPaymentLogsTableMissing(weekLogsCountRes.error.message)) ||
-          (monthLogsCountRes.error && isPaymentLogsTableMissing(monthLogsCountRes.error.message))
-      );
-
-      if (plansRes.error && !billingPlansMissing) throw new Error(plansRes.error.message);
-      if (todayLogsRes.error && !paymentLogsMissing) throw new Error(todayLogsRes.error.message);
-      if (weekLogsCountRes.error && !paymentLogsMissing) throw new Error(weekLogsCountRes.error.message);
-      if (monthLogsCountRes.error && !paymentLogsMissing) throw new Error(monthLogsCountRes.error.message);
+      const billingPlansMissing = plansResult.missing;
+      const paymentLogsMissing =
+        todayLogsResult.missing || weekLogsCountResult.missing || monthLogsCountResult.missing;
 
       const transactionRows =
         (transactionsRes.data || []) as Array<Database["public"]["Tables"]["client_payments"]["Row"]>;
@@ -3770,8 +4003,8 @@ export async function listCoachPaymentsDashboardAction(
           })
         : transactionsRaw;
 
-      const planRows = billingPlansMissing ? [] : ((plansRes.data || []) as BillingPlanRow[]);
-      const todayLogRows = paymentLogsMissing ? [] : ((todayLogsRes.data || []) as PaymentLogRow[]);
+      const planRows = plansResult.rows;
+      const todayLogRows = todayLogsResult.rows;
       const activePayments = allPayments;
 
       const totalCollected = activePayments.reduce((sum, row) => (row.status === "paid" ? sum + Number(row.amount || 0) : sum), 0);
@@ -3920,8 +4153,8 @@ export async function listCoachPaymentsDashboardAction(
           overdue_amount: overdueAmount,
           active_billing: activeBilling,
           sessions_logged_today: todayLogRows.length,
-          sessions_logged_this_week: paymentLogsMissing ? 0 : weekLogsCountRes.count ?? 0,
-          sessions_logged_this_month: paymentLogsMissing ? 0 : monthLogsCountRes.count ?? 0,
+          sessions_logged_this_week: paymentLogsMissing ? 0 : weekLogsCountResult.count,
+          sessions_logged_this_month: paymentLogsMissing ? 0 : monthLogsCountResult.count,
           packages_expiring_soon: packagesExpiringSoon,
           clients_due_today: clientsDueToday,
         },

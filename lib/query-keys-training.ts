@@ -6,4 +6,6 @@ export const trainingKeys = {
   planAssignees: (programId: string, search: string) => [...trainingKeys.planAssigneesBase(programId), search] as const,
   sessions: () => ["training_sessions"] as const,
   session: (sessionId: string) => [...trainingKeys.sessions(), sessionId] as const,
+  executionSubjects: () => [...trainingKeys.sessions(), "execution_subjects"] as const,
+  executionSubjectsSearch: (search: string) => [...trainingKeys.executionSubjects(), search] as const,
 };

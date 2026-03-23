@@ -21,6 +21,7 @@ export type SettingsProfilePayload = {
   email: string | null;
   role: Database["public"]["Enums"]["user_role"];
   phone: string | null;
+  date_of_birth: string | null;
   bio: string | null;
   avatar_url: string | null;
   preferred_units: "metric" | "imperial";
@@ -84,7 +85,7 @@ export async function getSettingsProfile(): Promise<SettingsProfilePayload> {
 
       const { data: profileData, error: profileError } = await supabase
         .from("profiles")
-        .select("id, full_name, bio, avatar_url, preferred_units, role")
+        .select("id, full_name, date_of_birth, bio, avatar_url, preferred_units, role")
         .eq("id", user.id)
         .maybeSingle();
 
@@ -110,6 +111,7 @@ export async function getSettingsProfile(): Promise<SettingsProfilePayload> {
         email: user.email ?? null,
         role: profileData?.role === "sysadmin" ? "sysadmin" : "user",
         phone,
+        date_of_birth: profileData?.date_of_birth ?? null,
         bio,
         avatar_url: avatarUrl,
         preferred_units: preferredUnits,
@@ -134,6 +136,7 @@ export async function updateProfile(data: ProfileFormValues) {
       const profilePayload: ProfileInsert = {
         id: user.id,
         full_name: parsed.full_name.trim(),
+        date_of_birth: parsed.date_of_birth ?? null,
         bio: toNullableText(parsed.bio),
         avatar_url: toNullableText(parsed.avatar_url),
       };

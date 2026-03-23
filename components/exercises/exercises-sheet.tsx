@@ -211,11 +211,15 @@ export function ExerciseSheet({ open, onOpenChange, exerciseToEdit }: ExerciseSh
               <FormLabel>Muscle Groups</FormLabel>
               <FormControl>
                 <TagInput 
-                  placeholder="Add muscle (e.g. Chest)" 
+                  placeholder="Add muscle (e.g. chest, push)" 
                   value={field.value} 
                   onChange={field.onChange} 
                 />
               </FormControl>
+              <p className="text-xs text-muted-foreground">
+                Include one focus tag for strength exercises: <code>push</code>, <code>pull</code>, <code>core</code>,
+                or <code>legs</code>.
+              </p>
               <FormMessage />
             </FormItem>
           )}
