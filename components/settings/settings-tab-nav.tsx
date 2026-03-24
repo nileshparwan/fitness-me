@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Dumbbell, Monitor, Shield, User } from "lucide-react";
+import { Bell, Dumbbell, Monitor, Shield, User } from "lucide-react";
 
 import { cn } from "@/utils";
 
@@ -10,6 +10,7 @@ const SETTINGS_TABS = [
   { title: "Profile", href: "/settings/profile", icon: User },
   { title: "Coaching", href: "/settings/coaching", icon: Dumbbell },
   { title: "Display", href: "/settings/display", icon: Monitor },
+  { title: "Notifications", href: "/settings/notifications", icon: Bell },
   { title: "Security", href: "/settings/security", icon: Shield },
 ] as const;
 

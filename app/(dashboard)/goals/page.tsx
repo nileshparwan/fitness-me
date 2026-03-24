@@ -1,6 +1,6 @@
 import { GoalsRealtimeSubscriber } from "@/components/goals/goals-realtime-subscriber";
-import { ClientGoalsMedicalTab } from "@/components/coach-tools/client-goals-medical-tab";
 import { createClient } from "@/lib/supabase/server";
+import { GoalSubjectBar } from "./_components/goal-subject-bar";
 
 export default async function GoalsPage() {
   const supabase = await createClient();
@@ -18,7 +18,7 @@ export default async function GoalsPage() {
         </p>
       </header>
 
-      <ClientGoalsMedicalTab mode="self" title="My Goals" />
+      <GoalSubjectBar />
     </div>
   );
 }

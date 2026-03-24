@@ -12956,88 +12956,96 @@ The `habits` array already contains `{ id, name, completed_today, streak_days, c
 ### [A-037] Notification Center + Mobile Push Reminders
 
 - Priority: High
-- Depends on: A-031 (progress page live), A-035 (check-in page live)
-- Status: Queued
-- Files:
-  - NEW: `supabase/migrations/YYYYMMDD_notifications_extension.sql`
-  - NEW: `app/actions/notifications.ts`
-  - NEW: `app/api/push/subscribe/route.ts`
-  - NEW: `app/api/push/unsubscribe/route.ts`
-  - NEW: `public/sw.js`
-  - NEW: `lib/push/send.ts`
-  - NEW: `lib/inngest/functions/send-daily-reminders.ts`
-  - NEW: `hooks/use-notifications.ts`
-  - NEW: `components/notifications/notification-bell.tsx`
-  - NEW: `components/notifications/notification-dropdown.tsx`
-  - NEW: `components/notifications/notification-item.tsx`
-  - NEW: `app/(dashboard)/(account)/settings/notifications/page.tsx`
-  - NEW: `components/settings/notification-settings-form.tsx`
-  - UPDATE: `components/settings/settings-tab-nav.tsx` — add Notifications tab
-  - UPDATE: `app/(dashboard)/layout.tsx` — wire bell into header
-  - UPDATE: `app/layout.tsx` — register Service Worker
-  - UPDATE: `lib/inngest/index.ts` — register new cron function
-  - UPDATE: `lib/inngest/functions/send-reminders.ts` — fix stale `ai_insights` reference
+- Depends on: A-031 (progress page live), A-034, A-035 (check-in page live)
+- Status: Partially implemented — bell center done, push + settings remain
+
+---
+
+#### What the engineer has already built
+
+The following are **complete and do not need to be touched** unless extending:
+
+| File | What exists |
+|------|-------------|
+| `components/layout/notification-bell.tsx` | Full bell popover with badge, dismiss, clear all, relative timestamps, ticket deep-links |
+| `app/actions/notifications.ts` | `getNotificationCountAction`, `getNotificationsAction`, `dismissNotificationAction`, `dismissAllNotificationsAction` |
+| `hooks/use-notifications.ts` | `useNotificationCount` + `useNotifications` React Query hooks |
+| `hooks/use-notifications-realtime.ts` | Supabase Realtime subscribe on `notifications INSERT` — updates count + feed in React Query cache |
+| `lib/query-keys.ts` | `notificationKeys.all / .count() / .feed()` |
+| `app/(dashboard)/layout.tsx` | `<NotificationBell userId={user?.id} className="ml-auto" />` wired into sticky header |
+
+**Dismiss model (not read model):** The engineer chose delete-on-dismiss rather than is_read. The badge count = total undismissed rows for the user. This is the correct model — do not add `is_read` or `read_at` columns.
+
+**Routing model:** Ticket notifications deep-link via `notification.data.ticket_id` → `/support/:id`. Reminder notifications must store their target URL in `notification.data` as `{ url: "/nutrition/diary" }` — the bell component already reads this field. No `action_url` column is needed.
 
 ---
 
 #### Architecture overview
 
-Two independent layers that share the same `notifications` table as the source of truth:
-
 ```
-IN-APP BELL (all devices)
-  Inngest cron ──► INSERT into notifications table
-  Supabase Realtime ──► bell badge increments in real time
-  User opens dropdown ──► marks as read
+IN-APP BELL (all devices) — ALREADY BUILT
+  Inngest cron ──► INSERT into notifications { data: { url: "..." } }
+  Supabase Realtime ──► badge increments instantly
+  User opens bell ──► sees feed; clicks X to dismiss
 
-MOBILE PUSH (mobile browsers only)
+MOBILE PUSH (mobile browsers only) — TO BUILD
   Same Inngest cron ──► also calls web-push.sendNotification()
-  Service Worker receives push ──► OS shows notification
-  User taps ──► sw opens app at action_url
+  Service Worker receives push ──► OS notification appears
+  User taps ──► sw.js navigates to data.url
 ```
-
-**Why Inngest and not pg_cron here:** pg_cron runs SQL inside the database only — it cannot make HTTP calls to browser push endpoints. Inngest is the correct tool for any scheduled job that touches external services. See the pg_cron note at the end of this task for appropriate pg_cron use cases in this app.
 
 ---
 
-#### PART I — Migration (`supabase/migrations/YYYYMMDD_notifications_extension.sql`)
+#### Files remaining to build
 
-**1. Extend `notification_type` enum** — add two new values:
+- NEW: `supabase/migrations/YYYYMMDD_notifications_push_prefs.sql`
+- NEW: `lib/push/send.ts`
+- NEW: `app/api/push/subscribe/route.ts`
+- NEW: `app/api/push/unsubscribe/route.ts`
+- NEW: `public/sw.js`
+- NEW: `public/manifest.json`
+- NEW: `components/layout/sw-register.tsx`
+- NEW: `lib/inngest/functions/send-daily-reminders.ts`
+- NEW: `app/actions/notification-preferences.ts`
+- NEW: `app/(dashboard)/(account)/settings/notifications/page.tsx`
+- NEW: `components/settings/notification-settings-form.tsx`
+- UPDATE: `components/layout/notification-bell.tsx` — extend `notificationMeta` for new types + `data.url` routing
+- UPDATE: `hooks/use-notifications-realtime.ts` — add new types to `KNOWN_NOTIFICATION_TYPES`
+- UPDATE: `app/actions/notifications.ts` — add new types to `KNOWN_NOTIFICATION_TYPES`
+- UPDATE: `components/settings/settings-tab-nav.tsx` — add Notifications tab
+- UPDATE: `app/layout.tsx` — `<SwRegister />` + `<link rel="manifest" />`
+- UPDATE: `lib/inngest/index.ts` — register new functions
+- UPDATE: `lib/inngest/functions/send-reminders.ts` — fix stale `ai_insights` write
+
+---
+
+#### PART I — Migration (`supabase/migrations/YYYYMMDD_notifications_push_prefs.sql`)
+
+**No changes to the `notifications` table** — the existing schema is correct for the dismiss model. Only add the two new enum values and two new tables.
+
+**1. Extend `notification_type` enum:**
 ```sql
 ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'meal_reminder';
 ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'health_checkin_reminder';
 ```
 
-**2. Extend the existing `notifications` table:**
-```sql
-ALTER TABLE notifications
-  ADD COLUMN IF NOT EXISTS is_read    boolean     NOT NULL DEFAULT false,
-  ADD COLUMN IF NOT EXISTS read_at    timestamptz,
-  ADD COLUMN IF NOT EXISTS action_url text;          -- e.g. "/nutrition/diary", "/check-in"
-
-CREATE INDEX notifications_user_unread_idx
-  ON notifications (user_id, is_read, created_at DESC)
-  WHERE is_read = false;
-```
-
-**3. New `notification_preferences` table** — one row per user:
+**2. `notification_preferences` table** — one row per user:
 ```sql
 CREATE TABLE notification_preferences (
-  user_id               uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
-
-  timezone              text NOT NULL DEFAULT 'UTC',   -- IANA e.g. "America/New_York"
+  user_id                 uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  timezone                text NOT NULL DEFAULT 'UTC',
 
   -- Meal log reminder
-  meal_bell_enabled     boolean NOT NULL DEFAULT false, -- in-app bell notification
-  meal_push_enabled     boolean NOT NULL DEFAULT false, -- mobile Web Push
-  meal_reminder_time    time    NOT NULL DEFAULT '12:00:00',
+  meal_bell_enabled       boolean NOT NULL DEFAULT false,
+  meal_push_enabled       boolean NOT NULL DEFAULT false,
+  meal_reminder_time      time    NOT NULL DEFAULT '12:00:00',
 
   -- Health check-in reminder
-  checkin_bell_enabled  boolean NOT NULL DEFAULT false,
-  checkin_push_enabled  boolean NOT NULL DEFAULT false,
-  checkin_reminder_time time    NOT NULL DEFAULT '08:00:00',
+  checkin_bell_enabled    boolean NOT NULL DEFAULT false,
+  checkin_push_enabled    boolean NOT NULL DEFAULT false,
+  checkin_reminder_time   time    NOT NULL DEFAULT '08:00:00',
 
-  updated_at            timestamptz NOT NULL DEFAULT now()
+  updated_at              timestamptz NOT NULL DEFAULT now()
 );
 
 ALTER TABLE notification_preferences ENABLE ROW LEVEL SECURITY;
@@ -13045,15 +13053,15 @@ CREATE POLICY "notification_preferences_self"
   ON notification_preferences USING (user_id = auth.uid());
 ```
 
-**4. New `push_subscriptions` table** — one row per browser/device:
+**3. `push_subscriptions` table** — one row per browser/device:
 ```sql
 CREATE TABLE push_subscriptions (
   id          uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id     uuid        NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  endpoint    text        NOT NULL UNIQUE,   -- push service URL (per device)
-  p256dh      text        NOT NULL,          -- encryption key
-  auth        text        NOT NULL,          -- auth secret
-  user_agent  text,                          -- optional: Chrome on Android, Safari on iOS
+  endpoint    text        NOT NULL UNIQUE,
+  p256dh      text        NOT NULL,
+  auth        text        NOT NULL,
+  user_agent  text,
   created_at  timestamptz NOT NULL DEFAULT now()
 );
 
@@ -13066,15 +13074,56 @@ CREATE INDEX push_subscriptions_user_idx ON push_subscriptions (user_id);
 
 ---
 
-#### PART II — Push sender utility (`lib/push/send.ts`)
+#### PART II — Extend existing notification files for new types
 
-Install: `npm install web-push`
-
-Add to `.env.local` (and server environment):
+**`app/actions/notifications.ts`** — add to `KNOWN_NOTIFICATION_TYPES`:
+```ts
+"meal_reminder",
+"health_checkin_reminder",
 ```
-VAPID_PUBLIC_KEY=<generate with: npx web-push generate-vapid-keys>
+
+**`hooks/use-notifications-realtime.ts`** — same addition to `KNOWN_NOTIFICATION_TYPES`.
+
+**`components/layout/notification-bell.tsx`** — two changes:
+
+1. Add to `notificationMeta()`:
+```ts
+import { Utensils, Activity } from "lucide-react";
+
+if (type === "meal_reminder")
+  return { icon: Utensils, toneClass: "bg-orange-100 text-orange-600" };
+if (type === "health_checkin_reminder")
+  return { icon: Activity, toneClass: "bg-teal-100 text-teal-600" };
+```
+
+2. Add `data.url` navigation for non-ticket notifications. Currently the non-ticket branch renders a plain `<div>`. Change it to a conditional `<Link>` when `notification.data.url` is a string:
+```tsx
+const actionUrl = typeof notification.data.url === "string" ? notification.data.url : null;
+
+// In the non-ticket branch, wrap with Link if actionUrl exists:
+{actionUrl ? (
+  <Link href={actionUrl} className="..." onClick={() => setOpen(false)}>
+    {/* same inner content */}
+  </Link>
+) : (
+  <div className="...">
+    {/* same inner content */}
+  </div>
+)}
+```
+
+---
+
+#### PART III — Push sender utility (`lib/push/send.ts`)
+
+Install: `npm install web-push @types/web-push`
+
+Add env vars (`.env.local` + server environment):
+```
+VAPID_PUBLIC_KEY=<generate: npx web-push generate-vapid-keys>
 VAPID_PRIVATE_KEY=<from above>
 VAPID_SUBJECT=mailto:admin@yourdomain.com
+NEXT_PUBLIC_VAPID_PUBLIC_KEY=<same as VAPID_PUBLIC_KEY>
 ```
 
 ```ts
@@ -13084,40 +13133,35 @@ import webPush from "web-push";
 webPush.setVapidDetails(
   process.env.VAPID_SUBJECT!,
   process.env.VAPID_PUBLIC_KEY!,
-  process.env.VAPID_PRIVATE_KEY!
+  process.env.VAPID_PRIVATE_KEY!,
 );
 
-export type PushPayload = {
-  title: string;
-  body: string;
-  url: string;   // action_url — where to navigate on tap
-};
+export type PushPayload = { title: string; body: string; url: string };
 
-export type PushSubscriptionRow = {
+export type PushSubscriptionRecord = {
+  id: string;
   endpoint: string;
   p256dh: string;
   auth: string;
 };
 
 /**
- * Send a push notification to a single subscription.
- * Returns false if the subscription is stale (410 Gone) — caller should delete it.
+ * Returns false when the subscription is stale (410/404) — caller must delete it.
+ * Throws on any other error.
  */
 export async function sendPushNotification(
-  subscription: PushSubscriptionRow,
-  payload: PushPayload
+  sub: PushSubscriptionRecord,
+  payload: PushPayload,
 ): Promise<boolean> {
   try {
     await webPush.sendNotification(
-      { endpoint: subscription.endpoint, keys: { p256dh: subscription.p256dh, auth: subscription.auth } },
-      JSON.stringify(payload)
+      { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+      JSON.stringify(payload),
     );
     return true;
   } catch (err: unknown) {
-    if (typeof err === "object" && err !== null && "statusCode" in err) {
-      const statusCode = (err as { statusCode: number }).statusCode;
-      if (statusCode === 410 || statusCode === 404) return false; // stale subscription
-    }
+    const status = (err as { statusCode?: number })?.statusCode;
+    if (status === 410 || status === 404) return false;
     throw err;
   }
 }
@@ -13125,104 +13169,41 @@ export async function sendPushNotification(
 
 ---
 
-#### PART III — Server Actions (`app/actions/notifications.ts`)
-
-```ts
-"use server";
-
-// ── Read ──────────────────────────────────────────────────────────────────
-
-export type NotificationRow = {
-  id: string;
-  title: string;
-  body: string;
-  type: string;
-  action_url: string | null;
-  is_read: boolean;
-  created_at: string;
-};
-
-/**
- * Fetch the 30 most recent notifications for the current user.
- * Returns { notifications, unread_count }.
- */
-export async function getNotifications(): Promise<{
-  notifications: NotificationRow[];
-  unread_count: number;
-}>
-
-// ── Mutations ─────────────────────────────────────────────────────────────
-
-export async function markNotificationRead(id: string): Promise<void>
-// UPDATE notifications SET is_read = true, read_at = now() WHERE id = id AND user_id = uid()
-
-export async function markAllNotificationsRead(): Promise<void>
-// UPDATE notifications SET is_read = true, read_at = now() WHERE user_id = uid() AND is_read = false
-
-// ── Preferences ───────────────────────────────────────────────────────────
-
-export type NotificationPreferencesInput = {
-  timezone: string;
-  meal_bell_enabled: boolean;
-  meal_push_enabled: boolean;
-  meal_reminder_time: string;       // "HH:MM"
-  checkin_bell_enabled: boolean;
-  checkin_push_enabled: boolean;
-  checkin_reminder_time: string;    // "HH:MM"
-};
-
-export async function getNotificationPreferences(): Promise<NotificationPreferencesInput | null>
-// SELECT * FROM notification_preferences WHERE user_id = uid()
-
-export async function upsertNotificationPreferences(
-  input: NotificationPreferencesInput
-): Promise<void>
-// UPSERT into notification_preferences
-// Validate time strings are valid "HH:MM" format via Zod
-// Validate timezone is a non-empty string (browser provides IANA value)
-// Wrap in runTrackedAction("notification_preferences.upsert")
-```
-
----
-
 #### PART IV — API Routes
 
-**`app/api/push/subscribe/route.ts`** — save a new push subscription:
+**`app/api/push/subscribe/route.ts`**
 ```ts
 // POST /api/push/subscribe
 // Body: { endpoint: string; keys: { p256dh: string; auth: string }; userAgent?: string }
-// Auth: requires session (call getServerUser())
-// Action: upsert into push_subscriptions by (user_id, endpoint)
-// Returns: 200 OK
+// Auth: call getServerUser() — 401 if not authenticated
+// Action: upsert into push_subscriptions ON CONFLICT (endpoint) DO UPDATE SET user_id, p256dh, auth
+// Use createClient() from "@/lib/supabase/server"
+// Returns: 200 { ok: true }
 ```
 
-**`app/api/push/unsubscribe/route.ts`** — remove a subscription:
+**`app/api/push/unsubscribe/route.ts`**
 ```ts
 // POST /api/push/unsubscribe
 // Body: { endpoint: string }
-// Auth: requires session
+// Auth: getServerUser() — 401 if not authenticated
 // Action: DELETE FROM push_subscriptions WHERE endpoint = ? AND user_id = uid()
-// Returns: 200 OK
+// Returns: 200 { ok: true }
 ```
-
-Both routes use the service-role client for writes (the RLS policy allows it but service role avoids cookie plumbing in route handlers). Use `createClient` from `@/lib/supabase/server` if it supports route handlers, otherwise use the admin client pattern from `send-reminders.ts`.
-
-**Important:** The `VAPID_PUBLIC_KEY` must be exposed to the client. Add to `next.config` as `NEXT_PUBLIC_VAPID_PUBLIC_KEY`.
 
 ---
 
 #### PART V — Service Worker (`public/sw.js`)
 
 ```js
-// public/sw.js  — no bundler, plain JS, served statically
+// public/sw.js — plain JS, no bundler, served statically from /public
 
 self.addEventListener("push", (event) => {
   const data = event.data?.json() ?? {};
   event.waitUntil(
     self.registration.showNotification(data.title ?? "Reminder", {
       body: data.body ?? "",
-      icon: "/icons/icon-192.png",   // add a 192×192 app icon to public/icons/
-      badge: "/icons/badge-72.png",  // 72×72 monochrome badge icon
+      icon: "/icons/icon-192.png",
+      badge: "/icons/badge-72.png",
       data: { url: data.url ?? "/" },
     })
   );
@@ -13232,8 +13213,8 @@ self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   const url = event.notification.data?.url ?? "/";
   event.waitUntil(
-    clients.matchAll({ type: "window" }).then((windowClients) => {
-      for (const client of windowClients) {
+    clients.matchAll({ type: "window" }).then((list) => {
+      for (const client of list) {
         if (client.url.includes(self.location.origin) && "focus" in client) {
           client.navigate(url);
           return client.focus();
@@ -13245,19 +13226,7 @@ self.addEventListener("notificationclick", (event) => {
 });
 ```
 
-**Register the SW in `app/layout.tsx`** (client component wrapper or `useEffect` in root):
-```tsx
-// In a "use client" component mounted at the root layout:
-useEffect(() => {
-  if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.register("/sw.js").catch(console.error);
-  }
-}, []);
-```
-
-Create a minimal `components/layout/sw-register.tsx` client component that does only this registration and render it inside the root `app/layout.tsx`.
-
-**PWA manifest** (`public/manifest.json`) — required for iOS push support:
+**`public/manifest.json`** (required for iOS Web Push):
 ```json
 {
   "name": "Fitness Tracker",
@@ -13273,276 +13242,684 @@ Create a minimal `components/layout/sw-register.tsx` client component that does 
 }
 ```
 
-Add `<link rel="manifest" href="/manifest.json" />` to the `<head>` in `app/layout.tsx`.
+**`components/layout/sw-register.tsx`** — client component, renders nothing:
+```tsx
+"use client";
+import { useEffect } from "react";
 
-**iOS caveat** — iOS Safari 16.4+ requires the user to tap "Share → Add to Home Screen" before Web Push works. Show a one-time inline tip in the push permission button for iOS users (`/iPhone|iPad/i.test(navigator.userAgent)`).
+export function SwRegister() {
+  useEffect(() => {
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/sw.js").catch(console.error);
+    }
+  }, []);
+  return null;
+}
+```
+
+**`app/layout.tsx`** — add inside `<head>` and `<body>`:
+```tsx
+// In <head>:
+<link rel="manifest" href="/manifest.json" />
+
+// In <body> (before closing tag):
+<SwRegister />
+```
+
+Add app icons: `public/icons/icon-192.png`, `public/icons/icon-512.png`, `public/icons/badge-72.png`.
 
 ---
 
-#### PART VI — Inngest cron (`lib/inngest/functions/send-daily-reminders.ts`)
+#### PART VI — Notification Preferences Actions (`app/actions/notification-preferences.ts`)
 
 ```ts
-// Cron: every 15 minutes
-// { cron: "*/15 * * * *" }
+"use server";
+import { z } from "zod";
+import { runTrackedAction } from "@/lib/events/dispatcher";
+import { createClient } from "@/lib/supabase/server";
 
-// Step 1: query users whose meal_reminder_time falls in the current 15-min window
-//   SELECT np.user_id, np.meal_reminder_time
-//   FROM notification_preferences np
-//   WHERE np.meal_bell_enabled = true OR np.meal_push_enabled = true
-//     AND date_trunc('hour', now() AT TIME ZONE np.timezone)
-//       + floor(extract(minute FROM now() AT TIME ZONE np.timezone) / 15)
-//         * interval '15 min'
-//     = date_trunc('hour', np.meal_reminder_time::timetz)
-//       + floor(extract(minute FROM np.meal_reminder_time) / 15)
-//         * interval '15 min'
-//
-// Step 2: same query for checkin_reminder
+const preferencesSchema = z.object({
+  timezone:              z.string().min(1),
+  meal_bell_enabled:     z.boolean(),
+  meal_push_enabled:     z.boolean(),
+  meal_reminder_time:    z.string().regex(/^\d{2}:\d{2}$/),   // "HH:MM"
+  checkin_bell_enabled:  z.boolean(),
+  checkin_push_enabled:  z.boolean(),
+  checkin_reminder_time: z.string().regex(/^\d{2}:\d{2}$/),
+});
 
-// Step 3: for each user in meal batch:
-//   a. If meal_bell_enabled → INSERT into notifications { user_id, type: "meal_reminder",
-//        title: "Log your meals", body: "Don't forget to log today's meals.",
-//        action_url: "/nutrition/diary" }
-//   b. If meal_push_enabled → fetch push_subscriptions for user → sendPushNotification()
-//        → if sendPushNotification returns false (stale) → DELETE that subscription
+export type NotificationPreferencesInput = z.infer<typeof preferencesSchema>;
 
-// Step 4: same for checkin batch (action_url: "/check-in")
+export async function getNotificationPreferencesAction(): Promise<NotificationPreferencesInput | null>
+// SELECT * FROM notification_preferences WHERE user_id = uid()
+// Return null if no row yet (frontend uses defaults)
 
-// Fan-out pattern for scale: emit one inngest event per user, handle in a separate function
-// This prevents one slow push send from blocking the whole batch
+export async function upsertNotificationPreferencesAction(
+  input: NotificationPreferencesInput
+): Promise<void>
+// Parse with preferencesSchema
+// UPSERT into notification_preferences (user_id = uid(), ...input, updated_at = now())
+// Wrap in runTrackedAction("notification_preferences.upsert")
 ```
 
-**Fan-out pattern (for scale):**
-```ts
-// In send-daily-reminders: emit events
-await step.sendEvent("send-reminder-batch", mealUsers.map(user => ({
-  name: "notification/send.reminder",
-  data: { user_id: user.user_id, type: "meal_reminder" }
-})));
+---
 
-// Separate function handles one user at a time with retries:
+#### PART VII — Inngest cron (`lib/inngest/functions/send-daily-reminders.ts`)
+
+**Two functions in one file:**
+
+```ts
+// Function 1: cron fan-out — runs every 15 minutes
+export const sendDailyReminders = inngest.createFunction(
+  { id: "send-daily-reminders" },
+  { cron: "*/15 * * * *" },
+  async ({ step }) => {
+    // Step 1: query users due for meal reminder in this 15-min window
+    // Step 2: query users due for check-in reminder in this 15-min window
+    // Step 3: emit one "notification/send.reminder" event per user per due type
+    // → Inngest handles fan-out + retries per user independently
+  }
+);
+
+// Function 2: per-user handler — retries independently
 export const handleSendReminder = inngest.createFunction(
   { id: "handle-send-reminder", retries: 2 },
   { event: "notification/send.reminder" },
-  async ({ event, step }) => { ... }
+  async ({ event, step }) => {
+    // event.data: { user_id: string; type: "meal_reminder" | "health_checkin_reminder" }
+    // Step 1: build notification payload based on type
+    //   meal_reminder:            { title: "Log your meals", body: "Don't forget to log today's meals.", url: "/nutrition/diary" }
+    //   health_checkin_reminder:  { title: "Daily check-in", body: "How are you feeling today?", url: "/check-in" }
+    // Step 2: if bell enabled → INSERT into notifications { user_id, type, title, body, data: { url } }
+    // Step 3: if push enabled → fetch push_subscriptions for user_id
+    //         → for each: sendPushNotification(); if returns false → DELETE that subscription (stale)
+  }
 );
 ```
 
-Use the admin Supabase client (same pattern as `send-reminders.ts`) for all DB operations inside Inngest.
+**Timezone-aware query for Step 1/2** — use Supabase admin client (same pattern as `send-reminders.ts`):
+```sql
+SELECT user_id
+FROM notification_preferences
+WHERE meal_bell_enabled = true OR meal_push_enabled = true
+  AND (
+    date_trunc('hour', now() AT TIME ZONE timezone)
+      + floor(extract(minute FROM now() AT TIME ZONE timezone) / 15) * interval '15 min'
+  ) = (
+    date_trunc('hour', meal_reminder_time::time)
+      + floor(extract(minute FROM meal_reminder_time) / 15) * interval '15 min'
+  )
+```
 
-**Register in `lib/inngest/index.ts`:**
+Run the same query for `checkin_bell_enabled OR checkin_push_enabled` with `checkin_reminder_time`.
+
+**Register both in `lib/inngest/index.ts`:**
 ```ts
-import { sendDailyReminders } from "./functions/send-daily-reminders";
-import { handleSendReminder } from "./functions/send-daily-reminders";
+import { sendDailyReminders, handleSendReminder } from "./functions/send-daily-reminders";
 
 export const inngestFunctions = [
-  ...existing,
+  // ...existing,
   sendDailyReminders,
   handleSendReminder,
 ];
 ```
 
-**Also fix `send-reminders.ts`:** It currently writes to `ai_insights` which no longer exists. Change it to write to the `notifications` table with `type: "general"` and `action_url: "/workouts"`. Keep the existing cron schedule (`0 8 * * *`).
-
----
-
-#### PART VII — Bell notification center
-
-**`hooks/use-notifications.ts`**
+**Fix `lib/inngest/functions/send-reminders.ts`** — currently writes to `ai_insights` (removed table). Change the `create-notifications` step to write to `notifications` instead:
 ```ts
-"use client";
-// Two concerns:
-// 1. React Query fetch: useQuery({ queryKey: ["notifications"], queryFn: getNotifications })
-// 2. Supabase Realtime: subscribe to INSERT on notifications WHERE user_id = uid()
-//    On new row: queryClient.invalidateQueries({ queryKey: ["notifications"] })
-//
-// Returns: { notifications, unreadCount, markRead, markAllRead, isLoading }
-// The Supabase Realtime subscription is set up in a useEffect, cleaned up on unmount.
-// Use createClient from "@/lib/supabase/client" for the Realtime channel.
-```
-
-**`components/notifications/notification-bell.tsx`**
-```tsx
-// Bell icon button with a red badge showing unreadCount
-// On click: toggles the dropdown open/closed
-// Badge: show count if > 0; cap display at "9+" if count > 9
-// Uses useNotifications() hook
-// Icon: Bell from lucide-react
-```
-
-**`components/notifications/notification-dropdown.tsx`**
-```tsx
-// Dropdown panel (absolute positioned, w-80, max-h-[420px] overflow-y-auto)
-// Header: "Notifications" title + "Mark all read" button (only if unreadCount > 0)
-// Body: map over notifications → <NotificationItem>
-// Empty state: "No notifications yet."
-// Closes on outside click (useRef + useEffect with mousedown listener)
-```
-
-**`components/notifications/notification-item.tsx`**
-```tsx
-// Single notification row:
-// - Unread indicator: left border or dot (bg-primary/60 when !is_read)
-// - Icon: pick by type (Bell for general, Utensils for meal_reminder, Activity for health_checkin_reminder, etc.)
-// - Title (font-medium) + body (text-sm text-muted-foreground, line-clamp-2)
-// - Timestamp: relative time (e.g. "2h ago") using date-fns or native Intl
-// - On click: if action_url → navigate via router.push(action_url); markNotificationRead(id)
-```
-
-**Wire bell into `app/(dashboard)/layout.tsx`:**
-Add a thin topbar above the main content area:
-```tsx
-// If a topbar/header already exists in the dashboard layout, add <NotificationBell /> there.
-// If none exists, create components/layout/dashboard-topbar.tsx:
-//   <div className="flex h-12 items-center justify-end border-b border-white/10 px-4">
-//     <NotificationBell />
-//   </div>
-// And render it at the top of the dashboard layout children area.
+// Replace:
+.from("ai_insights").insert(notifications)
+// With:
+.from("notifications").insert(
+  inactiveUsers.map(user => ({
+    user_id: user.id,
+    type: "general",
+    title: "We miss you!",
+    body: `Hey ${user.name}, it's been a few days since your last log. Ready to get back on track?`,
+    data: { url: "/workouts" },
+  }))
+)
 ```
 
 ---
 
-#### PART VIII — Settings page (`/settings/notifications`)
+#### PART VIII — Settings page
 
 **`components/settings/settings-tab-nav.tsx`** — add tab:
 ```ts
 import { Bell } from "lucide-react";
 
-const SETTINGS_TABS = [
-  ...existing,
-  { title: "Notifications", href: "/settings/notifications", icon: Bell },
-];
+// Add to SETTINGS_TABS array:
+{ title: "Notifications", href: "/settings/notifications", icon: Bell },
 ```
 
-**`app/(dashboard)/(account)/settings/notifications/page.tsx`** — non-blocking layout (same pattern as all settings pages): header renders immediately, form area shows skeleton while `getNotificationPreferences()` loads.
+**`app/(dashboard)/(account)/settings/notifications/page.tsx`** — non-blocking (same pattern as other settings pages):
+```tsx
+// Server component: fetch getNotificationPreferencesAction() here
+// Pass data as initialValues prop to the form
+// Page header renders immediately; form skeleton only if data not yet ready
+```
 
 **`components/settings/notification-settings-form.tsx`**
 
 ```
 Notifications
 
-── Meal Log Reminder ────────────────────────────────
-  [●] Bell notification (show in app)
+── Meal Log Reminder ─────────────────────────────────
+  [●] Show in notification bell
   [●] Mobile push notification
-      Remind me at  [12:00 ▾]              (time picker, 15-min increments)
+      Remind me at  [12:00 ▾]     (select with 15-min increments: 00:00, 00:15, ..., 23:45)
 
-── Health Check-in Reminder ─────────────────────────
-  [●] Bell notification (show in app)
+── Health Check-in Reminder ──────────────────────────
+  [●] Show in notification bell
   [●] Mobile push notification
       Remind me at  [08:00 ▾]
 
-── Timezone ─────────────────────────────────────────
-  [America/New_York ▾]    (auto-detected on first load via
-                           Intl.DateTimeFormat().resolvedOptions().timeZone)
+── Timezone ──────────────────────────────────────────
+  [America/New_York ▾]    (auto-detected via Intl.DateTimeFormat().resolvedOptions().timeZone
+                           on first render; user can override)
 
 [Save preferences]
 
-── Mobile Push ──────────────────────────────────────
-  [Enable push notifications on this device]    ← button triggers browser permission prompt
-  (Only shown on mobile devices)
-  (After permission granted: shows "Push enabled on this device" + "Disable" button)
-  (iOS note: "On iPhone/iPad, add this app to your Home Screen first.")
+── Mobile Push ───────────────────────────────────────
+  (Shown only on mobile: /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent))
+
+  [Enable push on this device]     ← triggers browser Notification.requestPermission()
+                                     then subscribes via pushManager.subscribe()
+                                     then POSTs to /api/push/subscribe
+
+  After granted: show "Push enabled ✓" + [Disable] button
+                  [Disable] → POSTs to /api/push/unsubscribe, updates UI
+
+  iOS note (show when iPhone/iPad detected):
+  "On iPhone/iPad, tap Share → Add to Home Screen first."
 ```
 
-**Push toggle implementation:**
+**Push subscription flow in the form:**
 ```ts
-// Push permission + subscription registration:
+const VAPID_PUBLIC_KEY = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!;
+
 async function enablePush() {
   const permission = await Notification.requestPermission();
   if (permission !== "granted") return;
-
   const reg = await navigator.serviceWorker.ready;
   const sub = await reg.pushManager.subscribe({
     userVisibleOnly: true,
-    applicationServerKey: urlBase64ToUint8Array(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!),
+    applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
   });
-
+  const json = sub.toJSON();
   await fetch("/api/push/subscribe", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       endpoint: sub.endpoint,
-      keys: { p256dh: sub.toJSON().keys?.p256dh, auth: sub.toJSON().keys?.auth },
+      keys: { p256dh: json.keys?.p256dh, auth: json.keys?.auth },
       userAgent: navigator.userAgent,
     }),
   });
 }
-// urlBase64ToUint8Array is a standard VAPID key conversion utility — copy from web-push docs
-```
 
-Mobile detection for showing the push section:
-```ts
-const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
-// Render the push section only when isMobile is true
+// urlBase64ToUint8Array — standard VAPID conversion utility:
+function urlBase64ToUint8Array(base64String: string): Uint8Array {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const rawData = atob(base64);
+  return Uint8Array.from([...rawData].map((c) => c.charCodeAt(0)));
+}
 ```
 
 ---
 
-#### PART IX — Checklist
+#### PART IX — PWA Install Banner (`components/layout/pwa-install-banner.tsx`)
+
+Show a bottom banner on mobile inviting the user to install the app. Never show if already installed or previously dismissed.
+
+**Detection logic (all three checks run client-side on mount):**
+
+```ts
+// 1. Already installed as PWA → never show
+const isStandalone = window.matchMedia("(display-mode: standalone)").matches
+  || (navigator as { standalone?: boolean }).standalone === true;  // iOS Safari standalone flag
+if (isStandalone) return null;
+
+// 2. Previously dismissed → never show
+if (localStorage.getItem("pwa-install-dismissed") === "1") return null;
+
+// 3. Not mobile → never show
+const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+if (!isMobile) return null;
+```
+
+**Android/Chrome — native prompt:**
+
+The browser fires `beforeinstallprompt` before the page finishes loading. Capture and defer it:
+
+```ts
+const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
+
+useEffect(() => {
+  const handler = (e: Event) => {
+    e.preventDefault();
+    setDeferredPrompt(e as BeforeInstallPromptEvent);
+  };
+  window.addEventListener("beforeinstallprompt", handler);
+  return () => window.removeEventListener("beforeinstallprompt", handler);
+}, []);
+```
+
+`BeforeInstallPromptEvent` is not yet in TypeScript's DOM lib — declare it locally:
+```ts
+interface BeforeInstallPromptEvent extends Event {
+  prompt(): Promise<void>;
+  readonly userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
+}
+```
+
+On [Install] tap → call `deferredPrompt.prompt()` → browser shows native install dialog → on resolve: dismiss banner + set localStorage.
+
+**iOS Safari — manual tip:**
+
+No `beforeinstallprompt` on iOS. Detect iOS and show a manual instruction:
+
+```ts
+const isIos = /iPhone|iPad/i.test(navigator.userAgent);
+// Show tip: "Tap the Share icon ⎋ then 'Add to Home Screen'"
+```
+
+**Banner UI:**
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  [App icon 40px]  Add to your home screen          [✕]      │
+│                   Get the full app experience               │
+│                                  [Install / How to install] │
+└─────────────────────────────────────────────────────────────┘
+```
+
+- Fixed at the bottom of the screen (`fixed bottom-0 left-0 right-0 z-50`)
+- Sits above the mobile bottom nav — add `pb-[env(safe-area-inset-bottom)]` + enough bottom margin to clear the nav (check the existing `MobileBottomNav` height, currently ~5rem)
+- Dismissing (✕): `localStorage.setItem("pwa-install-dismissed", "1")`, hide banner immediately
+- After successful install (`userChoice.outcome === "accepted"`): hide banner, no need to set localStorage (the next visit will be standalone)
+- iOS: [How to install] button opens a small inline tip panel below the banner explaining the Share → Add to Home Screen steps — no external link needed
+
+**Wire into `app/(dashboard)/layout.tsx`:**
+```tsx
+import { PwaInstallBanner } from "@/components/layout/pwa-install-banner";
+
+// Add inside <SidebarInset>, after <MobileBottomNav>:
+<PwaInstallBanner />
+```
+
+The component renders `null` on server (it's `"use client"` with all logic inside `useEffect`) so it is hydration-safe.
+
+---
+
+#### PART X — Goal Check-in Notifications
+
+Goal check-in reminders notify users (and coaches) when a goal's check-in interval is due. The interval is already stored in `fitness_goals.check_in_interval_days`. This part adds the notification type, extends preferences, adds a dedicated Inngest cron, and wires the bell.
+
+##### 10.1 — Migration
+
+```sql
+-- 1. Extend notification_type enum
+ALTER TYPE public.notification_type ADD VALUE IF NOT EXISTS 'goal_checkin_reminder';
+
+-- 2. Add goal notification columns to notification_preferences
+ALTER TABLE public.notification_preferences
+  ADD COLUMN IF NOT EXISTS goal_bell_enabled boolean NOT NULL DEFAULT true,
+  ADD COLUMN IF NOT EXISTS goal_push_enabled boolean NOT NULL DEFAULT false;
+```
+
+Run via Supabase dashboard SQL editor. No new table needed.
+
+##### 10.2 — Update `types/database.ts`
+
+**`NotificationType` union** (top of file, line ~9) — add:
+```ts
+| "goal_checkin_reminder"
+```
+
+**`notification_preferences` Row / Insert / Update** — add:
+```ts
+// Row
+goal_bell_enabled: boolean
+goal_push_enabled: boolean
+
+// Insert
+goal_bell_enabled?: boolean
+goal_push_enabled?: boolean
+
+// Update
+goal_bell_enabled?: boolean
+goal_push_enabled?: boolean
+```
+
+##### 10.3 — Extend `KNOWN_NOTIFICATION_TYPES`
+
+**`app/actions/notifications.ts`** — add `"goal_checkin_reminder"` to the `KNOWN_NOTIFICATION_TYPES` Set.
+
+**`hooks/use-notifications-realtime.ts`** — same addition to `KNOWN_NOTIFICATION_TYPES`.
+
+##### 10.4 — Extend `notificationMeta()` in `components/layout/notification-bell.tsx`
+
+```ts
+case "goal_checkin_reminder":
+  return {
+    icon: <Target className="h-4 w-4 text-amber-500" />,
+    label: "Goal Check-in Due",
+  };
+```
+
+Non-ticket notifications already route via `notification.data.url` — ensure `data.url` is set to `"/goals"` in the Inngest sender (step 10.5).
+
+##### 10.5 — New Inngest function: `lib/inngest/functions/send-goal-checkin-reminders.ts`
+
+Create a **separate** cron function. Do not extend `send-daily-reminders.ts` — goal check-ins fire on a per-goal schedule (interval days), not at a fixed user time.
+
+```ts
+import { createClient } from "@supabase/supabase-js";
+import { inngest } from "../client";
+import { sendPushNotification } from "@/lib/push/send";
+
+export const sendGoalCheckinReminders = inngest.createFunction(
+  { id: "send-goal-checkin-reminders" },
+  { cron: "0 9 * * *" }, // daily at 09:00 UTC — fine-grained enough; goals don't need 15-min precision
+  async ({ step }) => {
+    const supabaseAdmin = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      { auth: { autoRefreshToken: false, persistSession: false } }
+    );
+
+    // Step 1: Find goals due for check-in today
+    const dueGoals = await step.run("find-due-goals", async () => {
+      // A goal is due if: today - last_check_in_date >= check_in_interval_days
+      // last_check_in_date = MAX(goal_progress_history.snapshot_at) or start_date if no history
+      const { data, error } = await supabaseAdmin.rpc("get_goals_due_for_checkin");
+      if (error) throw error;
+      return data as Array<{
+        goal_id: string;
+        user_id: string;
+        goal_type: string;
+      }>;
+    });
+
+    if (dueGoals.length === 0) return { sent: 0 };
+
+    // Step 2: Fan out per-goal reminder events
+    await step.sendEvent(
+      "fan-out-goal-checkin-reminders",
+      dueGoals.map((g) => ({
+        name: "notification/send.goal-checkin-reminder" as const,
+        data: { goal_id: g.goal_id, user_id: g.user_id, goal_type: g.goal_type },
+      }))
+    );
+
+    return { sent: dueGoals.length };
+  }
+);
+
+export const handleSendGoalCheckinReminder = inngest.createFunction(
+  { id: "handle-send-goal-checkin-reminder", retries: 2 },
+  { event: "notification/send.goal-checkin-reminder" },
+  async ({ event, step }) => {
+    const { goal_id, user_id, goal_type } = event.data;
+
+    const supabaseAdmin = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      { auth: { autoRefreshToken: false, persistSession: false } }
+    );
+
+    // Load user preferences
+    const { data: prefs } = await supabaseAdmin
+      .from("notification_preferences")
+      .select("goal_bell_enabled, goal_push_enabled")
+      .eq("user_id", user_id)
+      .maybeSingle();
+
+    const bellEnabled = prefs?.goal_bell_enabled ?? true;
+    const pushEnabled = prefs?.goal_push_enabled ?? false;
+
+    const title = "Goal Check-in Due";
+    const body = `Time to log your progress on your ${goal_type.replace(/_/g, " ")} goal.`;
+
+    // Insert bell notification
+    if (bellEnabled) {
+      await step.run("insert-bell-notification", async () => {
+        const { error } = await supabaseAdmin.from("notifications").insert({
+          user_id,
+          type: "goal_checkin_reminder",
+          title,
+          body,
+          data: { url: "/goals", goal_id },
+        });
+        if (error) throw error;
+      });
+    }
+
+    // Send push notification
+    if (pushEnabled) {
+      await step.run("send-push", async () => {
+        const { data: subs } = await supabaseAdmin
+          .from("push_subscriptions")
+          .select("*")
+          .eq("user_id", user_id);
+
+        for (const sub of subs ?? []) {
+          const ok = await sendPushNotification(sub, { title, body, url: "/goals" });
+          if (!ok) {
+            // Stale subscription — remove
+            await supabaseAdmin.from("push_subscriptions").delete().eq("id", sub.id);
+          }
+        }
+      });
+    }
+
+    return { bellEnabled, pushEnabled };
+  }
+);
+```
+
+**Create the SQL function** (run in Supabase dashboard):
+
+```sql
+CREATE OR REPLACE FUNCTION public.get_goals_due_for_checkin()
+RETURNS TABLE(goal_id uuid, user_id uuid, goal_type text)
+LANGUAGE sql
+STABLE
+AS $$
+  SELECT
+    fg.id                AS goal_id,
+    fg.user_id           AS user_id,
+    fg.goal_type         AS goal_type
+  FROM public.fitness_goals fg
+  WHERE fg.check_in_interval_days IS NOT NULL
+    AND fg.status = 'active'
+    AND (
+      CURRENT_DATE - COALESCE(
+        (SELECT MAX(gph.snapshot_at::date)
+         FROM public.goal_progress_history gph
+         WHERE gph.goal_id = fg.id),
+        fg.start_date::date
+      )
+    ) >= fg.check_in_interval_days;
+$$;
+```
+
+This avoids loading all history rows into Node — the computation happens in Postgres.
+
+##### 10.6 — Register new functions in `lib/inngest/index.ts`
+
+```ts
+import { sendGoalCheckinReminders, handleSendGoalCheckinReminder } from "./functions/send-goal-checkin-reminders";
+
+export const functions = [
+  // ... existing
+  sendGoalCheckinReminders,
+  handleSendGoalCheckinReminder,
+];
+```
+
+##### 10.7 — Update event schema in `types/inngest.ts`
+
+Add:
+```ts
+"notification/send.goal-checkin-reminder": {
+  data: {
+    goal_id: string;
+    user_id: string;
+    goal_type: string;
+  };
+};
+```
+
+##### 10.8 — Extend `/settings/notifications` page + action
+
+**`app/actions/notification-preferences.ts`** — `upsertNotificationPreferencesAction` already accepts a partial object. No structural change needed — just ensure `goal_bell_enabled` + `goal_push_enabled` flow through the zod schema and the upsert call.
+
+**`components/settings/notification-settings-form.tsx`** — update the full form layout to include Goal Check-in. The complete layout the engineer must produce:
+
+```
+Notifications
+
+── Meal Log Reminder ─────────────────────────────────
+  [●] Show in notification bell
+  [●] Mobile push notification
+      Remind me at  [12:00 ▾]     (15-min increments)
+
+── Health Check-in Reminder ──────────────────────────
+  [●] Show in notification bell
+  [●] Mobile push notification
+      Remind me at  [08:00 ▾]
+
+── Goal Check-in Reminder ────────────────────────────
+  [●] Show in notification bell
+  [●] Mobile push notification
+      ℹ Reminders fire at 09:00 UTC on the day your check-in interval is due.
+      (no time picker — timing is per-goal, driven by check_in_interval_days)
+
+── Timezone ──────────────────────────────────────────
+  [America/New_York ▾]
+
+[Save preferences]
+
+── Mobile Push ───────────────────────────────────────
+  (mobile userAgent only)
+  [Enable push on this device]  →  Notification.requestPermission() → subscribe → POST /api/push/subscribe
+  After granted: "Push enabled ✓" + [Disable] button → POST /api/push/unsubscribe
+  iOS tip: "Tap Share → Add to Home Screen first."
+```
+
+`onSubmit` must pass all six preference fields to `upsertNotificationPreferencesAction`:
+```ts
+{
+  meal_bell_enabled,
+  meal_push_enabled,
+  meal_reminder_time,
+  checkin_bell_enabled,
+  checkin_push_enabled,
+  checkin_reminder_time,
+  goal_bell_enabled,       // NEW
+  goal_push_enabled,       // NEW
+  timezone,
+}
+```
+
+---
+
+#### PART XI — Checklist
 
 **Migration:**
-- [ ] `notification_type` enum extended with `meal_reminder`, `health_checkin_reminder`
-- [ ] `notifications` table extended: `is_read`, `read_at`, `action_url`; unread index added
-- [ ] `notification_preferences` table created with RLS
-- [ ] `push_subscriptions` table created with RLS
+- [ ] `notification_type` enum extended: `meal_reminder`, `health_checkin_reminder`, `goal_checkin_reminder`
+- [ ] `notification_preferences` table created with RLS; columns `goal_bell_enabled` + `goal_push_enabled` added
+- [ ] `push_subscriptions` table created with RLS + index on `user_id`
+- [ ] SQL function `get_goals_due_for_checkin()` created in Supabase
 
-**Backend:**
-- [ ] `lib/push/send.ts`: `sendPushNotification()` — stale-subscription detection (returns false on 410/404)
-- [ ] `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` in env; `NEXT_PUBLIC_VAPID_PUBLIC_KEY` exposed
-- [ ] `app/actions/notifications.ts`: `getNotifications`, `markNotificationRead`, `markAllNotificationsRead`, `getNotificationPreferences`, `upsertNotificationPreferences`
-- [ ] `POST /api/push/subscribe` — upsert push subscription
-- [ ] `POST /api/push/unsubscribe` — delete push subscription
-- [ ] `send-daily-reminders.ts` Inngest cron (*/15) — timezone-aware query, bell insert + push send, fan-out pattern
-- [ ] `handle-send-reminder.ts` Inngest event function — per-user handler with retries, stale subscription cleanup
-- [ ] Both functions registered in `lib/inngest/index.ts`
-- [ ] `send-reminders.ts` fixed to write to `notifications` table instead of `ai_insights`
+**Extend existing files:**
+- [ ] `app/actions/notifications.ts` — `KNOWN_NOTIFICATION_TYPES` includes all new types including `goal_checkin_reminder`
+- [ ] `hooks/use-notifications-realtime.ts` — `KNOWN_NOTIFICATION_TYPES` includes `goal_checkin_reminder`
+- [ ] `notification-bell.tsx` — `notificationMeta()` handles `meal_reminder`, `health_checkin_reminder`, `goal_checkin_reminder`; non-ticket notifications link via `notification.data.url`
+- [ ] `types/database.ts` — `NotificationType` includes `goal_checkin_reminder`; `notification_preferences` Row/Insert/Update includes `goal_bell_enabled` + `goal_push_enabled`
+
+**Push backend:**
+- [ ] `npm install web-push @types/web-push`
+- [ ] VAPID keys generated and in env (`VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`, `NEXT_PUBLIC_VAPID_PUBLIC_KEY`)
+- [ ] `lib/push/send.ts`: `sendPushNotification()` — stale subscription returns false (410/404)
+- [ ] `POST /api/push/subscribe` — upsert subscription
+- [ ] `POST /api/push/unsubscribe` — delete subscription
 
 **Service Worker + PWA:**
-- [ ] `public/sw.js`: push event handler + notificationclick handler
-- [ ] `public/manifest.json`: PWA manifest with app icons
-- [ ] `components/layout/sw-register.tsx`: client component that calls `navigator.serviceWorker.register`
-- [ ] `app/layout.tsx`: renders `<SwRegister />` and `<link rel="manifest" />`
-- [ ] App icons added: `public/icons/icon-192.png`, `public/icons/icon-512.png`, `public/icons/badge-72.png`
+- [ ] `public/sw.js`: push event + notificationclick handlers
+- [ ] `public/manifest.json`: PWA manifest
+- [ ] `public/icons/`: icon-192.png, icon-512.png, badge-72.png
+- [ ] `components/layout/sw-register.tsx`: mounts SW registration
+- [ ] `app/layout.tsx`: `<SwRegister />` + `<link rel="manifest" />`
 
-**Bell notification center:**
-- [ ] `hooks/use-notifications.ts`: React Query fetch + Supabase Realtime subscribe on INSERT
-- [ ] `NotificationBell`: bell icon + unread badge (capped at 9+)
-- [ ] `NotificationDropdown`: list + mark all read + empty state + click-outside close
-- [ ] `NotificationItem`: unread dot, type icon, title/body, relative time, click-to-navigate
-- [ ] Bell wired into dashboard topbar (`app/(dashboard)/layout.tsx`)
+**PWA Install Banner:**
+- [ ] `components/layout/pwa-install-banner.tsx`: renders `null` on server; all logic in `useEffect`
+- [ ] Already-installed check: `display-mode: standalone` + iOS `navigator.standalone` → return null
+- [ ] Already-dismissed check: `localStorage.getItem("pwa-install-dismissed") === "1"` → return null
+- [ ] Mobile-only check: `/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)` → return null on desktop
+- [ ] Android: captures `beforeinstallprompt`, calls `deferredPrompt.prompt()` on Install tap
+- [ ] iOS: shows "Tap Share ⎋ → Add to Home Screen" inline tip instead of native prompt
+- [ ] Dismiss (✕): sets `pwa-install-dismissed` in localStorage, hides immediately
+- [ ] Banner sits above `MobileBottomNav` — verify bottom offset matches nav height
+- [ ] `<PwaInstallBanner />` wired into `app/(dashboard)/layout.tsx` after `<MobileBottomNav />`
 
-**Settings:**
-- [ ] `settings-tab-nav.tsx`: Notifications tab added
-- [ ] `/settings/notifications` page: non-blocking load, form pre-populated with saved preferences
-- [ ] `notification-settings-form.tsx`: per-channel bell + push toggles, time pickers, timezone selector
-- [ ] Push section visible on mobile only; permission button handles grant/deny/iOS tip
+**Inngest (meal + health check-in):**
+- [ ] `send-daily-reminders.ts`: cron `*/15 * * * *`, timezone-aware user query, fan-out via `step.sendEvent`
+- [ ] `handle-send-reminder.ts` (or same file): per-user handler — inserts bell notification if enabled; sends push if enabled; cleans stale subscriptions
+- [ ] Both registered in `lib/inngest/index.ts`
+- [ ] `send-reminders.ts` fixed — writes to `notifications` table (not `ai_insights`)
+
+**Inngest (goal check-in — PART X):**
+- [ ] `lib/inngest/functions/send-goal-checkin-reminders.ts` created — `sendGoalCheckinReminders` + `handleSendGoalCheckinReminder`
+- [ ] `sendGoalCheckinReminders`: cron `0 9 * * *`, calls `get_goals_due_for_checkin()` RPC, fans out `notification/send.goal-checkin-reminder` events
+- [ ] `handleSendGoalCheckinReminder`: reads `goal_bell_enabled` + `goal_push_enabled` from preferences; inserts bell notification; sends push; removes stale subs
+- [ ] `types/inngest.ts` event schema: `notification/send.goal-checkin-reminder` added
+- [ ] Both functions registered in `lib/inngest/index.ts`
+
+**Preferences:**
+- [ ] `app/actions/notification-preferences.ts`: `getNotificationPreferencesAction` + `upsertNotificationPreferencesAction`
+- [ ] `upsertNotificationPreferencesAction` passes `goal_bell_enabled` + `goal_push_enabled` through to DB
+
+**Settings UI:**
+- [ ] `settings-tab-nav.tsx` — Notifications tab added
+- [ ] `/settings/notifications` page — non-blocking, pre-populated from saved preferences
+- [ ] `notification-settings-form.tsx` — per-channel toggles, time picker (15-min intervals), timezone selector, mobile-only push section with iOS tip
+- [ ] Goal Check-in row added to `notification-settings-form.tsx` — bell toggle + push toggle + helper text: _"Reminders fire at 09:00 UTC on the day your check-in is due."_
+
+**QA:**
 - [ ] `npm run typecheck && npm run lint` → pass
-
-**Manual QA:**
-- [ ] Desktop: bell badge increments when Inngest manually triggers `notification/send.reminder` event; dropdown shows notification; click navigates + marks read
-- [ ] Mobile Chrome (Android): enable push in settings → grant permission → trigger Inngest event → OS notification appears → tap → app opens at correct URL
-- [ ] Toggle off meal bell → Inngest cron runs → no new notification for that user
-- [ ] Stale subscription (manually delete endpoint from browser) → next cron run silently removes the DB row
+- [ ] Desktop: trigger Inngest `notification/send.reminder` manually → bell badge increments, dropdown shows notification, click navigates to correct URL
+- [ ] Mobile Chrome (Android): enable push → grant permission → trigger event → OS notification appears → tap → app opens at correct URL
+- [ ] Stale subscription test: manually invalidate push endpoint → next send silently deletes the DB row
+- [ ] Toggle off meal bell → Inngest runs → no new bell notification inserted for that user
+- [ ] Goal check-in test: create a goal with `check_in_interval_days = 1`; trigger `sendGoalCheckinReminders` manually → bell badge appears; click → `/goals` page opens
+- [ ] Toggle off goal bell → run cron → no notification inserted for that user
+- [ ] Install banner — Android: open app on fresh mobile Chrome → banner appears at bottom; tap Install → native prompt fires → after install, banner gone on next visit (standalone mode detected)
+- [ ] Install banner — iOS: open in Safari → banner shows iOS tip; tap ✕ → banner never appears again on any page
+- [ ] Install banner — already installed: open from home screen → banner never renders
+- [ ] Install banner — desktop: open on laptop → banner never renders
 
 ---
 
 #### pg_cron — when to use it in this app
 
-**Not here.** pg_cron runs SQL inside the database only — it cannot make HTTP calls to push endpoints or invoke Inngest. Inngest is the correct choice for any job that touches external services or requires retry logic.
+**Not suitable here** — pg_cron runs SQL inside the database only and cannot make HTTP calls to push endpoints. Inngest is the correct tool for anything that touches external services or requires retries.
 
-**pg_cron belongs in this app for pure DB-maintenance tasks:**
+**pg_cron is the right tool for these tasks in this app — pure SQL housekeeping:**
 
-| Task | SQL |
-|------|-----|
-| Purge old notifications | `DELETE FROM notifications WHERE created_at < now() - interval '90 days'` |
-| Clean up stale push subscriptions | `DELETE FROM push_subscriptions WHERE created_at < now() - interval '1 year'` (belt-and-suspenders alongside the 410 cleanup) |
-| Auto-expire goals past their target date | `UPDATE fitness_goals SET status = 'completed' WHERE target_date < current_date AND status = 'active'` |
-| Prune old `workout_executions` audit rows | Based on your retention policy |
-| Refresh a materialized view for leaderboards | `REFRESH MATERIALIZED VIEW CONCURRENTLY weekly_training_stats` |
-| Mark overdue client tasks | `UPDATE client_tasks SET status = 'overdue' WHERE due_date < current_date AND status = 'pending'` |
+| Task | Schedule suggestion |
+|------|---------------------|
+| Purge notifications older than 90 days | `0 3 * * *` (3am daily) |
+| Delete push subscriptions older than 1 year | `0 4 1 * *` (monthly) |
+| Auto-complete goals past `target_date` | `0 1 * * *` (1am daily) |
+| Mark overdue `client_tasks` | `*/30 * * * *` (every 30 min) |
+| Refresh a leaderboard materialized view | `0 * * * *` (hourly) |
 
-Add all pg_cron jobs in a single migration file: `supabase/migrations/YYYYMMDD_pg_cron_jobs.sql`. Enable the extension first: `CREATE EXTENSION IF NOT EXISTS pg_cron;`. Supabase supports pg_cron natively on paid plans.
+All pg_cron jobs go in a single migration: `supabase/migrations/YYYYMMDD_pg_cron_jobs.sql`. Enable the extension first: `CREATE EXTENSION IF NOT EXISTS pg_cron;`. Supabase supports pg_cron on Pro plans and above.
 
----
 
 
 ## A-025 — Nutrition Progress Page Full Revamp (Full Spec)
@@ -18291,3 +18668,1087 @@ Once the migrations above are finalized and the schema is stable, remove all `is
 #### Validation
 
 - `npm run build` -> pass
+
+### [E-100] A-037 implementation — Notification center extension + push reminders + settings (2026-03-23)
+
+- Linked architect item: A-037
+- Status: Implemented
+
+#### 1) Migration + DB model
+
+- Added `supabase/migrations/20260323114000_notifications_push_preferences.sql`:
+  - extends `notifications_type_check` to include:
+    - `meal_reminder`
+    - `health_checkin_reminder`
+  - adds `notification_preferences` table:
+    - `user_id` PK
+    - timezone + meal/check-in bell/push toggles + reminder times
+    - `created_at`, `updated_at`
+  - adds `push_subscriptions` table:
+    - `id`, `user_id`, `endpoint` (unique), `p256dh`, `auth`, `user_agent`, `created_at`
+  - adds index `idx_push_subscriptions_user`
+  - enables RLS on both tables
+  - adds self-scoped select/insert/update/delete policies for both tables
+  - adds `trg_notification_preferences_set_updated_at` trigger (when `trigger_set_updated_at` exists)
+
+#### 2) Notification stack extension
+
+- `app/actions/notifications.ts`
+  - extended `KNOWN_NOTIFICATION_TYPES` with:
+    - `meal_reminder`
+    - `health_checkin_reminder`
+
+- `hooks/use-notifications-realtime.ts`
+  - extended `KNOWN_NOTIFICATION_TYPES` with:
+    - `meal_reminder`
+    - `health_checkin_reminder`
+
+- `components/layout/notification-bell.tsx`
+  - added icon/tone mapping:
+    - `meal_reminder` → `Utensils` orange tone
+    - `health_checkin_reminder` → `Activity` teal tone
+  - added `data.url` deep-link routing for non-ticket notifications
+  - unified notification row rendering logic with conditional link wrapping
+
+#### 3) Push backend
+
+- Added `lib/push/send.ts`
+  - `sendPushNotification(...)` with stale subscription handling (404/410 → return `false`)
+  - `isPushConfigured()` helper for guarded push sending when VAPID env is absent
+
+- Added API routes:
+  - `app/api/push/subscribe/route.ts`
+    - authenticated `POST`
+    - validates `{ endpoint, keys: { p256dh, auth }, userAgent? }`
+    - upserts into `push_subscriptions` on `endpoint`
+  - `app/api/push/unsubscribe/route.ts`
+    - authenticated `POST`
+    - validates `{ endpoint }`
+    - deletes endpoint for current user
+
+#### 4) Service worker + manifest + registration
+
+- Added `public/sw.js`
+  - handles `push` event and displays notification
+  - handles `notificationclick` and navigates/focuses app at `data.url`
+
+- Added `public/manifest.json`
+- Added icon assets:
+  - `public/icons/icon-192.png`
+  - `public/icons/icon-512.png`
+  - `public/icons/badge-72.png`
+
+- Added `components/layout/sw-register.tsx`
+  - client-side SW registration (`/sw.js`)
+
+- Updated `app/layout.tsx`
+  - `metadata.manifest = "/manifest.json"`
+  - mounts `<SwRegister />` in `<body>`
+
+#### 5) Notification preferences actions + settings UI
+
+- Added `app/actions/notification-preferences.ts`
+  - `getNotificationPreferencesAction()`
+  - `upsertNotificationPreferencesAction(...)`
+  - runtime validation for `HH:MM` reminder times
+  - wrapped in `runTrackedAction`
+
+- Added `app/(dashboard)/(account)/settings/notifications/page.tsx`
+  - server page wrapper with suspense skeleton
+
+- Added `components/settings/notification-settings-form.tsx`
+  - meal reminder section (bell/push toggles + 15-min time picker)
+  - health check-in reminder section (bell/push toggles + 15-min time picker)
+  - timezone selector (auto-detected default + override)
+  - mobile-only push device controls:
+    - enable push (permission + `pushManager.subscribe` + `/api/push/subscribe`)
+    - disable push (`unsubscribe` + `/api/push/unsubscribe`)
+    - iOS home-screen guidance note
+
+- Updated `components/settings/settings-tab-nav.tsx`
+  - added Notifications tab: `/settings/notifications`
+
+#### 6) Inngest reminders
+
+- Added `lib/inngest/functions/send-daily-reminders.ts`:
+  - `sendDailyReminders` (cron `*/15 * * * *`)
+    - loads enabled reminder preferences
+    - computes per-user timezone quarter bucket
+    - fans out `notification/send.reminder` events
+  - `handleSendReminder` (event handler, retries: 2)
+    - resolves reminder payload by type
+    - inserts bell notification when enabled
+    - sends push when enabled and VAPID configured
+    - removes stale push subscriptions (404/410)
+
+- Updated `types/inngest.ts`
+  - added event schema:
+    - `notification/send.reminder`
+
+- Updated `lib/inngest/index.ts`
+  - registered:
+    - `sendDailyReminders`
+    - `handleSendReminder`
+
+- Updated `lib/inngest/functions/send-reminders.ts`
+  - fixed stale write target:
+    - replaced `ai_insights` insert with `notifications` insert
+
+#### 7) Type model updates
+
+- Updated `types/database.ts`
+  - extended `NotificationType` union with:
+    - `meal_reminder`
+    - `health_checkin_reminder`
+  - added table types:
+    - `notification_preferences`
+    - `push_subscriptions`
+
+#### Validation
+
+- `npm run -s typecheck` -> pass
+- `npm run -s lint` -> pass
+- `npm run build` -> pass
+
+### [E-102] A-037 missing deliverable completion — PWA install banner wiring (2026-03-23)
+
+- Linked architect item: A-037 PART IX
+- Status: Implemented
+
+#### Changes
+
+- Updated `app/(dashboard)/layout.tsx`
+  - imported `PwaInstallBanner` from `@/components/layout/pwa-install-banner`
+  - mounted `<PwaInstallBanner />` immediately after `<MobileBottomNav />` and before `<SiteFooter />`
+
+#### Outcome
+
+- Mobile dashboard now surfaces the PWA install banner according to existing banner gating logic:
+  - mobile-only
+  - not shown in standalone mode
+  - respects `localStorage["pwa-install-dismissed"]`
+  - handles Android install prompt and iOS manual install guidance
+
+---
+
+### [A-038] Goals Page — Coach Client Assignment
+
+**Status:** Queued
+**Depends on:** A-037 PART X (goal_checkin_reminder notifications already spec'd there)
+**Priority:** High
+
+Allow a coach to view and manage goals for their clients directly from the `/goals` page. When the signed-in user has no active clients, the page is unchanged. When they have ≥ 1 active clients, a dropdown appears and the goal table switches to show that client's goals.
+
+**Architecture:** `goals/page.tsx` stays a server component — it already has `userId` from cookies at zero cost. A small `GoalSubjectBar` client component owns the `clientId` state, renders the dropdown, and renders `ClientGoalsMedicalTab`. The server page passes `userId` down as a prop so `GoalsRealtimeSubscriber` keeps its current data source.
+
+Do **not** convert `goals/page.tsx` to `"use client"` — that would trade a free server-side `getUser()` for a browser round-trip via `useUser()` just to hold one dropdown state. Do **not** reuse `SubjectSelector` or `MeasurementSubject` from the body-measurements domain here — those types belong to that feature and importing them on the goals page is type leakage.
+
+`ClientGoalsMedicalTab` already supports `mode="client" clientId={id}` — no changes to that component are needed.
+
+---
+
+#### PART I — New file: `app/(dashboard)/goals/_components/goal-subject-bar.tsx`
+
+This is the only new file. Use the **same visual pattern as `components/program/program-assignee-dropdown.tsx`** — `Popover` with a search input and custom button rows — for UI consistency. The internals are simpler: no DB mutation (this is a view switcher, not a persisted assignment), no infinite query, client-side search over the already-loaded list.
+
+```tsx
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { Check, ChevronDown, Search } from "lucide-react";
+import { ClientGoalsMedicalTab } from "@/components/coach-tools/client-goals-medical-tab";
+import { listCoachClientsAction } from "@/app/actions/coach-tools";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { cn } from "@/utils";
+
+type ClientOption = { id: string; label: string };
+
+const MYSELF: ClientOption = { id: "me", label: "My Goals" };
+
+export function GoalSubjectBar() {
+  const [clients, setClients] = useState<ClientOption[]>([]);
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const [selected, setSelected] = useState<ClientOption>(MYSELF);
+
+  useEffect(() => {
+    listCoachClientsAction({ status: "active", page_size: 50 })
+      .then((res) => {
+        setClients(
+          res.data.map((c) => ({
+            id: c.id,
+            label: c.display_name || [c.first_name, c.last_name].filter(Boolean).join(" "),
+          }))
+        );
+      })
+      .catch(() => {
+        // silently degrade — user sees self-only view
+      });
+  }, []);
+
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase();
+    const all = [MYSELF, ...clients];
+    return q ? all.filter((c) => c.label.toLowerCase().includes(q)) : all;
+  }, [clients, search]);
+
+  const clientId = selected.id === "me" ? undefined : selected.id;
+  const mode = clientId ? "client" : "self";
+  const title = clientId ? `${selected.label}'s Goals` : "My Goals";
+
+  // Regular users (0 clients) see nothing — tab renders directly
+  if (clients.length === 0) {
+    return <ClientGoalsMedicalTab mode="self" title="My Goals" />;
+  }
+
+  return (
+    <>
+      <div className="flex items-center gap-3">
+        <span className="text-sm font-medium text-muted-foreground">Viewing goals for:</span>
+        <Popover open={open} onOpenChange={(v) => { setOpen(v); if (!v) setSearch(""); }}>
+          <PopoverTrigger asChild>
+            <Button
+              variant="outline"
+              className="h-9 min-w-[230px] justify-between rounded-xl border-border/60 bg-muted/20"
+            >
+              <span className="truncate text-left">{selected.label}</span>
+              <ChevronDown className="ml-2 h-4 w-4 shrink-0" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent align="start" className="w-[300px] rounded-xl border-border/70 bg-card/95 p-3">
+            <div className="space-y-2">
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search..."
+                  className="h-9 rounded-lg border-border/60 bg-muted/20 pl-9"
+                />
+              </div>
+
+              <div className="max-h-64 overflow-y-auto rounded-lg border border-border/60">
+                {filtered.length === 0 ? (
+                  <p className="px-3 py-2 text-sm text-muted-foreground">No results.</p>
+                ) : (
+                  <div className="divide-y divide-border/50">
+                    {filtered.map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        className={cn(
+                          "flex w-full items-center justify-between px-3 py-2 text-left hover:bg-muted/40",
+                          selected.id === item.id ? "bg-muted/40" : ""
+                        )}
+                        onClick={() => {
+                          setSelected(item);
+                          setOpen(false);
+                          setSearch("");
+                        }}
+                      >
+                        <span className="truncate pr-2 text-sm">{item.label}</span>
+                        {selected.id === item.id && (
+                          <Check className="h-3.5 w-3.5 shrink-0 text-emerald-500" />
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </PopoverContent>
+        </Popover>
+      </div>
+
+      <ClientGoalsMedicalTab mode={mode} clientId={clientId} title={title} />
+    </>
+  );
+}
+```
+
+**Rules:**
+- Visual pattern matches `ProgramAssigneeDropdown` (Popover, search, custom rows, check icon, button/border styling) for UI consistency.
+- No mutation — selecting a client switches the local view only, nothing is written to the DB.
+- Search is client-side — filters the already-loaded list of 50. No need for server-side search or infinite query at this scale.
+- `clients.length === 0` → early return with `mode="self"` — regular users never see the popover trigger.
+- `search` is cleared on close so the list is fresh on next open.
+- Do not use `useCoachClients` — that is the paginated infinite-query hook for the clients dashboard table.
+- Do not import `MeasurementSubject` or `SubjectSelector` from the body-measurements domain.
+
+---
+
+#### PART II — Update `app/(dashboard)/goals/page.tsx`
+
+Minimal change — swap `ClientGoalsMedicalTab` for `GoalSubjectBar`. The server component is otherwise untouched.
+
+```tsx
+import { GoalsRealtimeSubscriber } from "@/components/goals/goals-realtime-subscriber";
+import { GoalSubjectBar } from "./_components/goal-subject-bar";
+import { createClient } from "@/lib/supabase/server";
+
+export default async function GoalsPage() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  return (
+    <div className="page-shell space-y-4 md:space-y-5">
+      <GoalsRealtimeSubscriber userId={user?.id ?? null} />
+      <header>
+        <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">Goals</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Track and manage your personal goals. Changes are saved to your goal history automatically.
+        </p>
+      </header>
+
+      <GoalSubjectBar />
+    </div>
+  );
+}
+```
+
+`userId` stays server-sourced. `GoalSubjectBar` owns all interactivity.
+
+---
+
+#### PART III — No backend changes needed
+
+`ClientGoalsMedicalTab` in `mode="client"` already:
+- Uses `useClientGoals(clientId)` to fetch the client's goals.
+- Has the coach goal form wired for adding/editing client goals.
+- Sets `assigned_by_id` on goal creation when a coach submits on behalf of a client.
+
+No new server actions, API routes, or migrations required.
+
+---
+
+#### Checklist
+
+> **Note:** E-103 already delivered the file structure and server component wiring correctly. The only remaining work is updating `GoalSubjectBar` from the plain `<Select>` it used to the Popover pattern specified in PART I above. No changes to `goals/page.tsx` are needed — it is correct as-is.
+
+- [x] `app/(dashboard)/goals/_components/goal-subject-bar.tsx` created (E-103)
+- [x] `app/(dashboard)/goals/page.tsx` updated — server component preserved, `GoalSubjectBar` mounted (E-103)
+- [x] `GoalSubjectBar` updated to Popover pattern: replace `<Select>` with `Popover` + search input + custom button rows + `Check` icon — matching `ProgramAssigneeDropdown` visual style
+- [x] Verify: regular user (no clients) → no popover trigger rendered, goals table renders directly
+- [x] Verify: coach with ≥ 1 active clients → trigger button shows, popover opens, search filters client list, selecting a client switches table to client's goals
+- [x] Verify: closing popover clears search input
+- [x] Verify: coach can add a goal for the selected client
+- [x] `npm run typecheck && npm run lint` → pass
+
+### [E-103] A-038 implementation — Goals page coach client assignment (2026-03-24)
+
+- Linked architect item: A-038
+- Status: Implemented
+
+#### Changes
+
+- Added new client component:
+  - `app/(dashboard)/goals/_components/goal-subject-bar.tsx`
+  - calls `listCoachClientsAction({ status: "active", page_size: 50 })` once on mount
+  - maps active clients into lightweight dropdown options (`id`, `label`)
+  - keeps `"me"` sentinel for self mode and degrades to self-only when no clients or request error
+  - renders `ClientGoalsMedicalTab` in:
+    - `mode="self"` when `"me"` selected
+    - `mode="client"` with `clientId` when a client is selected
+
+- Updated goals page:
+  - `app/(dashboard)/goals/page.tsx`
+  - replaced `<ClientGoalsMedicalTab mode="self" title="My Goals" />` with `<GoalSubjectBar />`
+  - kept page as server component and preserved server-sourced `userId` for `GoalsRealtimeSubscriber`
+
+#### A-038 checklist status
+
+- [x] `app/(dashboard)/goals/_components/goal-subject-bar.tsx` created
+- [x] `app/(dashboard)/goals/page.tsx` updated to use `GoalSubjectBar`
+- [x] Coach/no-client fallback behavior implemented (dropdown hidden, self-only mode)
+- [x] Coach with active clients can switch view to client goals via dropdown
+- [x] `npm run typecheck && npm run lint` passed
+
+---
+
+### [E-104] A-037 PART X missing deliverable — Goal check-in notifications (2026-03-24)
+
+- Linked architect item: A-037 PART X
+- Status: In progress
+
+A-037 PART X was never implemented. All items below are missing from the codebase. Implement them in order — migration first, then types, then Inngest, then UI.
+
+#### 1 — Migration (`supabase/migrations/YYYYMMDD_goal_checkin_notifications.sql`)
+
+```sql
+begin;
+
+-- 1a. Extend notifications check constraint to allow goal_checkin_reminder
+alter table public.notifications
+  drop constraint if exists notifications_type_check;
+
+alter table public.notifications
+  add constraint notifications_type_check check (
+    type in (
+      'goal_achieved',
+      'checkin_submitted',
+      'support_ticket_created',
+      'support_ticket_updated',
+      'support_ticket_comment_added',
+      'support_ticket_comment_edited',
+      'support_ticket_comment_deleted',
+      'support_ticket_status_changed',
+      'support_ticket_closed',
+      'support_ticket_reopened',
+      'meal_reminder',
+      'health_checkin_reminder',
+      'goal_checkin_reminder'
+    )
+  );
+
+-- 1b. Add goal notification columns to notification_preferences
+alter table public.notification_preferences
+  add column if not exists goal_bell_enabled boolean not null default true,
+  add column if not exists goal_push_enabled boolean not null default false;
+
+commit;
+```
+
+Then run in Supabase dashboard SQL editor (separate from the migration file — this is a Postgres function, not a table change):
+
+```sql
+create or replace function public.get_goals_due_for_checkin()
+returns table(goal_id uuid, user_id uuid, goal_type text)
+language sql
+stable
+as $$
+  select
+    fg.id          as goal_id,
+    fg.user_id     as user_id,
+    fg.goal_type   as goal_type
+  from public.fitness_goals fg
+  where fg.check_in_interval_days is not null
+    and fg.status = 'active'
+    and (
+      current_date - coalesce(
+        (select max(gph.snapshot_at::date)
+         from public.goal_progress_history gph
+         where gph.goal_id = fg.id),
+        fg.start_date::date
+      )
+    ) >= fg.check_in_interval_days;
+$$;
+```
+
+#### 2 — Update `types/database.ts`
+
+**`NotificationType` union** (top of file, ~line 9) — add:
+```ts
+| "goal_checkin_reminder"
+```
+
+**`notification_preferences` Row / Insert / Update** — add the two new columns:
+```ts
+// Row
+goal_bell_enabled: boolean
+goal_push_enabled: boolean
+
+// Insert
+goal_bell_enabled?: boolean
+goal_push_enabled?: boolean
+
+// Update
+goal_bell_enabled?: boolean
+goal_push_enabled?: boolean
+```
+
+#### 3 — Extend `KNOWN_NOTIFICATION_TYPES`
+
+**`app/actions/notifications.ts`** — add `"goal_checkin_reminder"` to the `KNOWN_NOTIFICATION_TYPES` Set.
+
+**`hooks/use-notifications-realtime.ts`** — same addition.
+
+#### 4 — Extend `notificationMeta()` in `components/layout/notification-bell.tsx`
+
+```ts
+case "goal_checkin_reminder":
+  return {
+    icon: <Target className="h-4 w-4 text-amber-500" />,
+    label: "Goal Check-in Due",
+  };
+```
+
+Import `Target` from `lucide-react` if not already imported.
+
+#### 5 — New file: `lib/inngest/functions/send-goal-checkin-reminders.ts`
+
+Copy the structure of `send-daily-reminders.ts` — same admin client pattern, same `isPushConfigured` + `sendPushNotification` imports, same stale-subscription cleanup. Key differences: no timezone bucket logic (this cron fires once daily), query is the `get_goals_due_for_checkin()` RPC, fan-out is per goal not per user.
+
+```ts
+import { createAdminClient } from "@/lib/supabase/admin";
+import { isPushConfigured, sendPushNotification, type PushSubscriptionRecord } from "@/lib/push/send";
+import { inngest } from "../client";
+
+const GOAL_CHECKIN_PAYLOAD = {
+  title: "Goal Check-in Due",
+  body: "Time to log your progress on a goal.",
+  url: "/goals",
+};
+
+export const sendGoalCheckinReminders = inngest.createFunction(
+  { id: "send-goal-checkin-reminders" },
+  { cron: "0 9 * * *" },
+  async ({ step }) => {
+    const admin = createAdminClient();
+
+    const dueGoals = await step.run("find-due-goals", async () => {
+      const { data, error } = await admin.rpc("get_goals_due_for_checkin");
+      if (error) throw new Error(error.message);
+      return (data || []) as Array<{ goal_id: string; user_id: string; goal_type: string }>;
+    });
+
+    if (dueGoals.length === 0) return { queued: 0 };
+
+    await step.sendEvent(
+      "fan-out-goal-checkin-reminders",
+      dueGoals.map((g) => ({
+        name: "notification/send.goal-checkin-reminder" as const,
+        data: { goal_id: g.goal_id, user_id: g.user_id, goal_type: g.goal_type },
+      }))
+    );
+
+    return { queued: dueGoals.length };
+  }
+);
+
+export const handleSendGoalCheckinReminder = inngest.createFunction(
+  { id: "handle-send-goal-checkin-reminder", retries: 2 },
+  { event: "notification/send.goal-checkin-reminder" },
+  async ({ event, step }) => {
+    const admin = createAdminClient();
+    const { goal_id, user_id, goal_type } = event.data;
+
+    const prefs = await step.run("load-user-preferences", async () => {
+      const { data, error } = await admin
+        .from("notification_preferences")
+        .select("goal_bell_enabled, goal_push_enabled")
+        .eq("user_id", user_id)
+        .maybeSingle();
+      if (error) throw new Error(error.message);
+      return data;
+    });
+
+    const bellEnabled = prefs?.goal_bell_enabled ?? true;
+    const pushEnabled = prefs?.goal_push_enabled ?? false;
+    const body = `Time to log your progress on your ${goal_type.replace(/_/g, " ")} goal.`;
+
+    if (bellEnabled) {
+      await step.run("insert-bell-notification", async () => {
+        const { error } = await admin.from("notifications").insert({
+          user_id,
+          type: "goal_checkin_reminder",
+          title: GOAL_CHECKIN_PAYLOAD.title,
+          body,
+          data: { url: GOAL_CHECKIN_PAYLOAD.url, goal_id },
+        });
+        if (error) throw new Error(error.message);
+      });
+    }
+
+    if (pushEnabled && isPushConfigured()) {
+      const subscriptions = await step.run("load-push-subscriptions", async () => {
+        const { data, error } = await admin
+          .from("push_subscriptions")
+          .select("id, endpoint, p256dh, auth")
+          .eq("user_id", user_id);
+        if (error) throw new Error(error.message);
+        return (data || []) as PushSubscriptionRecord[];
+      });
+
+      if (subscriptions.length > 0) {
+        await step.run("send-push-notifications", async () => {
+          for (const sub of subscriptions) {
+            const isActive = await sendPushNotification(sub, {
+              ...GOAL_CHECKIN_PAYLOAD,
+              body,
+            });
+            if (!isActive) {
+              await admin.from("push_subscriptions").delete().eq("id", sub.id).eq("user_id", user_id);
+            }
+          }
+        });
+      }
+    }
+
+    return { bell_enabled: bellEnabled, push_enabled: pushEnabled };
+  }
+);
+```
+
+#### 6 — Update `types/inngest.ts`
+
+Add the event schema:
+```ts
+"notification/send.goal-checkin-reminder": {
+  data: {
+    goal_id: string;
+    user_id: string;
+    goal_type: string;
+  };
+};
+```
+
+#### 7 — Register in `lib/inngest/index.ts`
+
+```ts
+import { sendGoalCheckinReminders, handleSendGoalCheckinReminder } from "./functions/send-goal-checkin-reminders";
+
+// Add to the exported functions array:
+sendGoalCheckinReminders,
+handleSendGoalCheckinReminder,
+```
+
+#### 8 — Update `components/settings/notification-settings-form.tsx`
+
+Add the Goal Check-in section to the form. The full form must now cover three reminder channels — see A-037 PART X section 10.8 for the complete layout. The Goal Check-in section specifically:
+
+- Bell toggle bound to `goal_bell_enabled`
+- Push toggle bound to `goal_push_enabled` (mobile-only section, same as meal/checkin)
+- **No time picker** — show helper text instead: _"Reminders fire daily at 09:00 UTC on the day your check-in interval is due."_
+- `onSubmit` must include `goal_bell_enabled` and `goal_push_enabled` in the payload sent to `upsertNotificationPreferencesAction`
+
+#### 9 — Update `app/actions/notification-preferences.ts`
+
+Extend the zod schema and upsert to pass through `goal_bell_enabled` + `goal_push_enabled`. Pattern is identical to how `meal_bell_enabled` and `checkin_bell_enabled` are handled.
+
+#### Checklist
+
+- [x] Migration file created: `notifications_type_check` includes `goal_checkin_reminder`; `notification_preferences` has `goal_bell_enabled` + `goal_push_enabled`
+- [ ] SQL function `get_goals_due_for_checkin()` created in Supabase dashboard
+- [x] `types/database.ts`: `NotificationType` includes `goal_checkin_reminder`; `notification_preferences` Row/Insert/Update includes new columns
+- [x] `app/actions/notifications.ts`: `KNOWN_NOTIFICATION_TYPES` includes `goal_checkin_reminder`
+- [x] `hooks/use-notifications-realtime.ts`: same
+- [x] `notification-bell.tsx`: `notificationMeta()` handles `goal_checkin_reminder` with `Target` icon
+- [x] `lib/inngest/functions/send-goal-checkin-reminders.ts` created — `sendGoalCheckinReminders` + `handleSendGoalCheckinReminder`
+- [x] `types/inngest.ts` event schema: `notification/send.goal-checkin-reminder` added
+- [x] Both functions registered in `lib/inngest/index.ts`
+- [x] `notification-settings-form.tsx`: Goal Check-in row added (bell + push toggles, no time picker, helper text)
+- [x] `notification-preferences.ts`: `goal_bell_enabled` + `goal_push_enabled` flow through schema and upsert
+- [x] `npm run typecheck && npm run lint` → pass
+- [ ] Manual test: create a goal with `check_in_interval_days = 1`; trigger `sendGoalCheckinReminders` via Inngest dashboard → bell badge increments; click notification → navigates to `/goals`
+
+### [E-104] A-038 follow-up — GoalSubjectBar Popover parity update (2026-03-24)
+
+- Linked architect item: A-038 (Popover UI parity requirement)
+- Status: Implemented
+
+#### Changes
+
+- Updated:
+  - `app/(dashboard)/goals/_components/goal-subject-bar.tsx`
+
+- Replaced plain `Select` dropdown with searchable `Popover` pattern aligned to `ProgramAssigneeDropdown`:
+  - trigger button with `ChevronDown`
+  - `PopoverContent` search input with `Search` icon
+  - custom row list with `Check` icon for selected item
+  - client-side filtering across `[My Goals, ...activeClients]`
+  - clears search on popover close
+
+- Preserved behavioral rules:
+  - no mutation/persistence on selection (view switch only)
+  - single mount fetch via `listCoachClientsAction({ status: "active", page_size: 50 })`
+  - regular users / coaches with no active clients: no trigger rendered, direct self goals tab
+  - selected client switches `ClientGoalsMedicalTab` to `mode="client"` with selected `clientId`
+
+#### Validation
+
+- `npm run -s typecheck` -> pass
+- `npm run -s lint` -> pass
+- `npm run build` -> pass
+
+### [E-105] A-037 PART X implementation — Goal check-in reminder channel (2026-03-24)
+
+- Linked architect item: A-037 PART X
+- Status: Implemented (code + local validation complete; Supabase dashboard SQL + manual Inngest QA pending)
+
+#### Changes
+
+- Migration added:
+  - `supabase/migrations/20260324134000_goal_checkin_notifications.sql`
+  - extends `notifications_type_check` with `goal_checkin_reminder`
+  - adds `goal_bell_enabled` + `goal_push_enabled` columns to `notification_preferences`
+
+- Manual SQL file added for dashboard execution:
+  - `supabase/manual/20260324_get_goals_due_for_checkin.sql`
+  - defines `public.get_goals_due_for_checkin()`
+
+- Type updates:
+  - `types/database.ts`
+    - `NotificationType` now includes `goal_checkin_reminder`
+    - `notification_preferences` Row/Insert/Update include `goal_bell_enabled` + `goal_push_enabled`
+    - `public.Functions` includes `get_goals_due_for_checkin`
+  - `types/inngest.ts`
+    - added `notification/send.goal-checkin-reminder` event schema
+
+- Notification pipeline updates:
+  - `app/actions/notifications.ts` → `KNOWN_NOTIFICATION_TYPES` includes `goal_checkin_reminder`
+  - `hooks/use-notifications-realtime.ts` → `KNOWN_NOTIFICATION_TYPES` includes `goal_checkin_reminder`
+  - `components/layout/notification-bell.tsx`
+    - `notificationMeta()` handles `goal_checkin_reminder` with `Target` icon + amber tone
+
+- Inngest additions:
+  - new file: `lib/inngest/functions/send-goal-checkin-reminders.ts`
+    - `sendGoalCheckinReminders` cron: `0 9 * * *`
+    - `handleSendGoalCheckinReminder` event handler
+    - bell insert + optional push send + stale subscription cleanup
+  - `lib/inngest/index.ts`
+    - registered `sendGoalCheckinReminders`
+    - registered `handleSendGoalCheckinReminder`
+
+- Settings + preferences flow:
+  - `app/actions/notification-preferences.ts`
+    - schema extended with `goal_bell_enabled` + `goal_push_enabled`
+    - select/upsert includes new fields
+  - `components/settings/notification-settings-form.tsx`
+    - added "Goal Check-in Reminder" section:
+      - bell toggle
+      - push toggle
+      - helper text (no time picker): "Reminders fire daily at 09:00 UTC on the day your check-in interval is due."
+
+#### Validation
+
+- `npm run -s typecheck` -> pass
+- `npm run -s lint` -> pass
+- `npm run build` -> pass
+
+#### Pending manual steps
+
+- Execute `supabase/manual/20260324_get_goals_due_for_checkin.sql` in Supabase SQL editor.
+- Trigger `sendGoalCheckinReminders` in Inngest dashboard and verify notification bell + `/goals` deep-link behavior.
+
+---
+
+### [E-106] E-105 architecture fix — goal check-in notifications must fire at user's configured time (2026-03-24)
+
+- Linked architect item: A-037 PART X
+- Status: Implemented (code complete + local validation pass; Supabase dashboard function re-run + cron QA pending)
+- Fixes: E-105
+
+#### Problem
+
+E-105 hardcodes the cron to `0 9 * * *` (09:00 UTC) and has no `goal_reminder_time` column. Users cannot configure when they receive goal check-in reminders. The SQL function also scans every active goal on every tick instead of filtering to users whose time window matches now.
+
+The correct behaviour: a user with a 7-day goal interval receives the notification at the time they configured in Settings → Notifications, in their own timezone, on the day the interval is due — exactly as meal and health check-in reminders work.
+
+#### Changes required
+
+##### 1 — New migration: `supabase/migrations/YYYYMMDD_goal_reminder_time.sql`
+
+```sql
+begin;
+
+alter table public.notification_preferences
+  add column if not exists goal_reminder_time time not null default '09:00:00';
+
+commit;
+```
+
+##### 2 — Update SQL function (run in Supabase dashboard, replacing existing)
+
+Change `get_goals_due_for_checkin()` to accept a `p_user_ids` parameter so the Inngest cron only checks goals for users whose time bucket matches now. This avoids scanning all active goals on every 15-min tick.
+
+```sql
+create or replace function public.get_goals_due_for_checkin(p_user_ids uuid[])
+returns table(goal_id uuid, user_id uuid, goal_type text)
+language sql
+stable
+as $$
+  select
+    fg.id          as goal_id,
+    fg.user_id     as user_id,
+    fg.goal_type   as goal_type
+  from public.fitness_goals fg
+  where fg.user_id = any(p_user_ids)
+    and fg.check_in_interval_days is not null
+    and fg.status = 'active'
+    and (
+      current_date - coalesce(
+        (select max(gph.snapshot_at::date)
+         from public.goal_progress_history gph
+         where gph.goal_id = fg.id),
+        fg.start_date::date
+      )
+    ) >= fg.check_in_interval_days;
+$$;
+```
+
+Update `supabase/manual/20260324_get_goals_due_for_checkin.sql` to match.
+
+##### 3 — Extract shared time helpers to `lib/inngest/time-utils.ts` (NEW)
+
+`send-daily-reminders.ts` defines `toQuarterBucket` and `localQuarterBucket` inline. Move both functions to a shared file so `send-goal-checkin-reminders.ts` can import them without duplication.
+
+```ts
+// lib/inngest/time-utils.ts
+export function toQuarterBucket(value: string): string {
+  const match = value.match(/^(\d{2}):(\d{2})/);
+  if (!match) return "00:00";
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  return `${String(hour).padStart(2, "0")}:${String(Math.floor(minute / 15) * 15).padStart(2, "0")}`;
+}
+
+export function localQuarterBucket(now: Date, timezone: string): string {
+  let formatter: Intl.DateTimeFormat;
+  try {
+    formatter = new Intl.DateTimeFormat("en-GB", {
+      timeZone: timezone || "UTC",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    });
+  } catch {
+    formatter = new Intl.DateTimeFormat("en-GB", {
+      timeZone: "UTC",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    });
+  }
+  const parts = formatter.formatToParts(now);
+  const hour = parts.find((p) => p.type === "hour")?.value ?? "00";
+  const minute = Number(parts.find((p) => p.type === "minute")?.value ?? "0");
+  return `${hour}:${String(Math.floor(minute / 15) * 15).padStart(2, "0")}`;
+}
+```
+
+Update `send-daily-reminders.ts` to `import { toQuarterBucket, localQuarterBucket } from "../time-utils"` and remove the inline definitions.
+
+##### 4 — Rewrite `lib/inngest/functions/send-goal-checkin-reminders.ts`
+
+Replace the entire file:
+
+```ts
+import { createAdminClient } from "@/lib/supabase/admin";
+import { isPushConfigured, sendPushNotification, type PushSubscriptionRecord } from "@/lib/push/send";
+import { inngest } from "../client";
+import { toQuarterBucket, localQuarterBucket } from "../time-utils";
+
+const GOAL_CHECKIN_TITLE = "Goal Check-in Due";
+const GOAL_CHECKIN_URL = "/goals";
+
+type PrefRow = {
+  user_id: string;
+  timezone: string;
+  goal_bell_enabled: boolean;
+  goal_push_enabled: boolean;
+  goal_reminder_time: string;
+};
+
+type DueGoalRow = {
+  goal_id: string;
+  user_id: string;
+  goal_type: string;
+};
+
+export const sendGoalCheckinReminders = inngest.createFunction(
+  { id: "send-goal-checkin-reminders" },
+  { cron: "*/15 * * * *" },
+  async ({ step }) => {
+    const admin = createAdminClient();
+
+    // Step 1: Find users whose goal_reminder_time matches the current 15-min bucket in their timezone
+    const matchingUsers = await step.run("find-users-due-now", async () => {
+      const { data, error } = await admin
+        .from("notification_preferences")
+        .select("user_id, timezone, goal_bell_enabled, goal_push_enabled, goal_reminder_time")
+        .or("goal_bell_enabled.eq.true,goal_push_enabled.eq.true");
+
+      if (error) throw new Error(error.message);
+
+      const now = new Date();
+      return ((data || []) as PrefRow[]).filter((row) => {
+        const bucketNow = localQuarterBucket(now, row.timezone);
+        return toQuarterBucket(row.goal_reminder_time) === bucketNow;
+      });
+    });
+
+    if (matchingUsers.length === 0) return { queued: 0, checked: 0 };
+
+    // Step 2: Find goals due today for those users only
+    const userIds = matchingUsers.map((u) => u.user_id);
+    const dueGoals = await step.run("find-due-goals", async () => {
+      const { data, error } = await admin.rpc("get_goals_due_for_checkin", {
+        p_user_ids: userIds,
+      });
+      if (error) throw new Error(error.message);
+      return (data || []) as DueGoalRow[];
+    });
+
+    if (dueGoals.length === 0) return { queued: 0, checked: matchingUsers.length };
+
+    // Step 3: Fan out one event per due goal
+    await step.sendEvent(
+      "fan-out-goal-checkin-reminders",
+      dueGoals.map((g) => ({
+        name: "notification/send.goal-checkin-reminder" as const,
+        data: { goal_id: g.goal_id, user_id: g.user_id, goal_type: g.goal_type },
+      }))
+    );
+
+    return { queued: dueGoals.length, checked: matchingUsers.length };
+  }
+);
+
+export const handleSendGoalCheckinReminder = inngest.createFunction(
+  { id: "handle-send-goal-checkin-reminder", retries: 2 },
+  { event: "notification/send.goal-checkin-reminder" },
+  async ({ event, step }) => {
+    const admin = createAdminClient();
+    const { goal_id, user_id, goal_type } = event.data;
+
+    const prefs = await step.run("load-user-preferences", async () => {
+      const { data, error } = await admin
+        .from("notification_preferences")
+        .select("goal_bell_enabled, goal_push_enabled")
+        .eq("user_id", user_id)
+        .maybeSingle();
+      if (error) throw new Error(error.message);
+      return data;
+    });
+
+    const bellEnabled = prefs?.goal_bell_enabled ?? true;
+    const pushEnabled = prefs?.goal_push_enabled ?? false;
+    const body = `Time to log your progress on your ${goal_type.replace(/_/g, " ")} goal.`;
+
+    if (bellEnabled) {
+      await step.run("insert-bell-notification", async () => {
+        const { error } = await admin.from("notifications").insert({
+          user_id,
+          type: "goal_checkin_reminder",
+          title: GOAL_CHECKIN_TITLE,
+          body,
+          data: { url: GOAL_CHECKIN_URL, goal_id },
+        });
+        if (error) throw new Error(error.message);
+      });
+    }
+
+    if (pushEnabled && isPushConfigured()) {
+      const subscriptions = await step.run("load-push-subscriptions", async () => {
+        const { data, error } = await admin
+          .from("push_subscriptions")
+          .select("id, endpoint, p256dh, auth")
+          .eq("user_id", user_id);
+        if (error) throw new Error(error.message);
+        return (data || []) as PushSubscriptionRecord[];
+      });
+
+      if (subscriptions.length > 0) {
+        await step.run("send-push-notifications", async () => {
+          for (const sub of subscriptions) {
+            const isActive = await sendPushNotification(sub, {
+              title: GOAL_CHECKIN_TITLE,
+              body,
+              url: GOAL_CHECKIN_URL,
+            });
+            if (!isActive) {
+              await admin.from("push_subscriptions").delete().eq("id", sub.id).eq("user_id", user_id);
+            }
+          }
+        });
+      }
+    }
+
+    return { bell_enabled: bellEnabled, push_enabled: pushEnabled };
+  }
+);
+```
+
+##### 5 — Update `types/database.ts`
+
+Add `goal_reminder_time: string` to `notification_preferences` Row, Insert (optional), and Update (optional). Update the `get_goals_due_for_checkin` function signature in the `Functions` type to include `Args: { p_user_ids: string[] }`.
+
+##### 6 — Update `app/actions/notification-preferences.ts`
+
+Add `goal_reminder_time` to the zod schema (string, defaults to `"09:00"`) and include it in both the `select` call and the `upsert` payload — same pattern as `meal_reminder_time` and `checkin_reminder_time`.
+
+##### 7 — Update `components/settings/notification-settings-form.tsx`
+
+Replace the static helper text under Goal Check-in with a real time picker — same 15-min increment `<Select>` used for meal and health check-in. Remove `"Reminders fire daily at 09:00 UTC..."`. The section should now read:
+
+```
+── Goal Check-in Reminder ────────────────────────────
+  [●] Show in notification bell
+  [●] Mobile push notification
+      Remind me at  [09:00 ▾]
+```
+
+`onSubmit` must include `goal_reminder_time` in the payload.
+
+#### Checklist
+
+- [x] Migration `YYYYMMDD_goal_reminder_time.sql` created — adds `goal_reminder_time` to `notification_preferences`
+- [ ] `supabase/manual/20260324_get_goals_due_for_checkin.sql` updated — function now accepts `p_user_ids uuid[]`; re-run in Supabase dashboard
+- [x] `lib/inngest/time-utils.ts` created — `toQuarterBucket` + `localQuarterBucket` extracted here
+- [x] `send-daily-reminders.ts` updated — imports helpers from `time-utils.ts`, inline definitions removed
+- [x] `send-goal-checkin-reminders.ts` rewritten — cron `*/15 * * * *`, time-bucket filter in step 1, parameterised RPC call in step 2
+- [x] `types/database.ts` — `notification_preferences` Row/Insert/Update includes `goal_reminder_time`; `get_goals_due_for_checkin` Args type includes `p_user_ids`
+- [x] `notification-preferences.ts` — `goal_reminder_time` in schema + select + upsert
+- [x] `notification-settings-form.tsx` — Goal Check-in section has time picker, static UTC text removed
+- [x] `npm run typecheck && npm run lint` → pass
+- [ ] Manual test: set goal interval = 1 day, set `goal_reminder_time` to 2 min from now in your timezone, wait for cron tick → bell notification appears
+
+### [E-107] E-106 implementation — per-user goal reminder scheduling (2026-03-24)
+
+- Linked architect item: E-106 / A-037 PART X
+- Status: Implemented (manual Supabase function re-run + runtime QA pending)
+
+#### Changes
+
+- Added migration:
+  - `supabase/migrations/20260324142000_goal_reminder_time.sql`
+  - adds `notification_preferences.goal_reminder_time` (`time not null default '09:00:00'`)
+
+- Updated manual function SQL:
+  - `supabase/manual/20260324_get_goals_due_for_checkin.sql`
+  - function now accepts `p_user_ids uuid[]`
+  - filters due goals by `fg.user_id = any(p_user_ids)` to avoid full-table scan per tick
+
+- Added shared Inngest time helpers:
+  - `lib/inngest/time-utils.ts`
+  - exports `toQuarterBucket(...)` and `localQuarterBucket(...)`
+
+- Updated reminder workers:
+  - `lib/inngest/functions/send-daily-reminders.ts`
+    - now imports shared time helpers; removed duplicated inline bucket logic
+  - `lib/inngest/functions/send-goal-checkin-reminders.ts`
+    - rewritten to `*/15 * * * *`
+    - step 1: loads notification preferences and filters users by `goal_reminder_time` bucket in user timezone
+    - step 2: calls `rpc("get_goals_due_for_checkin", { p_user_ids })`
+    - step 3: fans out per-goal event
+    - handler keeps bell/push fanout + stale subscription cleanup
+
+- Updated typed contracts:
+  - `types/database.ts`
+    - `notification_preferences` Row/Insert/Update includes `goal_reminder_time`
+    - `Functions.get_goals_due_for_checkin.Args` now `{ p_user_ids: string[] }`
+  - `app/actions/notification-preferences.ts`
+    - schema includes `goal_reminder_time` (`HH:MM`, default `"09:00"`)
+    - select/upsert include `goal_reminder_time`
+  - `components/settings/notification-settings-form.tsx`
+    - Goal Check-in section now has 15-min time picker
+    - removed static UTC helper text
+
+#### Validation
+
+- `npm run -s typecheck` -> pass
+- `npm run -s lint` -> pass
+- `npm run build` -> pass
+
+#### Pending manual steps
+
+- Re-run `supabase/manual/20260324_get_goals_due_for_checkin.sql` in Supabase dashboard SQL editor.
+- Manual cron QA:
+  - set a goal with `check_in_interval_days = 1`
+  - set `goal_reminder_time` to near-current bucket in user timezone
+  - wait for next 15-min cron tick
+  - verify bell notification and `/goals` deep-link.

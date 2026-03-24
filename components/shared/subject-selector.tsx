@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/utils";
 
 export type SubjectSelectorValue = { type: "me" } | { type: "client"; id: string };
@@ -84,7 +85,14 @@ export function SubjectSelector<TSubject extends SubjectSelectorValue = SubjectS
     return options.filter((option) => option.label.toLowerCase().includes(query));
   }, [options, search]);
 
-  if (clientsQuery.isLoading) return null;
+  if (clientsQuery.isLoading) {
+    return (
+      <div className={cn("grid min-w-[220px] gap-2", className)}>
+        <Skeleton className="h-3 w-14" />
+        <Skeleton className="h-9 w-[230px] rounded-xl" />
+      </div>
+    );
+  }
   if (clientsQuery.error) return null;
   if (options.length === 0) return null;
 

@@ -17,6 +17,9 @@ export type NotificationType =
   | "support_ticket_status_changed"
   | "support_ticket_closed"
   | "support_ticket_reopened"
+  | "meal_reminder"
+  | "health_checkin_reminder"
+  | "goal_checkin_reminder"
 
 export type Database = {
   // Allows to automatically instantiate createClient with right options
@@ -848,6 +851,62 @@ export type Database = {
         }
         Relationships: []
       }
+      notification_preferences: {
+        Row: {
+          checkin_bell_enabled: boolean
+          checkin_push_enabled: boolean
+          checkin_reminder_time: string
+          created_at: string
+          goal_bell_enabled: boolean
+          goal_push_enabled: boolean
+          goal_reminder_time: string
+          meal_bell_enabled: boolean
+          meal_push_enabled: boolean
+          meal_reminder_time: string
+          timezone: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          checkin_bell_enabled?: boolean
+          checkin_push_enabled?: boolean
+          checkin_reminder_time?: string
+          created_at?: string
+          goal_bell_enabled?: boolean
+          goal_push_enabled?: boolean
+          goal_reminder_time?: string
+          meal_bell_enabled?: boolean
+          meal_push_enabled?: boolean
+          meal_reminder_time?: string
+          timezone?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          checkin_bell_enabled?: boolean
+          checkin_push_enabled?: boolean
+          checkin_reminder_time?: string
+          created_at?: string
+          goal_bell_enabled?: boolean
+          goal_push_enabled?: boolean
+          goal_reminder_time?: string
+          meal_bell_enabled?: boolean
+          meal_push_enabled?: boolean
+          meal_reminder_time?: string
+          timezone?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notification_preferences_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       payment_logs: {
         Row: {
           amount: number | null
@@ -912,6 +971,44 @@ export type Database = {
           {
             foreignKeyName: "payment_logs_coach_id_fkey"
             columns: ["coach_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      push_subscriptions: {
+        Row: {
+          auth_secret: string
+          created_at: string
+          endpoint: string
+          id: string
+          public_key: string
+          user_agent: string | null
+          user_id: string
+        }
+        Insert: {
+          auth_secret: string
+          created_at?: string
+          endpoint: string
+          id?: string
+          public_key: string
+          user_agent?: string | null
+          user_id: string
+        }
+        Update: {
+          auth_secret?: string
+          created_at?: string
+          endpoint?: string
+          id?: string
+          public_key?: string
+          user_agent?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "push_subscriptions_user_id_fkey"
+            columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -3582,6 +3679,14 @@ export type Database = {
           goal_id: string
           progress_percent: number
           snapshot_at: string
+        }[]
+      }
+      get_goals_due_for_checkin: {
+        Args: { p_user_ids: string[] }
+        Returns: {
+          goal_id: string
+          goal_type: string
+          user_id: string
         }[]
       }
       has_client_coach_access: {

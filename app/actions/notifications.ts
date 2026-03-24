@@ -22,6 +22,9 @@ export type NotificationRow = {
 const KNOWN_NOTIFICATION_TYPES = new Set<NotificationType>([
   "goal_achieved",
   "checkin_submitted",
+  "meal_reminder",
+  "health_checkin_reminder",
+  "goal_checkin_reminder",
   "support_ticket_created",
   "support_ticket_updated",
   "support_ticket_comment_added",

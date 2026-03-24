@@ -2,6 +2,7 @@ import { SiteFooter } from "@/components/layout/app-footer"
 import { NotificationBell } from "@/components/layout/notification-bell"
 import { AppSidebar } from "@/components/layout/app-sidebar"
 import { MobileBottomNav } from "@/components/layout/mobile-bottom-nav"
+import { PwaInstallBanner } from "@/components/layout/pwa-install-banner"
 import { Separator } from "@/components/ui/separator"
 import { createClient } from "@/lib/supabase/server"
 import {
@@ -37,12 +38,13 @@ export default async function DashboardLayout({
           </div>
         </header>
         
-        <main className="flex flex-1 flex-col gap-4 px-safe px-3 pb-[calc(5rem+env(safe-area-inset-bottom))] md:gap-5 md:px-5 md:pb-5 lg:gap-6 lg:px-6 lg:pb-6">
+        <section className="flex flex-1 flex-col gap-4 px-safe px-3 pb-[calc(5rem+env(safe-area-inset-bottom))] md:gap-5 md:px-5 md:pb-5 lg:gap-6 lg:px-6 lg:pb-6">
           <div className="min-h-[calc(100svh-3.5rem)] flex-1 rounded-[10px] md:desktop-surface md:min-h-min overflow-hidden">
              {children}
           </div>
-        </main>
+        </section>
         <MobileBottomNav />
+        <PwaInstallBanner />
         <SiteFooter />
       </SidebarInset>
     </SidebarProvider>

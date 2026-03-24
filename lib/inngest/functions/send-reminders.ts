@@ -53,27 +53,22 @@ export const sendReminders = inngest.createFunction(
     // Step 2: Create Notifications
     if (inactiveUsers.length > 0) {
       await step.run("create-notifications", async () => {
-        const notifications = inactiveUsers.map(user => ({
+        const notifications = inactiveUsers.map((user) => ({
           user_id: user.id,
-          insight_type: "general",
+          type: "checkin_submitted",
           title: "We miss you!",
-          content: `Hey ${user.name}, consistency is key! It's been a few days since your last log. Ready to crush a workout today?`,
-          priority: "medium",
-          is_read: false,
-          created_at: new Date().toISOString()
+          body: `Hey ${user.name}, it's been a few days since your last log. Ready to get back on track?`,
+          data: { url: "/workouts", source: "inactive-workout-reminder" },
         }));
 
-        // Batch insert
-        const { error } = await supabaseAdmin
-          .from("ai_insights")
-          .insert(notifications);
+        const { error } = await supabaseAdmin.from("notifications").insert(notifications);
           
         if (error) throw error;
       });
     }
 
     return { 
-      totalUsers: inactiveUsers.length + (await step.run("count-active", async () => 0)), // pseudo-code for metrics
+      totalUsers: inactiveUsers.length + (await step.run("count-active", async () => 0)), // placeholder metric
       remindedCount: inactiveUsers.length 
     };
   }

@@ -5,6 +5,7 @@ import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
 import {
+  Activity,
   Bell,
   CheckCircle2,
   CheckSquare,
@@ -14,6 +15,7 @@ import {
   RefreshCw,
   RotateCcw,
   Target,
+  Utensils,
   X,
 } from "lucide-react";
 
@@ -32,6 +34,9 @@ import { cn } from "@/utils";
 function notificationMeta(type: NotificationRow["type"]) {
   if (type === "goal_achieved") return { icon: Target, toneClass: "bg-emerald-100 text-emerald-600" };
   if (type === "checkin_submitted") return { icon: CheckSquare, toneClass: "bg-blue-100 text-blue-600" };
+  if (type === "meal_reminder") return { icon: Utensils, toneClass: "bg-orange-100 text-orange-600" };
+  if (type === "health_checkin_reminder") return { icon: Activity, toneClass: "bg-teal-100 text-teal-600" };
+  if (type === "goal_checkin_reminder") return { icon: Target, toneClass: "bg-amber-100 text-amber-600" };
   if (type === "support_ticket_created") return { icon: Inbox, toneClass: "bg-violet-100 text-violet-600" };
   if (type === "support_ticket_updated") return { icon: FileEdit, toneClass: "bg-amber-100 text-amber-600" };
   if (type === "support_ticket_comment_added") return { icon: MessageSquare, toneClass: "bg-sky-100 text-sky-600" };
@@ -56,6 +61,11 @@ function formatRelativeTime(iso: string) {
 
 function getTicketIdFromNotification(notification: NotificationRow) {
   const value = notification.data.ticket_id;
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function getActionUrlFromNotification(notification: NotificationRow) {
+  const value = notification.data.url;
   return typeof value === "string" && value.length > 0 ? value : null;
 }
 
@@ -168,35 +178,33 @@ export function NotificationBell({
                 const Icon = meta.icon;
                 const isDismissing = dismissingId === notification.id;
                 const ticketId = getTicketIdFromNotification(notification);
+                const actionUrl = getActionUrlFromNotification(notification);
+                const href = ticketId ? `/support/${ticketId}` : actionUrl;
+                const content = (
+                  <>
+                    <div className={cn("mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full", meta.toneClass)}>
+                      <Icon className="h-4 w-4" />
+                    </div>
+                    <div className="min-w-0 flex-1 space-y-1">
+                      <p className="text-sm font-medium">{notification.title}</p>
+                      <p className="line-clamp-2 text-xs text-muted-foreground">{notification.body}</p>
+                      <p className="text-[11px] text-muted-foreground">{formatRelativeTime(notification.created_at)}</p>
+                    </div>
+                  </>
+                );
 
                 return (
                   <div key={notification.id} className="group flex items-start gap-3 p-3">
-                    {ticketId ? (
+                    {href ? (
                       <Link
-                        href={`/support/${ticketId}`}
+                        href={href}
                         className="flex min-w-0 flex-1 items-start gap-3 rounded-md hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                         onClick={() => setOpen(false)}
                       >
-                        <div className={cn("mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full", meta.toneClass)}>
-                          <Icon className="h-4 w-4" />
-                        </div>
-                        <div className="min-w-0 flex-1 space-y-1">
-                          <p className="text-sm font-medium">{notification.title}</p>
-                          <p className="line-clamp-2 text-xs text-muted-foreground">{notification.body}</p>
-                          <p className="text-[11px] text-muted-foreground">{formatRelativeTime(notification.created_at)}</p>
-                        </div>
+                        {content}
                       </Link>
                     ) : (
-                      <>
-                        <div className={cn("mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full", meta.toneClass)}>
-                          <Icon className="h-4 w-4" />
-                        </div>
-                        <div className="min-w-0 flex-1 space-y-1">
-                          <p className="text-sm font-medium">{notification.title}</p>
-                          <p className="line-clamp-2 text-xs text-muted-foreground">{notification.body}</p>
-                          <p className="text-[11px] text-muted-foreground">{formatRelativeTime(notification.created_at)}</p>
-                        </div>
-                      </>
+                      <div className="flex min-w-0 flex-1 items-start gap-3">{content}</div>
                     )}
                     <Button
                       type="button"

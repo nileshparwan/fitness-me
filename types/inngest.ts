@@ -64,6 +64,21 @@ type SupportTicketActivityEvent = {
   };
 };
 
+type SendReminderEvent = {
+  data: {
+    user_id: string;
+    type: "meal_reminder" | "health_checkin_reminder";
+  };
+};
+
+type SendGoalCheckinReminderEvent = {
+  data: {
+    goal_id: string;
+    user_id: string;
+    goal_type: string;
+  };
+};
+
 type Events = {
   "ai/analyze.workout": AnalyzeWorkoutEvent;
   "ai/analyze.photo": AnalyzePhotoEvent;
@@ -73,6 +88,8 @@ type Events = {
   "training/workout.completed": TrainingWorkoutCompletedEvent;
   "coaching/checkin.submitted": CoachingCheckinSubmittedEvent;
   "support/ticket.activity": SupportTicketActivityEvent;
+  "notification/send.reminder": SendReminderEvent;
+  "notification/send.goal-checkin-reminder": SendGoalCheckinReminderEvent;
 };
 // Create the schema to pass to the client
 export const InngestSchemas = new EventSchemas().fromRecord<Events>();
