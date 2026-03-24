@@ -3118,12 +3118,6 @@ function validateBillingPlanByType(input: {
   }
 }
 
-function shouldUsePaymentLogsFallbackOrThrow(error: { message: string } | null | undefined) {
-  if (!error) return false;
-  if (isPaymentLogsTableMissing(error.message)) return true;
-  throw new Error(error.message);
-}
-
 async function getBillingPlanByIdForCoach(
   supabase: DbClient,
   coachId: string,
@@ -3234,15 +3228,18 @@ async function listCoachPaymentLogsForDate(input: {
 async function countCoachPaymentLogsSince(input: {
   supabase: DbClient;
   coachId: string;
-  fromDate: string;
+  fromDate?: string;
+  clientId?: string;
   allowMissingTableFallback?: boolean;
 }): Promise<{ count: number; missing: boolean }> {
-  const { count, error } = await input.supabase
+  let query = input.supabase
     .from("payment_logs")
     .select("id", { count: "exact", head: true })
     .eq("coach_id", input.coachId)
-    .gte("session_date", input.fromDate)
     .neq("status", "voided");
+  if (input.fromDate) query = query.gte("session_date", input.fromDate);
+  if (input.clientId) query = query.eq("client_id", input.clientId);
+  const { count, error } = await query;
 
   if (error) {
     if (input.allowMissingTableFallback && isPaymentLogsTableMissing(error.message)) {
@@ -3252,6 +3249,75 @@ async function countCoachPaymentLogsSince(input: {
   }
 
   return { count: count ?? 0, missing: false };
+}
+
+async function listClientPaymentLogAmountsSince(input: {
+  supabase: DbClient;
+  coachId: string;
+  clientId: string;
+  fromDate: string;
+  allowMissingTableFallback?: boolean;
+}): Promise<{ rows: Array<{ amount: number | null; status: string }>; missing: boolean }> {
+  const { data, error } = await input.supabase
+    .from("payment_logs")
+    .select("amount, status, session_date")
+    .eq("coach_id", input.coachId)
+    .eq("client_id", input.clientId)
+    .gte("session_date", input.fromDate)
+    .neq("status", "voided");
+
+  if (error) {
+    if (input.allowMissingTableFallback && isPaymentLogsTableMissing(error.message)) {
+      return { rows: [], missing: true };
+    }
+    throw new Error(normalizeBillingTablesError(error.message));
+  }
+
+  return { rows: (data || []) as Array<{ amount: number | null; status: string }>, missing: false };
+}
+
+async function listClientPaymentLogsPage(input: {
+  supabase: DbClient;
+  coachId: string;
+  clientId: string;
+  from: number;
+  to: number;
+  sortBy: "session_date" | "created_at" | "amount" | "status";
+  ascending: boolean;
+  dateFrom?: string;
+  dateTo?: string;
+  status?: "logged" | "confirmed" | "voided" | "all";
+  search?: string;
+  allowMissingTableFallback?: boolean;
+}): Promise<{ rows: PaymentLogRow[]; total: number; missing: boolean }> {
+  let query = input.supabase
+    .from("payment_logs")
+    .select("*", { count: "exact" })
+    .eq("client_id", input.clientId)
+    .eq("coach_id", input.coachId)
+    .neq("status", "voided")
+    .order(input.sortBy, { ascending: input.ascending })
+    .order("created_at", { ascending: input.ascending })
+    .range(input.from, input.to);
+
+  if (input.dateFrom) query = query.gte("session_date", input.dateFrom);
+  if (input.dateTo) query = query.lte("session_date", input.dateTo);
+  if (input.status && input.status !== "all") query = query.eq("status", input.status);
+  if (input.search) {
+    const escapedSearch = escapeLikePattern(input.search);
+    query = query.ilike("notes", `%${escapedSearch}%`);
+  }
+
+  const { data, error, count } = await query;
+  if (error) {
+    if (input.allowMissingTableFallback && isPaymentLogsTableMissing(error.message)) {
+      return { rows: [], total: 0, missing: true };
+    }
+    throw new Error(normalizeBillingTablesError(error.message));
+  }
+
+  const rows = (data || []) as PaymentLogRow[];
+  return { rows, total: count ?? rows.length, missing: false };
 }
 
 export async function createBillingPlanAction(input: z.input<typeof createBillingPlanSchema>): Promise<ClientBillingPlanWithRemaining> {
@@ -3624,26 +3690,21 @@ export async function listClientPaymentLogsAction(
       const { supabase, user } = await requireActor();
       const from = payload.page * payload.limit;
       const to = from + payload.limit - 1;
-      let query = supabase
-        .from("payment_logs")
-        .select("*", { count: "exact" })
-        .eq("client_id", payload.client_id)
-        .eq("coach_id", user.id)
-        .neq("status", "voided")
-        .order(payload.sort_by, { ascending: payload.sort_dir === "asc" })
-        .order("created_at", { ascending: payload.sort_dir === "asc" })
-        .range(from, to);
-
-      if (payload.date_from) query = query.gte("session_date", payload.date_from);
-      if (payload.date_to) query = query.lte("session_date", payload.date_to);
-      if (payload.status !== "all") query = query.eq("status", payload.status);
-      if (payload.search) {
-        const escapedSearch = escapeLikePattern(payload.search);
-        query = query.ilike("notes", `%${escapedSearch}%`);
-      }
-
-      const { data, error, count } = await query;
-      if (shouldUsePaymentLogsFallbackOrThrow(error)) {
+      const result = await listClientPaymentLogsPage({
+        supabase,
+        coachId: user.id,
+        clientId: payload.client_id,
+        from,
+        to,
+        sortBy: payload.sort_by,
+        ascending: payload.sort_dir === "asc",
+        dateFrom: payload.date_from || undefined,
+        dateTo: payload.date_to || undefined,
+        status: payload.status,
+        search: payload.search || undefined,
+        allowMissingTableFallback: true,
+      });
+      if (result.missing) {
         return {
           rows: [],
           total: 0,
@@ -3652,8 +3713,8 @@ export async function listClientPaymentLogsAction(
           has_more: false,
         };
       }
-      const rows = (data || []) as PaymentLogRow[];
-      const total = count ?? rows.length;
+      const rows = result.rows;
+      const total = result.total;
       return {
         rows,
         total,
@@ -3679,40 +3740,38 @@ export async function getClientPaymentLogStatsAction(clientId: string): Promise<
       };
 
       const [totalRes, monthSessionsRes, monthRevenueRes] = await Promise.all([
-        supabase
-          .from("payment_logs")
-          .select("id", { count: "exact", head: true })
-          .eq("client_id", clientId)
-          .eq("coach_id", user.id)
-          .neq("status", "voided"),
-        supabase
-          .from("payment_logs")
-          .select("id", { count: "exact", head: true })
-          .eq("client_id", clientId)
-          .eq("coach_id", user.id)
-          .gte("session_date", monthStartIso)
-          .neq("status", "voided"),
-        supabase
-          .from("payment_logs")
-          .select("amount, status, session_date")
-          .eq("client_id", clientId)
-          .eq("coach_id", user.id)
-          .gte("session_date", monthStartIso)
-          .neq("status", "voided"),
+        countCoachPaymentLogsSince({
+          supabase,
+          coachId: user.id,
+          clientId,
+          allowMissingTableFallback: true,
+        }),
+        countCoachPaymentLogsSince({
+          supabase,
+          coachId: user.id,
+          clientId,
+          fromDate: monthStartIso,
+          allowMissingTableFallback: true,
+        }),
+        listClientPaymentLogAmountsSince({
+          supabase,
+          coachId: user.id,
+          clientId,
+          fromDate: monthStartIso,
+          allowMissingTableFallback: true,
+        }),
       ]);
 
-      if (shouldUsePaymentLogsFallbackOrThrow(totalRes.error)) return emptyStats;
-      if (shouldUsePaymentLogsFallbackOrThrow(monthSessionsRes.error)) return emptyStats;
-      if (shouldUsePaymentLogsFallbackOrThrow(monthRevenueRes.error)) return emptyStats;
+      if (totalRes.missing || monthSessionsRes.missing || monthRevenueRes.missing) return emptyStats;
 
-      const revenueThisMonth = ((monthRevenueRes.data || []) as Array<{ amount: number | null; status: string }>)
+      const revenueThisMonth = monthRevenueRes.rows
         .filter((row) => row.status !== "voided")
         .reduce((sum, row) => sum + Number(row.amount || 0), 0);
 
       return {
-        sessions_this_month: monthSessionsRes.count ?? 0,
+        sessions_this_month: monthSessionsRes.count,
         revenue_this_month: revenueThisMonth,
-        total_sessions: totalRes.count ?? 0,
+        total_sessions: totalRes.count,
       };
     },
   });

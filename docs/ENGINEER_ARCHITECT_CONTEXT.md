@@ -4062,7 +4062,7 @@ Use this template for each response:
 
 - Priority: High
 - Depends on: A-009 (can be implemented in parallel; no schema dependencies)
-- Status: Queued
+- Status: Implemented (engineer: 2026-03-23, awaiting QA)
 
 ---
 
@@ -12205,7 +12205,7 @@ Or remove the `range` parameter from `progressOverviewKeys.muscleBalance` entire
   - NEW: `components/measurements/measurements-table.tsx` — TanStack table component
   - UPDATE: `lib/auth/route-access.ts` — add `/measurements` to prefixes + sidebar; add `"ruler"` to icon union
   - UPDATE: `components/layout/app-sidebar.tsx` — add `ruler: Ruler` to `iconMap`
-  - NEW: `supabase/migrations/YYYYMMDD_body_measurements_subject.sql` — add subject columns
+  - NEW: `supabase/migrations/20260323100000_body_measurements_subject.sql` — add subject columns
 
 ---
 
@@ -12510,19 +12510,26 @@ ruler: Ruler,   // import { Ruler } from "lucide-react"
 
 #### Checklist
 
-- [ ] Migration: `subject_user_id` + `subject_client_id` on `body_measurements`; backfill from `user_id`; check constraint; indexes; RLS updated
-- [ ] `logBodyMeasurementAction(subject, input)`: Zod validation, resolve subject, upsert
-- [ ] `getBodyMeasurements(subject, range)`: subject filter + date range filter, ordered `date DESC`
-- [ ] `getBodyMeasurementForDate(subject, date)`: single-row pre-population lookup
-- [ ] `/measurements` page: header + controls render immediately (no skeleton); only table area skeletons
-- [ ] `SubjectSelector`: hidden when user has 0 active clients (not role-gated); defaults to "Myself"; populated via `listCoachClientsAction({ status: "active", page_size: 50 })` from `app/actions/coach-tools.ts`
-- [ ] `MeasurementsTable`: TanStack table, 8 columns, sort `date DESC`, page size 20, skeleton on load (headers still visible)
-- [ ] `LogMeasurementDialog`: pre-populates from `prefillRow` or date lookup; collapsible advanced fields; disabled save if all empty; toast on success
-- [ ] `lib/auth/route-access.ts`: `/measurements` in prefixes + sidebar entry; `"ruler"` in icon union
-- [ ] `app-sidebar.tsx`: `ruler: Ruler` added to `iconMap`
-- [ ] `npm run typecheck && npm run lint` → pass
+- [x] Migration: `subject_user_id` + `subject_client_id` on `body_measurements`; backfill from `user_id`; check constraint; indexes; RLS updated
+- [x] `logBodyMeasurementAction(subject, input)`: Zod validation, resolve subject, upsert
+- [x] `getBodyMeasurements(subject, range)`: subject filter + date range filter, ordered `date DESC`
+- [x] `getBodyMeasurementForDate(subject, date)`: single-row pre-population lookup
+- [x] `/measurements` page: header + controls render immediately (no skeleton); only table area skeletons
+- [x] `SubjectSelector`: hidden when user has 0 active clients (not role-gated); defaults to "Myself"; populated via `listCoachClientsAction({ status: "active", page_size: 50 })` from `app/actions/coach-tools.ts`
+- [x] `MeasurementsTable`: TanStack table, 8 columns, sort `date DESC`, page size 20, skeleton on load (headers still visible)
+- [x] `LogMeasurementDialog`: pre-populates from `prefillRow` or date lookup; collapsible advanced fields; disabled save if all empty; toast on success
+- [x] `lib/auth/route-access.ts`: `/measurements` in prefixes + sidebar entry; `"ruler"` in icon union
+- [x] `app-sidebar.tsx`: `ruler: Ruler` added to `iconMap`
+- [x] `npm run typecheck && npm run lint` → pass
 - [ ] Manual QA: log weight + waist → row appears in table; Body Composition card on `/progress` still works
 - [ ] Manual QA (coach): switch to client → log measurement → appears only in that client's history
+
+#### Engineer Notes (2026-03-23)
+
+- Implemented all A-034 deliverable files (`actions`, page, table, dialog, shared `SubjectSelector`, nav/sidebar wiring).
+- Added partial unique indexes for subject/date upsert targets: `uq_body_measurements_subject_user_date` and `uq_body_measurements_subject_client_date`.
+- `user_id` on `body_measurements` is now nullable to avoid mixing coach-owned and client-subject rows in self analytics while preserving legacy compatibility.
+- Validation completed: `npm run typecheck`, `npm run lint`, `npm run build` all pass.
 
 ---
 
@@ -12530,7 +12537,7 @@ ruler: Ruler,   // import { Ruler } from "lucide-react"
 
 - Priority: High
 - Depends on: A-031 (progress page must be live)
-- Status: Queued
+- Status: Implemented (engineer: 2026-03-23, awaiting QA)
 - Files:
   - NEW: `app/(dashboard)/check-in/page.tsx` — dedicated check-in page
   - NEW: `app/actions/daily-health-log.ts` — upsert actions with subject pattern
@@ -12538,7 +12545,7 @@ ruler: Ruler,   // import { Ruler } from "lucide-react"
   - NEW: `components/check-in/health-log-table.tsx` — TanStack table component
   - UPDATE: `lib/auth/route-access.ts` — add `/check-in` to prefixes + sidebar; add `"activity"` to icon union
   - UPDATE: `components/layout/app-sidebar.tsx` — add `activity: Activity` to `iconMap`
-  - NEW: `supabase/migrations/YYYYMMDD_health_tables_subject.sql` — add subject columns to `sleep_log`, `vitals_log`, `daily_activity`
+  - NEW: `supabase/migrations/20260323101000_health_tables_subject.sql` — add subject columns to `sleep_log`, `vitals_log`, `daily_activity`
 
 ---
 
@@ -12826,19 +12833,26 @@ activity: Activity,   // import { Activity } from "lucide-react"
 
 #### Checklist
 
-- [ ] Migration: `subject_user_id` + `subject_client_id` added to `sleep_log`, `vitals_log`, `daily_activity`; backfill from `user_id`; check constraint; RLS updated
-- [ ] `logDailyHealthAction(subject, input)`: parallel upserts; skips tables with no filled fields; `supabase as any`; `isMissingSchemaDependencyError` guard on each
-- [ ] `getHealthCheckIns(subject, range)`: merges rows from all three tables by date; `supabase as any`; returns `[]` if tables missing
-- [ ] `getHealthCheckInForDate(subject, date)`: single merged row for pre-population
-- [ ] `/check-in` page: header + controls render immediately (no skeleton); only table area skeletons
-- [ ] `SubjectSelector`: hidden when user has 0 active clients (same component as A-034, shared in `components/shared/subject-selector`)
-- [ ] `HealthLogTable`: TanStack table, 8 columns, sort `date DESC`, page size 20, skeleton on load (headers visible)
-- [ ] `LogHealthDialog`: 5-button radio for quality/energy; pre-populates from `prefillRow` or date lookup; save disabled if all empty; toast on success
-- [ ] `lib/auth/route-access.ts`: `/check-in` in prefixes + sidebar entry; `"activity"` in icon union
-- [ ] `app-sidebar.tsx`: `activity: Activity` added to `iconMap`
-- [ ] `npm run typecheck && npm run lint` → pass
+- [x] Migration: `subject_user_id` + `subject_client_id` added to `sleep_log`, `vitals_log`, `daily_activity`; backfill from `user_id`; check constraint; RLS updated
+- [x] `logDailyHealthAction(subject, input)`: parallel upserts; skips tables with no filled fields; `supabase as any`; `isMissingSchemaDependencyError` guard on each
+- [x] `getHealthCheckIns(subject, range)`: merges rows from all three tables by date; `supabase as any`; returns `[]` if tables missing
+- [x] `getHealthCheckInForDate(subject, date)`: single merged row for pre-population
+- [x] `/check-in` page: header + controls render immediately (no skeleton); only table area skeletons
+- [x] `SubjectSelector`: hidden when user has 0 active clients (same component as A-034, shared in `components/shared/subject-selector`)
+- [x] `HealthLogTable`: TanStack table, 8 columns, sort `date DESC`, page size 20, skeleton on load (headers visible)
+- [x] `LogHealthDialog`: 5-button radio for quality/energy; pre-populates from `prefillRow` or date lookup; save disabled if all empty; toast on success
+- [x] `lib/auth/route-access.ts`: `/check-in` in prefixes + sidebar entry; `"activity"` in icon union
+- [x] `app-sidebar.tsx`: `activity: Activity` added to `iconMap`
+- [x] `npm run typecheck && npm run lint` → pass
 - [ ] Manual QA: log 7.5h sleep + HRV 62ms → row appears in table; `/progress` Recovery tile updates
 - [ ] Manual QA (coach): switch to client → log check-in → appears under that client's history only
+
+#### Engineer Notes (2026-03-23)
+
+- Implemented all A-035 deliverable files (`actions`, page, table, dialog, nav/sidebar wiring).
+- Because a prior migration dropped `sleep_log`, `vitals_log`, and `daily_activity` in this branch, A-035 migration is defensive: it recreates missing tables and then applies the subject model + RLS + indexes.
+- Added missing daily activity fields used by UI/progress reads (`sleep_hours`, `energy_level`) where absent.
+- All A-035 server actions intentionally use `supabase as any` and guard missing-schema errors with `isMissingSchemaDependencyError`.
 
 ### [A-036] Habit Goals
 
@@ -12938,6 +12952,598 @@ The `habits` array already contains `{ id, name, completed_today, streak_days, c
 - [ ] Manual QA: tap check-in → checkbox fills immediately, streak increments on next load
 
 ---
+
+### [A-037] Notification Center + Mobile Push Reminders
+
+- Priority: High
+- Depends on: A-031 (progress page live), A-035 (check-in page live)
+- Status: Queued
+- Files:
+  - NEW: `supabase/migrations/YYYYMMDD_notifications_extension.sql`
+  - NEW: `app/actions/notifications.ts`
+  - NEW: `app/api/push/subscribe/route.ts`
+  - NEW: `app/api/push/unsubscribe/route.ts`
+  - NEW: `public/sw.js`
+  - NEW: `lib/push/send.ts`
+  - NEW: `lib/inngest/functions/send-daily-reminders.ts`
+  - NEW: `hooks/use-notifications.ts`
+  - NEW: `components/notifications/notification-bell.tsx`
+  - NEW: `components/notifications/notification-dropdown.tsx`
+  - NEW: `components/notifications/notification-item.tsx`
+  - NEW: `app/(dashboard)/(account)/settings/notifications/page.tsx`
+  - NEW: `components/settings/notification-settings-form.tsx`
+  - UPDATE: `components/settings/settings-tab-nav.tsx` — add Notifications tab
+  - UPDATE: `app/(dashboard)/layout.tsx` — wire bell into header
+  - UPDATE: `app/layout.tsx` — register Service Worker
+  - UPDATE: `lib/inngest/index.ts` — register new cron function
+  - UPDATE: `lib/inngest/functions/send-reminders.ts` — fix stale `ai_insights` reference
+
+---
+
+#### Architecture overview
+
+Two independent layers that share the same `notifications` table as the source of truth:
+
+```
+IN-APP BELL (all devices)
+  Inngest cron ──► INSERT into notifications table
+  Supabase Realtime ──► bell badge increments in real time
+  User opens dropdown ──► marks as read
+
+MOBILE PUSH (mobile browsers only)
+  Same Inngest cron ──► also calls web-push.sendNotification()
+  Service Worker receives push ──► OS shows notification
+  User taps ──► sw opens app at action_url
+```
+
+**Why Inngest and not pg_cron here:** pg_cron runs SQL inside the database only — it cannot make HTTP calls to browser push endpoints. Inngest is the correct tool for any scheduled job that touches external services. See the pg_cron note at the end of this task for appropriate pg_cron use cases in this app.
+
+---
+
+#### PART I — Migration (`supabase/migrations/YYYYMMDD_notifications_extension.sql`)
+
+**1. Extend `notification_type` enum** — add two new values:
+```sql
+ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'meal_reminder';
+ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'health_checkin_reminder';
+```
+
+**2. Extend the existing `notifications` table:**
+```sql
+ALTER TABLE notifications
+  ADD COLUMN IF NOT EXISTS is_read    boolean     NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS read_at    timestamptz,
+  ADD COLUMN IF NOT EXISTS action_url text;          -- e.g. "/nutrition/diary", "/check-in"
+
+CREATE INDEX notifications_user_unread_idx
+  ON notifications (user_id, is_read, created_at DESC)
+  WHERE is_read = false;
+```
+
+**3. New `notification_preferences` table** — one row per user:
+```sql
+CREATE TABLE notification_preferences (
+  user_id               uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+
+  timezone              text NOT NULL DEFAULT 'UTC',   -- IANA e.g. "America/New_York"
+
+  -- Meal log reminder
+  meal_bell_enabled     boolean NOT NULL DEFAULT false, -- in-app bell notification
+  meal_push_enabled     boolean NOT NULL DEFAULT false, -- mobile Web Push
+  meal_reminder_time    time    NOT NULL DEFAULT '12:00:00',
+
+  -- Health check-in reminder
+  checkin_bell_enabled  boolean NOT NULL DEFAULT false,
+  checkin_push_enabled  boolean NOT NULL DEFAULT false,
+  checkin_reminder_time time    NOT NULL DEFAULT '08:00:00',
+
+  updated_at            timestamptz NOT NULL DEFAULT now()
+);
+
+ALTER TABLE notification_preferences ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "notification_preferences_self"
+  ON notification_preferences USING (user_id = auth.uid());
+```
+
+**4. New `push_subscriptions` table** — one row per browser/device:
+```sql
+CREATE TABLE push_subscriptions (
+  id          uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id     uuid        NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  endpoint    text        NOT NULL UNIQUE,   -- push service URL (per device)
+  p256dh      text        NOT NULL,          -- encryption key
+  auth        text        NOT NULL,          -- auth secret
+  user_agent  text,                          -- optional: Chrome on Android, Safari on iOS
+  created_at  timestamptz NOT NULL DEFAULT now()
+);
+
+ALTER TABLE push_subscriptions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "push_subscriptions_self"
+  ON push_subscriptions USING (user_id = auth.uid());
+
+CREATE INDEX push_subscriptions_user_idx ON push_subscriptions (user_id);
+```
+
+---
+
+#### PART II — Push sender utility (`lib/push/send.ts`)
+
+Install: `npm install web-push`
+
+Add to `.env.local` (and server environment):
+```
+VAPID_PUBLIC_KEY=<generate with: npx web-push generate-vapid-keys>
+VAPID_PRIVATE_KEY=<from above>
+VAPID_SUBJECT=mailto:admin@yourdomain.com
+```
+
+```ts
+// lib/push/send.ts
+import webPush from "web-push";
+
+webPush.setVapidDetails(
+  process.env.VAPID_SUBJECT!,
+  process.env.VAPID_PUBLIC_KEY!,
+  process.env.VAPID_PRIVATE_KEY!
+);
+
+export type PushPayload = {
+  title: string;
+  body: string;
+  url: string;   // action_url — where to navigate on tap
+};
+
+export type PushSubscriptionRow = {
+  endpoint: string;
+  p256dh: string;
+  auth: string;
+};
+
+/**
+ * Send a push notification to a single subscription.
+ * Returns false if the subscription is stale (410 Gone) — caller should delete it.
+ */
+export async function sendPushNotification(
+  subscription: PushSubscriptionRow,
+  payload: PushPayload
+): Promise<boolean> {
+  try {
+    await webPush.sendNotification(
+      { endpoint: subscription.endpoint, keys: { p256dh: subscription.p256dh, auth: subscription.auth } },
+      JSON.stringify(payload)
+    );
+    return true;
+  } catch (err: unknown) {
+    if (typeof err === "object" && err !== null && "statusCode" in err) {
+      const statusCode = (err as { statusCode: number }).statusCode;
+      if (statusCode === 410 || statusCode === 404) return false; // stale subscription
+    }
+    throw err;
+  }
+}
+```
+
+---
+
+#### PART III — Server Actions (`app/actions/notifications.ts`)
+
+```ts
+"use server";
+
+// ── Read ──────────────────────────────────────────────────────────────────
+
+export type NotificationRow = {
+  id: string;
+  title: string;
+  body: string;
+  type: string;
+  action_url: string | null;
+  is_read: boolean;
+  created_at: string;
+};
+
+/**
+ * Fetch the 30 most recent notifications for the current user.
+ * Returns { notifications, unread_count }.
+ */
+export async function getNotifications(): Promise<{
+  notifications: NotificationRow[];
+  unread_count: number;
+}>
+
+// ── Mutations ─────────────────────────────────────────────────────────────
+
+export async function markNotificationRead(id: string): Promise<void>
+// UPDATE notifications SET is_read = true, read_at = now() WHERE id = id AND user_id = uid()
+
+export async function markAllNotificationsRead(): Promise<void>
+// UPDATE notifications SET is_read = true, read_at = now() WHERE user_id = uid() AND is_read = false
+
+// ── Preferences ───────────────────────────────────────────────────────────
+
+export type NotificationPreferencesInput = {
+  timezone: string;
+  meal_bell_enabled: boolean;
+  meal_push_enabled: boolean;
+  meal_reminder_time: string;       // "HH:MM"
+  checkin_bell_enabled: boolean;
+  checkin_push_enabled: boolean;
+  checkin_reminder_time: string;    // "HH:MM"
+};
+
+export async function getNotificationPreferences(): Promise<NotificationPreferencesInput | null>
+// SELECT * FROM notification_preferences WHERE user_id = uid()
+
+export async function upsertNotificationPreferences(
+  input: NotificationPreferencesInput
+): Promise<void>
+// UPSERT into notification_preferences
+// Validate time strings are valid "HH:MM" format via Zod
+// Validate timezone is a non-empty string (browser provides IANA value)
+// Wrap in runTrackedAction("notification_preferences.upsert")
+```
+
+---
+
+#### PART IV — API Routes
+
+**`app/api/push/subscribe/route.ts`** — save a new push subscription:
+```ts
+// POST /api/push/subscribe
+// Body: { endpoint: string; keys: { p256dh: string; auth: string }; userAgent?: string }
+// Auth: requires session (call getServerUser())
+// Action: upsert into push_subscriptions by (user_id, endpoint)
+// Returns: 200 OK
+```
+
+**`app/api/push/unsubscribe/route.ts`** — remove a subscription:
+```ts
+// POST /api/push/unsubscribe
+// Body: { endpoint: string }
+// Auth: requires session
+// Action: DELETE FROM push_subscriptions WHERE endpoint = ? AND user_id = uid()
+// Returns: 200 OK
+```
+
+Both routes use the service-role client for writes (the RLS policy allows it but service role avoids cookie plumbing in route handlers). Use `createClient` from `@/lib/supabase/server` if it supports route handlers, otherwise use the admin client pattern from `send-reminders.ts`.
+
+**Important:** The `VAPID_PUBLIC_KEY` must be exposed to the client. Add to `next.config` as `NEXT_PUBLIC_VAPID_PUBLIC_KEY`.
+
+---
+
+#### PART V — Service Worker (`public/sw.js`)
+
+```js
+// public/sw.js  — no bundler, plain JS, served statically
+
+self.addEventListener("push", (event) => {
+  const data = event.data?.json() ?? {};
+  event.waitUntil(
+    self.registration.showNotification(data.title ?? "Reminder", {
+      body: data.body ?? "",
+      icon: "/icons/icon-192.png",   // add a 192×192 app icon to public/icons/
+      badge: "/icons/badge-72.png",  // 72×72 monochrome badge icon
+      data: { url: data.url ?? "/" },
+    })
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const url = event.notification.data?.url ?? "/";
+  event.waitUntil(
+    clients.matchAll({ type: "window" }).then((windowClients) => {
+      for (const client of windowClients) {
+        if (client.url.includes(self.location.origin) && "focus" in client) {
+          client.navigate(url);
+          return client.focus();
+        }
+      }
+      return clients.openWindow(url);
+    })
+  );
+});
+```
+
+**Register the SW in `app/layout.tsx`** (client component wrapper or `useEffect` in root):
+```tsx
+// In a "use client" component mounted at the root layout:
+useEffect(() => {
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("/sw.js").catch(console.error);
+  }
+}, []);
+```
+
+Create a minimal `components/layout/sw-register.tsx` client component that does only this registration and render it inside the root `app/layout.tsx`.
+
+**PWA manifest** (`public/manifest.json`) — required for iOS push support:
+```json
+{
+  "name": "Fitness Tracker",
+  "short_name": "FitTrack",
+  "start_url": "/dashboard",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
+```
+
+Add `<link rel="manifest" href="/manifest.json" />` to the `<head>` in `app/layout.tsx`.
+
+**iOS caveat** — iOS Safari 16.4+ requires the user to tap "Share → Add to Home Screen" before Web Push works. Show a one-time inline tip in the push permission button for iOS users (`/iPhone|iPad/i.test(navigator.userAgent)`).
+
+---
+
+#### PART VI — Inngest cron (`lib/inngest/functions/send-daily-reminders.ts`)
+
+```ts
+// Cron: every 15 minutes
+// { cron: "*/15 * * * *" }
+
+// Step 1: query users whose meal_reminder_time falls in the current 15-min window
+//   SELECT np.user_id, np.meal_reminder_time
+//   FROM notification_preferences np
+//   WHERE np.meal_bell_enabled = true OR np.meal_push_enabled = true
+//     AND date_trunc('hour', now() AT TIME ZONE np.timezone)
+//       + floor(extract(minute FROM now() AT TIME ZONE np.timezone) / 15)
+//         * interval '15 min'
+//     = date_trunc('hour', np.meal_reminder_time::timetz)
+//       + floor(extract(minute FROM np.meal_reminder_time) / 15)
+//         * interval '15 min'
+//
+// Step 2: same query for checkin_reminder
+
+// Step 3: for each user in meal batch:
+//   a. If meal_bell_enabled → INSERT into notifications { user_id, type: "meal_reminder",
+//        title: "Log your meals", body: "Don't forget to log today's meals.",
+//        action_url: "/nutrition/diary" }
+//   b. If meal_push_enabled → fetch push_subscriptions for user → sendPushNotification()
+//        → if sendPushNotification returns false (stale) → DELETE that subscription
+
+// Step 4: same for checkin batch (action_url: "/check-in")
+
+// Fan-out pattern for scale: emit one inngest event per user, handle in a separate function
+// This prevents one slow push send from blocking the whole batch
+```
+
+**Fan-out pattern (for scale):**
+```ts
+// In send-daily-reminders: emit events
+await step.sendEvent("send-reminder-batch", mealUsers.map(user => ({
+  name: "notification/send.reminder",
+  data: { user_id: user.user_id, type: "meal_reminder" }
+})));
+
+// Separate function handles one user at a time with retries:
+export const handleSendReminder = inngest.createFunction(
+  { id: "handle-send-reminder", retries: 2 },
+  { event: "notification/send.reminder" },
+  async ({ event, step }) => { ... }
+);
+```
+
+Use the admin Supabase client (same pattern as `send-reminders.ts`) for all DB operations inside Inngest.
+
+**Register in `lib/inngest/index.ts`:**
+```ts
+import { sendDailyReminders } from "./functions/send-daily-reminders";
+import { handleSendReminder } from "./functions/send-daily-reminders";
+
+export const inngestFunctions = [
+  ...existing,
+  sendDailyReminders,
+  handleSendReminder,
+];
+```
+
+**Also fix `send-reminders.ts`:** It currently writes to `ai_insights` which no longer exists. Change it to write to the `notifications` table with `type: "general"` and `action_url: "/workouts"`. Keep the existing cron schedule (`0 8 * * *`).
+
+---
+
+#### PART VII — Bell notification center
+
+**`hooks/use-notifications.ts`**
+```ts
+"use client";
+// Two concerns:
+// 1. React Query fetch: useQuery({ queryKey: ["notifications"], queryFn: getNotifications })
+// 2. Supabase Realtime: subscribe to INSERT on notifications WHERE user_id = uid()
+//    On new row: queryClient.invalidateQueries({ queryKey: ["notifications"] })
+//
+// Returns: { notifications, unreadCount, markRead, markAllRead, isLoading }
+// The Supabase Realtime subscription is set up in a useEffect, cleaned up on unmount.
+// Use createClient from "@/lib/supabase/client" for the Realtime channel.
+```
+
+**`components/notifications/notification-bell.tsx`**
+```tsx
+// Bell icon button with a red badge showing unreadCount
+// On click: toggles the dropdown open/closed
+// Badge: show count if > 0; cap display at "9+" if count > 9
+// Uses useNotifications() hook
+// Icon: Bell from lucide-react
+```
+
+**`components/notifications/notification-dropdown.tsx`**
+```tsx
+// Dropdown panel (absolute positioned, w-80, max-h-[420px] overflow-y-auto)
+// Header: "Notifications" title + "Mark all read" button (only if unreadCount > 0)
+// Body: map over notifications → <NotificationItem>
+// Empty state: "No notifications yet."
+// Closes on outside click (useRef + useEffect with mousedown listener)
+```
+
+**`components/notifications/notification-item.tsx`**
+```tsx
+// Single notification row:
+// - Unread indicator: left border or dot (bg-primary/60 when !is_read)
+// - Icon: pick by type (Bell for general, Utensils for meal_reminder, Activity for health_checkin_reminder, etc.)
+// - Title (font-medium) + body (text-sm text-muted-foreground, line-clamp-2)
+// - Timestamp: relative time (e.g. "2h ago") using date-fns or native Intl
+// - On click: if action_url → navigate via router.push(action_url); markNotificationRead(id)
+```
+
+**Wire bell into `app/(dashboard)/layout.tsx`:**
+Add a thin topbar above the main content area:
+```tsx
+// If a topbar/header already exists in the dashboard layout, add <NotificationBell /> there.
+// If none exists, create components/layout/dashboard-topbar.tsx:
+//   <div className="flex h-12 items-center justify-end border-b border-white/10 px-4">
+//     <NotificationBell />
+//   </div>
+// And render it at the top of the dashboard layout children area.
+```
+
+---
+
+#### PART VIII — Settings page (`/settings/notifications`)
+
+**`components/settings/settings-tab-nav.tsx`** — add tab:
+```ts
+import { Bell } from "lucide-react";
+
+const SETTINGS_TABS = [
+  ...existing,
+  { title: "Notifications", href: "/settings/notifications", icon: Bell },
+];
+```
+
+**`app/(dashboard)/(account)/settings/notifications/page.tsx`** — non-blocking layout (same pattern as all settings pages): header renders immediately, form area shows skeleton while `getNotificationPreferences()` loads.
+
+**`components/settings/notification-settings-form.tsx`**
+
+```
+Notifications
+
+── Meal Log Reminder ────────────────────────────────
+  [●] Bell notification (show in app)
+  [●] Mobile push notification
+      Remind me at  [12:00 ▾]              (time picker, 15-min increments)
+
+── Health Check-in Reminder ─────────────────────────
+  [●] Bell notification (show in app)
+  [●] Mobile push notification
+      Remind me at  [08:00 ▾]
+
+── Timezone ─────────────────────────────────────────
+  [America/New_York ▾]    (auto-detected on first load via
+                           Intl.DateTimeFormat().resolvedOptions().timeZone)
+
+[Save preferences]
+
+── Mobile Push ──────────────────────────────────────
+  [Enable push notifications on this device]    ← button triggers browser permission prompt
+  (Only shown on mobile devices)
+  (After permission granted: shows "Push enabled on this device" + "Disable" button)
+  (iOS note: "On iPhone/iPad, add this app to your Home Screen first.")
+```
+
+**Push toggle implementation:**
+```ts
+// Push permission + subscription registration:
+async function enablePush() {
+  const permission = await Notification.requestPermission();
+  if (permission !== "granted") return;
+
+  const reg = await navigator.serviceWorker.ready;
+  const sub = await reg.pushManager.subscribe({
+    userVisibleOnly: true,
+    applicationServerKey: urlBase64ToUint8Array(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!),
+  });
+
+  await fetch("/api/push/subscribe", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      endpoint: sub.endpoint,
+      keys: { p256dh: sub.toJSON().keys?.p256dh, auth: sub.toJSON().keys?.auth },
+      userAgent: navigator.userAgent,
+    }),
+  });
+}
+// urlBase64ToUint8Array is a standard VAPID key conversion utility — copy from web-push docs
+```
+
+Mobile detection for showing the push section:
+```ts
+const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+// Render the push section only when isMobile is true
+```
+
+---
+
+#### PART IX — Checklist
+
+**Migration:**
+- [ ] `notification_type` enum extended with `meal_reminder`, `health_checkin_reminder`
+- [ ] `notifications` table extended: `is_read`, `read_at`, `action_url`; unread index added
+- [ ] `notification_preferences` table created with RLS
+- [ ] `push_subscriptions` table created with RLS
+
+**Backend:**
+- [ ] `lib/push/send.ts`: `sendPushNotification()` — stale-subscription detection (returns false on 410/404)
+- [ ] `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` in env; `NEXT_PUBLIC_VAPID_PUBLIC_KEY` exposed
+- [ ] `app/actions/notifications.ts`: `getNotifications`, `markNotificationRead`, `markAllNotificationsRead`, `getNotificationPreferences`, `upsertNotificationPreferences`
+- [ ] `POST /api/push/subscribe` — upsert push subscription
+- [ ] `POST /api/push/unsubscribe` — delete push subscription
+- [ ] `send-daily-reminders.ts` Inngest cron (*/15) — timezone-aware query, bell insert + push send, fan-out pattern
+- [ ] `handle-send-reminder.ts` Inngest event function — per-user handler with retries, stale subscription cleanup
+- [ ] Both functions registered in `lib/inngest/index.ts`
+- [ ] `send-reminders.ts` fixed to write to `notifications` table instead of `ai_insights`
+
+**Service Worker + PWA:**
+- [ ] `public/sw.js`: push event handler + notificationclick handler
+- [ ] `public/manifest.json`: PWA manifest with app icons
+- [ ] `components/layout/sw-register.tsx`: client component that calls `navigator.serviceWorker.register`
+- [ ] `app/layout.tsx`: renders `<SwRegister />` and `<link rel="manifest" />`
+- [ ] App icons added: `public/icons/icon-192.png`, `public/icons/icon-512.png`, `public/icons/badge-72.png`
+
+**Bell notification center:**
+- [ ] `hooks/use-notifications.ts`: React Query fetch + Supabase Realtime subscribe on INSERT
+- [ ] `NotificationBell`: bell icon + unread badge (capped at 9+)
+- [ ] `NotificationDropdown`: list + mark all read + empty state + click-outside close
+- [ ] `NotificationItem`: unread dot, type icon, title/body, relative time, click-to-navigate
+- [ ] Bell wired into dashboard topbar (`app/(dashboard)/layout.tsx`)
+
+**Settings:**
+- [ ] `settings-tab-nav.tsx`: Notifications tab added
+- [ ] `/settings/notifications` page: non-blocking load, form pre-populated with saved preferences
+- [ ] `notification-settings-form.tsx`: per-channel bell + push toggles, time pickers, timezone selector
+- [ ] Push section visible on mobile only; permission button handles grant/deny/iOS tip
+- [ ] `npm run typecheck && npm run lint` → pass
+
+**Manual QA:**
+- [ ] Desktop: bell badge increments when Inngest manually triggers `notification/send.reminder` event; dropdown shows notification; click navigates + marks read
+- [ ] Mobile Chrome (Android): enable push in settings → grant permission → trigger Inngest event → OS notification appears → tap → app opens at correct URL
+- [ ] Toggle off meal bell → Inngest cron runs → no new notification for that user
+- [ ] Stale subscription (manually delete endpoint from browser) → next cron run silently removes the DB row
+
+---
+
+#### pg_cron — when to use it in this app
+
+**Not here.** pg_cron runs SQL inside the database only — it cannot make HTTP calls to push endpoints or invoke Inngest. Inngest is the correct choice for any job that touches external services or requires retry logic.
+
+**pg_cron belongs in this app for pure DB-maintenance tasks:**
+
+| Task | SQL |
+|------|-----|
+| Purge old notifications | `DELETE FROM notifications WHERE created_at < now() - interval '90 days'` |
+| Clean up stale push subscriptions | `DELETE FROM push_subscriptions WHERE created_at < now() - interval '1 year'` (belt-and-suspenders alongside the 410 cleanup) |
+| Auto-expire goals past their target date | `UPDATE fitness_goals SET status = 'completed' WHERE target_date < current_date AND status = 'active'` |
+| Prune old `workout_executions` audit rows | Based on your retention policy |
+| Refresh a materialized view for leaderboards | `REFRESH MATERIALIZED VIEW CONCURRENTLY weekly_training_stats` |
+| Mark overdue client tasks | `UPDATE client_tasks SET status = 'overdue' WHERE due_date < current_date AND status = 'pending'` |
+
+Add all pg_cron jobs in a single migration file: `supabase/migrations/YYYYMMDD_pg_cron_jobs.sql`. Enable the extension first: `CREATE EXTENSION IF NOT EXISTS pg_cron;`. Supabase supports pg_cron natively on paid plans.
+
+---
+
 
 ## A-025 — Nutrition Progress Page Full Revamp (Full Spec)
 
@@ -16891,6 +17497,50 @@ Once the migrations above are finalized and the schema is stable, remove all `is
 - No schema/database changes.
 - No route/URL changes.
 - Dashboard and today-log behavior preserved; duplication removed by reusing existing shared helpers.
+
+#### Validation
+
+- `npm run build` -> pass
+
+### [E-102] Duplication removal pass (client payment-log list/stats reads) (2026-03-23)
+
+- Linked request: architect feedback + next dedupe task continuation in coach-tools payment log reads.
+- Status: Implemented.
+
+#### 1) Shared client payment-log read helpers
+
+- `app/actions/coach-tools.ts`
+  - added:
+    - `listClientPaymentLogsPage(...)`
+    - `listClientPaymentLogAmountsSince(...)`
+  - expanded existing helper:
+    - `countCoachPaymentLogsSince(...)` now supports optional `clientId` and optional `fromDate` to cover both coach-wide and client-scoped count flows.
+
+#### 2) Rewired duplicated client payment-log actions
+
+- `listClientPaymentLogsAction(...)`
+  - now uses `listClientPaymentLogsPage(...)` instead of inlined query + filter + fallback scaffolding.
+  - preserves missing `payment_logs` fallback behavior (`rows: []`, `total: 0`, `has_more: false`).
+
+- `getClientPaymentLogStatsAction(...)`
+  - now uses:
+    - `countCoachPaymentLogsSince(...)` for total and month counts
+    - `listClientPaymentLogAmountsSince(...)` for month revenue rows
+  - preserves missing-table fallback behavior (returns empty stats payload when `payment_logs` is unavailable).
+
+#### 3) Dead-code cleanup
+
+- `app/actions/coach-tools.ts`
+  - removed now-unused helper:
+    - `shouldUsePaymentLogsFallbackOrThrow(...)`
+
+#### 4) Behavior guarantee
+
+- No API contract changes.
+- No schema/database changes.
+- No route/URL changes.
+- Existing client payment-log list/stat outputs preserved.
+- Refactor only: duplicated payment-log query/fallback scaffolding centralized.
 
 #### Validation
 

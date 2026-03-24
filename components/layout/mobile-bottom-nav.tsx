@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import type { ComponentType } from "react";
 import {
+  Activity,
   BookOpen,
   ChevronRight,
   Dumbbell,
@@ -14,6 +15,7 @@ import {
   LogOut,
   Menu,
   Pill,
+  Ruler,
   TrendingUp,
   UserRound,
   Users,
@@ -53,6 +55,8 @@ const iconMap: Record<MobileNavTabConfig["icon"] | SidebarItemConfig["icon"], Co
   building: Folder,
   bell: Goal,
   pill: Pill,
+  ruler: Ruler,
+  activity: Activity,
 };
 
 function isRouteActive(pathname: string, href: string) {

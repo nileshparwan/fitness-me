@@ -194,11 +194,13 @@ export type Database = {
           skinfold_abdomen_mm: number | null
           skinfold_chest_mm: number | null
           skinfold_thigh_mm: number | null
+          subject_client_id: string | null
+          subject_user_id: string | null
           thigh_left_cm: number | null
           thigh_right_cm: number | null
           thighs_cm: number | null
           updated_at: string | null
-          user_id: string
+          user_id: string | null
           visceral_fat_level: number | null
           waist_cm: number | null
           weight: number | null
@@ -233,11 +235,13 @@ export type Database = {
           skinfold_abdomen_mm?: number | null
           skinfold_chest_mm?: number | null
           skinfold_thigh_mm?: number | null
+          subject_client_id?: string | null
+          subject_user_id?: string | null
           thigh_left_cm?: number | null
           thigh_right_cm?: number | null
           thighs_cm?: number | null
           updated_at?: string | null
-          user_id: string
+          user_id?: string | null
           visceral_fat_level?: number | null
           waist_cm?: number | null
           weight?: number | null
@@ -272,17 +276,33 @@ export type Database = {
           skinfold_abdomen_mm?: number | null
           skinfold_chest_mm?: number | null
           skinfold_thigh_mm?: number | null
+          subject_client_id?: string | null
+          subject_user_id?: string | null
           thigh_left_cm?: number | null
           thigh_right_cm?: number | null
           thighs_cm?: number | null
           updated_at?: string | null
-          user_id?: string
+          user_id?: string | null
           visceral_fat_level?: number | null
           waist_cm?: number | null
           weight?: number | null
           wrist_cm?: number | null
         }
         Relationships: [
+          {
+            foreignKeyName: "body_measurements_subject_client_id_fkey"
+            columns: ["subject_client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "body_measurements_subject_user_id_fkey"
+            columns: ["subject_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "body_measurements_user_id_fkey"
             columns: ["user_id"]

@@ -16,6 +16,8 @@ const AUTH_ONLY_PREFIXES = [
   "/nutrition",
   "/supplements",
   "/progress",
+  "/measurements",
+  "/check-in",
   "/goals",
   "/settings",
   "/support",
@@ -32,6 +34,8 @@ const USER_PREFIXES = [
   "/nutrition",
   "/supplements",
   "/progress",
+  "/measurements",
+  "/check-in",
   "/goals",
   "/support",
   "/settings",
@@ -88,7 +92,9 @@ export type SidebarItemConfig = {
     | "message"
     | "building"
     | "bell"
-    | "pill";
+    | "pill"
+    | "ruler"
+    | "activity";
   children?: SidebarItemConfig[];
 };
 
@@ -138,6 +144,8 @@ const USER_WORKSPACE_SECTIONS: SidebarSectionConfig[] = [
     label: "Insights",
     items: [
       { title: "Progress", href: "/progress", icon: "trend" },
+      { title: "Measurements", href: "/measurements", icon: "ruler" },
+      { title: "Health Check-in", href: "/check-in", icon: "activity" },
       { title: "Nutrition", href: "/progress/nutrition", icon: "nutrition" },
     ],
   },

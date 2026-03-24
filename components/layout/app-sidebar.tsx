@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import {
+  Activity,
   Bell,
   BookOpen,
   Bot,
@@ -13,6 +14,7 @@ import {
   LayoutDashboard,
   MessageSquare,
   Pill,
+  Ruler,
   Settings,
   Shield,
   Target,
@@ -69,6 +71,8 @@ const iconMap = {
   building: Building2,
   bell: Bell,
   pill: Pill,
+  ruler: Ruler,
+  activity: Activity,
 } as const
 
 function isRouteActive(pathname: string, href: string) {
