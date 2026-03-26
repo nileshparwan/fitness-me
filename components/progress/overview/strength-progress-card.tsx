@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import { Trophy } from "lucide-react";
 import {
   CartesianGrid,
@@ -13,6 +14,9 @@ import {
 
 import { Skeleton } from "@/components/ui/skeleton";
 import type { StrengthProgressData } from "@/app/actions/progress-overview";
+import { PROGRESS_STRENGTH_LEVELS, PROGRESS_STRENGTH_STANDARDS } from "@/utils/app-constants";
+import { useUnitLabels, useUnitSystem } from "@/stores/use-settings-store";
+import { displayWeight } from "@/utils/unit-conversion";
 
 type Props = {
   data: StrengthProgressData | undefined;
@@ -24,22 +28,13 @@ type Props = {
 
 const LINE_COLORS = ["#60A5FA", "#4ADE80", "#F472B6", "#FBBF24"] as const;
 
-const STANDARDS: Record<string, number[]> = {
-  squat: [0.75, 1.25, 1.5, 2.0, 2.5],
-  "bench press": [0.5, 0.75, 1.0, 1.25, 1.5],
-  deadlift: [1.0, 1.5, 2.0, 2.5, 3.0],
-  ohp: [0.35, 0.55, 0.7, 0.9, 1.1],
-};
-
-const LEVELS = ["Beginner", "Novice", "Intermediate", "Advanced", "Elite"];
-
 function formatDate(value: string) {
   return value.slice(5);
 }
 
 function formatMetric(value: unknown) {
   if (typeof value !== "number") return "—";
-  return `${value.toFixed(1)} kg`;
+  return value.toFixed(1);
 }
 
 function buildCompareSeries(
@@ -84,11 +79,25 @@ function scoreToLevel(score: number, thresholds: number[]) {
 }
 
 export function StrengthProgressCard({ data, compareData, compare, isLoading, latestWeightKg }: Props) {
+  const system = useUnitSystem();
+  const labels = useUnitLabels();
+
+  const chartRows = useMemo(() => {
+    const rows = buildCompareSeries(data, compareData, compare);
+    if (!data) return rows;
+    return rows.map((row) => {
+      const next: Record<string, string | number | null> = { ...row };
+      for (const exercise of data.top_exercises) {
+        next[exercise] = displayWeight((row[exercise] as number | null | undefined) ?? null, system);
+        next[`compare_${exercise}`] = displayWeight((row[`compare_${exercise}`] as number | null | undefined) ?? null, system);
+      }
+      return next;
+    });
+  }, [compare, compareData, data, system]);
+
   if (isLoading) {
     return <Skeleton className="h-[620px] rounded-[16px]" />;
   }
-
-  const chartRows = buildCompareSeries(data, compareData, compare);
 
   return (
     <section className="rounded-[16px] border border-white/10 bg-[#0f172b]/85 p-4">
@@ -100,7 +109,7 @@ export function StrengthProgressCard({ data, compareData, compare, isLoading, la
           <LineChart data={chartRows} margin={{ top: 6, right: 10, left: -16, bottom: 4 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="rgba(140,156,187,0.22)" />
             <XAxis dataKey="date" tickFormatter={formatDate} stroke="#8692af" minTickGap={28} />
-            <YAxis stroke="#8692af" width={52} tickFormatter={(value) => `${value}kg`} />
+            <YAxis stroke="#8692af" width={52} tickFormatter={(value) => `${value} ${labels.weight}`} />
             <ChartTooltip
               cursor={{ stroke: "rgba(229,237,255,0.55)", strokeWidth: 1 }}
               contentStyle={{
@@ -167,8 +176,12 @@ export function StrengthProgressCard({ data, compareData, compare, isLoading, la
                   <p className="text-xs text-muted-foreground">Est. 1RM · {pr.achieved_on}</p>
                 </div>
                 <div className="text-right">
-                  <p className="text-sm font-semibold">{pr.estimated_1rm_kg} kg</p>
-                  <p className="text-xs text-[#5ed28f]">+{pr.delta_kg} kg</p>
+                  <p className="text-sm font-semibold">
+                    {displayWeight(pr.estimated_1rm_kg, system)?.toFixed(1)} {labels.weight}
+                  </p>
+                  <p className="text-xs text-[#5ed28f]">
+                    +{displayWeight(pr.delta_kg, system)?.toFixed(1)} {labels.weight}
+                  </p>
                 </div>
               </div>
             ))}
@@ -203,15 +216,15 @@ export function StrengthProgressCard({ data, compareData, compare, isLoading, la
               .filter((row) => row.value !== null)
               .map((row) => {
                 const ratio = (row.value || 0) / latestWeightKg;
-                const thresholds = STANDARDS[row.key] || STANDARDS.squat;
+                const thresholds = PROGRESS_STRENGTH_STANDARDS[row.key] || PROGRESS_STRENGTH_STANDARDS.squat;
                 const levelIndex = scoreToLevel(ratio, thresholds);
-                const progress = Math.min(100, ((levelIndex + 1) / LEVELS.length) * 100);
+                const progress = Math.min(100, ((levelIndex + 1) / PROGRESS_STRENGTH_LEVELS.length) * 100);
                 return (
                   <div key={row.label} className="rounded-[12px] border border-white/10 bg-[#111a2f]/55 px-3 py-2">
                     <div className="flex items-center justify-between text-sm">
                       <p className="font-medium">{row.label}</p>
                       <p className="text-muted-foreground">
-                        {formatMetric(row.value)} · {LEVELS[levelIndex]}
+                        {formatMetric(row.value)} {labels.weight} · {PROGRESS_STRENGTH_LEVELS[levelIndex]}
                       </p>
                     </div>
                     <div className="mt-2 h-2 rounded-full bg-[#1f2a44]">
