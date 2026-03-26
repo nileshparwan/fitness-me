@@ -5,6 +5,8 @@ import { Area, ComposedChart, Line, CartesianGrid, XAxis, YAxis, ResponsiveConta
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { format, parseISO, isValid } from "date-fns"; // Added isValid
+import { useUnitLabels, useUnitSystem } from "@/stores/use-settings-store";
+import { KM_PER_MILE, displayDistance } from "@/utils/unit-conversion";
 
 type CardioChartPoint = {
   date: string;
@@ -28,6 +30,13 @@ const formatTooltipDate = (dateStr: string) => {
 
 export function CardioCharts({ data, exerciseName }: { data: CardioChartPoint[], exerciseName: string }) {
   const [activeTab, setActiveTab] = useState("efficiency");
+  const system = useUnitSystem();
+  const labels = useUnitLabels();
+  const chartData = data.map((point) => ({
+    ...point,
+    pace: system === "imperial" ? point.pace * KM_PER_MILE : point.pace,
+    distance: displayDistance(point.distance, system) ?? point.distance,
+  }));
 
   return (
     <Card className="col-span-1 lg:col-span-2 shadow-sm border-muted">
@@ -48,7 +57,7 @@ export function CardioCharts({ data, exerciseName }: { data: CardioChartPoint[],
       <CardContent className="h-[350px]">
         <ResponsiveContainer width="100%" height="100%">
            {activeTab === "efficiency" ? (
-              <ComposedChart data={data} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
+              <ComposedChart data={chartData} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
                 <defs>
                   <linearGradient id="fillHR" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#ef4444" stopOpacity={0.3} />
@@ -76,16 +85,16 @@ export function CardioCharts({ data, exerciseName }: { data: CardioChartPoint[],
                 <Legend />
                 
                 <Area yAxisId="left" type="monotone" dataKey="heart_rate" name="Avg HR (bpm)" stroke="#ef4444" fill="url(#fillHR)" strokeWidth={2} />
-                <Line yAxisId="right" type="monotone" dataKey="pace" name="Pace (min/km)" stroke="#3b82f6" strokeWidth={3} dot={{ r: 4 }} />
+                <Line yAxisId="right" type="monotone" dataKey="pace" name={`Pace (min/${labels.distance})`} stroke="#3b82f6" strokeWidth={3} dot={{ r: 4 }} />
               </ComposedChart>
            ) : (
               // ... (Second chart: Volume)
-              <AreaChart data={data} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
+              <AreaChart data={chartData} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
                 <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="var(--border)" />
                 <XAxis dataKey="date" tickFormatter={formatDate} tickLine={false} axisLine={false} style={{ fontSize: '10px' }} />
                 <YAxis axisLine={false} tickLine={false} style={{ fontSize: '10px' }} />
                 <Tooltip labelFormatter={formatTooltipDate} contentStyle={{ borderRadius: '8px', border: 'none' }} />
-                <Area type="step" dataKey="distance" name="Distance (km)" stroke="#10b981" fill="#10b981" fillOpacity={0.2} strokeWidth={2} />
+                <Area type="step" dataKey="distance" name={`Distance (${labels.distance})`} stroke="#10b981" fill="#10b981" fillOpacity={0.2} strokeWidth={2} />
               </AreaChart>
            )}
         </ResponsiveContainer>

@@ -15,19 +15,8 @@ import { useCoachClientPortalMutations, useCoachClientPortalSettings } from "@/h
 import { CLIENT_MODULE_KEYS, type ClientModuleKey } from "@/lib/client-portal/constants";
 import { coachKeys } from "@/lib/query-keys-coach";
 import { withToastFeedback } from "@/lib/ui/toast-feedback";
+import { CLIENT_MODULE_LABELS } from "@/utils/app-constants";
 import { cn } from "@/utils";
-
-const MODULE_LABELS: Record<ClientModuleKey, string> = {
-  workouts: "Workouts",
-  training_plan: "Training Plan",
-  meal_plan: "Meal Plan",
-  meal_logging: "Meal Logging",
-  steps_tracking: "Steps Tracking",
-  goals: "Goals",
-  check_ins: "Check-ins",
-  coach_notes: "Coach Notes Visibility",
-  tasks: "Tasks / Todos",
-};
 
 function statusTone(status: "active" | "blocked" | "removed" | null) {
   if (status === "active") return "border-chart-2/40 bg-chart-2/10 text-chart-2";
@@ -163,7 +152,7 @@ export function ClientAccessControl({ clientId }: { clientId: string }) {
       }),
       {
         loading: "Updating module access...",
-        success: `${MODULE_LABELS[moduleKey]} updated`,
+        success: `${CLIENT_MODULE_LABELS[moduleKey]} updated`,
         error: "Unable to update module access",
       }
     ).catch(() => null);
@@ -265,7 +254,7 @@ export function ClientAccessControl({ clientId }: { clientId: string }) {
             return (
               <div key={moduleKey} className="glass-subtle flex flex-col gap-2 p-3 md:flex-row md:items-center md:justify-between">
                 <div>
-                  <p className="font-medium">{MODULE_LABELS[moduleKey]}</p>
+                  <p className="font-medium">{CLIENT_MODULE_LABELS[moduleKey]}</p>
                   <p className="text-xs text-muted-foreground">Set visibility and edit permissions for this module.</p>
                 </div>
 

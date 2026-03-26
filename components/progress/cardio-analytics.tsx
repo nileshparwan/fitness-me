@@ -4,7 +4,9 @@ import { Database } from "@/types/database";
 import { Activity, Map, Timer, Flame } from "lucide-react";
 import { cn } from "@/utils";
 import { LucideIcon } from "lucide-react";
-import { calculatePaceMinutesPerKm, formatPace } from "@/utils/fitness-logic";
+import { calculatePace, formatPace as formatPaceMinutes } from "@/utils/fitness-logic";
+import { useUnitLabels, useUnitSystem } from "@/stores/use-settings-store";
+import { displayDistance } from "@/utils/unit-conversion";
 
 type CardioLog = Database['public']['Tables']['cardio_sessions']['Row'];
 type StatTileProps = {
@@ -16,12 +18,15 @@ type StatTileProps = {
 };
 
 export function CardioAnalytics({ logs }: { logs: CardioLog[] }) {
+  const system = useUnitSystem();
+  const labels = useUnitLabels();
+
   if (!logs || logs.length === 0) return null;
 
   const latest = logs[0];
-  const totalDist = logs.reduce((acc, l) => acc + (l.distance_km || 0), 0);
+  const totalDist = logs.reduce((acc, l) => acc + (l.distance || 0), 0);
   
-  const latestPace = calculatePaceMinutesPerKm(latest.distance_km || 0, latest.duration_minutes || 0);
+  const latestPace = calculatePace(latest.distance || 0, latest.duration_minutes || 0, system);
 
   // Reusable Micro-Card Component
   const StatTile = ({ label, value, subtext, icon: Icon, colorClass }: StatTileProps) => (
@@ -43,16 +48,16 @@ export function CardioAnalytics({ logs }: { logs: CardioLog[] }) {
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-4 md:gap-4">
       <StatTile 
-        label="Distance"
-        value={`${latest.distance_km?.toFixed(2)} km`}
+        label={`Distance (${labels.distance})`}
+        value={`${displayDistance(latest.distance, system)?.toFixed(2)} ${labels.distance}`}
         subtext={new Date(latest.date).toLocaleDateString()}
         icon={Map}
         colorClass="text-blue-600 bg-blue-50"
       />
       
       <StatTile 
-        label="Pace"
-        value={`${formatPace(latestPace)} /km`}
+        label={`Pace (min/${labels.distance})`}
+        value={`${formatPaceMinutes(latestPace)} /${labels.distance}`}
         subtext={`${latest.duration_minutes} min duration`}
         icon={Timer}
         colorClass="text-green-600 bg-green-50"
@@ -67,8 +72,8 @@ export function CardioAnalytics({ logs }: { logs: CardioLog[] }) {
       />
 
       <StatTile 
-        label="Total Volume"
-        value={`${totalDist.toFixed(1)} km`}
+        label={`Total Volume (${labels.distance})`}
+        value={`${displayDistance(totalDist, system)?.toFixed(1)} ${labels.distance}`}
         subtext={`${logs.length} sessions total`}
         icon={Flame}
         colorClass="text-orange-600 bg-orange-50"

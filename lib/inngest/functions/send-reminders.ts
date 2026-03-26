@@ -41,13 +41,23 @@ export const sendReminders = inngest.createFunction(
       const activeSet = new Set((activeUserIds || []).map((u) => u.user_id).filter(Boolean));
 
       // D. Filter: The "At Risk" users are those NOT in the active set
-      return users
+      const inactiveUserIds = users
         .filter(user => !activeSet.has(user.id))
-        .map(user => ({
-          id: user.id,
-          // Extract display name from your new metadata location
-          name: user.user_metadata?.full_name || user.user_metadata?.display_name || "Athlete"
-        }));
+        .map(user => user.id);
+
+      // E. Batch-fetch display names from profiles table (single source of truth)
+      const { data: profileRows } = inactiveUserIds.length > 0
+        ? await supabaseAdmin
+            .from("profiles")
+            .select("id, full_name")
+            .in("id", inactiveUserIds)
+        : { data: [] as Array<{ id: string; full_name: string | null }> };
+      const nameMap = new Map((profileRows || []).map(row => [row.id, row.full_name]));
+
+      return inactiveUserIds.map(id => ({
+        id,
+        name: nameMap.get(id) || "Athlete",
+      }));
     });
 
     // Step 2: Create Notifications

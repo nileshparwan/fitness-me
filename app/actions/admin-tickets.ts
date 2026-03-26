@@ -76,17 +76,22 @@ async function requireAdminUser() {
 async function resolveReporter(userId: string): Promise<AdminTicketRow["reporter"]> {
   try {
     const admin = createAdminClient();
+
+    // Read display name from profiles table (single source of truth)
+    const { data: profile } = await admin
+      .from("profiles")
+      .select("full_name")
+      .eq("id", userId)
+      .maybeSingle();
+
+    // Fall back to auth user email for the email field
     const { data, error } = await admin.auth.admin.getUserById(userId);
     if (error || !data.user) throw error || new Error("User not found");
-    const user = data.user;
-    const fullName =
-      typeof user.user_metadata?.full_name === "string"
-        ? user.user_metadata.full_name
-        : null;
-    const derivedName = fullName || (user.email ? user.email.split("@")[0] : "User");
+
+    const derivedName = profile?.full_name || (data.user.email ? data.user.email.split("@")[0] : "User");
     return {
       id: userId,
-      email: user.email ?? null,
+      email: data.user.email ?? null,
       name: derivedName,
     };
   } catch {

@@ -7,6 +7,8 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { TrendingUp, TrendingDown } from "lucide-react";
 import { format, parseISO } from "date-fns";
+import { useUnitLabels, useUnitSystem } from "@/stores/use-settings-store";
+import { displayWeight } from "@/utils/unit-conversion";
 
 interface ChartPoint {
     date: string;
@@ -22,6 +24,13 @@ interface Props {
 
 export function ProgressCharts({ data, exerciseName, timeRange }: Props) {
     const [activeTab, setActiveTab] = useState("strength");
+    const system = useUnitSystem();
+    const labels = useUnitLabels();
+    const chartData = data.map((point) => ({
+        ...point,
+        estimated_1rm: displayWeight(point.estimated_1rm, system) ?? point.estimated_1rm,
+        volume: displayWeight(point.volume, system) ?? point.volume,
+    }));
 
     // Calculate Trend Metrics (Logic merged from StrengthTrendChart)
     const currentMax = data.length > 0 ? (data[data.length - 1].estimated_1rm || 0) : 0;
@@ -57,7 +66,7 @@ export function ProgressCharts({ data, exerciseName, timeRange }: Props) {
             <CardContent className="h-[320px]">
                 <ResponsiveContainer width="100%" height="100%">
                     {activeTab === "strength" ? (
-                        <AreaChart data={data} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
+                        <AreaChart data={chartData} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
                             <defs>
                                 <linearGradient id="fillStrength" x1="0" y1="0" x2="0" y2="1">
                                     <stop offset="5%" stopColor="var(--primary)" stopOpacity={0.3} />
@@ -90,7 +99,7 @@ export function ProgressCharts({ data, exerciseName, timeRange }: Props) {
                             <Tooltip
                                 contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
                                 labelFormatter={(l) => l ? format(parseISO(l), "MMM d, yyyy") : ""}
-                                formatter={(val: number) => [`${val} kg`, "Est. 1RM"]}
+                                formatter={(val: number) => [`${val} ${labels.weight}`, "Est. 1RM"]}
                             />
                             <Area
                                 type="monotone"
@@ -101,7 +110,7 @@ export function ProgressCharts({ data, exerciseName, timeRange }: Props) {
                             />
                         </AreaChart>
                     ) : (
-                        <BarChart data={data} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
+                        <BarChart data={chartData} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
                             <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="var(--border)" />
                             <XAxis
                                 dataKey="date"
@@ -128,7 +137,7 @@ export function ProgressCharts({ data, exerciseName, timeRange }: Props) {
                                 cursor={{ fill: 'var(--muted)' }}
                                 contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
                                 labelFormatter={(l) => l ? format(parseISO(l), "MMM d, yyyy") : ""}
-                                formatter={(val: number) => [`${val.toLocaleString()} kg`, "Volume Load"]}
+                                formatter={(val: number) => [`${val.toLocaleString()} ${labels.weight}`, "Volume Load"]}
                             />
                             <Bar
                                 dataKey="volume"

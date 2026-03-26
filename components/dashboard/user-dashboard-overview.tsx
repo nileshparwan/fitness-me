@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { useUnitLabels } from "@/stores/use-settings-store";
 
 type ActivityRingMetric = {
   label: string;
@@ -115,6 +116,7 @@ export function UserDashboardOverview({
   macros = DEFAULT_MACROS,
   workouts = DEFAULT_WORKOUTS,
 }: UserDashboardOverviewProps) {
+  const labels = useUnitLabels();
   return (
     <div className="space-y-4 md:space-y-6">
       <section className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -216,7 +218,7 @@ export function UserDashboardOverview({
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="space-y-2">
-              <Label htmlFor="bodyweight">Bodyweight (kg)</Label>
+              <Label htmlFor="bodyweight">Bodyweight ({labels.weight})</Label>
               <Input id="bodyweight" type="number" inputMode="decimal" placeholder="e.g. 72.4" />
             </div>
 

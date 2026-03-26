@@ -13,6 +13,9 @@ import {
 
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { PROGRESS_CARDIO_HR_ZONES } from "@/utils/app-constants";
+import { useUnitLabels, useUnitSystem } from "@/stores/use-settings-store";
+import { KM_PER_MILE, displayDistance } from "@/utils/unit-conversion";
 import type { CardioProgressSeries } from "@/app/actions/progress-overview";
 
 type Props = {
@@ -23,65 +26,9 @@ type Props = {
   vo2maxEstimate: number | null;
 };
 
-type SeriesKey = "distance_km" | "pace_min_per_km" | "avg_hr_bpm";
+type SeriesKey = "distance" | "pace_min_per_km" | "avg_hr_bpm";
 
-const LINES: Array<{ key: SeriesKey; label: string; color: string }> = [
-  { key: "distance_km", label: "Distance (km)", color: "#60A5FA" },
-  { key: "pace_min_per_km", label: "Pace (min/km)", color: "#4ADE80" },
-  { key: "avg_hr_bpm", label: "Avg HR (bpm)", color: "#F472B6" },
-];
-
-type HrZoneKey = keyof NonNullable<CardioProgressSeries["hr_zones_summary"]>;
-
-const HR_ZONES: Array<{
-  key: HrZoneKey;
-  shortLabel: string;
-  title: string;
-  range: string;
-  color: string;
-  description: string;
-}> = [
-  {
-    key: "zone1_pct",
-    shortLabel: "Z1",
-    title: "Zone 1 Recovery",
-    range: "<50% max HR",
-    color: "#64748b",
-    description: "Very easy effort, warm-up and active recovery.",
-  },
-  {
-    key: "zone2_pct",
-    shortLabel: "Z2",
-    title: "Zone 2 Aerobic",
-    range: "50-60% max HR",
-    color: "#60a5fa",
-    description: "Easy aerobic base work and long sustainable sessions.",
-  },
-  {
-    key: "zone3_pct",
-    shortLabel: "Z3",
-    title: "Zone 3 Tempo",
-    range: "60-70% max HR",
-    color: "#4ade80",
-    description: "Moderate steady-state work to build stamina.",
-  },
-  {
-    key: "zone4_pct",
-    shortLabel: "Z4",
-    title: "Zone 4 Threshold",
-    range: "70-85% max HR",
-    color: "#fbbf24",
-    description: "Hard effort near lactate threshold, performance focused.",
-  },
-  {
-    key: "zone5_pct",
-    shortLabel: "Z5",
-    title: "Zone 5 Max",
-    range: ">=85% max HR",
-    color: "#ef4444",
-    description: "Very hard intervals and peak-intensity bursts.",
-  },
-];
+type LineConfig = { key: SeriesKey; label: string; color: string };
 
 function formatDate(value: string) {
   const raw = String(value || "");
@@ -110,17 +57,32 @@ function predictRaceTime(vo2max: number, distanceKm: number) {
 function mergeCompare(
   current: CardioProgressSeries,
   compareData: CardioProgressSeries | undefined,
-  compare: boolean
+  compare: boolean,
+  system: ReturnType<typeof useUnitSystem>
 ) {
   if (!compare || !compareData) return current.series;
   const byDate = new Map<string, Record<string, number | string | null>>();
   for (const row of current.series) {
-    byDate.set(row.date, { ...row });
+    byDate.set(row.date, {
+      ...row,
+      distance: displayDistance(row.distance, system),
+      pace_min_per_km:
+        row.pace_min_per_km !== null && row.pace_min_per_km !== undefined
+          ? system === "imperial"
+            ? row.pace_min_per_km * KM_PER_MILE
+            : row.pace_min_per_km
+          : row.pace_min_per_km,
+    });
   }
   for (const row of compareData.series) {
     const existing = byDate.get(row.date) || { date: row.date };
-    existing.compare_distance_km = row.distance_km;
-    existing.compare_pace_min_per_km = row.pace_min_per_km;
+    existing.compare_distance = displayDistance(row.distance, system);
+    existing.compare_pace_min_per_km =
+      row.pace_min_per_km !== null && row.pace_min_per_km !== undefined
+        ? system === "imperial"
+          ? row.pace_min_per_km * KM_PER_MILE
+          : row.pace_min_per_km
+        : row.pace_min_per_km;
     existing.compare_avg_hr_bpm = row.avg_hr_bpm;
     byDate.set(row.date, existing);
   }
@@ -128,11 +90,19 @@ function mergeCompare(
 }
 
 export function CardioProgressCard({ data, compareData, compare, isLoading, vo2maxEstimate }: Props) {
+  const system = useUnitSystem();
+  const labels = useUnitLabels();
+
   if (isLoading) {
     return <Skeleton className="h-[720px] rounded-[16px]" />;
   }
 
-  const chartRows = mergeCompare(data, compareData, compare);
+  const chartRows = mergeCompare(data, compareData, compare, system);
+  const lines: LineConfig[] = [
+    { key: "distance", label: `Distance (${labels.distance})`, color: "#60A5FA" },
+    { key: "pace_min_per_km", label: `Pace (min/${labels.distance})`, color: "#4ADE80" },
+    { key: "avg_hr_bpm", label: "Avg HR (bpm)", color: "#F472B6" },
+  ];
 
   return (
     <section className="rounded-[16px] border border-white/10 bg-[#0f172b]/85 p-4">
@@ -158,19 +128,19 @@ export function CardioProgressCard({ data, compareData, compare, isLoading, vo2m
         </div>
       ) : (
         <div className="mt-4 space-y-5">
-          {LINES.map((line, index) => (
+          {lines.map((line, index) => (
             <div key={line.key} className="h-[150px] w-full">
               <p className="mb-1 text-sm text-muted-foreground">{line.label}</p>
               <ResponsiveContainer width="100%" height="100%">
                 <ComposedChart data={chartRows} syncId="cardio">
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(140,156,187,0.22)" />
-                  <XAxis
-                    dataKey="date"
-                    tickFormatter={formatDate}
-                    stroke="#8692af"
-                    hide={index < LINES.length - 1}
-                    minTickGap={26}
-                  />
+                    <XAxis
+                      dataKey="date"
+                      tickFormatter={formatDate}
+                      stroke="#8692af"
+                      hide={index < lines.length - 1}
+                      minTickGap={26}
+                    />
                   <YAxis stroke="#8692af" width={42} />
                   <ChartTooltip
                     cursor={{ stroke: "rgba(229,237,255,0.55)", strokeWidth: 1 }}
@@ -221,7 +191,7 @@ export function CardioProgressCard({ data, compareData, compare, isLoading, vo2m
           <p className="mb-2 text-sm text-muted-foreground">HR Zones</p>
           <div className="h-8 overflow-hidden rounded-[8px] border border-white/10 bg-[#131b2f]/75">
             <div className="flex h-full w-full">
-              {HR_ZONES.map((zone) => {
+              {PROGRESS_CARDIO_HR_ZONES.map((zone) => {
                 const value = data.hr_zones_summary?.[zone.key] ?? 0;
                 return (
                 <div
@@ -239,7 +209,7 @@ export function CardioProgressCard({ data, compareData, compare, isLoading, vo2m
           <p className="mt-2 text-xs text-muted-foreground">Based on average heart rate from logged cardio sessions.</p>
           <TooltipProvider delayDuration={200}>
             <div className="mt-3 hidden flex-wrap gap-2 xl:flex">
-              {HR_ZONES.map((zone) => {
+              {PROGRESS_CARDIO_HR_ZONES.map((zone) => {
                 const value = data.hr_zones_summary?.[zone.key] ?? 0;
                 return (
                   <Tooltip key={`desktop-${zone.key}`}>
@@ -264,7 +234,7 @@ export function CardioProgressCard({ data, compareData, compare, isLoading, vo2m
             </div>
           </TooltipProvider>
           <div className="mt-3 grid gap-2 xl:hidden">
-            {HR_ZONES.map((zone) => {
+            {PROGRESS_CARDIO_HR_ZONES.map((zone) => {
               const value = data.hr_zones_summary?.[zone.key] ?? 0;
               return (
                 <div
@@ -290,11 +260,11 @@ export function CardioProgressCard({ data, compareData, compare, isLoading, vo2m
           <p className="text-sm font-medium">Race Predictions (VO2 max {vo2maxEstimate})</p>
           <div className="mt-2 grid grid-cols-2 gap-2 text-sm md:grid-cols-4">
             <div className="rounded-[8px] border border-white/10 bg-[#131b2f]/70 px-2 py-2">
-              <p className="text-xs text-muted-foreground">5 km</p>
+              <p className="text-xs text-muted-foreground">{`${displayDistance(5, system)?.toFixed(1)} ${labels.distance}`}</p>
               <p className="font-semibold">{predictRaceTime(vo2maxEstimate, 5)}</p>
             </div>
             <div className="rounded-[8px] border border-white/10 bg-[#131b2f]/70 px-2 py-2">
-              <p className="text-xs text-muted-foreground">10 km</p>
+              <p className="text-xs text-muted-foreground">{`${displayDistance(10, system)?.toFixed(1)} ${labels.distance}`}</p>
               <p className="font-semibold">{predictRaceTime(vo2maxEstimate, 10)}</p>
             </div>
             <div className="rounded-[8px] border border-white/10 bg-[#131b2f]/70 px-2 py-2">

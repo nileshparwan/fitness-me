@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/client";
+import { updateProfilePasswordStatus } from "@/app/actions/settings";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -63,20 +64,13 @@ export function SecuritySettingsPanel({ email, hasEmailIdentity, isAdmin = false
         if (verifyError) throw new Error("Current password is incorrect.");
       }
 
-      const { data: userData } = await supabase.auth.getUser();
-      const metadata = {
-        ...(userData.user?.user_metadata || {}),
-        has_password: true,
-        password_configured_at: new Date().toISOString(),
-      };
-
       const updated = await withToastFeedback(
         (async () => {
           const { error } = await supabase.auth.updateUser({
             password: newPassword,
-            data: metadata,
           });
           if (error) throw error;
+          await updateProfilePasswordStatus();
           return true;
         })(),
         {

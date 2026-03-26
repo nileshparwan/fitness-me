@@ -1,32 +1,5 @@
 import { EventSchemas } from "inngest";
 
-type AnalyzeWorkoutEvent = {
-  data: {
-    queueId: string; // ID from ai_processing_queue
-    userId: string;
-    rawText: string;
-  };
-};
-
-type AnalyzePhotoEvent = {
-  data: {
-    queueId: string;
-    userId: string;
-    imageUrl: string;
-    comparisonImageUrl?: string; // Optional: for before/after
-  };
-};
-
-type WeeklyReportEvent = {
-  data: {}; // No data needed, triggered by Cron
-};
-
-type GenerateUserReportEvent = {
-  data: {
-    userId: string;
-  };
-};
-
 type TrainingWorkoutCompletedEvent = {
   data: {
     workout_id: string; // training_sessions.id
@@ -80,10 +53,6 @@ type SendGoalCheckinReminderEvent = {
 };
 
 type Events = {
-  "ai/analyze.workout": AnalyzeWorkoutEvent;
-  "ai/analyze.photo": AnalyzePhotoEvent;
-  "app/weekly.report": WeeklyReportEvent;
-  "app/generate.user.report": GenerateUserReportEvent;
   "admin/run.reminders": { data: {} };
   "training/workout.completed": TrainingWorkoutCompletedEvent;
   "coaching/checkin.submitted": CoachingCheckinSubmittedEvent;

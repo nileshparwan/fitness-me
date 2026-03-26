@@ -4,6 +4,7 @@ import React from "react";
 import { Page, Text, View, Document, StyleSheet } from "@react-pdf/renderer";
 import { format } from "date-fns";
 import { Database } from "@/types/database";
+import { displayDistance, displayWeight, distanceUnit, weightUnit, type UnitSystem } from "@/utils/unit-conversion";
 
 type Workout = Database['public']['Tables']['training_sessions']['Row'];
 type WorkoutLog = Database['public']['Tables']['strength_sets']['Row'];
@@ -36,10 +37,11 @@ interface WorkoutPDFProps {
   workout: Workout & { user?: { email: string } | null };
   strengthLogs: WorkoutLog[];
   cardioLogs: CardioLog[];
+  unitSystem?: UnitSystem;
 }
 
 // 2. The PDF Component
-export const WorkoutPDF = ({ workout, strengthLogs, cardioLogs }: WorkoutPDFProps) => {
+export const WorkoutPDF = ({ workout, strengthLogs, cardioLogs, unitSystem = "metric" }: WorkoutPDFProps) => {
   const strengthGroups = groupBy(strengthLogs, "exercise_name");
   const cardioGroups = groupBy(cardioLogs, "activity_type");
 
@@ -82,7 +84,7 @@ export const WorkoutPDF = ({ workout, strengthLogs, cardioLogs }: WorkoutPDFProp
             {sets.map((set, i) => (
               <View key={i} style={styles.tableRow}>
                 <Text style={styles.colSet}>#{set.set_number}</Text>
-                <Text style={styles.colMain}>{set.weight} kg</Text>
+                <Text style={styles.colMain}>{displayWeight(set.weight, unitSystem)?.toFixed(1)} {weightUnit(unitSystem)}</Text>
                 <Text style={styles.colMetric}>{set.reps}</Text>
                 <Text style={styles.colEnd}>
                   {[
@@ -99,13 +101,6 @@ export const WorkoutPDF = ({ workout, strengthLogs, cardioLogs }: WorkoutPDFProp
           </View>
         ))}
 
-        {workout.ai_feedback ? (
-          <View wrap={false} style={{ marginTop: 12 }}>
-            <Text style={styles.sectionTitle}>AI Feedback</Text>
-            <Text style={{ fontSize: 10, color: "#444444" }}>{workout.ai_feedback}</Text>
-          </View>
-        ) : null}
-
         {/* CARDIO SECTION */}
         {Object.entries(cardioGroups).map(([activity, logs], index) => (
           <View key={`cardio-${index}`} wrap={false}>
@@ -121,7 +116,7 @@ export const WorkoutPDF = ({ workout, strengthLogs, cardioLogs }: WorkoutPDFProp
             {logs.map((log, i) => (
               <View key={i} style={styles.tableRow}>
                 <Text style={styles.colSet}>{log.duration_minutes} min</Text>
-                <Text style={styles.colMain}>{log.distance_km ? `${log.distance_km} km` : "-"}</Text>
+                <Text style={styles.colMain}>{log.distance ? `${displayDistance(log.distance, unitSystem)?.toFixed(1)} ${distanceUnit(unitSystem)}` : "-"}</Text>
                 <Text style={styles.colMetric}>{log.calories_burned || "-"}</Text>
                 <Text style={styles.colEnd}>{log.average_heart_rate || "-"}</Text>
               </View>

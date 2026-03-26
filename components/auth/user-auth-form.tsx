@@ -9,6 +9,7 @@ import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { checkAuthUserExistsAction } from "@/app/actions/auth";
+import { checkProfileDeletedStatus } from "@/app/actions/settings";
 
 import { cn } from "@/utils";
 import { Button } from "@/components/ui/button";
@@ -103,9 +104,7 @@ export function UserAuthForm({ className, type, ...props }: UserAuthFormProps) {
 
         if (error) throw error;
 
-        const { data: sessionData } = await supabase.auth.getUser();
-        const isDeleted = Boolean(sessionData.user?.user_metadata?.is_deleted);
-        const isBlocked = Boolean(sessionData.user?.user_metadata?.is_blocked);
+        const { is_deleted: isDeleted, is_blocked: isBlocked } = await checkProfileDeletedStatus();
         if (isBlocked) {
           await supabase.auth.signOut();
           toast.error("Your account is blocked. Contact support.");

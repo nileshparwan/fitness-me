@@ -1,6 +1,8 @@
 "use client";
 
 import { Skeleton } from "@/components/ui/skeleton";
+import { useUnitLabels, useUnitSystem } from "@/stores/use-settings-store";
+import { displayWeight } from "@/utils/unit-conversion";
 import { cn } from "@/utils";
 import type { ProgressSummaryStats, ProgressTrainingType } from "@/app/actions/progress-overview";
 
@@ -49,6 +51,9 @@ function StatTile({
 }
 
 export function ProgressStatsBar({ data, isLoading, trainingType }: Props) {
+  const system = useUnitSystem();
+  const labels = useUnitLabels();
+
   if (isLoading) {
     return (
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-8">
@@ -77,9 +82,9 @@ export function ProgressStatsBar({ data, isLoading, trainingType }: Props) {
       />
       <StatTile
         label="Volume"
-        value={volumeSuppressed ? "—" : data ? formatCompactNumber(data.volume_kg) : "0"}
+        value={volumeSuppressed ? "—" : data ? `${formatCompactNumber(displayWeight(data.volume_kg, system) ?? 0)}` : "0"}
         className={volumeSuppressed ? undefined : "text-[#5b9cff]"}
-        sub={volumeSuppressed ? undefined : "kg total"}
+        sub={volumeSuppressed ? undefined : `${labels.weight} total`}
       />
       <StatTile
         label="Cardio Time"
@@ -91,11 +96,15 @@ export function ProgressStatsBar({ data, isLoading, trainingType }: Props) {
       />
       <StatTile
         label="Weight"
-        value={data?.latest_weight_kg !== null && data?.latest_weight_kg !== undefined ? `${data.latest_weight_kg.toFixed(1)} kg` : "—"}
+        value={
+          data?.latest_weight !== null && data?.latest_weight !== undefined
+            ? `${displayWeight(data.latest_weight, system)?.toFixed(1)} ${labels.weight}`
+            : "—"
+        }
         className={weightClass(data?.weight_delta_kg ?? null)}
         sub={
           data?.weight_delta_kg !== null && data?.weight_delta_kg !== undefined
-            ? `${data.weight_delta_kg > 0 ? "+" : ""}${data.weight_delta_kg.toFixed(1)} kg vs prior`
+            ? `${data.weight_delta_kg > 0 ? "+" : ""}${displayWeight(data.weight_delta_kg, system)?.toFixed(1)} ${labels.weight} vs prior`
             : undefined
         }
       />
@@ -106,7 +115,7 @@ export function ProgressStatsBar({ data, isLoading, trainingType }: Props) {
         sub={
           data?.vo2max_delta !== null && data?.vo2max_delta !== undefined
             ? `${data.vo2max_delta > 0 ? "↑" : "↓"} ${Math.abs(data.vo2max_delta).toFixed(1)} vs prior`
-            : "ml/kg/min"
+            : `ml/${labels.weight}`
         }
       />
     </div>

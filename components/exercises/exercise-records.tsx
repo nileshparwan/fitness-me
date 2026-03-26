@@ -2,8 +2,13 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Trophy, TrendingUp, Timer, Scale } from "lucide-react";
 import { format } from "date-fns";
 import { HistoryEntry } from "@/app/actions/exercises";
+import { useUnitLabels, useUnitSystem } from "@/stores/use-settings-store";
+import { displayDistance, displayWeight } from "@/utils/unit-conversion";
 
 export function ExerciseRecords({ history, type }: { history: HistoryEntry[], type: string }) {
+  const system = useUnitSystem();
+  const labels = useUnitLabels();
+
   if (history.length === 0) return null;
 
   // --- Logic to find Records ---
@@ -12,7 +17,7 @@ export function ExerciseRecords({ history, type }: { history: HistoryEntry[], ty
   if (type.toLowerCase() === 'cardio') {
     // 1. Max Distance
     const maxDist = history.reduce((prev, current) => 
-      (current.distance_km || 0) > (prev.distance_km || 0) ? current : prev
+      (current.distance || 0) > (prev.distance || 0) ? current : prev
     , history[0]);
 
     // 2. Longest Duration
@@ -21,7 +26,7 @@ export function ExerciseRecords({ history, type }: { history: HistoryEntry[], ty
     , history[0]);
 
     recordCards = [
-      { label: "Farthest Distance", value: `${maxDist.distance_km} km`, icon: TrendingUp, date: maxDist.date },
+      { label: `Farthest Distance (${labels.distance})`, value: `${displayDistance(maxDist.distance, system)} ${labels.distance}`, icon: TrendingUp, date: maxDist.date },
       { label: "Longest Session", value: `${maxDur.duration_minutes} min`, icon: Timer, date: maxDur.date },
     ];
   } else {
@@ -36,8 +41,8 @@ export function ExerciseRecords({ history, type }: { history: HistoryEntry[], ty
     , history[0]);
 
     recordCards = [
-      { label: "Heaviest Lift", value: `${maxWeight.weight} kg`, icon: Scale, date: maxWeight.date },
-      { label: "Best Est. 1RM", value: `${max1RM.estimated_1rm} kg`, icon: Trophy, date: max1RM.date },
+      { label: `Heaviest Lift (${labels.weight})`, value: `${displayWeight(maxWeight.weight, system)} ${labels.weight}`, icon: Scale, date: maxWeight.date },
+      { label: `Best Est. 1RM (${labels.weight})`, value: `${displayWeight(max1RM.estimated_1rm, system)} ${labels.weight}`, icon: Trophy, date: max1RM.date },
     ];
   }
 

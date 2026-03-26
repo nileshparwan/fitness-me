@@ -79,56 +79,6 @@ export type Database = {
           },
         ]
       }
-      ai_insights: {
-        Row: {
-          content: string
-          created_at: string | null
-          id: string
-          insight_type: string
-          is_dismissed: boolean | null
-          is_read: boolean | null
-          metadata: Json | null
-          priority: string | null
-          title: string
-          updated_at: string | null
-          user_id: string
-        }
-        Insert: {
-          content: string
-          created_at?: string | null
-          id?: string
-          insight_type: string
-          is_dismissed?: boolean | null
-          is_read?: boolean | null
-          metadata?: Json | null
-          priority?: string | null
-          title: string
-          updated_at?: string | null
-          user_id: string
-        }
-        Update: {
-          content?: string
-          created_at?: string | null
-          id?: string
-          insight_type?: string
-          is_dismissed?: boolean | null
-          is_read?: boolean | null
-          metadata?: Json | null
-          priority?: string | null
-          title?: string
-          updated_at?: string | null
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "ai_insights_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       analytics_events: {
         Row: {
           created_at: string | null
@@ -169,125 +119,104 @@ export type Database = {
       }
       body_measurements: {
         Row: {
-          ai_analysis: string | null
           ankle_cm: number | null
           arms_cm: number | null
-          bicep_left_cm: number | null
-          bicep_right_cm: number | null
+          bicep_left: number | null
+          bicep_right: number | null
           bmi: number | null
           body_fat_percent: number | null
-          bone_density_score: number | null
-          calf_cm: number | null
+          calf: number | null
           calves_cm: number | null
-          chest_cm: number | null
+          chest: number | null
           created_at: string | null
           date: string
           forearms_cm: number | null
-          height_cm: number | null
-          hips_cm: number | null
+          height: number | null
+          hips: number | null
           id: string
-          measurement_method: string | null
           muscle_mass_kg: number | null
-          neck_cm: number | null
+          neck: number | null
           notes: string | null
-          photo_back_url: string | null
-          photo_front_url: string | null
-          photo_side_url: string | null
           shoulder_cm: number | null
           skinfold_abdomen_mm: number | null
           skinfold_chest_mm: number | null
           skinfold_thigh_mm: number | null
           subject_client_id: string | null
           subject_user_id: string | null
-          thigh_left_cm: number | null
-          thigh_right_cm: number | null
+          thigh_left: number | null
+          thigh_right: number | null
           thighs_cm: number | null
           updated_at: string | null
           user_id: string | null
-          visceral_fat_level: number | null
-          waist_cm: number | null
+          waist: number | null
           weight: number | null
           wrist_cm: number | null
         }
         Insert: {
-          ai_analysis?: string | null
           ankle_cm?: number | null
           arms_cm?: number | null
-          bicep_left_cm?: number | null
-          bicep_right_cm?: number | null
+          bicep_left?: number | null
+          bicep_right?: number | null
           bmi?: number | null
           body_fat_percent?: number | null
-          bone_density_score?: number | null
-          calf_cm?: number | null
+          calf?: number | null
           calves_cm?: number | null
-          chest_cm?: number | null
+          chest?: number | null
           created_at?: string | null
           date: string
           forearms_cm?: number | null
-          height_cm?: number | null
-          hips_cm?: number | null
+          height?: number | null
+          hips?: number | null
           id?: string
-          measurement_method?: string | null
           muscle_mass_kg?: number | null
-          neck_cm?: number | null
+          neck?: number | null
           notes?: string | null
-          photo_back_url?: string | null
-          photo_front_url?: string | null
-          photo_side_url?: string | null
           shoulder_cm?: number | null
           skinfold_abdomen_mm?: number | null
           skinfold_chest_mm?: number | null
           skinfold_thigh_mm?: number | null
           subject_client_id?: string | null
           subject_user_id?: string | null
-          thigh_left_cm?: number | null
-          thigh_right_cm?: number | null
+          thigh_left?: number | null
+          thigh_right?: number | null
           thighs_cm?: number | null
           updated_at?: string | null
           user_id?: string | null
-          visceral_fat_level?: number | null
-          waist_cm?: number | null
+          waist?: number | null
           weight?: number | null
           wrist_cm?: number | null
         }
         Update: {
-          ai_analysis?: string | null
           ankle_cm?: number | null
           arms_cm?: number | null
-          bicep_left_cm?: number | null
-          bicep_right_cm?: number | null
+          bicep_left?: number | null
+          bicep_right?: number | null
           bmi?: number | null
           body_fat_percent?: number | null
-          bone_density_score?: number | null
-          calf_cm?: number | null
+          calf?: number | null
           calves_cm?: number | null
-          chest_cm?: number | null
+          chest?: number | null
           created_at?: string | null
           date?: string
           forearms_cm?: number | null
-          height_cm?: number | null
-          hips_cm?: number | null
+          height?: number | null
+          hips?: number | null
           id?: string
-          measurement_method?: string | null
           muscle_mass_kg?: number | null
-          neck_cm?: number | null
+          neck?: number | null
           notes?: string | null
-          photo_back_url?: string | null
-          photo_front_url?: string | null
-          photo_side_url?: string | null
           shoulder_cm?: number | null
           skinfold_abdomen_mm?: number | null
           skinfold_chest_mm?: number | null
           skinfold_thigh_mm?: number | null
           subject_client_id?: string | null
           subject_user_id?: string | null
-          thigh_left_cm?: number | null
-          thigh_right_cm?: number | null
+          thigh_left?: number | null
+          thigh_right?: number | null
           thighs_cm?: number | null
           updated_at?: string | null
           user_id?: string | null
-          visceral_fat_level?: number | null
-          waist_cm?: number | null
+          waist?: number | null
           weight?: number | null
           wrist_cm?: number | null
         }
@@ -322,12 +251,12 @@ export type Database = {
           average_pace: string | null
           avg_cadence_rpm: number | null
           avg_power_watts: number | null
-          avg_speed_kmh: number | null
+          avg_speed: number | null
           calories_burned: number | null
           created_at: string | null
           date: string
           device_source: string | null
-          distance_km: number | null
+          distance: number | null
           duration_minutes: number
           elevation_gain_m: number | null
           entry_sequence: number | null
@@ -337,7 +266,6 @@ export type Database = {
           max_speed_kmh: number | null
           notes: string | null
           reps: number | null
-          route_gpx_url: string | null
           sport_type: string | null
           training_load_score: number | null
           updated_at: string | null
@@ -352,12 +280,12 @@ export type Database = {
           average_pace?: string | null
           avg_cadence_rpm?: number | null
           avg_power_watts?: number | null
-          avg_speed_kmh?: number | null
+          avg_speed?: number | null
           calories_burned?: number | null
           created_at?: string | null
           date?: string
           device_source?: string | null
-          distance_km?: number | null
+          distance?: number | null
           duration_minutes: number
           elevation_gain_m?: number | null
           entry_sequence?: number | null
@@ -367,7 +295,6 @@ export type Database = {
           max_speed_kmh?: number | null
           notes?: string | null
           reps?: number | null
-          route_gpx_url?: string | null
           sport_type?: string | null
           training_load_score?: number | null
           updated_at?: string | null
@@ -382,12 +309,12 @@ export type Database = {
           average_pace?: string | null
           avg_cadence_rpm?: number | null
           avg_power_watts?: number | null
-          avg_speed_kmh?: number | null
+          avg_speed?: number | null
           calories_burned?: number | null
           created_at?: string | null
           date?: string
           device_source?: string | null
-          distance_km?: number | null
+          distance?: number | null
           duration_minutes?: number
           elevation_gain_m?: number | null
           entry_sequence?: number | null
@@ -397,7 +324,6 @@ export type Database = {
           max_speed_kmh?: number | null
           notes?: string | null
           reps?: number | null
-          route_gpx_url?: string | null
           sport_type?: string | null
           training_load_score?: number | null
           updated_at?: string | null
@@ -1329,7 +1255,7 @@ export type Database = {
           email: string | null
           first_name: string
           goals: string | null
-          height_cm: number | null
+          height: number | null
           id: string
           is_archived: boolean
           last_name: string | null
@@ -1341,7 +1267,7 @@ export type Database = {
           sex: string | null
           status: Database["public"]["Enums"]["client_status"]
           updated_at: string
-          weight_kg: number | null
+          weight: number | null
         }
         Insert: {
           created_at?: string
@@ -1351,7 +1277,7 @@ export type Database = {
           email?: string | null
           first_name: string
           goals?: string | null
-          height_cm?: number | null
+          height?: number | null
           id?: string
           is_archived?: boolean
           last_name?: string | null
@@ -1363,7 +1289,7 @@ export type Database = {
           sex?: string | null
           status?: Database["public"]["Enums"]["client_status"]
           updated_at?: string
-          weight_kg?: number | null
+          weight?: number | null
         }
         Update: {
           created_at?: string
@@ -1373,7 +1299,7 @@ export type Database = {
           email?: string | null
           first_name?: string
           goals?: string | null
-          height_cm?: number | null
+          height?: number | null
           id?: string
           is_archived?: boolean
           last_name?: string | null
@@ -1385,7 +1311,7 @@ export type Database = {
           sex?: string | null
           status?: Database["public"]["Enums"]["client_status"]
           updated_at?: string
-          weight_kg?: number | null
+          weight?: number | null
         }
         Relationships: [
           {
@@ -1643,65 +1569,104 @@ export type Database = {
           },
         ]
       }
+      nutrition_target_history: {
+        Row: {
+          carbs_g: number | null
+          calories: number | null
+          created_at: string
+          effective_from: string
+          effective_to: string | null
+          fat_g: number | null
+          id: string
+          protein_g: number | null
+          source_id: string | null
+          source_type: string
+          subject_client_id: string | null
+          subject_user_id: string | null
+        }
+        Insert: {
+          carbs_g?: number | null
+          calories?: number | null
+          created_at?: string
+          effective_from: string
+          effective_to?: string | null
+          fat_g?: number | null
+          id?: string
+          protein_g?: number | null
+          source_id?: string | null
+          source_type: string
+          subject_client_id?: string | null
+          subject_user_id?: string | null
+        }
+        Update: {
+          carbs_g?: number | null
+          calories?: number | null
+          created_at?: string
+          effective_from?: string
+          effective_to?: string | null
+          fat_g?: number | null
+          id?: string
+          protein_g?: number | null
+          source_id?: string | null
+          source_type?: string
+          subject_client_id?: string | null
+          subject_user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nutrition_target_history_subject_client_id_fkey"
+            columns: ["subject_client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nutrition_target_history_subject_user_id_fkey"
+            columns: ["subject_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       exercise_catalog: {
         Row: {
           aliases: string[] | null
           category: string | null
-          contraindications: string | null
           created_at: string | null
           created_by: string | null
           description: string | null
-          difficulty_level: string | null
           equipment: string | null
-          force_type: string | null
           id: string
           is_approved: boolean
-          is_custom: boolean
-          is_unilateral: boolean
-          joint_actions: string[] | null
           muscle_groups: string[] | null
           name: string
-          sport_category: string[] | null
           video_url: string | null
         }
         Insert: {
           aliases?: string[] | null
           category?: string | null
-          contraindications?: string | null
           created_at?: string | null
           created_by?: string | null
           description?: string | null
-          difficulty_level?: string | null
           equipment?: string | null
-          force_type?: string | null
           id?: string
           is_approved?: boolean
-          is_custom?: boolean
-          is_unilateral?: boolean
-          joint_actions?: string[] | null
           muscle_groups?: string[] | null
           name: string
-          sport_category?: string[] | null
           video_url?: string | null
         }
         Update: {
           aliases?: string[] | null
           category?: string | null
-          contraindications?: string | null
           created_at?: string | null
           created_by?: string | null
           description?: string | null
-          difficulty_level?: string | null
           equipment?: string | null
-          force_type?: string | null
           id?: string
           is_approved?: boolean
-          is_custom?: boolean
-          is_unilateral?: boolean
-          joint_actions?: string[] | null
           muscle_groups?: string[] | null
           name?: string
-          sport_category?: string[] | null
           video_url?: string | null
         }
         Relationships: [
@@ -1734,20 +1699,16 @@ export type Database = {
           notes: string | null
           priority: number
           protein_target: number | null
-          review_date: string | null
           start_date: string
           start_value: number | null
           start_weight: number | null
-          sport_specific_goal: string | null
           status: string | null
-          target_body_fat_percent: number | null
           target_date: string | null
           target_value: number | null
           target_weight: number | null
           unit: string | null
           updated_at: string | null
           user_id: string
-          weekly_workouts: number | null
         }
         Insert: {
           assigned_by_id?: string | null
@@ -1768,20 +1729,16 @@ export type Database = {
           notes?: string | null
           priority?: number
           protein_target?: number | null
-          review_date?: string | null
           start_date?: string
           start_value?: number | null
           start_weight?: number | null
-          sport_specific_goal?: string | null
           status?: string | null
-          target_body_fat_percent?: number | null
           target_date?: string | null
           target_value?: number | null
           target_weight?: number | null
           unit?: string | null
           updated_at?: string | null
           user_id: string
-          weekly_workouts?: number | null
         }
         Update: {
           assigned_by_id?: string | null
@@ -1802,20 +1759,16 @@ export type Database = {
           notes?: string | null
           priority?: number
           protein_target?: number | null
-          review_date?: string | null
           start_date?: string
           start_value?: number | null
           start_weight?: number | null
-          sport_specific_goal?: string | null
           status?: string | null
-          target_body_fat_percent?: number | null
           target_date?: string | null
           target_value?: number | null
           target_weight?: number | null
           unit?: string | null
           updated_at?: string | null
           user_id?: string
-          weekly_workouts?: number | null
         }
         Relationships: [
           {
@@ -2842,21 +2795,28 @@ export type Database = {
           bio: string | null
           compact_mode: boolean
           created_at: string
+          date_of_birth: string | null
           default_calories: number | null
           default_carbs: number | null
           default_fat: number | null
           default_protein: number | null
-          date_of_birth: string | null
+          deleted_at: string | null
+          deletion_reason: string | null
           full_name: string | null
           gender: string | null
-          height_cm: number | null
+          has_password: boolean
+          height: number | null
           id: string
           is_active: boolean
+          is_blocked: boolean
+          is_deleted: boolean
           onboarding_completed: boolean
+          password_configured_at: string | null
           phone: string | null
           preferred_units: string
+          recoverable_until: string | null
+          restored_at: string | null
           role: Database["public"]["Enums"]["user_role"]
-          sport_focus: string[] | null
           updated_at: string
         }
         Insert: {
@@ -2864,21 +2824,28 @@ export type Database = {
           bio?: string | null
           compact_mode?: boolean
           created_at?: string
+          date_of_birth?: string | null
           default_calories?: number | null
           default_carbs?: number | null
           default_fat?: number | null
           default_protein?: number | null
-          date_of_birth?: string | null
+          deleted_at?: string | null
+          deletion_reason?: string | null
           full_name?: string | null
           gender?: string | null
-          height_cm?: number | null
+          has_password?: boolean
+          height?: number | null
           id: string
           is_active?: boolean
+          is_blocked?: boolean
+          is_deleted?: boolean
           onboarding_completed?: boolean
+          password_configured_at?: string | null
           phone?: string | null
           preferred_units?: string
+          recoverable_until?: string | null
+          restored_at?: string | null
           role?: Database["public"]["Enums"]["user_role"]
-          sport_focus?: string[] | null
           updated_at?: string
         }
         Update: {
@@ -2886,21 +2853,28 @@ export type Database = {
           bio?: string | null
           compact_mode?: boolean
           created_at?: string
+          date_of_birth?: string | null
           default_calories?: number | null
           default_carbs?: number | null
           default_fat?: number | null
           default_protein?: number | null
-          date_of_birth?: string | null
+          deleted_at?: string | null
+          deletion_reason?: string | null
           full_name?: string | null
           gender?: string | null
-          height_cm?: number | null
+          has_password?: boolean
+          height?: number | null
           id?: string
           is_active?: boolean
+          is_blocked?: boolean
+          is_deleted?: boolean
           onboarding_completed?: boolean
+          password_configured_at?: string | null
           phone?: string | null
           preferred_units?: string
+          recoverable_until?: string | null
+          restored_at?: string | null
           role?: Database["public"]["Enums"]["user_role"]
-          sport_focus?: string[] | null
           updated_at?: string
         }
         Relationships: []
@@ -3351,7 +3325,6 @@ export type Database = {
           day_label: string | null
           id: string
           item_type: string
-          nutrition_log_id: string | null
           order_index: number | null
           program_id: string
           workout_id: string | null
@@ -3361,7 +3334,6 @@ export type Database = {
           day_label?: string | null
           id?: string
           item_type: string
-          nutrition_log_id?: string | null
           order_index?: number | null
           program_id: string
           workout_id?: string | null
@@ -3371,7 +3343,6 @@ export type Database = {
           day_label?: string | null
           id?: string
           item_type?: string
-          nutrition_log_id?: string | null
           order_index?: number | null
           program_id?: string
           workout_id?: string | null
@@ -3443,8 +3414,6 @@ export type Database = {
       }
       training_sessions: {
         Row: {
-          ai_feedback: string | null
-          assigned_by: string | null
           assigned_by_id: string | null
           completed_at: string | null
           created_at: string | null
@@ -3466,7 +3435,6 @@ export type Database = {
           perceived_exertion: number | null
           performed_on: string
           plan_assignment_id: string | null
-          plan_id: string | null
           plan_session_id: string | null
           session_label: string | null
           session_slot: Database["public"]["Enums"]["session_slot"]
@@ -3480,8 +3448,6 @@ export type Database = {
           user_id: string
         }
         Insert: {
-          ai_feedback?: string | null
-          assigned_by?: string | null
           assigned_by_id?: string | null
           completed_at?: string | null
           created_at?: string | null
@@ -3503,7 +3469,6 @@ export type Database = {
           perceived_exertion?: number | null
           performed_on?: string
           plan_assignment_id?: string | null
-          plan_id?: string | null
           plan_session_id?: string | null
           session_label?: string | null
           session_slot?: Database["public"]["Enums"]["session_slot"]
@@ -3517,8 +3482,6 @@ export type Database = {
           user_id: string
         }
         Update: {
-          ai_feedback?: string | null
-          assigned_by?: string | null
           assigned_by_id?: string | null
           completed_at?: string | null
           created_at?: string | null
@@ -3540,7 +3503,6 @@ export type Database = {
           perceived_exertion?: number | null
           performed_on?: string
           plan_assignment_id?: string | null
-          plan_id?: string | null
           plan_session_id?: string | null
           session_label?: string | null
           session_slot?: Database["public"]["Enums"]["session_slot"]
@@ -3580,13 +3542,6 @@ export type Database = {
             columns: ["plan_assignment_id"]
             isOneToOne: false
             referencedRelation: "client_plan_assignments"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "training_sessions_plan_id_fkey"
-            columns: ["plan_id"]
-            isOneToOne: false
-            referencedRelation: "training_plans"
             referencedColumns: ["id"]
           },
           {

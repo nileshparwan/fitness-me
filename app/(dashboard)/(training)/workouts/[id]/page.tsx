@@ -55,6 +55,8 @@ import { WorkoutActions } from "@/components/workout/workout-actions";
 import { WorkoutDetailSkeleton } from "./_components/workout-detailed-skeleton";
 import { Database } from "@/types/database";
 import { withToastFeedback } from "@/lib/ui/toast-feedback";
+import { useUnitLabels, useUnitSystem } from "@/stores/use-settings-store";
+import { displayWeight } from "@/utils/unit-conversion";
 
 type StrengthSetRow = Database["public"]["Tables"]["strength_sets"]["Row"];
 type CardioLogRow = Database["public"]["Tables"]["cardio_sessions"]["Row"];
@@ -93,6 +95,8 @@ function formatMetric(value: number | null | undefined, suffix: string) {
 export default function WorkoutDetailPage() {
   const { id } = useParams() as { id: string };
   const router = useRouter();
+  const system = useUnitSystem();
+  const labels = useUnitLabels();
   const [isLogDialogOpen, setIsLogDialogOpen] = useState(false);
   const [subjectDropdownOpen, setSubjectDropdownOpen] = useState(false);
   const [subjectSearch, setSubjectSearch] = useState("");
@@ -124,7 +128,7 @@ export default function WorkoutDetailPage() {
   const totalStrengthSets = strengthLogs.length;
   const totalCardioMinutes = cardioLogs.reduce((sum, row) => sum + (row.duration_minutes || 0), 0);
   const totalCardioCalories = cardioLogs.reduce((sum, row) => sum + (row.calories_burned || 0), 0);
-  const hasSessionNotes = [workout.notes, workout.ai_feedback].some((value) => Boolean(value && value.trim()));
+  const hasSessionNotes = Boolean(workout.notes && workout.notes.trim());
 
   const sessionTimeline: SessionItem[] = (() => {
     const strengthItems: SessionItem[] = groupedStrength.map((exercise) => ({
@@ -173,7 +177,7 @@ export default function WorkoutDetailPage() {
       import("@/components/workout/workout-pdf-document"),
     ]);
     const blob = await pdf(
-      <WorkoutPDF workout={currentWorkout} strengthLogs={strengthLogs} cardioLogs={cardioLogs} />
+      <WorkoutPDF workout={currentWorkout} strengthLogs={strengthLogs} cardioLogs={cardioLogs} unitSystem={system} />
     ).toBlob();
     const objectUrl = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -299,7 +303,7 @@ export default function WorkoutDetailPage() {
                 <AccordionTrigger className="py-2 text-sm">Session Metrics</AccordionTrigger>
                 <AccordionContent className="space-y-2">
                   <MetricLine icon={Clock} label="Duration" value={formatMetric(workout.duration_minutes, " min")} />
-                  <MetricLine icon={Weight} label="Total Volume" value={`${(totalVolume / 1000).toFixed(1)}k kg`} />
+      <MetricLine icon={Weight} label="Total Volume" value={`${displayWeight(totalVolume, system)?.toFixed(1)} ${labels.weight}`} />
                   <MetricLine icon={Dumbbell} label="Strength Sets" value={String(totalStrengthSets)} />
                   <MetricLine icon={Activity} label="Cardio Time" value={formatMetric(totalCardioMinutes, " min")} />
                   <MetricLine icon={HeartPulse} label="Calories" value={String(totalCardioCalories || "-")} />
@@ -309,13 +313,9 @@ export default function WorkoutDetailPage() {
                 <AccordionItem value="session-general-notes">
                   <AccordionTrigger className="py-2 text-sm">General Notes</AccordionTrigger>
                   <AccordionContent className="space-y-2">
-                    {[workout.notes, workout.ai_feedback]
-                      .filter((value): value is string => Boolean(value && value.trim()))
-                      .map((value, idx) => (
-                        <p key={`session-note-mobile-${idx}`} className="whitespace-pre-wrap text-sm text-muted-foreground">
-                          {value}
-                        </p>
-                      ))}
+                    <p className="whitespace-pre-wrap text-sm text-muted-foreground">
+                      {workout.notes}
+                    </p>
                   </AccordionContent>
                 </AccordionItem>
               ) : null}
@@ -323,7 +323,7 @@ export default function WorkoutDetailPage() {
 
             <div className="hidden grid-cols-1 gap-x-4 gap-y-1.5 text-sm sm:grid sm:grid-cols-2 lg:grid-cols-5">
               <MetricLine icon={Clock} label="Duration" value={formatMetric(workout.duration_minutes, " min")} />
-              <MetricLine icon={Weight} label="Total Volume" value={`${(totalVolume / 1000).toFixed(1)}k kg`} />
+              <MetricLine icon={Weight} label="Total Volume" value={`${displayWeight(totalVolume, system)?.toFixed(1)} ${labels.weight}`} />
               <MetricLine icon={Dumbbell} label="Strength Sets" value={String(totalStrengthSets)} />
               <MetricLine icon={Activity} label="Cardio Time" value={formatMetric(totalCardioMinutes, " min")} />
               <MetricLine icon={HeartPulse} label="Calories" value={String(totalCardioCalories || "-")} />
@@ -362,13 +362,9 @@ export default function WorkoutDetailPage() {
                 <AccordionItem value="workout-notes">
                   <AccordionTrigger>General Notes</AccordionTrigger>
                   <AccordionContent className="space-y-2">
-                    {[workout.notes, workout.ai_feedback]
-                      .filter((value): value is string => Boolean(value && value.trim()))
-                      .map((value, idx) => (
-                        <p key={`session-note-${idx}`} className="whitespace-pre-wrap text-sm text-muted-foreground">
-                          {value}
-                        </p>
-                      ))}
+                    <p className="whitespace-pre-wrap text-sm text-muted-foreground">
+                      {workout.notes}
+                    </p>
                   </AccordionContent>
                 </AccordionItem>
               </Accordion>
@@ -444,7 +440,7 @@ export default function WorkoutDetailPage() {
                       className="grid grid-cols-4 items-center rounded-lg bg-muted/20 px-2 py-2 text-xs md:text-sm"
                     >
                       <span className="font-medium">#{set.set_number}</span>
-                      <span className="text-center">{set.weight ?? "-"} kg</span>
+                      <span className="text-center">{set.weight !== null && set.weight !== undefined ? `${displayWeight(set.weight, system)?.toFixed(1)} ${labels.weight}` : "-"}</span>
                       <span className="text-center">{set.reps ?? "-"}</span>
                       <span className="truncate text-right text-[11px] text-muted-foreground md:text-xs">
                         {advancedSetDetails(set) || "-"}
@@ -498,7 +494,7 @@ export default function WorkoutDetailPage() {
               ) : (
                 <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
                   <InfoPill label="Duration" value={formatMetric(item.log.duration_minutes, " min")} />
-                  <InfoPill label="Distance" value={formatMetric(item.log.distance_km, " km")} />
+                  <InfoPill label="Distance" value={formatMetric(item.log.distance, ` ${labels.distance}`)} />
                   <InfoPill label="Calories" value={item.log.calories_burned?.toString() || "-"} />
                   <InfoPill label="Avg HR" value={formatMetric(item.log.average_heart_rate, " bpm")} />
                 </div>

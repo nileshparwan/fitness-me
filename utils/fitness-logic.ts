@@ -1,11 +1,14 @@
 import { Database } from "@/types/database";
 import { differenceInYears } from "date-fns";
+import { KM_PER_MILE, type UnitSystem } from "@/utils/unit-conversion";
 
 type CardioLog = Database["public"]["Tables"]["cardio_sessions"]["Row"];
 
-export const calculatePaceMinutesPerKm = (distanceKm: number, durationMinutes: number) => {
+export const calculatePace = (distanceKm: number, durationMinutes: number, system: UnitSystem = "metric") => {
   if (distanceKm <= 0 || durationMinutes <= 0) return 0;
-  return durationMinutes / distanceKm;
+  const pace = durationMinutes / distanceKm;
+  if (system === "imperial") return pace * KM_PER_MILE;
+  return pace;
 };
 
 export const formatPace = (paceMinutes: number) => {
@@ -32,13 +35,13 @@ export const calculateCardioInsights = (logs: CardioLog[], birthDate?: string | 
   const age = birthDate ? differenceInYears(new Date(), new Date(birthDate)) : 30;
   const maxHR = 220 - age;
 
-  const latestPace = calculatePaceMinutesPerKm(latest.distance_km || 0, latest.duration_minutes || 0);
-  const previousPace = calculatePaceMinutesPerKm(previous.distance_km || 0, previous.duration_minutes || 0);
+  const latestPace = calculatePace(latest.distance ?? 0, latest.duration_minutes || 0);
+  const previousPace = calculatePace(previous.distance ?? 0, previous.duration_minutes || 0);
   const paceDiff = previousPace - latestPace;
 
   const efficiencyScore = (log: CardioLog) => {
-    if (!log.average_heart_rate || !log.distance_km || !log.duration_minutes) return 0;
-    return (log.distance_km * 1000) / (log.average_heart_rate * log.duration_minutes);
+    if (!log.average_heart_rate || !log.distance || !log.duration_minutes) return 0;
+    return (log.distance * 1000) / (log.average_heart_rate * log.duration_minutes);
   };
 
   const hrZone = latest.average_heart_rate ? (latest.average_heart_rate / maxHR) * 100 : 0;

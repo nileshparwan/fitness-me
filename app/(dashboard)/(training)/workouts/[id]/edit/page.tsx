@@ -83,18 +83,18 @@ export default function EditWorkoutPage() {
             parsedCardioNotes.cardioSets && parsedCardioNotes.cardioSets.length > 0
               ? parsedCardioNotes.cardioSets
               : [
-                  {
-                    set_number: 1,
-                    duration: cardio.duration_minutes || 0,
-                    distance: cardio.distance_km ?? undefined,
-                    reps: cardio.reps ?? undefined,
-                    calories: cardio.calories_burned ?? undefined,
-                    heartRate: cardio.average_heart_rate ?? undefined,
-                  },
+                    {
+                      set_number: 1,
+                      duration: cardio.duration_minutes || 0,
+                      distance: cardio.distance ?? undefined,
+                      reps: cardio.reps ?? undefined,
+                      calories: cardio.calories_burned ?? undefined,
+                      heartRate: cardio.average_heart_rate ?? undefined,
+                    },
                 ],
           reps: cardio.reps ?? undefined,
           duration: cardio.duration_minutes || 0,
-          distance: cardio.distance_km ?? undefined,
+          distance: cardio.distance ?? undefined,
           calories: cardio.calories_burned ?? undefined,
           heartRate: cardio.average_heart_rate ?? undefined,
           sport_type: cardio.sport_type || undefined,
@@ -103,7 +103,7 @@ export default function EditWorkoutPage() {
           device_source: cardio.device_source || undefined,
           avg_cadence_rpm: cardio.avg_cadence_rpm ?? undefined,
           avg_power_watts: cardio.avg_power_watts ?? undefined,
-          avg_speed_kmh: cardio.avg_speed_kmh ?? undefined,
+          avg_speed: cardio.avg_speed ?? undefined,
           max_speed_kmh: cardio.max_speed_kmh ?? undefined,
           vo2max_estimate: cardio.vo2max_estimate ?? undefined,
           training_load_score: cardio.training_load_score ?? undefined,
@@ -122,7 +122,6 @@ export default function EditWorkoutPage() {
     location: workout.location || "",
     perceived_exertion: workout.perceived_exertion ?? undefined,
     overall_rating: workout.overall_rating ?? undefined,
-    ai_feedback: workout.ai_feedback || "",
     template_id: workout.template_id || "",
     exercises: orderedEntries.map((entry) => entry.data),
   };

@@ -23,6 +23,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { useUnitLabels, useUnitSystem } from "@/stores/use-settings-store";
+import { displayCircumference, displayWeight } from "@/utils/unit-conversion";
 import { cn } from "@/utils";
 
 type LogMeasurementDialogProps = {
@@ -37,15 +39,15 @@ type FormState = {
   date: string;
   weight: string;
   body_fat_percent: string;
-  waist_cm: string;
-  hips_cm: string;
-  chest_cm: string;
-  neck_cm: string;
-  bicep_left_cm: string;
-  bicep_right_cm: string;
-  thigh_left_cm: string;
-  thigh_right_cm: string;
-  calf_cm: string;
+  waist: string;
+  hips: string;
+  chest: string;
+  neck: string;
+  bicep_left: string;
+  bicep_right: string;
+  thigh_left: string;
+  thigh_right: string;
+  calf: string;
   notes: string;
 };
 
@@ -73,49 +75,56 @@ function createEmptyForm(date: string): FormState {
     date,
     weight: "",
     body_fat_percent: "",
-    waist_cm: "",
-    hips_cm: "",
-    chest_cm: "",
-    neck_cm: "",
-    bicep_left_cm: "",
-    bicep_right_cm: "",
-    thigh_left_cm: "",
-    thigh_right_cm: "",
-    calf_cm: "",
+    waist: "",
+    hips: "",
+    chest: "",
+    neck: "",
+    bicep_left: "",
+    bicep_right: "",
+    thigh_left: "",
+    thigh_right: "",
+    calf: "",
     notes: "",
   };
 }
 
-function mapRowToForm(row: BodyMeasurementRow): FormState {
+function mapRowToForm(row: BodyMeasurementRow, system: ReturnType<typeof useUnitSystem>): FormState {
   return {
     date: row.date,
-    weight: toInputNumber(row.weight),
+    weight: toInputNumber(displayWeight(row.weight, system)),
     body_fat_percent: toInputNumber(row.body_fat_percent),
-    waist_cm: toInputNumber(row.waist_cm),
-    hips_cm: toInputNumber(row.hips_cm),
-    chest_cm: toInputNumber(row.chest_cm),
-    neck_cm: toInputNumber(row.neck_cm),
-    bicep_left_cm: toInputNumber(row.bicep_left_cm),
-    bicep_right_cm: toInputNumber(row.bicep_right_cm),
-    thigh_left_cm: toInputNumber(row.thigh_left_cm),
-    thigh_right_cm: toInputNumber(row.thigh_right_cm),
-    calf_cm: toInputNumber(row.calf_cm),
+    waist: toInputNumber(displayCircumference(row.waist, system)),
+    hips: toInputNumber(displayCircumference(row.hips, system)),
+    chest: toInputNumber(displayCircumference(row.chest, system)),
+    neck: toInputNumber(displayCircumference(row.neck, system)),
+    bicep_left: toInputNumber(displayCircumference(row.bicep_left, system)),
+    bicep_right: toInputNumber(displayCircumference(row.bicep_right, system)),
+    thigh_left: toInputNumber(displayCircumference(row.thigh_left, system)),
+    thigh_right: toInputNumber(displayCircumference(row.thigh_right, system)),
+    calf: toInputNumber(displayCircumference(row.calf, system)),
     notes: row.notes || "",
   };
 }
 
 function Field({
   label,
+  unit,
   value,
   onChange,
 }: {
   label: string;
+  unit: string;
   value: string;
   onChange: (value: string) => void;
 }) {
   return (
     <div className="grid gap-2">
-      <Label>{label}</Label>
+      <div className="flex items-center justify-between gap-2">
+        <Label>{label}</Label>
+        <span className="rounded-full border border-border/60 bg-muted px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
+          {unit}
+        </span>
+      </div>
       <Input
         type="number"
         step="0.1"
@@ -136,20 +145,22 @@ export function LogMeasurementDialog({
   onSaved,
 }: LogMeasurementDialogProps) {
   const isDesktop = useMediaQuery("(min-width: 768px)");
+  const system = useUnitSystem();
+  const labels = useUnitLabels();
   const [form, setForm] = useState<FormState>(() => createEmptyForm(toDateInput(new Date())));
   const [showMoreMeasurements, setShowMoreMeasurements] = useState(false);
 
   useEffect(() => {
     if (!open) return;
     if (prefillRow) {
-      setForm(mapRowToForm(prefillRow));
+      setForm(mapRowToForm(prefillRow, system));
       setShowMoreMeasurements(true);
       return;
     }
     const today = toDateInput(new Date());
     setForm(createEmptyForm(today));
     setShowMoreMeasurements(false);
-  }, [open, prefillRow]);
+  }, [open, prefillRow, system]);
 
   const existingEntryQuery = useQuery({
     queryKey: ["body-measurements", "prefill", subjectKey(subject), form.date],
@@ -164,24 +175,24 @@ export function LogMeasurementDialog({
     if (!open || prefillRow) return;
     const row = existingEntryQuery.data;
     if (row) {
-      setForm(mapRowToForm(row));
+      setForm(mapRowToForm(row, system));
     }
-  }, [existingEntryQuery.data, open, prefillRow]);
+  }, [existingEntryQuery.data, open, prefillRow, system]);
 
   const hasAnyMeasurement = useMemo(
     () =>
       [
         form.weight,
         form.body_fat_percent,
-        form.waist_cm,
-        form.hips_cm,
-        form.chest_cm,
-        form.neck_cm,
-        form.bicep_left_cm,
-        form.bicep_right_cm,
-        form.thigh_left_cm,
-        form.thigh_right_cm,
-        form.calf_cm,
+        form.waist,
+        form.hips,
+        form.chest,
+        form.neck,
+        form.bicep_left,
+        form.bicep_right,
+        form.thigh_left,
+        form.thigh_right,
+        form.calf,
       ].some((value) => value.trim() !== ""),
     [form]
   );
@@ -192,17 +203,17 @@ export function LogMeasurementDialog({
         date: form.date,
         weight: toNullableNumber(form.weight),
         body_fat_percent: toNullableNumber(form.body_fat_percent),
-        waist_cm: toNullableNumber(form.waist_cm),
-        hips_cm: toNullableNumber(form.hips_cm),
-        chest_cm: toNullableNumber(form.chest_cm),
-        neck_cm: toNullableNumber(form.neck_cm),
-        bicep_left_cm: toNullableNumber(form.bicep_left_cm),
-        bicep_right_cm: toNullableNumber(form.bicep_right_cm),
-        thigh_left_cm: toNullableNumber(form.thigh_left_cm),
-        thigh_right_cm: toNullableNumber(form.thigh_right_cm),
-        calf_cm: toNullableNumber(form.calf_cm),
+        waist: toNullableNumber(form.waist),
+        hips: toNullableNumber(form.hips),
+        chest: toNullableNumber(form.chest),
+        neck: toNullableNumber(form.neck),
+        bicep_left: toNullableNumber(form.bicep_left),
+        bicep_right: toNullableNumber(form.bicep_right),
+        thigh_left: toNullableNumber(form.thigh_left),
+        thigh_right: toNullableNumber(form.thigh_right),
+        calf: toNullableNumber(form.calf),
         notes: form.notes.trim() || null,
-      });
+      }, system);
     },
     onSuccess: () => {
       toast.success("Measurement saved.");
@@ -256,9 +267,15 @@ export function LogMeasurementDialog({
           <div className="space-y-3">
             <p className="text-sm font-medium">Core</p>
             <div className="grid gap-3 sm:grid-cols-2">
-              <Field label="Weight (kg)" value={form.weight} onChange={(value) => updateField("weight", value)} />
               <Field
-                label="Body Fat (%)"
+                label="Weight"
+                unit={labels.weight}
+                value={form.weight}
+                onChange={(value) => updateField("weight", value)}
+              />
+              <Field
+                label="Body Fat"
+                unit="%"
                 value={form.body_fat_percent}
                 onChange={(value) => updateField("body_fat_percent", value)}
               />
@@ -268,12 +285,13 @@ export function LogMeasurementDialog({
           <div className="space-y-3">
             <p className="text-sm font-medium">Circumferences</p>
             <div className="grid gap-3 sm:grid-cols-3">
-              <Field label="Waist (cm)" value={form.waist_cm} onChange={(value) => updateField("waist_cm", value)} />
-              <Field label="Hips (cm)" value={form.hips_cm} onChange={(value) => updateField("hips_cm", value)} />
+              <Field label="Waist" unit={labels.circumference} value={form.waist} onChange={(value) => updateField("waist", value)} />
+              <Field label="Hips" unit={labels.circumference} value={form.hips} onChange={(value) => updateField("hips", value)} />
               <Field
-                label="Chest (cm)"
-                value={form.chest_cm}
-                onChange={(value) => updateField("chest_cm", value)}
+                label="Chest"
+                unit={labels.circumference}
+                value={form.chest}
+                onChange={(value) => updateField("chest", value)}
               />
             </div>
           </div>
@@ -291,28 +309,32 @@ export function LogMeasurementDialog({
 
             {showMoreMeasurements ? (
               <div className="grid gap-3 sm:grid-cols-2">
-                <Field label="Neck (cm)" value={form.neck_cm} onChange={(value) => updateField("neck_cm", value)} />
+                <Field label="Neck" unit={labels.circumference} value={form.neck} onChange={(value) => updateField("neck", value)} />
                 <Field
-                  label="Bicep Left (cm)"
-                  value={form.bicep_left_cm}
-                  onChange={(value) => updateField("bicep_left_cm", value)}
+                  label="Bicep Left"
+                  unit={labels.circumference}
+                  value={form.bicep_left}
+                  onChange={(value) => updateField("bicep_left", value)}
                 />
                 <Field
-                  label="Bicep Right (cm)"
-                  value={form.bicep_right_cm}
-                  onChange={(value) => updateField("bicep_right_cm", value)}
+                  label="Bicep Right"
+                  unit={labels.circumference}
+                  value={form.bicep_right}
+                  onChange={(value) => updateField("bicep_right", value)}
                 />
                 <Field
-                  label="Thigh Left (cm)"
-                  value={form.thigh_left_cm}
-                  onChange={(value) => updateField("thigh_left_cm", value)}
+                  label="Thigh Left"
+                  unit={labels.circumference}
+                  value={form.thigh_left}
+                  onChange={(value) => updateField("thigh_left", value)}
                 />
                 <Field
-                  label="Thigh Right (cm)"
-                  value={form.thigh_right_cm}
-                  onChange={(value) => updateField("thigh_right_cm", value)}
+                  label="Thigh Right"
+                  unit={labels.circumference}
+                  value={form.thigh_right}
+                  onChange={(value) => updateField("thigh_right", value)}
                 />
-                <Field label="Calf (cm)" value={form.calf_cm} onChange={(value) => updateField("calf_cm", value)} />
+                <Field label="Calf" unit={labels.circumference} value={form.calf} onChange={(value) => updateField("calf", value)} />
               </div>
             ) : null}
           </div>

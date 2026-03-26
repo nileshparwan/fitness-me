@@ -55,7 +55,7 @@ const cardioExerciseSchema = z.object({
   device_source: z.string().optional(),
   avg_cadence_rpm: z.coerce.number().min(0).optional(),
   avg_power_watts: z.coerce.number().min(0).optional(),
-  avg_speed_kmh: z.coerce.number().min(0).optional(),
+  avg_speed: z.coerce.number().min(0).optional(),
   max_speed_kmh: z.coerce.number().min(0).optional(),
   vo2max_estimate: z.coerce.number().min(0).optional(),
   training_load_score: z.coerce.number().min(0).optional(),
@@ -73,7 +73,6 @@ export const workoutFormSchema = z.object({
   programIds: z.array(z.string()).optional(),
   notes: z.string().optional(),
   overall_rating: z.coerce.number().min(1).max(10).optional(),
-  ai_feedback: z.string().optional(),
   template_id: z.string().optional(),
   exercises: z.array(exerciseSchema),
 });

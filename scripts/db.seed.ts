@@ -34,8 +34,6 @@ const IDS = {
   accountDeletion: "e05ccf98-0408-438f-9f7f-7e725fd2c58f",
   analyticsA: "219f6527-fe01-459f-a4db-3ccfbf5f6640",
   analyticsB: "8c5b28af-3518-4ec2-a873-c76b2b387c7d",
-  aiInsightA: "f6f2fd5a-4534-4f80-8785-404f068ccf29",
-  aiInsightB: "8ba1ef3c-86f6-4905-80ca-bd8305ca2007",
   bodyA: "35f430dc-ec45-45d7-bcab-f1021923c45a",
   bodyB: "b9e9f5b8-409c-4b95-b4a5-c3ea7244e3aa",
   bodyC: "f2f06f78-9773-4eb9-a8dc-06f156073b14",
@@ -800,39 +798,6 @@ async function run() {
         daily_calories: 2550,
         weekly_workouts: 4,
         target_date: "2026-10-01",
-        created_at: nowIso,
-        updated_at: nowIso,
-      },
-    ],
-    "id"
-  );
-
-  await upsertMany(
-    "ai_insights",
-    [
-      {
-        id: IDS.aiInsightA,
-        user_id: PRIMARY_USER.id,
-        title: "Pulling Volume Trend",
-        content: "Your pulling volume has increased 12% over the last 3 sessions.",
-        insight_type: "progress_analysis",
-        priority: "medium",
-        metadata: { metric: "volume", trend: "up" },
-        is_read: false,
-        is_dismissed: false,
-        created_at: nowIso,
-        updated_at: nowIso,
-      },
-      {
-        id: IDS.aiInsightB,
-        user_id: PRIMARY_USER.id,
-        title: "Recovery Advisory",
-        content: "Consider adding one extra low-intensity day this week to support adaptation.",
-        insight_type: "progress_analysis",
-        priority: "high",
-        metadata: { source: "seed" },
-        is_read: false,
-        is_dismissed: false,
         created_at: nowIso,
         updated_at: nowIso,
       },

@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { FormControl, FormField, FormItem } from "@/components/ui/form";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { WorkoutFormValues } from "@/types/workout";
+import { useUnitLabels } from "@/stores/use-settings-store";
 
 interface CardioEntryCardProps {
   index: number;
@@ -19,6 +20,7 @@ interface CardioEntryCardProps {
 
 export function CardioEntryCard({ index, remove, control }: CardioEntryCardProps) {
   const [showNotes, setShowNotes] = useState(false);
+  const labels = useUnitLabels();
   const cardioName = useWatch({
     control,
     name: `exercises.${index}.name`,
@@ -77,7 +79,7 @@ export function CardioEntryCard({ index, remove, control }: CardioEntryCardProps
       <div className="grid grid-cols-10 gap-2 border-b px-3 py-2 text-center text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
         <div className="col-span-1">Set</div>
         <div className="col-span-3">Duration</div>
-        <div className="col-span-3">Distance</div>
+        <div className="col-span-3">Distance ({labels.distance})</div>
         <div className="col-span-2">Reps</div>
         <div className="col-span-1"></div>
       </div>
@@ -121,7 +123,7 @@ export function CardioEntryCard({ index, remove, control }: CardioEntryCardProps
                           type="number"
                           value={field.value ?? ""}
                           onChange={(e) => field.onChange(e.target.value === "" ? undefined : Number(e.target.value))}
-                          placeholder="Distance (km)"
+                          placeholder={`Distance (${labels.distance})`}
                           className="h-9 text-center text-sm"
                         />
                       </FormControl>
@@ -238,7 +240,7 @@ export function CardioEntryCard({ index, remove, control }: CardioEntryCardProps
                     />
                     <FormField
                       control={control}
-                      name={`exercises.${index}.avg_speed_kmh`}
+                      name={`exercises.${index}.avg_speed`}
                       render={({ field }) => (
                         <FormItem>
                           <FormControl>
@@ -246,7 +248,7 @@ export function CardioEntryCard({ index, remove, control }: CardioEntryCardProps
                               type="number"
                               value={field.value ?? ""}
                               onChange={(e) => field.onChange(e.target.value === "" ? undefined : Number(e.target.value))}
-                              placeholder="Avg Speed (km/h)"
+                              placeholder={`Avg Speed (${labels.speed})`}
                               className="h-9 text-sm"
                             />
                           </FormControl>
@@ -263,7 +265,7 @@ export function CardioEntryCard({ index, remove, control }: CardioEntryCardProps
                               type="number"
                               value={field.value ?? ""}
                               onChange={(e) => field.onChange(e.target.value === "" ? undefined : Number(e.target.value))}
-                              placeholder="Max Speed (km/h)"
+                              placeholder={`Max Speed (${labels.speed})`}
                               className="h-9 text-sm"
                             />
                           </FormControl>

@@ -19,7 +19,7 @@ export type ProgressSummaryStats = {
   volume_kg: number;
   cardio_time_minutes: number;
   avg_steps_per_day: number | null;
-  latest_weight_kg: number | null;
+  latest_weight: number | null;
   weight_delta_kg: number | null;
   vo2max_estimate: number | null;
   vo2max_delta: number | null;
@@ -37,17 +37,17 @@ export type ProgressInsight = {
 
 export type BodyCompositionPoint = {
   date: string;
-  weight_kg: number | null;
+  weight: number | null;
   body_fat_pct: number | null;
-  waist_cm: number | null;
-  hips_cm: number | null;
-  chest_cm: number | null;
-  neck_cm: number | null;
-  bicep_left_cm: number | null;
-  bicep_right_cm: number | null;
-  thigh_left_cm: number | null;
-  thigh_right_cm: number | null;
-  calf_cm: number | null;
+  waist: number | null;
+  hips: number | null;
+  chest: number | null;
+  neck: number | null;
+  bicep_left: number | null;
+  bicep_right: number | null;
+  thigh_left: number | null;
+  thigh_right: number | null;
+  calf: number | null;
 };
 
 export type BodyCompositionSeries = BodyCompositionPoint[];
@@ -74,7 +74,7 @@ export type StrengthProgressData = {
 
 export type CardioProgressPoint = {
   date: string;
-  distance_km: number | null;
+  distance: number | null;
   pace_min_per_km: number | null;
   avg_hr_bpm: number | null;
 };
@@ -200,7 +200,7 @@ type CardioRow = Pick<
   | "id"
   | "workout_id"
   | "date"
-  | "distance_km"
+  | "distance"
   | "duration_minutes"
   | "average_heart_rate"
   | "activity_type"
@@ -214,15 +214,15 @@ type BodyMeasurementRow = Pick<
   | "date"
   | "weight"
   | "body_fat_percent"
-  | "waist_cm"
-  | "hips_cm"
-  | "chest_cm"
-  | "neck_cm"
-  | "bicep_left_cm"
-  | "bicep_right_cm"
-  | "thigh_left_cm"
-  | "thigh_right_cm"
-  | "calf_cm"
+  | "waist"
+  | "hips"
+  | "chest"
+  | "neck"
+  | "bicep_left"
+  | "bicep_right"
+  | "thigh_left"
+  | "thigh_right"
+  | "calf"
   | "arms_cm"
   | "thighs_cm"
   | "calves_cm"
@@ -304,8 +304,8 @@ function formatPct(value: number) {
   return `${Math.round(value)}%`;
 }
 
-function formatKg(value: number) {
-  return `${roundOne(value)} kg`;
+function formatWeight(value: number) {
+  return `${roundOne(value)}`;
 }
 
 function isMissingSchemaDependencyError(error: { code?: string; message?: string } | null | undefined) {
@@ -468,7 +468,7 @@ async function fetchExecutionWindowData(
         .in("execution_id", executionIds),
       supabaseAny
         .from("cardio_sessions")
-        .select("id, execution_id, workout_id, date, distance_km, duration_minutes, average_heart_rate, activity_type, vo2max_estimate")
+        .select("id, execution_id, workout_id, date, distance, duration_minutes, average_heart_rate, activity_type, vo2max_estimate")
         .in("execution_id", executionIds),
     ]);
 
@@ -499,22 +499,22 @@ async function fetchExecutionWindowData(
 
 function computeVo2FromCardioRows(rows: CardioRow[]) {
   const runRows = rows.filter((row) => {
-    const distance = safeNumber(row.distance_km);
+    const distance = safeNumber(row.distance);
     const duration = safeNumber(row.duration_minutes);
     return distance > 1 && duration > 5 && /run/i.test(row.activity_type || "");
   });
 
   const candidateRows = runRows.length > 0
     ? runRows
-    : rows.filter((row) => safeNumber(row.distance_km) > 1 && safeNumber(row.duration_minutes) > 5);
+    : rows.filter((row) => safeNumber(row.distance) > 1 && safeNumber(row.duration_minutes) > 5);
 
   if (candidateRows.length === 0) return null;
 
   const best = [...candidateRows].sort(
-    (a, b) => safeNumber(b.distance_km) - safeNumber(a.distance_km)
+    (a, b) => safeNumber(b.distance) - safeNumber(a.distance)
   )[0];
 
-  const distanceKm = safeNumber(best.distance_km);
+  const distanceKm = safeNumber(best.distance);
   const durationMin = safeNumber(best.duration_minutes);
   const speed = (distanceKm * 1000) / durationMin;
 
@@ -671,7 +671,7 @@ export async function getProgressSummaryStats(
         volume_kg: volumeKg,
         cardio_time_minutes: cardioTime,
         avg_steps_per_day: avgStepsPerDay,
-        latest_weight_kg: latestWeight,
+        latest_weight: latestWeight,
         weight_delta_kg: weightDelta,
         vo2max_estimate: vo2Estimate,
         vo2max_delta: vo2Delta,
@@ -1004,7 +1004,7 @@ export async function getProgressInsights(
             withInsight(insights, {
               severity: "positive",
               title: `${pr.exercise} PR!`,
-              body: `New estimated 1RM of ${formatKg(pr.value)} on ${pr.date}, beating your previous best by ${formatKg(
+              body: `New estimated 1RM of ${formatWeight(pr.value)} on ${pr.date}, beating your previous best by ${formatWeight(
                 pr.delta
               )}.`,
               score: pr.delta,
@@ -1093,10 +1093,10 @@ export async function getProgressInsights(
       }
 
       const currentAvgDistance = average(
-        currentCardioRows.map((row) => safeNumber(row.distance_km)).filter((distance) => distance > 0)
+        currentCardioRows.map((row) => safeNumber(row.distance)).filter((distance) => distance > 0)
       );
       const priorAvgDistance = average(
-        priorCardioRows.map((row) => safeNumber(row.distance_km)).filter((distance) => distance > 0)
+        priorCardioRows.map((row) => safeNumber(row.distance)).filter((distance) => distance > 0)
       );
 
       if (priorAvgDistance > 0) {
@@ -1270,7 +1270,7 @@ export async function getProgressInsights(
           withInsight(insights, {
             severity: "positive",
             title: "Weight Goal Progress",
-            body: `You've dropped ${roundOne(delta)}kg in the last 30 days. Strong progress.`,
+            body: `You've dropped ${roundOne(delta)} in the last 30 days. Strong progress.`,
             score: delta,
           });
         }
@@ -1279,7 +1279,7 @@ export async function getProgressInsights(
       // Pace improving
       const currentPaces = currentCardioRows
         .map((row) => {
-          const distance = safeNumber(row.distance_km);
+          const distance = safeNumber(row.distance);
           const duration = safeNumber(row.duration_minutes);
           if (distance <= 0 || duration <= 0) return null;
           return duration / distance;
@@ -1287,7 +1287,7 @@ export async function getProgressInsights(
         .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
       const priorPaces = priorCardioRows
         .map((row) => {
-          const distance = safeNumber(row.distance_km);
+          const distance = safeNumber(row.distance);
           const duration = safeNumber(row.duration_minutes);
           if (distance <= 0 || duration <= 0) return null;
           return duration / distance;
@@ -1350,7 +1350,7 @@ export async function getBodyCompositionSeries(
       const { data, error } = await supabase
         .from("body_measurements")
         .select(
-          "date, weight, body_fat_percent, waist_cm, hips_cm, chest_cm, neck_cm, bicep_left_cm, bicep_right_cm, thigh_left_cm, thigh_right_cm, calf_cm, arms_cm, thighs_cm, calves_cm"
+          "date, weight, body_fat_percent, waist, hips, chest, neck, bicep_left, bicep_right, thigh_left, thigh_right, calf, arms_cm, thighs_cm, calves_cm"
         )
         .eq("user_id", userId)
         .gte("date", window.startDate)
@@ -1361,17 +1361,17 @@ export async function getBodyCompositionSeries(
 
       return ((data || []) as BodyMeasurementRow[]).map((row) => ({
         date: row.date,
-        weight_kg: row.weight,
+        weight: row.weight,
         body_fat_pct: row.body_fat_percent,
-        waist_cm: row.waist_cm,
-        hips_cm: row.hips_cm,
-        chest_cm: row.chest_cm,
-        neck_cm: row.neck_cm,
-        bicep_left_cm: row.bicep_left_cm ?? row.arms_cm,
-        bicep_right_cm: row.bicep_right_cm ?? row.arms_cm,
-        thigh_left_cm: row.thigh_left_cm ?? row.thighs_cm,
-        thigh_right_cm: row.thigh_right_cm ?? row.thighs_cm,
-        calf_cm: row.calf_cm ?? row.calves_cm,
+        waist: row.waist,
+        hips: row.hips,
+        chest: row.chest,
+        neck: row.neck,
+        bicep_left: row.bicep_left ?? row.arms_cm,
+        bicep_right: row.bicep_right ?? row.arms_cm,
+        thigh_left: row.thigh_left ?? row.thighs_cm,
+        thigh_right: row.thigh_right ?? row.thighs_cm,
+        calf: row.calf ?? row.calves_cm,
       }));
     },
   });
@@ -1676,7 +1676,7 @@ export async function getCardioProgressSeries(
 
       for (const row of scopedRows) {
         const date = toIsoDay(row.date);
-        const distance = safeNumber(row.distance_km);
+        const distance = safeNumber(row.distance);
         const duration = safeNumber(row.duration_minutes);
         const hr = safeNumber(row.average_heart_rate);
         const entry = byDate.get(date) || {
@@ -1717,14 +1717,14 @@ export async function getCardioProgressSeries(
         if (!value) {
           return {
             date,
-            distance_km: null,
+            distance: null,
             pace_min_per_km: null,
             avg_hr_bpm: null,
           };
         }
         return {
           date,
-          distance_km: value.distanceTotal > 0 ? roundOne(value.distanceTotal) : null,
+          distance: value.distanceTotal > 0 ? roundOne(value.distanceTotal) : null,
           pace_min_per_km:
             value.distanceTotal > 0 && value.durationTotal > 0 ? roundTwo(value.durationTotal / value.distanceTotal) : null,
           avg_hr_bpm:

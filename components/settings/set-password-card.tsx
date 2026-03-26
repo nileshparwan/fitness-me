@@ -5,6 +5,7 @@ import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { updateProfilePasswordStatus } from "@/app/actions/settings";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -36,19 +37,11 @@ export function SetPasswordCard({ isSocialOnly }: SetPasswordCardProps) {
 
     setIsLoading(true);
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      const metadata = {
-        ...(user?.user_metadata || {}),
-        has_password: true,
-        password_configured_at: new Date().toISOString(),
-      };
-
       const updated = await withToastFeedback(
         (async () => {
-          const { error } = await supabase.auth.updateUser({ password, data: metadata });
+          const { error } = await supabase.auth.updateUser({ password });
           if (error) throw error;
+          await updateProfilePasswordStatus();
           return true;
         })(),
         {

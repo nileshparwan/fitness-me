@@ -16,7 +16,7 @@ export type HistoryEntry = {
     weight: number | null;
     reps: number | null;
     estimated_1rm: number | null;
-    distance_km: number | null;
+    distance: number | null;
     duration_minutes: number | null;
   };
 
@@ -64,7 +64,7 @@ export async function getExerciseHistory(exerciseName: string) {
 
     const { data: cardioData, error: cardioError } = await supabase
       .from("cardio_sessions")
-      .select("date, distance_km, duration_minutes")
+      .select("date, distance, duration_minutes")
       .eq("user_id", user.id)
       .eq("activity_type", exerciseName)
       .order("date", { ascending: false });
@@ -74,7 +74,7 @@ export async function getExerciseHistory(exerciseName: string) {
       return [];
     }
 
-    const cardioLogs = (cardioData || []) as Pick<CardioLogRow, "date" | "distance_km" | "duration_minutes">[];
+    const cardioLogs = (cardioData || []) as Pick<CardioLogRow, "date" | "distance" | "duration_minutes">[];
 
     const strengthEntries: HistoryEntry[] = strengthLogs.map((log) => ({
       date: log.created_at || new Date(0).toISOString(),
@@ -82,7 +82,7 @@ export async function getExerciseHistory(exerciseName: string) {
       weight: log.weight,
       reps: log.reps,
       estimated_1rm: log.calculated_1rm,
-      distance_km: null,
+      distance: null,
       duration_minutes: null,
     }));
 
@@ -92,7 +92,7 @@ export async function getExerciseHistory(exerciseName: string) {
       weight: null,
       reps: null,
       estimated_1rm: null,
-      distance_km: log.distance_km,
+      distance: log.distance,
       duration_minutes: log.duration_minutes,
     }));
 

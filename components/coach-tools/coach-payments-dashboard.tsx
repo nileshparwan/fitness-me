@@ -68,6 +68,17 @@ import { useDebounce } from "@/hooks/use-debounce";
 import { useClientBillingPlan, useCoachClients, useCoachPaymentsDashboard, useCoachToolMutations } from "@/hooks/use-coach-tools";
 import { formatCurrencyAmount } from "@/lib/clients/dashboard";
 import { withToastFeedback } from "@/lib/ui/toast-feedback";
+import {
+  BILLING_HISTORY_STATUS_FILTER_OPTIONS,
+  COACH_BILLING_TABLE_STORAGE_KEY,
+  COACH_PAYMENTS_TABLE_STORAGE_KEY,
+  PAYMENT_DESCRIPTION_WORD_LIMIT,
+  PAYMENT_NOTES_WORD_LIMIT,
+  PAYMENT_TABLE_TEXT_WORD_LIMIT,
+  TABLE_DEFAULT_PAGINATION_PAGE_0_SIZE_10,
+  TABLE_DEFAULT_SORTING_CREATED_AT_DESC,
+  TABLE_PAGE_SIZE_OPTIONS_STANDARD,
+} from "@/utils/app-constants";
 import { cn } from "@/utils";
 
 const BillingPlanDialog = dynamic(() =>
@@ -77,14 +88,8 @@ const BillingPlanDialog = dynamic(() =>
 type ViewMode = "today" | "transactions" | "billing";
 type PaymentSortKey = "created_at" | "amount";
 type TableSortId = "created_at" | "amount";
-type BillingStatusFilter = "all" | "active" | "inactive";
+type BillingStatusFilter = (typeof BILLING_HISTORY_STATUS_FILTER_OPTIONS)[number];
 
-const PAGE_SIZE_OPTIONS = [10, 20, 50] as const;
-const DEFAULT_SORTING: SortingState = [{ id: "created_at", desc: true }];
-const DEFAULT_PAGINATION: PaginationState = { pageIndex: 0, pageSize: 10 };
-const PAYMENT_DESCRIPTION_WORD_LIMIT = 20;
-const PAYMENT_NOTES_WORD_LIMIT = 60;
-const TABLE_TEXT_WORD_LIMIT = 24;
 const DEFAULT_VISIBILITY: VisibilityState = {
   client_name: true,
   description: true,
@@ -93,8 +98,6 @@ const DEFAULT_VISIBILITY: VisibilityState = {
   status: true,
   amount: true,
 };
-const TABLE_STORAGE_KEY = "coach-payments-table:v1";
-const BILLING_TABLE_STORAGE_KEY = "coach-client-billing-table:v1";
 const SORT_COLUMN_MAP: Record<TableSortId, PaymentSortKey> = {
   created_at: "created_at",
   amount: "amount",
@@ -133,7 +136,7 @@ function normalizeTransactionSortId(id: string): TableSortId | null {
 }
 
 function sanitizeTransactionSorting(sorting: SortingState | undefined): SortingState {
-  if (!Array.isArray(sorting)) return DEFAULT_SORTING;
+  if (!Array.isArray(sorting)) return TABLE_DEFAULT_SORTING_CREATED_AT_DESC;
   const normalized = sorting
     .map((item) => {
       const id = normalizeTransactionSortId(String(item.id));
@@ -141,7 +144,7 @@ function sanitizeTransactionSorting(sorting: SortingState | undefined): SortingS
       return { id, desc: Boolean(item.desc) };
     })
     .filter((item): item is { id: TableSortId; desc: boolean } => item !== null);
-  return normalized.length > 0 ? normalized : DEFAULT_SORTING;
+  return normalized.length > 0 ? normalized : TABLE_DEFAULT_SORTING_CREATED_AT_DESC;
 }
 
 function sanitizeTransactionVisibility(visibility: VisibilityState | undefined): VisibilityState {
@@ -164,7 +167,7 @@ function parsePersistedTableState(value: string | null): PersistedPaymentsTableS
       typeof parsed.pagination.pageIndex === "number" &&
       typeof parsed.pagination.pageSize === "number"
         ? parsed.pagination
-        : DEFAULT_PAGINATION;
+        : TABLE_DEFAULT_PAGINATION_PAGE_0_SIZE_10;
     return {
       sorting: sanitizeTransactionSorting(parsed.sorting),
       columnVisibility: sanitizeTransactionVisibility(
@@ -293,8 +296,8 @@ export function CoachPaymentsDashboard({ initialData }: { initialData?: CoachPay
     clientName: string;
   } | null>(null);
 
-  const [sorting, setSorting] = useState<SortingState>(DEFAULT_SORTING);
-  const [pagination, setPagination] = useState<PaginationState>(DEFAULT_PAGINATION);
+  const [sorting, setSorting] = useState<SortingState>(TABLE_DEFAULT_SORTING_CREATED_AT_DESC);
+  const [pagination, setPagination] = useState<PaginationState>(TABLE_DEFAULT_PAGINATION_PAGE_0_SIZE_10);
   const [paymentCursorByPage, setPaymentCursorByPage] = useState<Record<number, string | null>>({ 0: null });
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(DEFAULT_VISIBILITY);
   const [tableStateHydrated, setTableStateHydrated] = useState(false);
@@ -325,7 +328,7 @@ export function CoachPaymentsDashboard({ initialData }: { initialData?: CoachPay
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const parsed = parsePersistedTableState(window.localStorage.getItem(TABLE_STORAGE_KEY));
+    const parsed = parsePersistedTableState(window.localStorage.getItem(COACH_PAYMENTS_TABLE_STORAGE_KEY));
     if (parsed) {
       setSorting(parsed.sorting);
       setColumnVisibility({
@@ -340,7 +343,7 @@ export function CoachPaymentsDashboard({ initialData }: { initialData?: CoachPay
   useEffect(() => {
     if (!tableStateHydrated || typeof window === "undefined") return;
     window.localStorage.setItem(
-      TABLE_STORAGE_KEY,
+      COACH_PAYMENTS_TABLE_STORAGE_KEY,
       JSON.stringify({
         sorting,
         columnVisibility,
@@ -352,7 +355,7 @@ export function CoachPaymentsDashboard({ initialData }: { initialData?: CoachPay
   useEffect(() => {
     if (typeof window === "undefined") return;
     try {
-      const raw = window.localStorage.getItem(BILLING_TABLE_STORAGE_KEY);
+      const raw = window.localStorage.getItem(COACH_BILLING_TABLE_STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw) as {
           sorting?: SortingState;
@@ -367,7 +370,7 @@ export function CoachPaymentsDashboard({ initialData }: { initialData?: CoachPay
         if (parsed.visibility && typeof parsed.visibility === "object") {
           setBillingVisibility((current) => ({ ...current, ...parsed.visibility }));
         }
-        if (parsed.status === "all" || parsed.status === "active" || parsed.status === "inactive") {
+        if (parsed.status && (BILLING_HISTORY_STATUS_FILTER_OPTIONS as readonly string[]).includes(parsed.status)) {
           setBillingStatusFilter(parsed.status);
         }
       }
@@ -380,7 +383,7 @@ export function CoachPaymentsDashboard({ initialData }: { initialData?: CoachPay
   useEffect(() => {
     if (!billingTableHydrated || typeof window === "undefined") return;
     window.localStorage.setItem(
-      BILLING_TABLE_STORAGE_KEY,
+      COACH_BILLING_TABLE_STORAGE_KEY,
       JSON.stringify({
         sorting: billingSorting,
         pagination: billingPagination,
@@ -398,7 +401,7 @@ export function CoachPaymentsDashboard({ initialData }: { initialData?: CoachPay
   const shouldHydrateFromServer =
     !debouncedSearch &&
     pagination.pageIndex === 0 &&
-    pagination.pageSize === DEFAULT_PAGINATION.pageSize &&
+    pagination.pageSize === TABLE_DEFAULT_PAGINATION_PAGE_0_SIZE_10.pageSize &&
     sortBy === "created_at" &&
     sortDir === "desc";
 
@@ -595,7 +598,7 @@ export function CoachPaymentsDashboard({ initialData }: { initialData?: CoachPay
         enableSorting: false,
         header: "Description",
         cell: ({ row }) => (
-          <span className="text-muted-foreground">{truncateWords(row.original.description, TABLE_TEXT_WORD_LIMIT)}</span>
+          <span className="text-muted-foreground">{truncateWords(row.original.description, PAYMENT_TABLE_TEXT_WORD_LIMIT)}</span>
         ),
       },
       {
@@ -606,7 +609,7 @@ export function CoachPaymentsDashboard({ initialData }: { initialData?: CoachPay
         header: "Notes",
         cell: ({ row }) => {
           const notes = paymentNotesBody(row.original.notes);
-          return <span className="text-muted-foreground">{notes ? truncateWords(notes, TABLE_TEXT_WORD_LIMIT) : "—"}</span>;
+          return <span className="text-muted-foreground">{notes ? truncateWords(notes, PAYMENT_TABLE_TEXT_WORD_LIMIT) : "—"}</span>;
         },
       },
       {
@@ -1199,7 +1202,7 @@ export function CoachPaymentsDashboard({ initialData }: { initialData?: CoachPay
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {PAGE_SIZE_OPTIONS.map((size) => (
+                {TABLE_PAGE_SIZE_OPTIONS_STANDARD.map((size) => (
                       <SelectItem key={size} value={String(size)}>
                         {size} / page
                       </SelectItem>
@@ -1269,9 +1272,11 @@ export function CoachPaymentsDashboard({ initialData }: { initialData?: CoachPay
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">All Status</SelectItem>
-                      <SelectItem value="active">Active</SelectItem>
-                      <SelectItem value="inactive">Inactive</SelectItem>
+                      {BILLING_HISTORY_STATUS_FILTER_OPTIONS.map((option) => (
+                        <SelectItem key={option} value={option}>
+                          {option === "all" ? "All Status" : option === "active" ? "Active" : "Inactive"}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
 
@@ -1429,7 +1434,7 @@ export function CoachPaymentsDashboard({ initialData }: { initialData?: CoachPay
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {PAGE_SIZE_OPTIONS.map((size) => (
+                        {TABLE_PAGE_SIZE_OPTIONS_STANDARD.map((size) => (
                           <SelectItem key={size} value={String(size)}>
                             {size} / page
                           </SelectItem>

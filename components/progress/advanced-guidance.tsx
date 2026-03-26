@@ -5,6 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { Brain, TrendingUp, Minus, Info } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Database } from "@/types/database";
+import { useUnitLabels, useUnitSystem } from "@/stores/use-settings-store";
+import { displayWeight } from "@/utils/unit-conversion";
 
 type WorkoutLogRow = Database['public']['Tables']['strength_sets']['Row'];
 
@@ -14,6 +16,8 @@ interface Props {
 }
 
 export function AdvancedGuidance({ logs, exerciseName }: Props) {
+  const system = useUnitSystem();
+  const labels = useUnitLabels();
   if (!logs || logs.length === 0) return null;
 
   // 1. Sort logs by date (descending)
@@ -52,7 +56,7 @@ export function AdvancedGuidance({ logs, exerciseName }: Props) {
     statusColor = "text-emerald-500";
   }
   
-  // Round to nearest 0.5kg
+  // Round to nearest 0.5 storage-unit increment
   nextLoad = Math.round(nextLoad * 2) / 2;
 
   // 5. Calculate Difference
@@ -83,9 +87,9 @@ export function AdvancedGuidance({ logs, exerciseName }: Props) {
                 </h4>
                 <div className="flex items-baseline gap-2">
                     <span className="text-5xl font-bold text-white tracking-tighter">
-                        {nextLoad}
+                        {displayWeight(nextLoad, system)?.toFixed(1)}
                     </span>
-                    <span className="text-xl text-slate-500 font-medium">kg</span>
+                    <span className="text-xl text-slate-500 font-medium">{labels.weight}</span>
                 </div>
             </div>
 
@@ -110,13 +114,13 @@ export function AdvancedGuidance({ logs, exerciseName }: Props) {
                             <Info className="h-3.5 w-3.5 text-slate-600 hover:text-indigo-400 cursor-help" />
                         </TooltipTrigger>
                         <TooltipContent className="bg-slate-800 text-slate-200 border-slate-700">
-                           <p>Next Load ({nextLoad}kg) vs Previous Max ({lastSessionMax}kg)</p>
+                           <p>Next Load ({displayWeight(nextLoad, system)?.toFixed(1)} {labels.weight}) vs Previous Max ({displayWeight(lastSessionMax, system)?.toFixed(1)} {labels.weight})</p>
                         </TooltipContent>
                     </Tooltip>
                 </div>
                 {/* DYNAMIC BADGE COLOR */}
                 <Badge variant="outline" className={`${diff >= 0 ? 'border-green-500/30 text-green-400 bg-green-500/10' : 'border-orange-500/30 text-orange-400 bg-orange-500/10'} px-3 py-1 font-mono`}>
-                    {diff > 0 ? '+' : ''}{diff}kg
+                    {diff > 0 ? '+' : ''}{displayWeight(diff, system)?.toFixed(1)} {labels.weight}
                 </Badge>
             </div>
             </TooltipProvider>

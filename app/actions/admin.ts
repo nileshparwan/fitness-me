@@ -112,20 +112,36 @@ function resolveUserRole(user: AuthAdminUser): Database["public"]["Enums"]["user
   return "user";
 }
 
-async function getProfileRoleMap(userIds: string[]): Promise<Map<string, AppRole>> {
+type ProfileFlags = { role: AppRole; is_deleted: boolean; is_blocked: boolean };
+
+async function getProfileMap(userIds: string[]): Promise<Map<string, ProfileFlags>> {
   const admin = createAdminClient();
   const uniqueIds = Array.from(new Set(userIds));
-  if (uniqueIds.length === 0) return new Map<string, AppRole>();
+  if (uniqueIds.length === 0) return new Map<string, ProfileFlags>();
 
   const { data, error } = await admin
     .from("profiles")
-    .select("id, role")
+    .select("id, role, is_deleted, is_blocked")
     .in("id", uniqueIds);
   if (error) throw new Error(error.message);
 
-  const map = new Map<string, AppRole>();
+  const map = new Map<string, ProfileFlags>();
   for (const row of data || []) {
-    map.set(row.id, row.role as AppRole);
+    map.set(row.id, {
+      role: row.role as AppRole,
+      is_deleted: Boolean(row.is_deleted),
+      is_blocked: Boolean(row.is_blocked),
+    });
+  }
+  return map;
+}
+
+/** @deprecated Use getProfileMap instead */
+async function getProfileRoleMap(userIds: string[]): Promise<Map<string, AppRole>> {
+  const profileMap = await getProfileMap(userIds);
+  const map = new Map<string, AppRole>();
+  for (const [id, flags] of profileMap) {
+    map.set(id, flags.role);
   }
   return map;
 }
@@ -227,7 +243,7 @@ export async function getAdminUsers(search = "", page = 1, pageSize = 100): Prom
   });
 
   if (error) throw new Error(error.message);
-  const roleMap = await getProfileRoleMap((data.users || []).map((user) => user.id));
+  const profileMap = await getProfileMap((data.users || []).map((user) => user.id));
 
   let users = data.users || [];
   if (search.trim()) {
@@ -240,17 +256,20 @@ export async function getAdminUsers(search = "", page = 1, pageSize = 100): Prom
     });
   }
 
-  const rows = users.map((u) => ({
-    user_id: u.id,
-    email: u.email ?? null,
-    role: roleMap.get(u.id) ?? resolveUserRole(u),
-    sessions_count: 0,
-    meal_plans_count: 0,
-    goals_count: 0,
-    last_activity: u.last_sign_in_at ?? null,
-    is_blocked: Boolean(u.banned_until && new Date(u.banned_until).getTime() > Date.now()),
-    is_deleted: Boolean((u.user_metadata as Record<string, unknown> | undefined)?.deleted_at),
-  }));
+  const rows = users.map((u) => {
+    const flags = profileMap.get(u.id);
+    return {
+      user_id: u.id,
+      email: u.email ?? null,
+      role: flags?.role ?? resolveUserRole(u),
+      sessions_count: 0,
+      meal_plans_count: 0,
+      goals_count: 0,
+      last_activity: u.last_sign_in_at ?? null,
+      is_blocked: flags?.is_blocked ?? false,
+      is_deleted: flags?.is_deleted ?? false,
+    };
+  });
 
   return {
     rows,
@@ -706,6 +725,13 @@ export async function setAdminUserBlocked(userId: string, blocked: boolean) {
         ban_duration: blocked ? "876000h" : "none",
       });
       if (error) throw new Error(error.message);
+
+      const { error: profileError } = await admin
+        .from("profiles")
+        .update({ is_blocked: blocked })
+        .eq("id", userId);
+      if (profileError) throw new Error(profileError.message);
+
       return { success: true, message: blocked ? "User blocked." : "User unblocked." };
     },
   });

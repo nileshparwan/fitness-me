@@ -30,13 +30,10 @@ const hasEmailPasswordProvider = (appMetadata: Record<string, unknown> | null | 
   return providers.length === 0 || providers.includes("email");
 };
 
-const hasConfiguredPassword = (userMetadata: Record<string, unknown> | null | undefined) =>
-  Boolean(userMetadata?.has_password);
-
 const hasPasswordAuthEnabled = (
   appMetadata: Record<string, unknown> | null | undefined,
-  userMetadata: Record<string, unknown> | null | undefined
-) => hasEmailPasswordProvider(appMetadata) || hasConfiguredPassword(userMetadata);
+  profileHasPassword: boolean
+) => hasEmailPasswordProvider(appMetadata) || profileHasPassword;
 
 type DeletionChallengePayload = {
   uid: string;
@@ -94,7 +91,6 @@ async function listAllUsers(maxUsers = 5000) {
   const allUsers: Array<{
     id: string;
     email: string | undefined;
-    user_metadata: Record<string, unknown> | null;
     app_metadata: Record<string, unknown> | null;
   }> = [];
 
@@ -110,7 +106,6 @@ async function listAllUsers(maxUsers = 5000) {
       ...batch.map((user) => ({
         id: user.id,
         email: user.email,
-        user_metadata: (user.user_metadata as Record<string, unknown> | null) || null,
         app_metadata: (user.app_metadata as Record<string, unknown> | null) || null,
       }))
     );
@@ -192,10 +187,18 @@ export async function requestPasswordReset(email: string) {
     }
 
     const matchingUser = await findUserByEmail(normalizedEmail);
-    if (matchingUser && !hasPasswordAuthEnabled(matchingUser.app_metadata, matchingUser.user_metadata)) {
-      throw new Error(
-        "This account does not have password login enabled. Continue with your social provider, then set a password in Account Settings."
-      );
+    if (matchingUser) {
+      const adminClient = createAdminClient();
+      const { data: profile } = await adminClient
+        .from("profiles")
+        .select("has_password")
+        .eq("id", matchingUser.id)
+        .maybeSingle();
+      if (!hasPasswordAuthEnabled(matchingUser.app_metadata, Boolean(profile?.has_password))) {
+        throw new Error(
+          "This account does not have password login enabled. Continue with your social provider, then set a password in Account Settings."
+        );
+      }
     }
 
     const { error } = await client.auth.resetPasswordForEmail(normalizedEmail, {
@@ -275,18 +278,16 @@ export async function requestSoftDeleteAccount(challengeToken: string, challenge
     const now = new Date();
     const recoverableUntil = new Date(now.getTime() + RECOVERY_WINDOW_DAYS * 24 * 60 * 60 * 1000);
 
-    const metadata = {
-      ...(user.user_metadata || {}),
-      is_deleted: true,
-      deleted_at: toDateIso(now),
-      recoverable_until: toDateIso(recoverableUntil),
-      deletion_reason: reason || null,
-    };
-
-    const updateResult = await admin.auth.admin.updateUserById(user.id, {
-      user_metadata: metadata,
-    });
-    if (updateResult.error) throw updateResult.error;
+    const { error: profileError } = await admin
+      .from("profiles")
+      .update({
+        is_deleted: true,
+        deleted_at: toDateIso(now),
+        recoverable_until: toDateIso(recoverableUntil),
+        deletion_reason: reason || null,
+      })
+      .eq("id", user.id);
+    if (profileError) throw profileError;
 
     const payload: DeletionInsert = {
       user_id: user.id,
@@ -348,26 +349,32 @@ export async function restoreSoftDeletedAccount(email: string, password: string)
 
     const user = signInResult.data.user;
     actorUserId = user.id;
-    const recoverableUntilRaw = user.user_metadata?.recoverable_until;
+
+    const admin = createAdminClient();
+    const { data: profile } = await admin
+      .from("profiles")
+      .select("recoverable_until")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    const recoverableUntilRaw = profile?.recoverable_until;
     const recoverableUntil = recoverableUntilRaw ? new Date(String(recoverableUntilRaw)) : null;
 
     if (!recoverableUntil || Number.isNaN(recoverableUntil.getTime()) || recoverableUntil.getTime() < Date.now()) {
       throw new Error("Recovery window expired");
     }
 
-    const admin = createAdminClient();
     const nowIso = toDateIso(new Date());
-    const updatedMetadata = {
-      ...(user.user_metadata || {}),
-      is_deleted: false,
-      restored_at: nowIso,
-      deletion_reason: null,
-    };
 
-    const restoreResult = await admin.auth.admin.updateUserById(user.id, {
-      user_metadata: updatedMetadata,
-    });
-    if (restoreResult.error) throw restoreResult.error;
+    const { error: profileError } = await admin
+      .from("profiles")
+      .update({
+        is_deleted: false,
+        restored_at: nowIso,
+        deletion_reason: null,
+      })
+      .eq("id", user.id);
+    if (profileError) throw profileError;
 
     await admin
       .from("account_deletion_requests")
@@ -417,7 +424,13 @@ export async function restoreCurrentSoftDeletedAccount() {
     }
     actorUserId = user.id;
 
-    const recoverableUntilRaw = user.user_metadata?.recoverable_until;
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("recoverable_until")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    const recoverableUntilRaw = profile?.recoverable_until;
     const recoverableUntil = recoverableUntilRaw ? new Date(String(recoverableUntilRaw)) : null;
 
     if (!recoverableUntil || Number.isNaN(recoverableUntil.getTime()) || recoverableUntil.getTime() < Date.now()) {
@@ -426,17 +439,16 @@ export async function restoreCurrentSoftDeletedAccount() {
 
     const admin = createAdminClient();
     const nowIso = toDateIso(new Date());
-    const updatedMetadata = {
-      ...(user.user_metadata || {}),
-      is_deleted: false,
-      restored_at: nowIso,
-      deletion_reason: null,
-    };
 
-    const restoreResult = await admin.auth.admin.updateUserById(user.id, {
-      user_metadata: updatedMetadata,
-    });
-    if (restoreResult.error) throw restoreResult.error;
+    const { error: profileError } = await admin
+      .from("profiles")
+      .update({
+        is_deleted: false,
+        restored_at: nowIso,
+        deletion_reason: null,
+      })
+      .eq("id", user.id);
+    if (profileError) throw profileError;
 
     await admin
       .from("account_deletion_requests")

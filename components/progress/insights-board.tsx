@@ -13,6 +13,8 @@ import {
   TrendingUp,
   Zap,
 } from "lucide-react";
+import { useUnitLabels, useUnitSystem } from "@/stores/use-settings-store";
+import { KM_PER_MILE } from "@/utils/unit-conversion";
 
 type StrengthSummary = {
   sessions: number;
@@ -36,11 +38,11 @@ type CardioSummary = {
   totalElevationM: number;
 };
 
-const formatPace = (pace: number) => {
+const formatPace = (pace: number, unit: string) => {
   if (!Number.isFinite(pace) || pace <= 0) return "--";
   const mins = Math.floor(pace);
   const secs = Math.round((pace - mins) * 60);
-  return `${mins}:${secs.toString().padStart(2, "0")} /km`;
+  return `${mins}:${secs.toString().padStart(2, "0")} /${unit}`;
 };
 
 function InsightCard({
@@ -74,6 +76,8 @@ function InsightCard({
 }
 
 export function StrengthInsightsBoard({ summary }: { summary: StrengthSummary }) {
+  const labels = useUnitLabels();
+
   return (
     <Card className="border-primary/20">
       <CardHeader className="pb-2">
@@ -85,7 +89,7 @@ export function StrengthInsightsBoard({ summary }: { summary: StrengthSummary })
       <CardContent className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <InsightCard
           title="Estimated 1RM"
-          value={`${summary.latest1RM.toFixed(0)} kg`}
+          value={`${summary.latest1RM.toFixed(0)} ${labels.weight}`}
           subtitle={`${summary.oneRmChangePercent >= 0 ? "+" : ""}${summary.oneRmChangePercent.toFixed(1)}% vs first session`}
           icon={TrendingUp}
         />
@@ -97,7 +101,7 @@ export function StrengthInsightsBoard({ summary }: { summary: StrengthSummary })
         />
         <InsightCard
           title="Workload Density"
-          value={`${summary.avgVolumePerSession.toFixed(0)} kg`}
+          value={`${summary.avgVolumePerSession.toFixed(0)} ${labels.weight}`}
           subtitle="Average total volume per session"
           icon={BarChart3}
         />
@@ -113,6 +117,11 @@ export function StrengthInsightsBoard({ summary }: { summary: StrengthSummary })
 }
 
 export function CardioInsightsBoard({ summary }: { summary: CardioSummary }) {
+  const system = useUnitSystem();
+  const labels = useUnitLabels();
+
+  const pace = system === "imperial" ? summary.avgPaceMinPerKm * KM_PER_MILE : summary.avgPaceMinPerKm;
+
   return (
     <Card className="border-blue-200">
       <CardHeader className="pb-2">
@@ -124,7 +133,7 @@ export function CardioInsightsBoard({ summary }: { summary: CardioSummary }) {
       <CardContent className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <InsightCard
           title="Average Pace"
-          value={formatPace(summary.avgPaceMinPerKm)}
+          value={formatPace(pace, labels.distance)}
           subtitle={`${summary.paceImprovementPercent >= 0 ? "+" : ""}${summary.paceImprovementPercent.toFixed(1)}% pace change across range`}
           icon={Timer}
         />
@@ -136,8 +145,8 @@ export function CardioInsightsBoard({ summary }: { summary: CardioSummary }) {
         />
         <InsightCard
           title="Weekly Volume"
-          value={`${summary.weeklyDistanceKm.toFixed(1)} km`}
-          subtitle={`${summary.totalDistanceKm.toFixed(1)} km total distance`}
+          value={`${summary.weeklyDistanceKm.toFixed(1)} ${labels.distance}`}
+          subtitle={`${summary.totalDistanceKm.toFixed(1)} ${labels.distance} total distance`}
           icon={Zap}
         />
         <InsightCard

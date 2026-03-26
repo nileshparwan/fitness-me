@@ -10,6 +10,7 @@ import { mealUnitInputSchema } from "@/lib/nutrition/meal-units";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { Database, Json } from "@/types/database";
+import { resolveGoalTargetForDate, type SubjectRef } from "@/app/actions/_lib/resolve-nutrition-targets";
 
 type MealPlanRow = Database["public"]["Tables"]["meal_plans"]["Row"];
 type MealPlanInsert = Database["public"]["Tables"]["meal_plans"]["Insert"];
@@ -74,11 +75,6 @@ const MEAL_TYPE_DISPLAY_ORDER: MealType[] = [
 
 const PLAN_STATUSES = ["draft", "active", "archived"] as const;
 type MealPlanStatus = (typeof PLAN_STATUSES)[number];
-
-type SubjectRef = {
-  subject_user_id: string | null;
-  subject_client_id: string | null;
-};
 
 export type ManualDiaryItem = MealLogItemRow;
 export type ManualDiaryLog = MealLogRow & {
@@ -421,40 +417,17 @@ async function resolveComplianceTargetsForDate(
     }
   }
 
-  let goalUserId = subject.subject_user_id;
-  if (!goalUserId && subject.subject_client_id) {
-    const { data: client, error: clientError } = await supabase
-      .from("clients")
-      .select("linked_user_id")
-      .eq("id", subject.subject_client_id)
-      .maybeSingle();
-    if (clientError) throw new Error(clientError.message);
-    goalUserId = client?.linked_user_id ?? null;
-  }
-
-  if (goalUserId) {
-    const { data: goal, error: goalError } = await supabase
-      .from("fitness_goals")
-      .select("daily_calories, protein_target, carbs_target, fat_target")
-      .eq("user_id", goalUserId)
-      .eq("status", "active")
-      .order("updated_at", { ascending: false })
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (goalError) throw new Error(goalError.message);
-
-    if (goal) {
-      const goalSnapshot: ComplianceTargetsSnapshot = {
-        target_calories: normalizeComplianceTarget(goal.daily_calories),
-        target_protein_g: normalizeComplianceTarget(goal.protein_target),
-        target_carbs_g: normalizeComplianceTarget(goal.carbs_target),
-        target_fat_g: normalizeComplianceTarget(goal.fat_target),
-        target_source: "fitness_goal",
-      };
-      if (hasCompleteMacroTargets(goalSnapshot)) {
-        return goalSnapshot;
-      }
+  const goalTarget = await resolveGoalTargetForDate(supabase, subject, performedOn);
+  if (goalTarget.source === "fitness_goal") {
+    const goalSnapshot: ComplianceTargetsSnapshot = {
+      target_calories: normalizeComplianceTarget(goalTarget.calories),
+      target_protein_g: normalizeComplianceTarget(goalTarget.protein_g),
+      target_carbs_g: normalizeComplianceTarget(goalTarget.carbs_g),
+      target_fat_g: normalizeComplianceTarget(goalTarget.fat_g),
+      target_source: "fitness_goal",
+    };
+    if (hasCompleteMacroTargets(goalSnapshot)) {
+      return goalSnapshot;
     }
   }
 

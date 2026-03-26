@@ -144,7 +144,7 @@ const workoutSchema = z.object({
       z.object({
         activity_type: z.string().trim().min(1).max(120),
         duration_minutes: z.number().min(0),
-        distance_km: z.number().min(0).nullable().optional(),
+        distance: z.number().min(0).nullable().optional(),
         calories_burned: z.number().min(0).nullable().optional(),
         average_heart_rate: z.number().min(0).nullable().optional(),
         reps: z.number().int().min(0).nullable().optional(),
@@ -679,7 +679,7 @@ export async function createClientWorkoutLogAction(
         date: performedOn,
         activity_type: cardio.activity_type,
         duration_minutes: cardio.duration_minutes,
-        distance_km: cardio.distance_km ?? null,
+        distance: cardio.distance ?? null,
         calories_burned: cardio.calories_burned ?? null,
         average_heart_rate: cardio.average_heart_rate ?? null,
         reps: cardio.reps ?? null,

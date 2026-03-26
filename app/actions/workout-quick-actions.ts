@@ -47,7 +47,7 @@ async function insertExerciseIntoWorkout(input: {
       date: input.dateIso || new Date().toISOString(),
       activity_type: input.exercise.name,
       duration_minutes: 0,
-      distance_km: 0,
+      distance: 0,
     };
     const { error } = await input.supabase.from("cardio_sessions").insert(payload);
     if (error) throw new Error(error.message);

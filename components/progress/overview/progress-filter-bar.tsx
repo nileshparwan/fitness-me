@@ -5,6 +5,7 @@ import { CalendarDays } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { PROGRESS_FILTER_RANGE_OPTIONS, PROGRESS_FILTER_TYPE_OPTIONS } from "@/utils/app-constants";
 import { cn } from "@/utils";
 import type { ProgressRange, ProgressTrainingType } from "@/app/actions/progress-overview";
 
@@ -16,19 +17,6 @@ type Props = {
   compare: boolean;
   onCompareChange: (value: boolean) => void;
 };
-
-const RANGE_OPTIONS: Array<{ value: ProgressRange; label: string }> = [
-  { value: "7d", label: "7 Days" },
-  { value: "30d", label: "30 Days" },
-  { value: "90d", label: "90 Days" },
-];
-
-const TYPE_OPTIONS: Array<{ value: ProgressTrainingType; label: string }> = [
-  { value: "all", label: "All Training" },
-  { value: "strength", label: "Strength" },
-  { value: "cardio", label: "Cardio" },
-  { value: "mixed", label: "Mixed" },
-];
 
 export function ProgressFilterBar({
   range,
@@ -42,7 +30,7 @@ export function ProgressFilterBar({
     <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
       <div className="flex flex-wrap items-center gap-3">
         <div className="inline-flex items-center rounded-[10px] border border-white/10 bg-[#131b2f]/85 p-1">
-          {RANGE_OPTIONS.map((option) => {
+          {PROGRESS_FILTER_RANGE_OPTIONS.map((option) => {
             const active = option.value === range;
             return (
               <Button
@@ -79,7 +67,7 @@ export function ProgressFilterBar({
             <SelectValue placeholder="Training type" />
           </SelectTrigger>
           <SelectContent>
-            {TYPE_OPTIONS.map((option) => (
+            {PROGRESS_FILTER_TYPE_OPTIONS.map((option) => (
               <SelectItem key={option.value} value={option.value}>
                 {option.label}
               </SelectItem>

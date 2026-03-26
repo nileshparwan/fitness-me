@@ -48,16 +48,13 @@ export function NavUser({ user }: { user: any }) {
   // 1. Unified User Object: Use the hook data if loaded, otherwise fallback to prop
   const activeUser = userData || user;
 
-  // 2. Access Metadata safely
-  // Note: Your useUser hook maps metadata to .profile, but it also exists on .user_metadata
-  const meta = activeUser?.profile || activeUser?.user_metadata || {};
+  // 2. Access profile from profiles table (single source of truth for display data)
+  const profile = activeUser?.profile;
 
-  // 3. Name Priority: Full Name -> Display Name -> Username -> Email segment -> Fallback
-  const name = 
-    meta.full_name || 
-    meta.display_name || 
-    meta.username || 
-    activeUser?.email?.split('@')[0] || 
+  // 3. Name Priority: Profile full_name -> Email segment -> Fallback
+  const name =
+    profile?.full_name ||
+    activeUser?.email?.split('@')[0] ||
     "Athlete";
 
   // 4. Email Fallback
@@ -70,9 +67,9 @@ export function NavUser({ user }: { user: any }) {
     .join('')
     .substring(0, 2)
     .toUpperCase();
-  
-  // 6. Avatar URL
-  const avatarUrl = meta.avatar_url;
+
+  // 6. Avatar URL from profiles table
+  const avatarUrl = profile?.avatar_url;
   // --- LOGIC END ---
 
   return (

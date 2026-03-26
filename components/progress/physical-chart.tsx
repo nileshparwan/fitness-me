@@ -3,6 +3,8 @@
 import { ComposedChart, Line, Area, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { format, parseISO } from "date-fns";
+import { useUnitLabels, useUnitSystem } from "@/stores/use-settings-store";
+import { displayCircumference, displayWeight } from "@/utils/unit-conversion";
 
 type PhysioPoint = {
   date: string;
@@ -14,8 +16,19 @@ type PhysioPoint = {
 };
 
 export function PhysioChart({ data }: { data: PhysioPoint[] }) {
+  const system = useUnitSystem();
+  const labels = useUnitLabels();
+
   // Filter out data points where we don't have body weight logged to avoid ugly gaps
-  const cleanData = data.filter(d => d.bodyWeight !== null);
+  const cleanData = data
+    .filter((d) => d.bodyWeight !== null)
+    .map((point) => ({
+      ...point,
+      estimated_1rm: displayWeight(point.estimated_1rm, system) ?? point.estimated_1rm,
+      bodyWeight: point.bodyWeight !== null ? displayWeight(point.bodyWeight, system) : null,
+      muscleMassKg: point.muscleMassKg !== null && point.muscleMassKg !== undefined ? displayWeight(point.muscleMassKg, system) : null,
+      waistCm: point.waistCm !== null && point.waistCm !== undefined ? displayCircumference(point.waistCm, system) : null,
+    }));
 
   if (cleanData.length < 2) return null;
 
@@ -43,11 +56,11 @@ export function PhysioChart({ data }: { data: PhysioPoint[] }) {
             />
             <Legend />
             
-            <Area yAxisId="left" type="monotone" dataKey="estimated_1rm" name="Est. 1RM (kg)" fill="var(--primary)" fillOpacity={0.2} stroke="var(--primary)" strokeWidth={2} />
-            <Line yAxisId="right" type="monotone" dataKey="bodyWeight" name="Body Weight (kg)" stroke="var(--chart-2)" strokeWidth={2} dot={{r:3}} />
+            <Area yAxisId="left" type="monotone" dataKey="estimated_1rm" name={`Est. 1RM (${labels.weight})`} fill="var(--primary)" fillOpacity={0.2} stroke="var(--primary)" strokeWidth={2} />
+            <Line yAxisId="right" type="monotone" dataKey="bodyWeight" name={`Body Weight (${labels.weight})`} stroke="var(--chart-2)" strokeWidth={2} dot={{r:3}} />
             <Line yAxisId="right" type="monotone" dataKey="bodyFatPercent" name="Body Fat (%)" stroke="var(--destructive)" strokeWidth={1.5} dot={false} />
-            <Line yAxisId="right" type="monotone" dataKey="muscleMassKg" name="Muscle Mass (kg)" stroke="var(--chart-5)" strokeWidth={1.5} dot={false} />
-            <Line yAxisId="right" type="monotone" dataKey="waistCm" name="Waist (cm)" stroke="var(--chart-3)" strokeWidth={1.5} dot={false} />
+            <Line yAxisId="right" type="monotone" dataKey="muscleMassKg" name={`Muscle Mass (${labels.weight})`} stroke="var(--chart-5)" strokeWidth={1.5} dot={false} />
+            <Line yAxisId="right" type="monotone" dataKey="waistCm" name={`Waist (${labels.circumference})`} stroke="var(--chart-3)" strokeWidth={1.5} dot={false} />
           </ComposedChart>
         </ResponsiveContainer>
       </CardContent>

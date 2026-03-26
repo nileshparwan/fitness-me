@@ -13,6 +13,7 @@ import type {
   NutritionProgressRange,
   NutritionProgressTargets,
 } from "@/types/nutrition-progress";
+import { resolveGoalTargetForDate, type SubjectRef } from "@/app/actions/_lib/resolve-nutrition-targets";
 
 type MealLogRangeRow = Pick<
   Database["public"]["Tables"]["meal_logs"]["Row"],
@@ -42,11 +43,6 @@ type MealComplianceRow = Pick<
   | "carbs_compliant"
   | "fat_compliant"
 >;
-
-type SubjectRef = {
-  subject_user_id: string | null;
-  subject_client_id: string | null;
-};
 
 const nutritionProgressSchema = z.object({
   range: z.union([z.literal(7), z.literal(30), z.literal(90)]).default(30),
@@ -760,7 +756,6 @@ function computeDeltas(
 async function resolveTargets(
   supabase: Awaited<ReturnType<typeof createClient>>,
   subject: SubjectRef,
-  actorUserId: string,
   performedOn: string
 ): Promise<NutritionProgressTargets> {
   let assignmentQuery = supabase
@@ -793,43 +788,9 @@ async function resolveTargets(
     };
   }
 
-  let targetUserId: string | null = subject.subject_user_id ?? null;
+  const goalTarget = await resolveGoalTargetForDate(supabase, subject, performedOn);
 
-  if (subject.subject_client_id) {
-    const { data: client, error: clientError } = await supabase
-      .from("clients")
-      .select("linked_user_id")
-      .eq("id", subject.subject_client_id)
-      .maybeSingle();
-    if (clientError) throw new Error(clientError.message);
-    targetUserId = client?.linked_user_id ?? null;
-    if (!targetUserId) {
-      return {
-        calories: 0,
-        protein_g: 0,
-        carbs_g: 0,
-        fat_g: 0,
-        source: "none",
-        plan_name: null,
-      };
-    }
-  }
-
-  if (!targetUserId) {
-    targetUserId = actorUserId;
-  }
-
-  const { data: goalRow, error: goalError } = await supabase
-    .from("fitness_goals")
-    .select("daily_calories, protein_target, carbs_target, fat_target")
-    .eq("user_id", targetUserId)
-    .eq("status", "active")
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (goalError) throw new Error(goalError.message);
-
-  if (!goalRow) {
+  if (goalTarget.source === "none") {
     return {
       calories: 0,
       protein_g: 0,
@@ -841,11 +802,11 @@ async function resolveTargets(
   }
 
   return {
-      calories: Math.round(safeNumber(goalRow.daily_calories)),
-      protein_g: Math.round(safeNumber(goalRow.protein_target)),
-      carbs_g: Math.round(safeNumber(goalRow.carbs_target)),
-      fat_g: Math.round(safeNumber(goalRow.fat_target)),
-      source: "fitness_goal",
+    calories: Math.round(safeNumber(goalTarget.calories)),
+    protein_g: Math.round(safeNumber(goalTarget.protein_g)),
+    carbs_g: Math.round(safeNumber(goalTarget.carbs_g)),
+    fat_g: Math.round(safeNumber(goalTarget.fat_g)),
+    source: "fitness_goal",
     plan_name: null,
   };
 }
@@ -882,7 +843,7 @@ export async function getNutritionProgressAction(
 
       const [{ data: logsData, error: logsError }, targets] = await Promise.all([
         logsQuery,
-        resolveTargets(supabase, subject, user.id, endDate),
+        resolveTargets(supabase, subject, endDate),
       ]);
       if (logsError) throw new Error(logsError.message);
 

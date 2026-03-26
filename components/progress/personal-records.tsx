@@ -3,10 +3,14 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Database } from "@/types/database";
 import { Trophy, Scale, Repeat } from "lucide-react";
+import { useUnitLabels, useUnitSystem } from "@/stores/use-settings-store";
+import { displayWeight } from "@/utils/unit-conversion";
 
 type WorkoutLog = Database['public']['Tables']['strength_sets']['Row'];
 
 export function PersonalRecords({ logs }: { logs: WorkoutLog[] }) {
+  const system = useUnitSystem();
+  const labels = useUnitLabels();
   if (!logs.length) return null;
 
   // Calculate Records
@@ -24,7 +28,7 @@ export function PersonalRecords({ logs }: { logs: WorkoutLog[] }) {
           <CardContent className="p-4 flex flex-col items-center text-center">
              <Trophy className="h-5 w-5 text-yellow-600 mb-2" />
              <span className="text-xs font-bold text-yellow-700 uppercase">Heaviest</span>
-             <span className="text-xl font-bold text-gray-900">{maxWeight}kg</span>
+             <span className="text-xl font-bold text-gray-900">{displayWeight(maxWeight, system)?.toFixed(1)} {labels.weight}</span>
           </CardContent>
        </Card>
        <Card className="bg-blue-50/50 border-blue-100">
@@ -38,7 +42,7 @@ export function PersonalRecords({ logs }: { logs: WorkoutLog[] }) {
           <CardContent className="p-4 flex flex-col items-center text-center">
              <Repeat className="h-5 w-5 text-green-600 mb-2" />
              <span className="text-xs font-bold text-green-700 uppercase">Best Set</span>
-             <span className="text-sm font-bold text-gray-900">{bestSet.weight}kg x {bestSet.reps}</span>
+             <span className="text-sm font-bold text-gray-900">{displayWeight(bestSet.weight ?? 0, system)?.toFixed(1)} {labels.weight} x {bestSet.reps}</span>
           </CardContent>
        </Card>
     </div>

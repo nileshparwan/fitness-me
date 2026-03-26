@@ -85,6 +85,16 @@ import { useCoachClientPortalMutations, useCoachClientPortalSettings } from "@/h
 import { CLIENT_MODULE_KEYS, type ClientModuleKey } from "@/lib/client-portal/constants";
 import { withToastFeedback } from "@/lib/ui/toast-feedback";
 import { Database } from "@/types/database";
+import {
+  CLIENT_MODULE_LABELS,
+  CLIENT_NOTE_TAGS,
+  CLIENT_PAYMENT_STATUSES,
+  CLIENT_PROFILE_PAYMENTS_TABLE_STORAGE_KEY,
+  PAYMENT_DESCRIPTION_WORD_LIMIT,
+  PAYMENT_NOTES_WORD_LIMIT,
+  PAYMENT_TABLE_TEXT_WORD_LIMIT,
+  TABLE_PAGE_SIZE_OPTIONS_STANDARD,
+} from "@/utils/app-constants";
 import { cn } from "@/utils";
 
 type ProfileTab = "overview" | "goals_medical" | "training" | "notes" | "payments" | "access";
@@ -98,16 +108,9 @@ const PROFILE_TABS: Array<{ key: ProfileTab; label: string; icon: React.Componen
   { key: "access", label: "Access", icon: Shield },
 ];
 
-const NOTE_TAGS: CoachNoteTag[] = ["general", "injury", "nutrition", "psychology", "milestone"];
-const PAYMENT_STATUSES: PaymentStatus[] = ["paid", "pending"];
 type ClientPaymentRow = Database["public"]["Tables"]["client_payments"]["Row"];
 type ClientPaymentStatusFilter = "all" | PaymentStatus;
 type PaymentTableSortId = "created_at" | "amount" | "status";
-const PAYMENT_TABLE_STORAGE_KEY = "client-profile-payments-table:v1";
-const PAYMENT_PAGE_SIZE_OPTIONS = [10, 20, 50] as const;
-const PAYMENT_DESCRIPTION_WORD_LIMIT = 20;
-const PAYMENT_NOTES_WORD_LIMIT = 60;
-const PAYMENT_TABLE_TEXT_WORD_LIMIT = 24;
 const PAYMENT_COLUMN_LABELS: Record<string, string> = {
   created_at: "Created",
   description: "Description",
@@ -115,18 +118,6 @@ const PAYMENT_COLUMN_LABELS: Record<string, string> = {
   amount: "Amount",
   status: "Status",
   actions: "Actions",
-};
-
-const MODULE_LABELS: Record<ClientModuleKey, string> = {
-  workouts: "Workouts",
-  training_plan: "Training Plan",
-  meal_plan: "Meal Plan",
-  meal_logging: "Meal Logging",
-  steps_tracking: "Steps Tracking",
-  goals: "Goals",
-  check_ins: "Check-ins",
-  coach_notes: "Coach Notes",
-  tasks: "Tasks",
 };
 
 function statusPill(status: string) {
@@ -370,7 +361,7 @@ export function ClientProfileHub({ clientId, initialTab = "overview" }: { client
   useEffect(() => {
     if (typeof window === "undefined") return;
     try {
-      const raw = window.localStorage.getItem(PAYMENT_TABLE_STORAGE_KEY);
+      const raw = window.localStorage.getItem(CLIENT_PROFILE_PAYMENTS_TABLE_STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw) as {
           sorting?: SortingState;
@@ -402,7 +393,7 @@ export function ClientProfileHub({ clientId, initialTab = "overview" }: { client
   useEffect(() => {
     if (!paymentsHydrated || typeof window === "undefined") return;
     window.localStorage.setItem(
-      PAYMENT_TABLE_STORAGE_KEY,
+      CLIENT_PROFILE_PAYMENTS_TABLE_STORAGE_KEY,
       JSON.stringify({
         sorting: paymentsSorting,
         visibility: paymentsVisibility,
@@ -773,7 +764,7 @@ export function ClientProfileHub({ clientId, initialTab = "overview" }: { client
       }),
       {
         loading: "Updating permissions...",
-        success: `${MODULE_LABELS[moduleKey]} updated`,
+        success: `${CLIENT_MODULE_LABELS[moduleKey]} updated`,
         error: "Unable to update permission",
       }
     ).catch(() => null);
@@ -1248,7 +1239,7 @@ export function ClientProfileHub({ clientId, initialTab = "overview" }: { client
                   <div className="space-y-2">
                     <Label>Tag</Label>
                     <div className="flex flex-wrap gap-2">
-                      {NOTE_TAGS.map((tag) => (
+                      {CLIENT_NOTE_TAGS.map((tag) => (
                         <button
                           key={tag}
                           type="button"
@@ -1465,7 +1456,7 @@ export function ClientProfileHub({ clientId, initialTab = "overview" }: { client
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Status</SelectItem>
-                  {PAYMENT_STATUSES.map((status) => (
+                  {CLIENT_PAYMENT_STATUSES.map((status) => (
                     <SelectItem key={status} value={status}>
                       {status.charAt(0).toUpperCase() + status.slice(1)}
                     </SelectItem>
@@ -1589,7 +1580,7 @@ export function ClientProfileHub({ clientId, initialTab = "overview" }: { client
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {PAYMENT_PAGE_SIZE_OPTIONS.map((size) => (
+                    {TABLE_PAGE_SIZE_OPTIONS_STANDARD.map((size) => (
                       <SelectItem key={size} value={String(size)}>
                         {size} / page
                       </SelectItem>
@@ -1662,7 +1653,7 @@ export function ClientProfileHub({ clientId, initialTab = "overview" }: { client
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          {PAYMENT_STATUSES.map((status) => (
+                        {CLIENT_PAYMENT_STATUSES.map((status) => (
                             <SelectItem key={status} value={status}>
                               {status.charAt(0).toUpperCase() + status.slice(1)}
                             </SelectItem>
@@ -1847,7 +1838,7 @@ export function ClientProfileHub({ clientId, initialTab = "overview" }: { client
                 return (
                   <article key={moduleKey} className="rounded-xl border border-border/60 bg-background/30 p-3">
                     <div className="flex flex-wrap items-center justify-between gap-3">
-                      <p className="text-sm font-medium">{MODULE_LABELS[moduleKey]}</p>
+                      <p className="text-sm font-medium">{CLIENT_MODULE_LABELS[moduleKey]}</p>
                       <div className="inline-flex rounded-lg border border-border/60 bg-background/40 p-1">
                         {(["disabled", "read_only", "enabled"] as const).map((option) => (
                           <button

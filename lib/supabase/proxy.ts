@@ -70,25 +70,25 @@ export async function updateSession(request: NextRequest) {
   // 3. Refresh Session
   // This will call 'setAll' above if the token needs refreshing
   const { data: { user } } = await supabase.auth.getUser()
-  const isDeleted = Boolean(user?.user_metadata?.is_deleted)
-  const isBlocked = Boolean(user?.user_metadata?.is_blocked)
   const providers = Array.isArray(user?.app_metadata?.providers)
     ? (user?.app_metadata?.providers as unknown[])
         .filter((entry): entry is string => typeof entry === "string")
         .map((entry) => entry.toLowerCase())
     : []
   const isSocialOnly = providers.length > 0 && !providers.includes("email")
-  const hasPassword = Boolean(user?.user_metadata?.has_password)
   const profile = user
     ? await (async () => {
         const { data } = await supabase
           .from("profiles")
-          .select("role")
+          .select("role, is_deleted, is_blocked, has_password")
           .eq("id", user.id)
           .maybeSingle()
         return data ?? null
       })()
     : null
+  const isDeleted = Boolean(profile?.is_deleted)
+  const isBlocked = Boolean(profile?.is_blocked)
+  const hasPassword = Boolean(profile?.has_password)
   const profileRole = typeof profile?.role === "string" ? profile.role.toLowerCase() : null
   const appRole =
     typeof user?.app_metadata?.role === "string" ? String(user.app_metadata.role).toLowerCase() : null

@@ -4,6 +4,8 @@ import { Database } from "@/types/database";
 import { Dumbbell, Zap, RotateCcw } from "lucide-react";
 import { cn } from "@/utils";
 import { LucideIcon } from "lucide-react";
+import { useUnitLabels, useUnitSystem } from "@/stores/use-settings-store";
+import { displayWeight } from "@/utils/unit-conversion";
 
 type WorkoutLog = Database['public']['Tables']['strength_sets']['Row'];
 type StatTileProps = {
@@ -16,6 +18,9 @@ type StatTileProps = {
 };
 
 export function AnalyticsPanel({ logs }: { logs: WorkoutLog[] }) {
+  const system = useUnitSystem();
+  const labels = useUnitLabels();
+
   if (!logs || logs.length === 0) return null;
 
   const latest = logs[0]; 
@@ -57,15 +62,15 @@ export function AnalyticsPanel({ logs }: { logs: WorkoutLog[] }) {
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-4 md:gap-4">
       <StatTile 
         label="Est. 1RM" 
-        value={`${currentMax} kg`} 
-        subtext={`${latest.weight}kg x ${latest.reps}`}
+        value={`${displayWeight(currentMax, system)?.toFixed(1)} ${labels.weight}`}
+        subtext={`${displayWeight(latest.weight || 0, system)?.toFixed(1)} ${labels.weight} x ${latest.reps}`}
         icon={Dumbbell}
         colorClass="text-primary bg-primary/10"
       />
 
       <StatTile 
         label="Volume" 
-        value={`${latestVolume.toLocaleString()} kg`}
+        value={`${displayWeight(latestVolume, system)?.toLocaleString()} ${labels.weight}`}
         progress={volumePercentage}
         subtext={`${volumePercentage.toFixed(0)}% of best`}
         icon={Zap}

@@ -27,7 +27,6 @@ interface UIProgramItem {
   item_type?: string;
   workouts?: Workout | null;
   created_at?: string | null;
-  nutrition_log_id?: string | null;
 }
 
 export function ProgramTimeline({ items, programId }: { items: UIProgramItem[], programId: string }) {

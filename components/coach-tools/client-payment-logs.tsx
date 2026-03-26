@@ -62,6 +62,14 @@ import { withToastFeedback } from "@/lib/ui/toast-feedback";
 import { useDebounce } from "@/hooks/use-debounce";
 import { formatCurrencyAmount } from "@/lib/clients/dashboard";
 import { cn } from "@/utils";
+import {
+  CLIENT_BILLING_HISTORY_TABLE_STORAGE_KEY,
+  CLIENT_PAYMENT_LOGS_TABLE_STORAGE_KEY,
+  TABLE_DEFAULT_PAGINATION_PAGE_0_SIZE_10,
+  TABLE_DEFAULT_SORTING_CREATED_AT_DESC,
+  TABLE_DEFAULT_SORTING_SESSION_DATE_DESC,
+  TABLE_PAGE_SIZE_OPTIONS_STANDARD,
+} from "@/utils/app-constants";
 
 const BillingPlanDialog = dynamic(() =>
   import("@/components/coach-tools/billing-plan-dialog").then((mod) => mod.BillingPlanDialog)
@@ -93,16 +101,12 @@ type PersistedHistoryTableState = {
   status: BillingHistoryStatusFilter;
 };
 
-const PAGE_SIZE_OPTIONS = [10, 20, 50] as const;
-const DEFAULT_SORTING: SortingState = [{ id: "session_date", desc: true }];
 const DEFAULT_VISIBILITY: VisibilityState = {
   description: false,
   created_at: false,
   notes: false,
   sessions_remaining_after: false,
 };
-const TABLE_STORAGE_KEY = "client-payment-logs-table:v1";
-const HISTORY_TABLE_STORAGE_KEY = "client-billing-history-table:v1";
 const COLUMN_LABELS: Record<string, string> = {
   session_date: "Session Date",
   description: "Description",
@@ -146,8 +150,8 @@ function parsePersistedState(raw: string | null): PersistedLogsTableState | null
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw) as Partial<PersistedLogsTableState>;
-    return {
-      sorting: Array.isArray(parsed.sorting) ? parsed.sorting : DEFAULT_SORTING,
+      return {
+      sorting: Array.isArray(parsed.sorting) ? parsed.sorting : TABLE_DEFAULT_SORTING_SESSION_DATE_DESC,
       columnVisibility:
         parsed.columnVisibility && typeof parsed.columnVisibility === "object"
           ? (parsed.columnVisibility as VisibilityState)
@@ -164,12 +168,15 @@ function parsePersistedHistoryState(raw: string | null): PersistedHistoryTableSt
   try {
     const parsed = JSON.parse(raw) as Partial<PersistedHistoryTableState>;
     return {
-      sorting: Array.isArray(parsed.sorting) ? parsed.sorting : [{ id: "created_at", desc: true }],
+      sorting: Array.isArray(parsed.sorting) ? parsed.sorting : TABLE_DEFAULT_SORTING_CREATED_AT_DESC,
       columnVisibility:
         parsed.columnVisibility && typeof parsed.columnVisibility === "object"
           ? (parsed.columnVisibility as VisibilityState)
           : { notes: false },
-      pageSize: typeof parsed.pageSize === "number" && parsed.pageSize > 0 ? parsed.pageSize : 10,
+      pageSize:
+        typeof parsed.pageSize === "number" && parsed.pageSize > 0
+          ? parsed.pageSize
+          : TABLE_DEFAULT_PAGINATION_PAGE_0_SIZE_10.pageSize,
       status:
         parsed.status === "all" || parsed.status === "active" || parsed.status === "inactive"
           ? parsed.status
@@ -256,7 +263,7 @@ function canDeleteLog(_row: PaymentLogRow) {
 
 export function ClientPaymentLogsView({ clientId, initialData }: ClientPaymentLogsViewProps) {
   const [tableHydrated, setTableHydrated] = useState(false);
-  const [sorting, setSorting] = useState<SortingState>(DEFAULT_SORTING);
+  const [sorting, setSorting] = useState<SortingState>(TABLE_DEFAULT_SORTING_SESSION_DATE_DESC);
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(DEFAULT_VISIBILITY);
   const [pagination, setPagination] = useState<PaginationState>({ pageIndex: 0, pageSize: 20 });
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
@@ -284,7 +291,7 @@ export function ClientPaymentLogsView({ clientId, initialData }: ClientPaymentLo
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const persisted = parsePersistedState(window.localStorage.getItem(TABLE_STORAGE_KEY));
+    const persisted = parsePersistedState(window.localStorage.getItem(CLIENT_PAYMENT_LOGS_TABLE_STORAGE_KEY));
     if (persisted) {
       setSorting(persisted.sorting);
       setColumnVisibility({ ...DEFAULT_VISIBILITY, ...persisted.columnVisibility });
@@ -296,7 +303,7 @@ export function ClientPaymentLogsView({ clientId, initialData }: ClientPaymentLo
   useEffect(() => {
     if (!tableHydrated || typeof window === "undefined") return;
     window.localStorage.setItem(
-      TABLE_STORAGE_KEY,
+      CLIENT_PAYMENT_LOGS_TABLE_STORAGE_KEY,
       JSON.stringify({
         sorting,
         columnVisibility,
@@ -307,7 +314,7 @@ export function ClientPaymentLogsView({ clientId, initialData }: ClientPaymentLo
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const persisted = parsePersistedHistoryState(window.localStorage.getItem(HISTORY_TABLE_STORAGE_KEY));
+    const persisted = parsePersistedHistoryState(window.localStorage.getItem(CLIENT_BILLING_HISTORY_TABLE_STORAGE_KEY));
     if (persisted) {
       setHistorySorting(persisted.sorting);
       setHistoryVisibility((current) => ({ ...current, ...persisted.columnVisibility }));
@@ -320,7 +327,7 @@ export function ClientPaymentLogsView({ clientId, initialData }: ClientPaymentLo
   useEffect(() => {
     if (!historyHydrated || typeof window === "undefined") return;
     window.localStorage.setItem(
-      HISTORY_TABLE_STORAGE_KEY,
+      CLIENT_BILLING_HISTORY_TABLE_STORAGE_KEY,
       JSON.stringify({
         sorting: historySorting,
         columnVisibility: historyVisibility,
@@ -1073,7 +1080,7 @@ export function ClientPaymentLogsView({ clientId, initialData }: ClientPaymentLo
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {PAGE_SIZE_OPTIONS.map((size) => (
+                {TABLE_PAGE_SIZE_OPTIONS_STANDARD.map((size) => (
                   <SelectItem key={size} value={String(size)}>
                     {size} / page
                   </SelectItem>
@@ -1248,7 +1255,7 @@ export function ClientPaymentLogsView({ clientId, initialData }: ClientPaymentLo
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {PAGE_SIZE_OPTIONS.map((size) => (
+                {TABLE_PAGE_SIZE_OPTIONS_STANDARD.map((size) => (
                   <SelectItem key={size} value={String(size)}>
                     {size} / page
                   </SelectItem>

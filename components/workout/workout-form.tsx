@@ -34,6 +34,8 @@ import { getWorkoutExerciseLastSessionAction, type WorkoutActionInput } from "@/
 import { mapEntriesToActionExercises, useWorkoutDraftStore } from "@/stores/use-workout-draft-store";
 import { trainingKeys } from "@/lib/query-keys-training";
 import { useQuery } from "@tanstack/react-query";
+import { useUnitLabels, useUnitSystem } from "@/stores/use-settings-store";
+import { displayDistance, displayWeight } from "@/utils/unit-conversion";
 
 type Program = Database['public']['Tables']['training_plans']['Row'];
 
@@ -45,6 +47,8 @@ interface WorkoutFormProps {
 export function WorkoutForm({ initialData, workoutId }: WorkoutFormProps) {
   const router = useRouter();
   const { data: user } = useUser();
+  const system = useUnitSystem();
+  const labels = useUnitLabels();
   const { createWorkout, updateWorkout } = useWorkouts();
   const { programs } = usePrograms();
   const searchParams = useSearchParams();
@@ -68,7 +72,6 @@ export function WorkoutForm({ initialData, workoutId }: WorkoutFormProps) {
     perceived_exertion: data.perceived_exertion,
     notes: data.notes || null,
     overall_rating: data.overall_rating,
-    ai_feedback: data.ai_feedback,
     template_id: data.template_id,
     exercises: mapEntriesToActionExercises(data.exercises),
   });
@@ -83,7 +86,6 @@ export function WorkoutForm({ initialData, workoutId }: WorkoutFormProps) {
       location: "",
       perceived_exertion: undefined,
       overall_rating: undefined,
-      ai_feedback: "",
       template_id: "",
       exercises: [],
       programIds: []
@@ -294,7 +296,7 @@ export function WorkoutForm({ initialData, workoutId }: WorkoutFormProps) {
                         <AccordionTrigger>General Notes</AccordionTrigger>
                         <AccordionContent>
                           <p className="whitespace-pre-wrap text-sm text-foreground">
-                            {form.watch("ai_feedback")?.trim() || "No notes provided."}
+                            {form.watch("notes")?.trim() || "No notes provided."}
                           </p>
                         </AccordionContent>
                       </AccordionItem>
@@ -419,7 +421,7 @@ export function WorkoutForm({ initialData, workoutId }: WorkoutFormProps) {
                         <AccordionContent>
                           <FormField
                             control={form.control}
-                            name="ai_feedback"
+                            name="notes"
                             render={({ field }) => (
                               <FormItem>
                                 <FormControl>
@@ -462,7 +464,7 @@ export function WorkoutForm({ initialData, workoutId }: WorkoutFormProps) {
                                 <div key={`viewer-strength-set-${idx}-${set.set_number}`} className="space-y-1">
                                   <div className="grid grid-cols-3 gap-2 text-xs">
                                     <span>Set {set.set_number}</span>
-                                    <span>{set.weight} kg</span>
+                                    <span>{displayWeight(set.weight, system)?.toFixed(1)} {labels.weight}</span>
                                     <span>{set.reps} reps</span>
                                   </div>
                                   {formatStrengthAdvancedDetails(set) ? (
@@ -490,7 +492,7 @@ export function WorkoutForm({ initialData, workoutId }: WorkoutFormProps) {
                                   <div className="grid grid-cols-4 gap-2 text-xs">
                                     <span>Set {set.set_number}</span>
                                     <span>{set.duration} min</span>
-                                    <span>{set.distance ?? 0} km</span>
+                                    <span>{displayDistance(set.distance ?? 0, system)?.toFixed(1)} {labels.distance}</span>
                                     <span>{set.reps ?? 0} reps</span>
                                   </div>
                                   {(set.calories !== undefined || set.heartRate !== undefined) ? (
@@ -597,7 +599,7 @@ export function WorkoutForm({ initialData, workoutId }: WorkoutFormProps) {
                           device_source: "",
                           avg_cadence_rpm: undefined,
                           avg_power_watts: undefined,
-                          avg_speed_kmh: undefined,
+                          avg_speed: undefined,
                           max_speed_kmh: undefined,
                           vo2max_estimate: undefined,
                           training_load_score: undefined,

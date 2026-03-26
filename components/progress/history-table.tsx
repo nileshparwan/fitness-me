@@ -13,6 +13,8 @@ import { Badge } from "@/components/ui/badge";
 import { format, parseISO, isValid } from "date-fns";
 import { Dumbbell, Activity, CalendarDays } from "lucide-react";
 import { Database } from "@/types/database";
+import { useUnitLabels, useUnitSystem } from "@/stores/use-settings-store";
+import { displayDistance, displayWeight } from "@/utils/unit-conversion";
 
 type WorkoutLog = Database["public"]["Tables"]["strength_sets"]["Row"];
 type CardioLog = Database["public"]["Tables"]["cardio_sessions"]["Row"];
@@ -23,6 +25,9 @@ interface Props {
 }
 
 export function HistoryTable({ logs }: Props) {
+  const system = useUnitSystem();
+  const labels = useUnitLabels();
+
   if (!logs || logs.length === 0) return null;
   const getLogDate = (log: HistoryLog) => ("activity_type" in log ? log.date : log.created_at || "");
 
@@ -96,12 +101,12 @@ export function HistoryTable({ logs }: Props) {
                     <TableCell className="whitespace-nowrap">
                       {isCardioLog ? (
                          <div className="flex flex-col">
-                            <span className="text-sm font-medium">{log.distance_km} km</span>
+                            <span className="text-sm font-medium">{displayDistance(log.distance, system)} {labels.distance}</span>
                             <span className="text-xs text-muted-foreground">{log.duration_minutes} min</span>
                          </div>
                       ) : (
                          <div className="flex flex-col">
-                            <span className="text-sm font-medium">{log.weight} kg</span>
+                            <span className="text-sm font-medium">{displayWeight(log.weight, system)} {labels.weight}</span>
                             <span className="text-xs text-muted-foreground">{log.reps} reps x {log.set_number} sets</span>
                          </div>
                       )}

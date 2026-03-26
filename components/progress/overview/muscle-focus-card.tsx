@@ -9,6 +9,8 @@ import {
 } from "recharts";
 
 import { Skeleton } from "@/components/ui/skeleton";
+import { useUnitLabels, useUnitSystem } from "@/stores/use-settings-store";
+import { displayWeight } from "@/utils/unit-conversion";
 
 type RadarDatum = {
   muscle: string;
@@ -38,6 +40,9 @@ function titleCase(value: string) {
 }
 
 export function MuscleFocusCard({ focusDistribution, muscleVolume, isLoading }: Props) {
+  const system = useUnitSystem();
+  const labels = useUnitLabels();
+
   if (isLoading) {
     return <Skeleton className="h-[380px] rounded-[16px]" />;
   }
@@ -106,7 +111,7 @@ export function MuscleFocusCard({ focusDistribution, muscleVolume, isLoading }: 
               <div key={row.muscle_group}>
                 <div className="flex items-center justify-between text-xs text-muted-foreground">
                   <span className="capitalize">{row.muscle_group.replace(/_/g, " ")}</span>
-                  <span>{row.volume_kg.toLocaleString()} kg · {row.pct}%</span>
+                  <span>{displayWeight(row.volume_kg, system)?.toLocaleString()} {labels.weight} · {row.pct}%</span>
                 </div>
                 <div className="mt-1 h-2 rounded-full bg-[#1f2a44]">
                   <div

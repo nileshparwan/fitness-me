@@ -185,7 +185,7 @@ async function syncExecutionExercisesFromWorkout(input: {
       .eq("workout_id", input.workoutId),
     supabaseAny
       .from("cardio_sessions")
-      .select("activity_type, distance_km, duration_minutes")
+      .select("activity_type, distance, duration_minutes")
       .eq("workout_id", input.workoutId),
   ]);
 
@@ -216,21 +216,21 @@ async function syncExecutionExercisesFromWorkout(input: {
 
   const cardioAgg = new Map<
     string,
-    { exercise_name: string; distance_km: number; duration_minutes: number }
+    { exercise_name: string; distance: number; duration_minutes: number }
   >();
   for (const row of (cardioRows || []) as Array<{
     activity_type: string | null;
-    distance_km: number | null;
+    distance: number | null;
     duration_minutes: number | null;
   }>) {
     const name = (row.activity_type || "Cardio").trim() || "Cardio";
     const key = name.toLowerCase();
     const existing = cardioAgg.get(key) || {
       exercise_name: name,
-      distance_km: 0,
+      distance: 0,
       duration_minutes: 0,
     };
-    existing.distance_km += Math.max(0, Number(row.distance_km || 0));
+    existing.distance += Math.max(0, Number(row.distance || 0));
     existing.duration_minutes += Math.max(0, Math.round(Number(row.duration_minutes || 0)));
     cardioAgg.set(key, existing);
   }
@@ -242,7 +242,7 @@ async function syncExecutionExercisesFromWorkout(input: {
       exercise_name: row.exercise_name,
       exercise_type: "strength",
       volume_kg: row.volume_kg > 0 ? Number(row.volume_kg.toFixed(2)) : null,
-      distance_km: null,
+      distance: null,
       duration_minutes: null,
     })),
     ...Array.from(cardioAgg.values()).map((row) => ({
@@ -251,7 +251,7 @@ async function syncExecutionExercisesFromWorkout(input: {
       exercise_name: row.exercise_name,
       exercise_type: "cardio",
       volume_kg: null,
-      distance_km: row.distance_km > 0 ? Number(row.distance_km.toFixed(2)) : null,
+      distance: row.distance > 0 ? Number(row.distance.toFixed(2)) : null,
       duration_minutes: row.duration_minutes > 0 ? row.duration_minutes : null,
     })),
   ];
@@ -315,7 +315,6 @@ export type WorkoutActionInput = {
   notes?: string | null;
   status?: WorkoutInsert['status'];
   overall_rating?: number;
-  ai_feedback?: string;
   template_id?: string;
   exercises?: {
     type?: 'strength' | 'cardio'; 
@@ -360,7 +359,7 @@ export type WorkoutActionInput = {
     device_source?: string;
     avg_cadence_rpm?: number | string;
     avg_power_watts?: number | string;
-    avg_speed_kmh?: number | string;
+    avg_speed?: number | string;
     max_speed_kmh?: number | string;
     vo2max_estimate?: number | string;
     training_load_score?: number | string;
@@ -429,12 +428,12 @@ function buildWorkoutLogs(
         device_source: ex.device_source || null,
         avg_cadence_rpm: toNullableNumber(ex.avg_cadence_rpm),
         avg_power_watts: toNullableNumber(ex.avg_power_watts),
-        avg_speed_kmh: toNullableNumber(ex.avg_speed_kmh),
+        avg_speed: toNullableNumber(ex.avg_speed),
         max_speed_kmh: toNullableNumber(ex.max_speed_kmh),
         vo2max_estimate: toNullableNumber(ex.vo2max_estimate),
         training_load_score: toNullableNumber(ex.training_load_score),
         duration_minutes: durationMinutes,
-        distance_km: distanceKm,
+        distance: distanceKm,
         calories_burned: caloriesBurned,
         average_heart_rate: averageHeartRate,
         reps: repsValue,
@@ -573,7 +572,6 @@ export async function createWorkoutAction(data: WorkoutActionInput) {
         status: normalizeWorkoutLifecycleStatus(data.status),
         notes: data.notes || null,
         overall_rating: data.overall_rating ?? null,
-        ai_feedback: data.ai_feedback || null,
         template_id: data.template_id || null,
       };
 
@@ -669,7 +667,6 @@ export async function updateWorkoutAction(id: string, data: Partial<WorkoutActio
       if (data.notes !== undefined) updateData.notes = data.notes;
       if (data.status) updateData.status = normalizeWorkoutLifecycleStatus(data.status);
       if (data.overall_rating !== undefined) updateData.overall_rating = data.overall_rating;
-      if (data.ai_feedback !== undefined) updateData.ai_feedback = data.ai_feedback || null;
       if (data.template_id !== undefined) updateData.template_id = data.template_id || null;
 
       if (Object.keys(updateData).length > 0) {

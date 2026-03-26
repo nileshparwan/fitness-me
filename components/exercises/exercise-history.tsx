@@ -2,8 +2,13 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { format } from "date-fns";
 import { Dumbbell, Timer, Activity, Calendar } from "lucide-react";
 import { HistoryEntry } from "@/app/actions/exercises";
+import { useUnitLabels, useUnitSystem } from "@/stores/use-settings-store";
+import { displayDistance, displayWeight } from "@/utils/unit-conversion";
 
 export function ExerciseHistory({ history }: { history: HistoryEntry[] }) {
+  const system = useUnitSystem();
+  const labels = useUnitLabels();
+
   if (history.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-12 text-muted-foreground border-2 border-dashed rounded-lg">
@@ -36,14 +41,15 @@ export function ExerciseHistory({ history }: { history: HistoryEntry[] }) {
                 // STRENGTH DISPLAY
                 <div className="flex flex-col items-end">
                   <span className="text-lg font-bold tabular-nums">
-                    {log.weight} <span className="text-xs text-muted-foreground font-normal">kg</span>
+                    {displayWeight(log.weight, system)}{" "}
+                    <span className="text-xs text-muted-foreground font-normal">{labels.weight}</span>
                   </span>
                   <span className="text-xs text-muted-foreground flex items-center gap-1">
                     <Dumbbell className="h-3 w-3" /> {log.reps} reps
                   </span>
                   {log.estimated_1rm && (
                      <span className="text-[10px] text-primary/80 mt-1">
-                        1RM: {log.estimated_1rm}kg
+                        1RM: {displayWeight(log.estimated_1rm, system)} {labels.weight}
                      </span>
                   )}
                 </div>
@@ -51,7 +57,8 @@ export function ExerciseHistory({ history }: { history: HistoryEntry[] }) {
                 // CARDIO DISPLAY
                 <div className="flex flex-col items-end">
                    <span className="text-lg font-bold tabular-nums">
-                    {log.distance_km} <span className="text-xs text-muted-foreground font-normal">km</span>
+                    {displayDistance(log.distance, system)}{" "}
+                    <span className="text-xs text-muted-foreground font-normal">{labels.distance}</span>
                   </span>
                   <span className="text-xs text-muted-foreground flex items-center gap-1">
                     <Timer className="h-3 w-3" /> {log.duration_minutes} mins

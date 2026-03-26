@@ -1,7 +1,16 @@
 import { create } from "zustand";
 import { createJSONStorage, persist, type StateStorage } from "zustand/middleware";
 
-export type PreferredUnits = "metric" | "imperial";
+import {
+  circumferenceUnit,
+  distanceUnit,
+  heightUnit,
+  speedUnit,
+  weightUnit,
+  type UnitSystem,
+} from "@/utils/unit-conversion";
+
+export type PreferredUnits = UnitSystem;
 
 type SettingsState = {
   preferred_units: PreferredUnits;
@@ -82,10 +91,17 @@ export const useSettingsStore = create<SettingsStore>()(
 export function useUnitLabels() {
   const units = useSettingsStore((state) => state.preferred_units);
   return {
-    weight: units === "imperial" ? "lbs" : "kg",
+    weight: weightUnit(units),
+    height: heightUnit(units),
+    circumference: circumferenceUnit(units),
+    distance: distanceUnit(units),
+    speed: speedUnit(units),
     volume: units === "imperial" ? "fl oz" : "ml",
-    distance: units === "imperial" ? "mi" : "km",
     macro: "g",
     energy: "kcal",
   } as const;
+}
+
+export function useUnitSystem(): PreferredUnits {
+  return useSettingsStore((state) => state.preferred_units);
 }

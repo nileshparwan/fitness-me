@@ -5,6 +5,7 @@ import { z } from "zod";
 import { runTrackedAction } from "@/lib/events/dispatcher";
 import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/types/database";
+import { storageCircumference, storageWeight, type UnitSystem } from "@/utils/unit-conversion";
 
 type BodyMeasurementTableRow = Database["public"]["Tables"]["body_measurements"]["Row"];
 
@@ -14,15 +15,15 @@ export type LogBodyMeasurementInput = {
   date: string;
   weight?: number | null;
   body_fat_percent?: number | null;
-  waist_cm?: number | null;
-  hips_cm?: number | null;
-  chest_cm?: number | null;
-  neck_cm?: number | null;
-  bicep_left_cm?: number | null;
-  bicep_right_cm?: number | null;
-  thigh_left_cm?: number | null;
-  thigh_right_cm?: number | null;
-  calf_cm?: number | null;
+  waist?: number | null;
+  hips?: number | null;
+  chest?: number | null;
+  neck?: number | null;
+  bicep_left?: number | null;
+  bicep_right?: number | null;
+  thigh_left?: number | null;
+  thigh_right?: number | null;
+  calf?: number | null;
   notes?: string | null;
 };
 
@@ -31,15 +32,15 @@ export type BodyMeasurementRow = {
   date: string;
   weight: number | null;
   body_fat_percent: number | null;
-  waist_cm: number | null;
-  hips_cm: number | null;
-  chest_cm: number | null;
-  neck_cm: number | null;
-  bicep_left_cm: number | null;
-  bicep_right_cm: number | null;
-  thigh_left_cm: number | null;
-  thigh_right_cm: number | null;
-  calf_cm: number | null;
+  waist: number | null;
+  hips: number | null;
+  chest: number | null;
+  neck: number | null;
+  bicep_left: number | null;
+  bicep_right: number | null;
+  thigh_left: number | null;
+  thigh_right: number | null;
+  calf: number | null;
   notes: string | null;
 };
 
@@ -61,15 +62,15 @@ const logBodyMeasurementSchema = z.object({
   date: z.string().regex(datePattern, "Invalid date format"),
   weight: positiveNumberSchema.nullish(),
   body_fat_percent: positiveNumberSchema.max(100).nullish(),
-  waist_cm: positiveNumberSchema.nullish(),
-  hips_cm: positiveNumberSchema.nullish(),
-  chest_cm: positiveNumberSchema.nullish(),
-  neck_cm: positiveNumberSchema.nullish(),
-  bicep_left_cm: positiveNumberSchema.nullish(),
-  bicep_right_cm: positiveNumberSchema.nullish(),
-  thigh_left_cm: positiveNumberSchema.nullish(),
-  thigh_right_cm: positiveNumberSchema.nullish(),
-  calf_cm: positiveNumberSchema.nullish(),
+  waist: positiveNumberSchema.nullish(),
+  hips: positiveNumberSchema.nullish(),
+  chest: positiveNumberSchema.nullish(),
+  neck: positiveNumberSchema.nullish(),
+  bicep_left: positiveNumberSchema.nullish(),
+  bicep_right: positiveNumberSchema.nullish(),
+  thigh_left: positiveNumberSchema.nullish(),
+  thigh_right: positiveNumberSchema.nullish(),
+  calf: positiveNumberSchema.nullish(),
   notes: z.string().trim().max(4000).nullish(),
 });
 
@@ -82,15 +83,15 @@ const rangeSchema = z.enum(["30d", "90d", "180d", "1y", "all"]);
 const MEASUREMENT_FIELDS: Array<keyof LogBodyMeasurementInput> = [
   "weight",
   "body_fat_percent",
-  "waist_cm",
-  "hips_cm",
-  "chest_cm",
-  "neck_cm",
-  "bicep_left_cm",
-  "bicep_right_cm",
-  "thigh_left_cm",
-  "thigh_right_cm",
-  "calf_cm",
+  "waist",
+  "hips",
+  "chest",
+  "neck",
+  "bicep_left",
+  "bicep_right",
+  "thigh_left",
+  "thigh_right",
+  "calf",
 ];
 
 function toDateInput(date: Date) {
@@ -163,15 +164,15 @@ function normalizeInputForWrite(input: z.infer<typeof logBodyMeasurementSchema>)
     date: input.date,
     weight: input.weight ?? null,
     body_fat_percent: input.body_fat_percent ?? null,
-    waist_cm: input.waist_cm ?? null,
-    hips_cm: input.hips_cm ?? null,
-    chest_cm: input.chest_cm ?? null,
-    neck_cm: input.neck_cm ?? null,
-    bicep_left_cm: input.bicep_left_cm ?? null,
-    bicep_right_cm: input.bicep_right_cm ?? null,
-    thigh_left_cm: input.thigh_left_cm ?? null,
-    thigh_right_cm: input.thigh_right_cm ?? null,
-    calf_cm: input.calf_cm ?? null,
+    waist: input.waist ?? null,
+    hips: input.hips ?? null,
+    chest: input.chest ?? null,
+    neck: input.neck ?? null,
+    bicep_left: input.bicep_left ?? null,
+    bicep_right: input.bicep_right ?? null,
+    thigh_left: input.thigh_left ?? null,
+    thigh_right: input.thigh_right ?? null,
+    calf: input.calf ?? null,
     notes: input.notes?.trim() || null,
   };
 }
@@ -191,22 +192,23 @@ function mapBodyMeasurementRow(row: BodyMeasurementTableRow): BodyMeasurementRow
     date: row.date,
     weight: row.weight,
     body_fat_percent: row.body_fat_percent,
-    waist_cm: row.waist_cm,
-    hips_cm: row.hips_cm,
-    chest_cm: row.chest_cm,
-    neck_cm: row.neck_cm,
-    bicep_left_cm: row.bicep_left_cm,
-    bicep_right_cm: row.bicep_right_cm,
-    thigh_left_cm: row.thigh_left_cm,
-    thigh_right_cm: row.thigh_right_cm,
-    calf_cm: row.calf_cm,
+    waist: row.waist,
+    hips: row.hips,
+    chest: row.chest,
+    neck: row.neck,
+    bicep_left: row.bicep_left,
+    bicep_right: row.bicep_right,
+    thigh_left: row.thigh_left,
+    thigh_right: row.thigh_right,
+    calf: row.calf,
     notes: row.notes,
   };
 }
 
 export async function logBodyMeasurementAction(
   subjectInput: MeasurementSubject,
-  input: LogBodyMeasurementInput
+  input: LogBodyMeasurementInput,
+  unitSystem: UnitSystem = "metric"
 ): Promise<void> {
   const subject = subjectSchema.parse(subjectInput);
   const payload = logBodyMeasurementSchema.parse(input);
@@ -227,6 +229,19 @@ export async function logBodyMeasurementAction(
         ...subjectRef,
         user_id: subjectRef.subject_user_id,
         ...normalized,
+        weight: normalized.weight == null ? null : storageWeight(normalized.weight, unitSystem),
+        waist: normalized.waist == null ? null : storageCircumference(normalized.waist, unitSystem),
+        hips: normalized.hips == null ? null : storageCircumference(normalized.hips, unitSystem),
+        chest: normalized.chest == null ? null : storageCircumference(normalized.chest, unitSystem),
+        neck: normalized.neck == null ? null : storageCircumference(normalized.neck, unitSystem),
+        bicep_left:
+          normalized.bicep_left == null ? null : storageCircumference(normalized.bicep_left, unitSystem),
+        bicep_right:
+          normalized.bicep_right == null ? null : storageCircumference(normalized.bicep_right, unitSystem),
+        thigh_left: normalized.thigh_left == null ? null : storageCircumference(normalized.thigh_left, unitSystem),
+        thigh_right:
+          normalized.thigh_right == null ? null : storageCircumference(normalized.thigh_right, unitSystem),
+        calf: normalized.calf == null ? null : storageCircumference(normalized.calf, unitSystem),
       };
 
       const onConflict =
@@ -263,7 +278,7 @@ export async function getBodyMeasurements(
       let query = supabaseAny
         .from("body_measurements")
         .select(
-          "id, date, weight, body_fat_percent, waist_cm, hips_cm, chest_cm, neck_cm, bicep_left_cm, bicep_right_cm, thigh_left_cm, thigh_right_cm, calf_cm, notes"
+          "id, date, weight, body_fat_percent, waist, hips, chest, neck, bicep_left, bicep_right, thigh_left, thigh_right, calf, notes"
         )
         .order("date", { ascending: false });
 
@@ -299,7 +314,7 @@ export async function getBodyMeasurementForDate(
       let query = supabaseAny
         .from("body_measurements")
         .select(
-          "id, date, weight, body_fat_percent, waist_cm, hips_cm, chest_cm, neck_cm, bicep_left_cm, bicep_right_cm, thigh_left_cm, thigh_right_cm, calf_cm, notes"
+          "id, date, weight, body_fat_percent, waist, hips, chest, neck, bicep_left, bicep_right, thigh_left, thigh_right, calf, notes"
         )
         .eq("date", date)
         .limit(1);

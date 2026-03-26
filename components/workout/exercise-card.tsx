@@ -9,6 +9,8 @@ import { SetInput } from "./set-input";
 import { WorkoutFormValues } from "@/types/workout";
 import { FormControl, FormField, FormItem } from "../ui/form";
 import type { WorkoutExerciseLastSession } from "@/app/actions/workout";
+import { useUnitLabels, useUnitSystem } from "@/stores/use-settings-store";
+import { displayWeight } from "@/utils/unit-conversion";
 
 interface ExerciseCardProps {
   index: number;
@@ -25,6 +27,8 @@ function formatWeight(weight: number | null) {
 
 export function ExerciseCard({ index, remove, control, lastSession }: ExerciseCardProps) {
   const [showNotes, setShowNotes] = useState(false);
+  const system = useUnitSystem();
+  const labels = useUnitLabels();
   const { fields, append, remove: removeSet } = useFieldArray({
     control,
     name: `exercises.${index}.sets`,
@@ -49,12 +53,12 @@ export function ExerciseCard({ index, remove, control, lastSession }: ExerciseCa
       <div className="p-0">
         {lastSession ? (
           <div className="border-b border-border/40 bg-muted/10 px-3 py-2 text-xs text-muted-foreground">
-            Last session ({lastSession.exercise_name}): {formatWeight(lastSession.weight)} kg × {lastSession.reps ?? "-"} ({lastSession.relative_label})
+            Last session ({lastSession.exercise_name}): {formatWeight(displayWeight(lastSession.weight, system))} {labels.weight} × {lastSession.reps ?? "-"} ({lastSession.relative_label})
           </div>
         ) : null}
         <div className="grid grid-cols-8 gap-2 border-b px-3 py-2 text-center text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
           <div className="col-span-1">Set</div>
-          <div className="col-span-3">kg</div>
+          <div className="col-span-3">{labels.weight}</div>
           <div className="col-span-3">Reps</div>
           <div className="col-span-1"></div>
         </div>

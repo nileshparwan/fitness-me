@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { useCoachToolMutations } from "@/hooks/use-coach-tools";
 import { withToastFeedback } from "@/lib/ui/toast-feedback";
+import { BILLING_TYPE_VALUES, PAYMENT_METHOD_VALUES } from "@/utils/app-constants";
 
 type BillingPlanDialogProps = {
   open: boolean;
@@ -23,20 +24,20 @@ type BillingPlanDialogProps = {
   mode?: "create" | "edit";
 };
 
-const BILLING_TYPE_OPTIONS: Array<{ value: BillingType; label: string }> = [
-  { value: "per_session", label: "Per Session" },
-  { value: "session_package", label: "Session Package" },
-  { value: "monthly", label: "Monthly" },
-  { value: "program", label: "Program" },
-  { value: "hourly", label: "Hourly" },
-];
+const BILLING_TYPE_OPTIONS = [
+  { value: BILLING_TYPE_VALUES[0], label: "Per Session" },
+  { value: BILLING_TYPE_VALUES[1], label: "Session Package" },
+  { value: BILLING_TYPE_VALUES[2], label: "Monthly" },
+  { value: BILLING_TYPE_VALUES[3], label: "Program" },
+  { value: BILLING_TYPE_VALUES[4], label: "Hourly" },
+] as const;
 
-const PAYMENT_METHOD_OPTIONS: Array<{ value: PaymentMethod; label: string }> = [
-  { value: "cash", label: "Cash" },
-  { value: "bank_transfer", label: "Bank Transfer" },
-  { value: "card", label: "Card" },
-  { value: "other", label: "Other" },
-];
+const PAYMENT_METHOD_OPTIONS = [
+  { value: PAYMENT_METHOD_VALUES[0], label: "Cash" },
+  { value: PAYMENT_METHOD_VALUES[1], label: "Bank Transfer" },
+  { value: PAYMENT_METHOD_VALUES[2], label: "Card" },
+  { value: PAYMENT_METHOD_VALUES[3], label: "Other" },
+] as const;
 
 function toNumber(value: string) {
   const parsed = Number(value);

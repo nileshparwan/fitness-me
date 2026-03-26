@@ -174,17 +174,21 @@ async function getVisibleTicketForViewer<T extends { is_public: boolean; user_id
 async function getAuthorById(userId: string): Promise<TicketAuthor> {
   try {
     const admin = createAdminClient();
+    const { data: profile } = await admin
+      .from("profiles")
+      .select("full_name, avatar_url")
+      .eq("id", userId)
+      .maybeSingle();
+
+    if (profile?.full_name) {
+      return { id: userId, name: profile.full_name, avatar_url: profile.avatar_url ?? null };
+    }
+
+    // Fallback to auth user email if profile has no name
     const { data, error } = await admin.auth.admin.getUserById(userId);
     if (error || !data.user) throw error || new Error("User not found");
-    const meta = (data.user.user_metadata || {}) as Record<string, unknown>;
-    const fullName = typeof meta.full_name === "string" ? meta.full_name : null;
-    const name =
-      fullName ||
-      (data.user.email ? data.user.email.split("@")[0] : null) ||
-      "User";
-    const avatar =
-      typeof meta.avatar_url === "string" ? meta.avatar_url : null;
-    return { id: userId, name, avatar_url: avatar };
+    const name = data.user.email ? data.user.email.split("@")[0] : "User";
+    return { id: userId, name, avatar_url: profile?.avatar_url ?? null };
   } catch {
     return { id: userId, name: "User", avatar_url: null };
   }

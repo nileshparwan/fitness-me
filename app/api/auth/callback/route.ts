@@ -79,6 +79,12 @@ export async function GET(request: NextRequest) {
             return redirectToPath(`/register${emailParam}`);
           }
 
+          const providers = Array.isArray(user.app_metadata?.providers)
+            ? (user.app_metadata.providers as string[])
+            : [];
+          const hasEmailProvider = providers.includes("email");
+          const hasPasswordFromMetadata = Boolean(user.user_metadata?.has_password);
+
           await supabase.from("profiles").upsert(
             {
               id: user.id,
@@ -89,6 +95,11 @@ export async function GET(request: NextRequest) {
                   : typeof user.user_metadata?.display_name === "string"
                     ? user.user_metadata.display_name
                     : null,
+              has_password: hasEmailProvider || hasPasswordFromMetadata,
+              password_configured_at:
+                hasEmailProvider || hasPasswordFromMetadata
+                  ? new Date().toISOString()
+                  : null,
             },
             { onConflict: "id" }
           );

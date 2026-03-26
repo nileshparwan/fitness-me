@@ -4,10 +4,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Database } from "@/types/database";
 import { calculateCardioInsights } from "@/utils/fitness-logic";
 import { Brain, Flame, Timer } from "lucide-react";
+import { useUnitLabels, useUnitSystem } from "@/stores/use-settings-store";
+import { KM_PER_MILE } from "@/utils/unit-conversion";
 
 type CardioLog = Database['public']['Tables']['cardio_sessions']['Row'];
 
 export function CardioGuidance({ logs, birthDate }: { logs: CardioLog[], birthDate?: string | null }) {
+  const system = useUnitSystem();
+  const labels = useUnitLabels();
   // Ensure we have enough data before calculating
 const insights = logs.length >= 2 ? calculateCardioInsights(logs, birthDate) : null;
 
@@ -51,8 +55,8 @@ if (!insights) return null;
                       <Timer className="h-4 w-4 text-green-400" /> Pace Trend
                    </span>
                    <span className={`text-sm font-bold ${insights.paceDiff > 0 ? "text-green-400" : "text-orange-400"}`}>
-                      {insights.paceDiff > 0 ? "Faster" : "Slower"} by {Math.abs(insights.paceDiff).toFixed(2)} min/km
-                   </span>
+                      {insights.paceDiff > 0 ? "Faster" : "Slower"} by {Math.abs(system === "imperial" ? insights.paceDiff * KM_PER_MILE : insights.paceDiff).toFixed(2)} min/{labels.distance}
+                    </span>
                 </div>
                 
                 <div className="flex items-center justify-between p-3 bg-white/5 rounded-lg border border-white/5">

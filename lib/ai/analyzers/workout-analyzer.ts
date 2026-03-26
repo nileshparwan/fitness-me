@@ -24,12 +24,12 @@ const multiWorkoutSchema = z.object({
       sets: z.array(z.object({
         reps: z.number(),
         // CHANGE: .optional() -> .nullable()
-        weight: z.number().nullable().describe("Weight in kg. 0 if bodyweight or not specified"),
+        weight: z.number().nullable().describe("Weight in the stored metric unit. 0 if bodyweight or not specified"),
       })).nullable().describe("List of sets performed. Return null for pure cardio activities."),
 
       // CHANGE: All .optional() -> .nullable()
       duration: z.number().nullable().describe("Duration in minutes. Vital for cardio."),
-      distance: z.number().nullable().describe("Distance in kilometers. Vital for running/cycling."),
+      distance: z.number().nullable().describe("Distance in the stored metric unit. Vital for running/cycling."),
       calories: z.number().nullable().describe("Calories burned if specified."),
       heartRate: z.number().nullable().describe("Average heart rate if specified."),
 

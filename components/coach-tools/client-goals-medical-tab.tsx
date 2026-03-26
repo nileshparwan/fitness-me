@@ -58,30 +58,21 @@ import { useExerciseSearch, useProgramSearch } from "@/hooks/use-goal-links";
 import { useClientFitnessGoalsRealtimeSync } from "@/hooks/use-fitness-goals-realtime";
 import { useClientGoals, useCoachToolMutations, useMyGoals } from "@/hooks/use-coach-tools";
 import { withToastFeedback } from "@/lib/ui/toast-feedback";
+import {
+  GOAL_CATEGORIES,
+  GOAL_STATUSES,
+  GOALS_TABLE_DEFAULT_PAGINATION,
+  GOALS_TABLE_DEFAULT_SORTING,
+  GOALS_TABLE_DEFAULT_VISIBILITY,
+  GOALS_TABLE_PAGE_SIZE_OPTIONS,
+  GOALS_TABLE_STORAGE_VERSION,
+  STRENGTH_FOCUSED_CATEGORIES,
+  WEIGHT_FOCUSED_CATEGORIES,
+} from "@/utils/app-constants";
+import { useUnitLabels, useUnitSystem } from "@/stores/use-settings-store";
+import { weightUnit } from "@/utils/unit-conversion";
 import { cn } from "@/utils";
 
-const GOAL_STATUSES: GoalStatus[] = ["active", "on_track", "at_risk", "completed", "paused", "archived"];
-const GOAL_CATEGORIES = ["weight", "muscle_gain", "strength", "performance", "nutrition", "custom"] as const;
-const WEIGHT_FOCUSED_CATEGORIES = new Set(["weight", "weight_gain", "weight_maintenance", "fat_loss", "body_recomp"]);
-const STRENGTH_FOCUSED_CATEGORIES = new Set(["strength", "performance", "muscle_gain"]);
-const TABLE_STORAGE_VERSION = "v4";
-const DEFAULT_TABLE_SORTING: SortingState = [{ id: "updated_at", desc: true }];
-const DEFAULT_TABLE_VISIBILITY: VisibilityState = {
-  unit: false,
-  start_value: false,
-  start_date: false,
-  target_date: false,
-  notes: false,
-  remaining: false,
-  value_delta: false,
-  pace_delta: false,
-  days_remaining: false,
-  elapsed_days: false,
-  goal_direction: false,
-  check_in_interval_days: false,
-};
-const DEFAULT_TABLE_PAGINATION: PaginationState = { pageIndex: 0, pageSize: 10 };
-const PAGE_SIZE_OPTIONS = ["5", "10", "20", "40"] as const;
 const TABLE_COLUMN_LABELS: Record<string, string> = {
   goal: "Goal",
   category: "Category",
@@ -243,7 +234,7 @@ function defaultModalSections(category: string) {
 
 function categoryHelperText(category: string) {
   if (isWeightFocusedCategory(category)) {
-    return "Weight goal selected. Use start/current/target values in kg and choose the right direction.";
+    return "Weight goal selected. Use start/current/target values in your configured weight unit and choose the right direction.";
   }
   if (isStrengthFocusedCategory(category)) {
     return "Strength/performance goal selected. Use start/current/target values for your chosen unit.";
@@ -296,7 +287,7 @@ function formStateFromGoal(goal: ClientGoalItem): GoalFormState {
 }
 
 function tableStorageKey(clientId: string) {
-  return `coach-client-goals-table:${TABLE_STORAGE_VERSION}:${clientId}`;
+  return `coach-client-goals-table:${GOALS_TABLE_STORAGE_VERSION}:${clientId}`;
 }
 
 function parsePersistedTableState(value: string | null): PersistedGoalsTableState | null {
@@ -305,18 +296,18 @@ function parsePersistedTableState(value: string | null): PersistedGoalsTableStat
     const parsed = JSON.parse(value) as Partial<PersistedGoalsTableState>;
     return {
       globalFilter: typeof parsed.globalFilter === "string" ? parsed.globalFilter : "",
-      sorting: Array.isArray(parsed.sorting) ? parsed.sorting : DEFAULT_TABLE_SORTING,
+      sorting: Array.isArray(parsed.sorting) ? parsed.sorting : GOALS_TABLE_DEFAULT_SORTING,
       columnFilters: Array.isArray(parsed.columnFilters) ? parsed.columnFilters : [],
       columnVisibility:
         parsed.columnVisibility && typeof parsed.columnVisibility === "object"
           ? (parsed.columnVisibility as VisibilityState)
-          : DEFAULT_TABLE_VISIBILITY,
+          : GOALS_TABLE_DEFAULT_VISIBILITY,
       pagination:
         parsed.pagination &&
         typeof parsed.pagination.pageIndex === "number" &&
         typeof parsed.pagination.pageSize === "number"
           ? parsed.pagination
-          : DEFAULT_TABLE_PAGINATION,
+          : GOALS_TABLE_DEFAULT_PAGINATION,
     };
   } catch {
     return null;
@@ -475,6 +466,8 @@ export function ClientGoalsMedicalTab({
   mode?: "client" | "self";
   title?: string;
 }) {
+  const system = useUnitSystem();
+  const labels = useUnitLabels();
   const mutations = useCoachToolMutations();
   const clientGoalsQuery = useClientGoals(clientId || "", "all", 120, {
     enabled: mode !== "self" && Boolean(clientId),
@@ -491,10 +484,10 @@ export function ClientGoalsMedicalTab({
   const [form, setForm] = useState<GoalFormState>(() => defaultFormState());
   const [modalSections, setModalSections] = useState<string[]>(() => defaultModalSections("weight"));
   const [globalFilter, setGlobalFilter] = useState("");
-  const [sorting, setSorting] = useState<SortingState>(DEFAULT_TABLE_SORTING);
+  const [sorting, setSorting] = useState<SortingState>(GOALS_TABLE_DEFAULT_SORTING);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
-  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(DEFAULT_TABLE_VISIBILITY);
-  const [pagination, setPagination] = useState<PaginationState>(DEFAULT_TABLE_PAGINATION);
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(GOALS_TABLE_DEFAULT_VISIBILITY);
+  const [pagination, setPagination] = useState<PaginationState>(GOALS_TABLE_DEFAULT_PAGINATION);
   const [tableStateHydrated, setTableStateHydrated] = useState(false);
   const [activeStatusGoalId, setActiveStatusGoalId] = useState<string | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -518,19 +511,20 @@ export function ClientGoalsMedicalTab({
       setSorting(persisted.sorting);
       setColumnFilters(persisted.columnFilters);
       setColumnVisibility({
-        ...DEFAULT_TABLE_VISIBILITY,
+        ...GOALS_TABLE_DEFAULT_VISIBILITY,
         ...persisted.columnVisibility,
       });
       setPagination({
         pageIndex: Math.max(persisted.pagination.pageIndex, 0),
-        pageSize: persisted.pagination.pageSize > 0 ? persisted.pagination.pageSize : DEFAULT_TABLE_PAGINATION.pageSize,
+        pageSize:
+          persisted.pagination.pageSize > 0 ? persisted.pagination.pageSize : GOALS_TABLE_DEFAULT_PAGINATION.pageSize,
       });
     } else {
       setGlobalFilter("");
-      setSorting(DEFAULT_TABLE_SORTING);
+      setSorting(GOALS_TABLE_DEFAULT_SORTING);
       setColumnFilters([]);
-      setColumnVisibility(DEFAULT_TABLE_VISIBILITY);
-      setPagination(DEFAULT_TABLE_PAGINATION);
+      setColumnVisibility(GOALS_TABLE_DEFAULT_VISIBILITY);
+      setPagination(GOALS_TABLE_DEFAULT_PAGINATION);
     }
     setTableStateHydrated(true);
   }, [storageKey]);
@@ -740,7 +734,7 @@ export function ClientGoalsMedicalTab({
       ...prev,
       category: value,
       goal_direction: direction,
-      unit: weightFocused && !prev.unit ? "kg" : prev.unit,
+      unit: weightFocused && !prev.unit ? weightUnit(system) : prev.unit,
     }));
     setModalSections((prev) => {
       const recommended = "goal-metrics";
@@ -1173,7 +1167,7 @@ export function ClientGoalsMedicalTab({
   const clearFilters = () => {
     setGlobalFilter("");
     setColumnFilters([]);
-    setSorting(DEFAULT_TABLE_SORTING);
+    setSorting(GOALS_TABLE_DEFAULT_SORTING);
     setPagination((prev) => ({ ...prev, pageIndex: 0 }));
   };
 
@@ -1220,7 +1214,7 @@ export function ClientGoalsMedicalTab({
                               value={form.goal}
                               onChange={(event) => setForm((prev) => ({ ...prev, goal: event.target.value }))}
                               className="h-11 rounded-xl border-border/60 bg-muted/20 focus-visible:ring-chart-1/60"
-                              placeholder="e.g. Lose 10 lbs"
+                              placeholder={`e.g. Lose 10 ${labels.weight}`}
                             />
                           </div>
                           <div className="space-y-2">
@@ -1299,7 +1293,7 @@ export function ClientGoalsMedicalTab({
                               value={form.unit}
                               onChange={(event) => setForm((prev) => ({ ...prev, unit: event.target.value }))}
                               className="h-11 rounded-xl border-border/60 bg-muted/20"
-                              placeholder="kg / reps / km / min"
+                              placeholder={`${labels.weight} / reps / ${labels.distance} / min`}
                             />
                           </div>
                         </div>
@@ -1810,7 +1804,7 @@ export function ClientGoalsMedicalTab({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {PAGE_SIZE_OPTIONS.map((value) => (
+                    {GOALS_TABLE_PAGE_SIZE_OPTIONS.map((value) => (
                       <SelectItem key={value} value={value}>
                         {value} / page
                       </SelectItem>

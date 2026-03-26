@@ -33,6 +33,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { useUnitSystem } from "@/stores/use-settings-store";
+import { displayCircumference, displayWeight, circumferenceUnit, weightUnit } from "@/utils/unit-conversion";
 
 type MeasurementsTableProps = {
   data: BodyMeasurementRow[];
@@ -91,6 +93,7 @@ export function MeasurementsTable({ data, isLoading, onEdit }: MeasurementsTable
   const [sorting, setSorting] = useState<SortingState>([{ id: "date", desc: true }]);
   const [globalFilter, setGlobalFilter] = useState("");
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
+  const system = useUnitSystem();
 
   const columns = useMemo<ColumnDef<BodyMeasurementRow>[]>(
     () => [
@@ -111,12 +114,12 @@ export function MeasurementsTable({ data, isLoading, onEdit }: MeasurementsTable
         accessorKey: "weight",
         header: ({ column }) => (
           <SortHeader
-            label="Weight"
+            label={`Weight (${weightUnit(system)})`}
             sorted={column.getIsSorted()}
             onClick={(event) => column.toggleSorting(column.getIsSorted() === "asc", event.shiftKey)}
           />
         ),
-        cell: ({ row }) => fmtUnit(row.original.weight, "kg"),
+        cell: ({ row }) => fmtUnit(displayWeight(row.original.weight, system), weightUnit(system)),
       },
       {
         id: "body_fat_percent",
@@ -131,40 +134,40 @@ export function MeasurementsTable({ data, isLoading, onEdit }: MeasurementsTable
         cell: ({ row }) => fmtPct(row.original.body_fat_percent),
       },
       {
-        id: "waist_cm",
-        accessorKey: "waist_cm",
+        id: "waist",
+        accessorKey: "waist",
         header: ({ column }) => (
           <SortHeader
-            label="Waist"
+            label={`Waist (${circumferenceUnit(system)})`}
             sorted={column.getIsSorted()}
             onClick={(event) => column.toggleSorting(column.getIsSorted() === "asc", event.shiftKey)}
           />
         ),
-        cell: ({ row }) => fmtUnit(row.original.waist_cm, "cm"),
+        cell: ({ row }) => fmtUnit(displayCircumference(row.original.waist, system), circumferenceUnit(system)),
       },
       {
-        id: "hips_cm",
-        accessorKey: "hips_cm",
+        id: "hips",
+        accessorKey: "hips",
         header: ({ column }) => (
           <SortHeader
-            label="Hips"
+            label={`Hips (${circumferenceUnit(system)})`}
             sorted={column.getIsSorted()}
             onClick={(event) => column.toggleSorting(column.getIsSorted() === "asc", event.shiftKey)}
           />
         ),
-        cell: ({ row }) => fmtUnit(row.original.hips_cm, "cm"),
+        cell: ({ row }) => fmtUnit(displayCircumference(row.original.hips, system), circumferenceUnit(system)),
       },
       {
-        id: "chest_cm",
-        accessorKey: "chest_cm",
+        id: "chest",
+        accessorKey: "chest",
         header: ({ column }) => (
           <SortHeader
-            label="Chest"
+            label={`Chest (${circumferenceUnit(system)})`}
             sorted={column.getIsSorted()}
             onClick={(event) => column.toggleSorting(column.getIsSorted() === "asc", event.shiftKey)}
           />
         ),
-        cell: ({ row }) => fmtUnit(row.original.chest_cm, "cm"),
+        cell: ({ row }) => fmtUnit(displayCircumference(row.original.chest, system), circumferenceUnit(system)),
       },
       {
         id: "notes",
@@ -215,9 +218,9 @@ export function MeasurementsTable({ data, isLoading, onEdit }: MeasurementsTable
         source.date,
         source.weight,
         source.body_fat_percent,
-        source.waist_cm,
-        source.hips_cm,
-        source.chest_cm,
+        source.waist,
+        source.hips,
+        source.chest,
         source.notes,
       ]
         .map((value) => (value == null ? "" : String(value)))

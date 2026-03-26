@@ -8,6 +8,7 @@ import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import * as z from "zod";
 import { restoreCurrentSoftDeletedAccount, restoreSoftDeletedAccount } from "@/app/actions/account-security";
+import { checkProfileDeletedStatus } from "@/app/actions/settings";
 import { createClient } from "@/lib/supabase/client";
 import { loginSchema } from "@/lib/validations/auth";
 import { Button } from "@/components/ui/button";
@@ -46,9 +47,13 @@ export function RestoreAccountForm() {
     let active = true;
     void (async () => {
       const { data } = await supabase.auth.getUser();
-      if (!active) return;
-      const isDeleted = Boolean(data.user?.user_metadata?.is_deleted);
-      setSessionDeleted(isDeleted);
+      if (!active || !data.user) return;
+      try {
+        const { is_deleted } = await checkProfileDeletedStatus();
+        if (active) setSessionDeleted(is_deleted);
+      } catch {
+        // User may not have a session — ignore
+      }
     })();
     return () => {
       active = false;

@@ -56,12 +56,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useDebounce } from "@/hooks/use-debounce";
 import { useCoachClients, useCoachToolMutations } from "@/hooks/use-coach-tools";
 import { withToastFeedback } from "@/lib/ui/toast-feedback";
+import {
+  CLIENT_STATUS_FILTER_OPTIONS,
+  TABLE_DEFAULT_PAGINATION_PAGE_0_SIZE_10,
+  TABLE_DEFAULT_SORTING_UPDATED_AT_DESC,
+  TABLE_PAGE_SIZE_OPTIONS_STANDARD,
+} from "@/utils/app-constants";
 import { cn } from "@/utils";
-
-const STATUS_OPTIONS: Array<ClientStatus | "all"> = ["all", "active", "paused", "blocked", "archived"];
-const PAGE_SIZE_OPTIONS = [10, 20, 50] as const;
-const DEFAULT_SORTING: SortingState = [{ id: "updated_at", desc: true }];
-const DEFAULT_PAGINATION: PaginationState = { pageIndex: 0, pageSize: 10 };
 const DEFAULT_VISIBILITY: VisibilityState = {
   updated_at: true,
   active_plans_count: true,
@@ -168,8 +169,8 @@ function sortIndicator(sorted: false | "asc" | "desc") {
 export function ClientRoster() {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<ClientStatus | "all">("all");
-  const [sorting, setSorting] = useState<SortingState>(DEFAULT_SORTING);
-  const [pagination, setPagination] = useState<PaginationState>(DEFAULT_PAGINATION);
+  const [sorting, setSorting] = useState<SortingState>(TABLE_DEFAULT_SORTING_UPDATED_AT_DESC);
+  const [pagination, setPagination] = useState<PaginationState>(TABLE_DEFAULT_PAGINATION_PAGE_0_SIZE_10);
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(DEFAULT_VISIBILITY);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [createForm, setCreateForm] = useState<ClientFormState>(() => emptyFormState());
@@ -504,7 +505,7 @@ export function ClientRoster() {
           </div>
 
           <div className="no-scrollbar flex gap-2 overflow-x-auto pb-1">
-            {STATUS_OPTIONS.map((entry) => {
+            {CLIENT_STATUS_FILTER_OPTIONS.map((entry) => {
               const active = status === entry;
               const countValue = counts[entry];
               return (
@@ -640,7 +641,7 @@ export function ClientRoster() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {PAGE_SIZE_OPTIONS.map((size) => (
+              {TABLE_PAGE_SIZE_OPTIONS_STANDARD.map((size) => (
                 <SelectItem key={size} value={String(size)}>
                   {size} / page
                 </SelectItem>
@@ -736,7 +737,7 @@ export function ClientRoster() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {STATUS_OPTIONS.filter((entry): entry is ClientStatus => entry !== "all").map((entry) => (
+                  {CLIENT_STATUS_FILTER_OPTIONS.filter((entry): entry is ClientStatus => entry !== "all").map((entry) => (
                     <SelectItem key={entry} value={entry}>
                       {entry}
                     </SelectItem>
@@ -845,7 +846,7 @@ export function ClientRoster() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {STATUS_OPTIONS.filter((entry): entry is ClientStatus => entry !== "all").map((entry) => (
+                    {CLIENT_STATUS_FILTER_OPTIONS.filter((entry): entry is ClientStatus => entry !== "all").map((entry) => (
                       <SelectItem key={entry} value={entry}>
                         {entry}
                       </SelectItem>

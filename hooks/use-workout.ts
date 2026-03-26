@@ -83,7 +83,6 @@ export function useWorkouts() {
         date: workoutData.date,
         notes: workoutData.notes,
         overall_rating: workoutData.overall_rating,
-        ai_feedback: workoutData.ai_feedback,
         template_id: workoutData.template_id,
         exercises: workoutData.exercises,
         status: "active" // Default per your requirement
@@ -110,7 +109,6 @@ export function useWorkouts() {
           notes: data.notes,
           status: data.status,
           overall_rating: data.overall_rating,
-          ai_feedback: data.ai_feedback,
           template_id: data.template_id,
           exercises: data.exercises 
         }),

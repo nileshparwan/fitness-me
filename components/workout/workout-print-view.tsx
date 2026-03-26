@@ -10,6 +10,8 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Database } from "@/types/database";
 import { parseCardioNotes } from "@/utils/cardio-notes";
+import { useUnitLabels, useUnitSystem } from "@/stores/use-settings-store";
+import { displayDistance, displayWeight } from "@/utils/unit-conversion";
 
 type WorkoutLog = Database["public"]["Tables"]["strength_sets"]["Row"];
 type CardioLog = Database["public"]["Tables"]["cardio_sessions"]["Row"];
@@ -23,6 +25,8 @@ interface PrintViewProps {
 
 export const WorkoutPrintView = React.forwardRef<HTMLDivElement, PrintViewProps>(
   ({ workout, strengthLogs, cardioLogs }, ref) => {
+    const system = useUnitSystem();
+    const labels = useUnitLabels();
     const strengthGroups = groupStrengthByExercise(strengthLogs);
 
     type TimelineEntry =
@@ -74,7 +78,7 @@ export const WorkoutPrintView = React.forwardRef<HTMLDivElement, PrintViewProps>
                   {
                     set_number: 1,
                     duration: log.duration_minutes || 0,
-                    distance: log.distance_km ?? undefined,
+                    distance: log.distance ?? undefined,
                     reps: log.reps ?? undefined,
                     calories: log.calories_burned ?? undefined,
                     heartRate: log.average_heart_rate ?? undefined,
@@ -135,7 +139,7 @@ export const WorkoutPrintView = React.forwardRef<HTMLDivElement, PrintViewProps>
         <div className="mb-6 space-y-1">
           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">General Notes</p>
           <p className="whitespace-pre-wrap text-sm text-muted-foreground">
-            {workout.ai_feedback?.trim() || "No notes provided."}
+            {workout.notes?.trim() || "No notes provided."}
           </p>
         </div>
 
@@ -164,7 +168,7 @@ export const WorkoutPrintView = React.forwardRef<HTMLDivElement, PrintViewProps>
                         <div key={`share-strength-set-${idx}-${set.set_number}`} className="space-y-1">
                           <div className="grid grid-cols-3 gap-2 text-xs">
                             <span>Set {set.set_number}</span>
-                            <span>{set.weight} kg</span>
+                            <span>{displayWeight(set.weight, system)?.toFixed(1)} {labels.weight}</span>
                             <span>{set.reps} reps</span>
                           </div>
                           {advanced ? <p className="text-[11px] text-muted-foreground">{advanced}</p> : null}
@@ -185,7 +189,7 @@ export const WorkoutPrintView = React.forwardRef<HTMLDivElement, PrintViewProps>
                         <div className="grid grid-cols-4 gap-2 text-xs">
                           <span>Set {set.set_number}</span>
                           <span>{set.duration} min</span>
-                          <span>{set.distance ?? 0} km</span>
+                          <span>{displayDistance(set.distance ?? 0, system)?.toFixed(1)} {labels.distance}</span>
                           <span>{set.reps ?? 0} reps</span>
                         </div>
                         {(set.calories !== undefined || set.heartRate !== undefined) ? (

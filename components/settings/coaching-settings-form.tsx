@@ -154,7 +154,7 @@ export function CoachingSettingsForm({ profile }: CoachingSettingsFormProps) {
         <section className="native-surface surface-pad stack-gap">
           <div className="space-y-1">
             <h3 className="text-lg font-semibold">Unit System</h3>
-            <p className="text-sm text-muted-foreground">Metric (kg, cm) or Imperial (lbs, in).</p>
+            <p className="text-sm text-muted-foreground">Stored values stay metric; labels switch with your unit preference.</p>
           </div>
           <FormField
             control={form.control}

@@ -27,7 +27,7 @@ type ActionExercise =
       device_source?: string;
       avg_cadence_rpm?: number;
       avg_power_watts?: number;
-      avg_speed_kmh?: number;
+      avg_speed?: number;
       max_speed_kmh?: number;
       vo2max_estimate?: number;
       training_load_score?: number;
@@ -94,7 +94,7 @@ export function mapEntriesToActionExercises(
           device_source: entry.device_source,
           avg_cadence_rpm: entry.avg_cadence_rpm,
           avg_power_watts: entry.avg_power_watts,
-          avg_speed_kmh: entry.avg_speed_kmh,
+          avg_speed: entry.avg_speed,
           max_speed_kmh: entry.max_speed_kmh,
           vo2max_estimate: entry.vo2max_estimate,
           training_load_score: entry.training_load_score,

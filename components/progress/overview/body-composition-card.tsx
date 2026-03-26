@@ -13,6 +13,8 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useUnitLabels, useUnitSystem } from "@/stores/use-settings-store";
+import { displayCircumference, displayWeight } from "@/utils/unit-conversion";
 import { cn } from "@/utils";
 import type { BodyCompositionSeries } from "@/app/actions/progress-overview";
 
@@ -24,47 +26,82 @@ type Props = {
 };
 
 type MetricKey =
-  | "weight_kg"
+  | "weight"
   | "body_fat_pct"
-  | "waist_cm"
-  | "hips_cm"
-  | "chest_cm"
-  | "neck_cm"
-  | "bicep_left_cm"
-  | "bicep_right_cm"
-  | "thigh_left_cm"
-  | "thigh_right_cm"
-  | "calf_cm";
+  | "waist"
+  | "hips"
+  | "chest"
+  | "neck"
+  | "bicep_left"
+  | "bicep_right"
+  | "thigh_left"
+  | "thigh_right"
+  | "calf";
 
-const METRICS: Array<{ key: MetricKey; label: string; color: string; unit: string; more?: boolean }> = [
-  { key: "weight_kg", label: "Weight", color: "#F472B6", unit: "kg" },
-  { key: "body_fat_pct", label: "Body Fat", color: "#4ADE80", unit: "%" },
-  { key: "waist_cm", label: "Waist", color: "#FBBF24", unit: "cm" },
-  { key: "hips_cm", label: "Hips", color: "#60A5FA", unit: "cm" },
-  { key: "chest_cm", label: "Chest", color: "#A78BFA", unit: "cm" },
-  { key: "neck_cm", label: "Neck", color: "#06B6D4", unit: "cm", more: true },
-  { key: "bicep_left_cm", label: "Bicep L", color: "#8B5CF6", unit: "cm", more: true },
-  { key: "bicep_right_cm", label: "Bicep R", color: "#EC4899", unit: "cm", more: true },
-  { key: "thigh_left_cm", label: "Thigh L", color: "#F97316", unit: "cm", more: true },
-  { key: "thigh_right_cm", label: "Thigh R", color: "#14B8A6", unit: "cm", more: true },
-  { key: "calf_cm", label: "Calf", color: "#84CC16", unit: "cm", more: true },
+type Metric = { key: MetricKey; label: string; color: string; unit: string; more?: boolean };
+
+const BASE_METRICS: Array<Omit<Metric, "unit">> = [
+  { key: "weight", label: "Weight", color: "#F472B6" },
+  { key: "body_fat_pct", label: "Body Fat", color: "#4ADE80" },
+  { key: "waist", label: "Waist", color: "#FBBF24" },
+  { key: "hips", label: "Hips", color: "#60A5FA" },
+  { key: "chest", label: "Chest", color: "#A78BFA" },
+  { key: "neck", label: "Neck", color: "#06B6D4", more: true },
+  { key: "bicep_left", label: "Bicep L", color: "#8B5CF6", more: true },
+  { key: "bicep_right", label: "Bicep R", color: "#EC4899", more: true },
+  { key: "thigh_left", label: "Thigh L", color: "#F97316", more: true },
+  { key: "thigh_right", label: "Thigh R", color: "#14B8A6", more: true },
+  { key: "calf", label: "Calf", color: "#84CC16", more: true },
 ];
 
-const DEFAULT_ACTIVE: MetricKey[] = ["weight_kg", "body_fat_pct"];
+const DEFAULT_ACTIVE: MetricKey[] = ["weight", "body_fat_pct"];
 const GRID = "rgba(140,156,187,0.22)";
 
 function formatDate(value: string) {
   return value.slice(5);
 }
 
+function convertPoint(
+  row: BodyCompositionSeries[number],
+  system: ReturnType<typeof useUnitSystem>
+): BodyCompositionSeries[number] {
+  return {
+    ...row,
+    weight: displayWeight(row.weight, system),
+    waist: displayCircumference(row.waist, system),
+    hips: displayCircumference(row.hips, system),
+    chest: displayCircumference(row.chest, system),
+    neck: displayCircumference(row.neck, system),
+    bicep_left: displayCircumference(row.bicep_left, system),
+    bicep_right: displayCircumference(row.bicep_right, system),
+    thigh_left: displayCircumference(row.thigh_left, system),
+    thigh_right: displayCircumference(row.thigh_right, system),
+    calf: displayCircumference(row.calf, system),
+  };
+}
+
+function convertMetricValue(key: MetricKey, value: number | null | undefined, system: ReturnType<typeof useUnitSystem>) {
+  if (value === null || value === undefined) return null;
+  switch (key) {
+    case "weight":
+      return displayWeight(value, system);
+    case "body_fat_pct":
+      return value;
+    default:
+      return displayCircumference(value, system);
+  }
+}
+
 function BodyTooltip({
   active,
   payload,
   activeKeys,
+  metrics,
 }: {
   active?: boolean;
   payload?: Array<{ payload: Record<string, number | string | null> }>;
   activeKeys: MetricKey[];
+  metrics: Metric[];
 }) {
   if (!active || !payload || payload.length === 0) return null;
   const row = payload[0]?.payload;
@@ -74,7 +111,7 @@ function BodyTooltip({
     <div className="rounded-[12px] border border-white/15 bg-[#10192d]/95 px-3 py-2 text-xs shadow-2xl">
       <p className="mb-1 text-sm font-medium text-foreground">{String(row.date).slice(5)}</p>
       {activeKeys.map((key) => {
-        const metric = METRICS.find((item) => item.key === key);
+        const metric = metrics.find((item) => item.key === key);
         if (!metric) return null;
         const value = row[key];
         if (value === null || value === undefined) return null;
@@ -91,33 +128,49 @@ function BodyTooltip({
 export function BodyCompositionCard({ series, compareSeries, compare, isLoading }: Props) {
   const [showMore, setShowMore] = useState(false);
   const [activeKeys, setActiveKeys] = useState<MetricKey[]>(DEFAULT_ACTIVE);
+  const system = useUnitSystem();
+  const labels = useUnitLabels();
+
+  const metrics = useMemo<Metric[]>(
+    () =>
+      BASE_METRICS.map((metric) => ({
+        ...metric,
+        unit:
+          metric.key === "weight"
+            ? labels.weight
+            : metric.key === "body_fat_pct"
+              ? "%"
+              : labels.circumference,
+      })),
+    [labels]
+  );
 
   const availableMap = useMemo(() => {
     const map = new Map<MetricKey, boolean>();
-    for (const metric of METRICS) {
+    for (const metric of metrics) {
       const hasCurrent = series.some((row) => row[metric.key] !== null && row[metric.key] !== undefined);
       const hasCompare = compareSeries?.some((row) => row[metric.key] !== null && row[metric.key] !== undefined) ?? false;
       map.set(metric.key, hasCurrent || hasCompare);
     }
     return map;
-  }, [series, compareSeries]);
+  }, [series, compareSeries, metrics]);
 
   const chartRows = useMemo(() => {
     const byDate = new Map<string, Record<string, number | string | null>>();
     for (const row of series) {
-      byDate.set(row.date, { ...row });
+      byDate.set(row.date, convertPoint(row, system));
     }
     if (compare && compareSeries) {
       for (const row of compareSeries) {
-        const existing = byDate.get(row.date) || { date: row.date };
-        for (const metric of METRICS) {
-          existing[`compare_${metric.key}`] = row[metric.key];
+        const existing = (byDate.get(row.date) || convertPoint(row, system)) as Record<string, number | string | null>;
+        for (const metric of metrics) {
+          existing[`compare_${metric.key}`] = convertMetricValue(metric.key, row[metric.key], system);
         }
         byDate.set(row.date, existing);
       }
     }
     return [...byDate.values()].sort((a, b) => String(a.date).localeCompare(String(b.date)));
-  }, [series, compareSeries, compare]);
+  }, [series, compareSeries, compare, metrics, system]);
 
   const yDomain = useMemo(() => {
     const values: number[] = [];
@@ -137,8 +190,8 @@ export function BodyCompositionCard({ series, compareSeries, compare, isLoading 
     return [Math.floor(min * 0.95), Math.ceil(max * 1.05)];
   }, [chartRows, activeKeys, compare]);
 
-  const primaryMetrics = METRICS.filter((metric) => !metric.more);
-  const extraMetrics = METRICS.filter((metric) => metric.more);
+  const primaryMetrics = metrics.filter((metric) => !metric.more);
+  const extraMetrics = metrics.filter((metric) => metric.more);
 
   if (isLoading) {
     return <Skeleton className="h-[520px] rounded-[16px]" />;
@@ -211,11 +264,11 @@ export function BodyCompositionCard({ series, compareSeries, compare, isLoading 
                 tick={{ fontSize: 12 }}
               />
               <ChartTooltip
-                content={<BodyTooltip activeKeys={activeKeys} />}
+                content={<BodyTooltip activeKeys={activeKeys} metrics={metrics} />}
                 cursor={{ stroke: "rgba(229,237,255,0.55)", strokeWidth: 1 }}
               />
               {activeKeys.map((key) => {
-                const metric = METRICS.find((item) => item.key === key);
+                const metric = metrics.find((item) => item.key === key);
                 if (!metric) return null;
                 return (
                   <Line
@@ -233,7 +286,7 @@ export function BodyCompositionCard({ series, compareSeries, compare, isLoading 
               })}
               {compare
                 ? activeKeys.map((key) => {
-                    const metric = METRICS.find((item) => item.key === key);
+                    const metric = metrics.find((item) => item.key === key);
                     if (!metric) return null;
                     return (
                       <Line

@@ -57,7 +57,7 @@ export default function AdminTrainingPage() {
         <CompactMetricCard title="Avg Min" value={data?.avg_session_duration_minutes ?? 0} isLoading={isLoading} />
         <CompactMetricCard title="Sets/Session" value={data?.avg_sets_per_session ?? 0} isLoading={isLoading} />
         <CompactMetricCard title="Reps/Set" value={data?.avg_reps_per_set ?? 0} isLoading={isLoading} />
-        <CompactMetricCard title="Volume kg" value={data?.total_volume_kg ?? 0} isLoading={isLoading} />
+        <CompactMetricCard title="Volume" value={data?.total_volume_kg ?? 0} isLoading={isLoading} />
       </section>
 
       <section className="grid grid-cols-1 gap-3 xl:grid-cols-3">

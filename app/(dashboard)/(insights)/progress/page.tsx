@@ -88,7 +88,7 @@ export default function ProgressPage() {
           compareData={overview?.strength.compare ?? undefined}
           compare={compare}
           isLoading={isLoadingOverview}
-          latestWeightKg={overview?.summary?.latest_weight_kg ?? null}
+          latestWeightKg={overview?.summary?.latest_weight ?? null}
         />
       </section>
 

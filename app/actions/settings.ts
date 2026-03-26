@@ -85,41 +85,28 @@ export async function getSettingsProfile(): Promise<SettingsProfilePayload> {
 
       const { data: profileData, error: profileError } = await supabase
         .from("profiles")
-        .select("id, full_name, date_of_birth, bio, avatar_url, preferred_units, role")
+        .select(
+          "id, full_name, date_of_birth, bio, avatar_url, preferred_units, role, phone, default_calories, default_protein, default_carbs, default_fat, compact_mode"
+        )
         .eq("id", user.id)
         .maybeSingle();
 
       if (profileError) throw profileError;
 
-      const metadata = user.user_metadata && typeof user.user_metadata === "object" ? user.user_metadata : {};
-
-      const fullName =
-        toNullableText(profileData?.full_name) ||
-        toNullableText((metadata as Record<string, unknown>).full_name) ||
-        toNullableText((metadata as Record<string, unknown>).display_name);
-      const bio = toNullableText(profileData?.bio) || toNullableText((metadata as Record<string, unknown>).bio);
-      const avatarUrl =
-        toNullableText(profileData?.avatar_url) || toNullableText((metadata as Record<string, unknown>).avatar_url);
-      const phone = toNullableText((metadata as Record<string, unknown>).phone);
-
-      const preferredUnits = normalizeUnit(
-        profileData?.preferred_units ?? (metadata as Record<string, unknown>).preferred_units
-      );
-
       return {
-        full_name: fullName,
+        full_name: profileData?.full_name ?? null,
         email: user.email ?? null,
         role: profileData?.role === "sysadmin" ? "sysadmin" : "user",
-        phone,
+        phone: profileData?.phone ?? null,
         date_of_birth: profileData?.date_of_birth ?? null,
-        bio,
-        avatar_url: avatarUrl,
-        preferred_units: preferredUnits,
-        default_calories: toNullableInt((metadata as Record<string, unknown>).default_calories),
-        default_protein: toNullableInt((metadata as Record<string, unknown>).default_protein),
-        default_carbs: toNullableInt((metadata as Record<string, unknown>).default_carbs),
-        default_fat: toNullableInt((metadata as Record<string, unknown>).default_fat),
-        compact_mode: toBoolean((metadata as Record<string, unknown>).compact_mode),
+        bio: profileData?.bio ?? null,
+        avatar_url: profileData?.avatar_url ?? null,
+        preferred_units: normalizeUnit(profileData?.preferred_units),
+        default_calories: toNullableInt(profileData?.default_calories),
+        default_protein: toNullableInt(profileData?.default_protein),
+        default_carbs: toNullableInt(profileData?.default_carbs),
+        default_fat: toNullableInt(profileData?.default_fat),
+        compact_mode: toBoolean(profileData?.compact_mode),
         has_email_identity: hasEmailIdentity(user),
       };
     },
@@ -139,22 +126,11 @@ export async function updateProfile(data: ProfileFormValues) {
         date_of_birth: parsed.date_of_birth ?? null,
         bio: toNullableText(parsed.bio),
         avatar_url: toNullableText(parsed.avatar_url),
+        phone: toNullableText(parsed.phone),
       };
 
       const { error: profileError } = await supabase.from("profiles").upsert(profilePayload, { onConflict: "id" });
       if (profileError) throw profileError;
-
-      const nextMetadata = {
-        ...(user.user_metadata && typeof user.user_metadata === "object" ? user.user_metadata : {}),
-        full_name: profilePayload.full_name,
-        bio: profilePayload.bio,
-        avatar_url: profilePayload.avatar_url,
-        phone: toNullableText(parsed.phone),
-        updatedAt: new Date().toISOString(),
-      };
-
-      const { error: metadataError } = await supabase.auth.updateUser({ data: nextMetadata });
-      if (metadataError) throw metadataError;
 
       revalidatePath("/settings/profile");
       revalidatePath("/settings");
@@ -174,21 +150,14 @@ export async function updateCoachingDefaults(payload: CoachingDefaultsPayload) {
       const profilePayload: ProfileInsert = {
         id: user.id,
         preferred_units: parsed.preferred_units,
-      };
-
-      const { error: profileError } = await supabase.from("profiles").upsert(profilePayload, { onConflict: "id" });
-      if (profileError) throw profileError;
-
-      const nextMetadata = {
-        ...(user.user_metadata && typeof user.user_metadata === "object" ? user.user_metadata : {}),
         default_calories: parsed.default_calories ?? null,
         default_protein: parsed.default_protein ?? null,
         default_carbs: parsed.default_carbs ?? null,
         default_fat: parsed.default_fat ?? null,
-        updatedAt: new Date().toISOString(),
       };
-      const { error: metadataError } = await supabase.auth.updateUser({ data: nextMetadata });
-      if (metadataError) throw metadataError;
+
+      const { error: profileError } = await supabase.from("profiles").upsert(profilePayload, { onConflict: "id" });
+      if (profileError) throw profileError;
 
       revalidatePath("/settings/coaching");
       revalidatePath("/settings");
@@ -205,6 +174,46 @@ export async function updateCoachingDefaults(payload: CoachingDefaultsPayload) {
   });
 }
 
+export async function updateProfilePasswordStatus() {
+  return runTrackedAction({
+    eventName: "settings.password.status.update",
+    action: async () => {
+      const { supabase, user } = await requireSettingsActor();
+
+      const { error } = await supabase
+        .from("profiles")
+        .update({
+          has_password: true,
+          password_configured_at: new Date().toISOString(),
+        })
+        .eq("id", user.id);
+      if (error) throw error;
+
+      return { success: true };
+    },
+  });
+}
+
+export async function checkProfileDeletedStatus() {
+  return runTrackedAction({
+    eventName: "settings.profile.deleted.check",
+    action: async () => {
+      const { supabase, user } = await requireSettingsActor();
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("is_deleted, is_blocked")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      return {
+        is_deleted: Boolean(profile?.is_deleted),
+        is_blocked: Boolean(profile?.is_blocked),
+      };
+    },
+  });
+}
+
 export async function updateDisplayPreferences(payload: DisplayPreferencesPayload) {
   return runTrackedAction({
     eventName: "settings.display.update",
@@ -212,13 +221,13 @@ export async function updateDisplayPreferences(payload: DisplayPreferencesPayloa
       const { supabase, user } = await requireSettingsActor();
       const parsed = displayPreferencesSchema.parse(payload);
 
-      const nextMetadata = {
-        ...(user.user_metadata && typeof user.user_metadata === "object" ? user.user_metadata : {}),
+      const profilePayload: ProfileInsert = {
+        id: user.id,
         compact_mode: parsed.compact_mode,
-        updatedAt: new Date().toISOString(),
       };
-      const { error: metadataError } = await supabase.auth.updateUser({ data: nextMetadata });
-      if (metadataError) throw metadataError;
+
+      const { error: profileError } = await supabase.from("profiles").upsert(profilePayload, { onConflict: "id" });
+      if (profileError) throw profileError;
 
       revalidatePath("/settings/display");
       revalidatePath("/settings");

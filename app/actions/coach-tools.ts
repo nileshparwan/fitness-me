@@ -27,6 +27,25 @@ import { decodeCursor, encodeCursor } from "@/lib/utils/pagination";
 import { escapeLikePattern } from "@/lib/utils/search";
 import { createClient } from "@/lib/supabase/server";
 import { Database, Json } from "@/types/database";
+import {
+  BILLING_TYPE_VALUES,
+  CHECKIN_STATUS_VALUES,
+  CLIENT_STATUS_VALUES,
+  COACH_PAYMENT_STATUS_FILTER_OPTIONS,
+  COACH_NOTE_TAG_INPUTS,
+  GOAL_CATEGORIES,
+  GOAL_DIRECTION_VALUES,
+  GOAL_STATUS_FILTER_OPTIONS,
+  GOAL_STATUSES,
+  PAYMENT_LOG_STATUS_FILTER_OPTIONS,
+  PAYMENT_METHOD_VALUES,
+  PAYMENT_STATUS_VALUES,
+  SESSION_LOCATION_TYPE_VALUES,
+  SESSION_SLOT_VALUES,
+  STRENGTH_FOCUSED_CATEGORIES,
+  WEIGHT_FOCUSED_CATEGORIES,
+} from "@/utils/app-constants";
+import { isWeightUnit, weightUnit, type UnitSystem } from "@/utils/unit-conversion";
 
 type ClientRow = Database["public"]["Tables"]["clients"]["Row"];
 type AssignmentRow = Database["public"]["Tables"]["client_plan_assignments"]["Row"];
@@ -54,6 +73,7 @@ type GoalUpdate = Database["public"]["Tables"]["fitness_goals"]["Update"];
 type GoalProgressHistoryInsert = Database["public"]["Tables"]["goal_progress_history"]["Insert"];
 type ClientInsert = Database["public"]["Tables"]["clients"]["Insert"];
 type ClientUpdate = Database["public"]["Tables"]["clients"]["Update"];
+type PreferredUnitsRow = Pick<Database["public"]["Tables"]["profiles"]["Row"], "preferred_units">;
 
 export type ClientStatus = Database["public"]["Enums"]["client_status"];
 export type SessionSlot = Database["public"]["Enums"]["session_slot"];
@@ -67,35 +87,6 @@ export type BillingType = Database["public"]["Enums"]["billing_type"];
 export type GoalStatus = ClientGoalStatus;
 export type GoalTrend = ClientGoalTrend;
 
-const GOAL_STATUS_VALUES = [
-  "active",
-  "on_track",
-  "at_risk",
-  "completed",
-  "paused",
-  "archived",
-] as const;
-
-const GOAL_CATEGORY_VALUES = [
-  "weight",
-  "muscle_gain",
-  "strength",
-  "performance",
-  "nutrition",
-  "custom",
-] as const;
-
-const COACH_NOTE_TAG_INPUTS = [
-  "general",
-  "injury",
-  "nutrition",
-  "psychology",
-  "milestone",
-  // Legacy tags kept for backward-compatible input handling.
-  "form",
-  "programming",
-] as const;
-
 function normalizeCoachNoteTag(tag: (typeof COACH_NOTE_TAG_INPUTS)[number]): CoachNoteTag {
   if (tag === "form" || tag === "programming") return "general";
   return tag as CoachNoteTag;
@@ -105,14 +96,14 @@ const listClientsSchema = z.object({
   cursor: z.string().nullish(),
   page_size: z.number().int().min(1).max(100).default(12),
   search: z.string().trim().max(100).optional(),
-  status: z.enum(["active", "paused", "blocked", "archived"]).optional(),
+  status: z.enum(CLIENT_STATUS_VALUES).optional(),
   sort_by: z.enum(["updated_at", "created_at", "first_name", "status", "email"]).default("updated_at"),
   sort_dir: z.enum(["asc", "desc"]).default("desc"),
 });
 
 const listCoachPaymentsSchema = z.object({
   search: z.string().trim().max(120).optional(),
-  status: z.enum(["all", "paid", "pending", "overdue"]).default("all"),
+  status: z.enum(COACH_PAYMENT_STATUS_FILTER_OPTIONS).default("all"),
   limit: z.number().int().min(1).max(2000).default(1000),
   cursor: z.string().nullish(),
   page: z.number().int().min(0).default(0),
@@ -129,7 +120,7 @@ const upsertClientSchema = z.object({
   email: z.string().trim().email().nullable().optional(),
   phone: z.string().trim().max(40).nullable().optional(),
   date_of_birth: z.string().date().nullable().optional(),
-  status: z.enum(["active", "paused", "blocked", "archived"]).default("active"),
+  status: z.enum(CLIENT_STATUS_VALUES).default(CLIENT_STATUS_VALUES[0]),
   linked_user_id: z.string().uuid().nullable().optional(),
   goals: z.string().trim().max(3000).nullable().optional(),
   notes: z.string().trim().max(3000).nullable().optional(),
@@ -144,7 +135,7 @@ const templateSessionSchema = z.object({
   title: z.string().trim().min(1).max(180),
   session_type: z.string().trim().min(1).max(64).default("mixed"),
   notes: z.string().trim().max(5000).nullable().optional(),
-  default_slot: z.enum(["morning", "afternoon", "evening", "other"]).default("other"),
+  default_slot: z.enum(SESSION_SLOT_VALUES).default("other"),
   estimated_duration_minutes: z.number().int().min(0).max(600).nullable().optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
 });
@@ -169,9 +160,9 @@ const logWorkoutSchema = z.object({
   performed_on: z.string().date(),
   started_at: z.string().datetime().nullable().optional(),
   completed_at: z.string().datetime().nullable().optional(),
-  session_slot: z.enum(["morning", "afternoon", "evening", "other"]).default("other"),
+  session_slot: z.enum(SESSION_SLOT_VALUES).default("other"),
   session_label: z.string().trim().max(120).nullable().optional(),
-  location_type: z.enum(["gym", "home", "outdoor", "travel", "other"]).nullable().optional(),
+  location_type: z.enum(SESSION_LOCATION_TYPE_VALUES).nullable().optional(),
   location_label: z.string().trim().max(180).nullable().optional(),
   location_address: z.string().trim().max(500).nullable().optional(),
   location_notes: z.string().trim().max(1000).nullable().optional(),
@@ -198,7 +189,7 @@ const logWorkoutSchema = z.object({
       z.object({
         activity_type: z.string().trim().min(1).max(120),
         duration_minutes: z.number().min(0),
-        distance_km: z.number().min(0).nullable().optional(),
+        distance: z.number().min(0).nullable().optional(),
         calories_burned: z.number().min(0).nullable().optional(),
         average_heart_rate: z.number().min(0).nullable().optional(),
         reps: z.number().int().min(0).nullable().optional(),
@@ -225,7 +216,7 @@ const createCheckinSchema = z.object({
 
 const updateCheckinSchema = z.object({
   id: z.string().uuid(),
-  status: z.enum(["pending", "reviewed", "actioned"]),
+  status: z.enum(CHECKIN_STATUS_VALUES),
   urgent: z.boolean().optional(),
   notes: z.string().trim().max(5000).nullable().optional(),
 });
@@ -481,11 +472,11 @@ const recordPaymentSchema = z.object({
   client_id: z.string().uuid(),
   amount: z.number().positive(),
   currency: z.string().trim().min(3).max(8).default("USD"),
-  method: z.enum(["cash", "bank_transfer", "card", "other"]).default("bank_transfer"),
+  method: z.enum(PAYMENT_METHOD_VALUES).default("bank_transfer"),
   payment_date: z.string().date(),
   period_start: z.string().date().nullable().optional(),
   period_end: z.string().date().nullable().optional(),
-  status: z.enum(["pending", "paid"]).default("pending"),
+  status: z.enum(PAYMENT_STATUS_VALUES).default("pending"),
   notes: z.string().trim().max(5000).nullable().optional(),
 });
 
@@ -495,14 +486,14 @@ const deletePaymentSchema = z.object({
 
 const updatePaymentStatusSchema = z.object({
   id: z.string().uuid(),
-  status: z.enum(["pending", "paid"]),
+  status: z.enum(PAYMENT_STATUS_VALUES),
 });
 
 const updatePaymentDetailsSchema = z
   .object({
     id: z.string().uuid(),
-    method: z.enum(["cash", "bank_transfer", "card", "other"]).optional(),
-    status: z.enum(["pending", "paid"]).optional(),
+    method: z.enum(PAYMENT_METHOD_VALUES).optional(),
+    status: z.enum(PAYMENT_STATUS_VALUES).optional(),
     notes: z.string().trim().max(5000).nullable().optional(),
   })
   .refine(
@@ -515,10 +506,10 @@ const updatePaymentDetailsSchema = z
 
 const createBillingPlanSchema = z.object({
   client_id: z.string().uuid(),
-  billing_type: z.enum(["per_session", "session_package", "monthly", "program", "hourly"]).default("per_session"),
+  billing_type: z.enum(BILLING_TYPE_VALUES).default("per_session"),
   session_rate: z.number().positive(),
   currency: z.string().trim().min(3).max(8).default("USD"),
-  payment_method: z.enum(["cash", "bank_transfer", "card", "other"]).default("cash"),
+  payment_method: z.enum(PAYMENT_METHOD_VALUES).default("cash"),
   sessions_purchased: z.number().int().min(0).default(0),
   monthly_amount: z.number().positive().nullable().optional(),
   billing_cycle_day: z.number().int().min(1).max(28).nullable().optional(),
@@ -534,7 +525,7 @@ const updateBillingPlanSchema = z
     sessions_purchased: z.number().int().min(0).optional(),
     monthly_amount: z.number().positive().nullable().optional(),
     billing_cycle_day: z.number().int().min(1).max(28).nullable().optional(),
-    payment_method: z.enum(["cash", "bank_transfer", "card", "other"]).optional(),
+    payment_method: z.enum(PAYMENT_METHOD_VALUES).optional(),
     notes: z.string().trim().max(5000).nullable().optional(),
     is_active: z.boolean().optional(),
   })
@@ -554,7 +545,7 @@ const renewPackageSchema = z.object({
   billing_plan_id: z.string().uuid(),
   sessions_to_add: z.number().int().positive(),
   payment_amount: z.number().positive(),
-  payment_method: z.enum(["cash", "bank_transfer", "card", "other"]).default("cash"),
+  payment_method: z.enum(PAYMENT_METHOD_VALUES).default("cash"),
   notes: z.string().trim().max(5000).nullable().optional(),
 });
 
@@ -578,17 +569,17 @@ const listClientPaymentLogsSchema = z.object({
   page: z.number().int().min(0).default(0),
   sort_by: z.enum(["session_date", "amount", "status", "created_at"]).default("session_date"),
   sort_dir: z.enum(["asc", "desc"]).default("desc"),
-  status: z.enum(["all", "logged", "confirmed"]).default("all"),
+  status: z.enum(PAYMENT_LOG_STATUS_FILTER_OPTIONS).default("all"),
   search: z.string().trim().max(120).optional(),
 });
 
 const listClientGoalsSchema = z.object({
   client_id: z.string().uuid(),
-  status: z.enum([...GOAL_STATUS_VALUES, "all"]).default("all"),
+  status: z.enum(GOAL_STATUS_FILTER_OPTIONS).default("all"),
   limit: z.number().int().min(1).max(120).default(50),
 });
 const listMyGoalsSchema = z.object({
-  status: z.enum([...GOAL_STATUS_VALUES, "all"]).default("all"),
+  status: z.enum(GOAL_STATUS_FILTER_OPTIONS).default("all"),
   limit: z.number().int().min(1).max(120).default(50),
 });
 
@@ -601,7 +592,7 @@ const createGoalSchema = z
     current_value: z.number().min(0).nullable().optional(),
     target_value: z.number().positive().nullable().optional(),
     unit: z.string().trim().max(32).nullable().optional(),
-    status: z.enum(GOAL_STATUS_VALUES).default("active"),
+    status: z.enum(GOAL_STATUSES).default("active"),
     start_date: z.string().date().optional(),
     target_date: z.string().date().nullable().optional(),
     notes: z.string().trim().max(2500).nullable().optional(),
@@ -609,7 +600,7 @@ const createGoalSchema = z
     start_weight: z.number().min(0).nullable().optional(),
     current_weight: z.number().min(0).nullable().optional(),
     target_weight: z.number().min(0).nullable().optional(),
-    goal_direction: z.enum(["increase", "decrease"]).default("increase"),
+    goal_direction: z.enum(GOAL_DIRECTION_VALUES).default("increase"),
     check_in_interval_days: z.number().int().min(1).max(365).nullable().optional(),
     linked_exercise_id: z.string().uuid().nullable().optional(),
     linked_program_id: z.string().uuid().nullable().optional(),
@@ -631,7 +622,7 @@ const updateGoalSchema = z
     current_value: z.number().min(0).nullable().optional(),
     target_value: z.number().positive().nullable().optional(),
     unit: z.string().trim().max(32).nullable().optional(),
-    status: z.enum(GOAL_STATUS_VALUES).optional(),
+    status: z.enum(GOAL_STATUSES).optional(),
     start_date: z.string().date().optional(),
     target_date: z.string().date().nullable().optional(),
     notes: z.string().trim().max(2500).nullable().optional(),
@@ -639,7 +630,7 @@ const updateGoalSchema = z
     start_weight: z.number().min(0).nullable().optional(),
     current_weight: z.number().min(0).nullable().optional(),
     target_weight: z.number().min(0).nullable().optional(),
-    goal_direction: z.enum(["increase", "decrease"]).optional(),
+    goal_direction: z.enum(GOAL_DIRECTION_VALUES).optional(),
     check_in_interval_days: z.number().int().min(1).max(365).nullable().optional(),
     linked_exercise_id: z.string().uuid().nullable().optional(),
     linked_program_id: z.string().uuid().nullable().optional(),
@@ -670,7 +661,7 @@ const updateGoalSchema = z
 const updateGoalStatusSchema = z.object({
   client_id: z.string().uuid(),
   goal_id: z.string().uuid(),
-  status: z.enum(GOAL_STATUS_VALUES),
+  status: z.enum(GOAL_STATUSES),
 });
 
 const deleteGoalSchema = z.object({
@@ -687,7 +678,7 @@ const createMyGoalSchema = z
     current_value: z.number().min(0).nullable().optional(),
     target_value: z.number().positive().nullable().optional(),
     unit: z.string().trim().max(32).nullable().optional(),
-    status: z.enum(GOAL_STATUS_VALUES).default("active"),
+    status: z.enum(GOAL_STATUSES).default("active"),
     start_date: z.string().date().optional(),
     target_date: z.string().date().nullable().optional(),
     notes: z.string().trim().max(2500).nullable().optional(),
@@ -695,7 +686,7 @@ const createMyGoalSchema = z
     start_weight: z.number().min(0).nullable().optional(),
     current_weight: z.number().min(0).nullable().optional(),
     target_weight: z.number().min(0).nullable().optional(),
-    goal_direction: z.enum(["increase", "decrease"]).default("increase"),
+    goal_direction: z.enum(GOAL_DIRECTION_VALUES).default("increase"),
     check_in_interval_days: z.number().int().min(1).max(365).nullable().optional(),
     linked_exercise_id: z.string().uuid().nullable().optional(),
     linked_program_id: z.string().uuid().nullable().optional(),
@@ -716,7 +707,7 @@ const updateMyGoalSchema = z
     current_value: z.number().min(0).nullable().optional(),
     target_value: z.number().positive().nullable().optional(),
     unit: z.string().trim().max(32).nullable().optional(),
-    status: z.enum(GOAL_STATUS_VALUES).optional(),
+    status: z.enum(GOAL_STATUSES).optional(),
     start_date: z.string().date().optional(),
     target_date: z.string().date().nullable().optional(),
     notes: z.string().trim().max(2500).nullable().optional(),
@@ -724,7 +715,7 @@ const updateMyGoalSchema = z
     start_weight: z.number().min(0).nullable().optional(),
     current_weight: z.number().min(0).nullable().optional(),
     target_weight: z.number().min(0).nullable().optional(),
-    goal_direction: z.enum(["increase", "decrease"]).optional(),
+    goal_direction: z.enum(GOAL_DIRECTION_VALUES).optional(),
     check_in_interval_days: z.number().int().min(1).max(365).nullable().optional(),
     linked_exercise_id: z.string().uuid().nullable().optional(),
     linked_program_id: z.string().uuid().nullable().optional(),
@@ -753,7 +744,7 @@ const updateMyGoalSchema = z
   );
 const updateMyGoalStatusSchema = z.object({
   goal_id: z.string().uuid(),
-  status: z.enum(GOAL_STATUS_VALUES),
+  status: z.enum(GOAL_STATUSES),
 });
 const deleteMyGoalSchema = z.object({
   goal_id: z.string().uuid(),
@@ -1101,7 +1092,7 @@ export type ClientGoalsPayload = {
 
 function normalizeGoalCategory(value: string) {
   const normalized = value.trim().toLowerCase().replace(/\s+/g, "_");
-  if ((GOAL_CATEGORY_VALUES as readonly string[]).includes(normalized)) return normalized;
+  if ((GOAL_CATEGORIES as readonly string[]).includes(normalized)) return normalized;
   return normalized.slice(0, 120) || "custom";
 }
 
@@ -1246,20 +1237,22 @@ function resolveGoalDirection(row: GoalRow): "increase" | "decrease" {
   return "increase";
 }
 
-function resolveGoalMetricValues(row: GoalRow) {
+function resolveGoalMetricValues(row: GoalRow, system: UnitSystem = "metric") {
   const hasWeightMetrics = row.start_weight !== null || row.current_weight !== null || row.target_weight !== null;
   const hasNumericMetrics = row.start_value !== null || row.current_value !== null || row.target_value !== null;
+  const normalizedUnit = (row.unit || "").toLowerCase();
+  const hasWeightGoalUnit = isWeightUnit(normalizedUnit);
   const shouldUseWeightMetrics =
     isWeightGoalCategory(row.goal_type) ||
     (hasWeightMetrics && !hasNumericMetrics) ||
-    ((row.unit || "").toLowerCase() === "kg" && hasWeightMetrics);
+    (hasWeightGoalUnit && hasWeightMetrics);
 
   if (shouldUseWeightMetrics) {
     return {
       start: row.start_weight ?? row.current_weight,
       current: row.current_weight,
       target: row.target_weight,
-      unit: row.unit || "kg",
+      unit: row.unit || weightUnit(system),
     };
   }
   return {
@@ -1612,6 +1605,13 @@ async function resolveClientGoalSubject(
   }
 
   return client;
+}
+
+async function getPreferredUnitsForUser(supabase: DbClient, userId: string): Promise<UnitSystem> {
+  const { data, error } = await supabase.from("profiles").select("preferred_units").eq("id", userId).maybeSingle();
+  if (error) throw new Error(error.message);
+  const row = data as PreferredUnitsRow | null;
+  return row?.preferred_units === "imperial" ? "imperial" : "metric";
 }
 
 async function listGoalHistoryByGoalIds(
@@ -2072,6 +2072,7 @@ export async function createClientGoalAction(input: z.input<typeof createGoalSch
       if (!client.linked_user_id) {
         throw new Error("Link this client to a user account before creating measurable goals.");
       }
+      const unitSystem = await getPreferredUnitsForUser(supabase, client.linked_user_id);
 
       const normalizedCategory = normalizeGoalCategory(payload.category);
       const isWeightCategory = isWeightGoalCategory(normalizedCategory);
@@ -2094,7 +2095,7 @@ export async function createClientGoalAction(input: z.input<typeof createGoalSch
         start_weight: resolvedStartWeight,
         current_weight: resolvedCurrentWeight,
         target_weight: resolvedTargetWeight,
-        unit: payload.unit || (isWeightCategory ? "kg" : null),
+        unit: payload.unit || (isWeightCategory ? weightUnit(unitSystem) : null),
         status: payload.status,
         start_date: payload.start_date || new Date().toISOString().slice(0, 10),
         target_date: payload.target_date || null,
@@ -2147,6 +2148,7 @@ export async function updateClientGoalAction(input: z.input<typeof updateGoalSch
       if (!client.linked_user_id) {
         throw new Error("Link this client to a user account before updating goals.");
       }
+      const unitSystem = await getPreferredUnitsForUser(supabase, client.linked_user_id);
 
       const { data: existing, error: existingError } = await supabase
         .from("fitness_goals")
@@ -2178,7 +2180,7 @@ export async function updateClientGoalAction(input: z.input<typeof updateGoalSch
       if (payload.current_weight !== undefined) updates.current_weight = payload.current_weight;
       if (payload.target_weight !== undefined) updates.target_weight = payload.target_weight;
       if (payload.category !== undefined && shouldMirrorToWeight && payload.unit === undefined && !existing.unit) {
-        updates.unit = "kg";
+        updates.unit = weightUnit(unitSystem);
       }
       if (payload.unit !== undefined) updates.unit = payload.unit;
       if (payload.status !== undefined) updates.status = payload.status;
@@ -2238,6 +2240,7 @@ export async function deleteClientGoalAction(input: z.input<typeof deleteGoalSch
     },
     action: async () => {
       const { supabase, user } = await requireActor();
+      const unitSystem = await getPreferredUnitsForUser(supabase, user.id);
       const client = await resolveClientGoalSubject(supabase, payload.client_id, user.id);
       if (!client.linked_user_id) {
         throw new Error("Link this client to a user account before deleting goals.");
@@ -2308,6 +2311,7 @@ export async function createMyGoalAction(input: z.input<typeof createMyGoalSchem
     },
     action: async () => {
       const { supabase, user } = await requireActor();
+      const unitSystem = await getPreferredUnitsForUser(supabase, user.id);
 
       const normalizedCategory = normalizeGoalCategory(payload.category);
       const isWeightCategory = isWeightGoalCategory(normalizedCategory);
@@ -2331,7 +2335,7 @@ export async function createMyGoalAction(input: z.input<typeof createMyGoalSchem
         start_weight: resolvedStartWeight,
         current_weight: resolvedCurrentWeight,
         target_weight: resolvedTargetWeight,
-        unit: payload.unit || (isWeightCategory ? "kg" : null),
+        unit: payload.unit || (isWeightCategory ? weightUnit(unitSystem) : null),
         status: payload.status,
         start_date: payload.start_date || new Date().toISOString().slice(0, 10),
         target_date: payload.target_date || null,
@@ -2379,6 +2383,7 @@ export async function updateMyGoalAction(input: z.input<typeof updateMyGoalSchem
     },
     action: async () => {
       const { supabase, user } = await requireActor();
+      const unitSystem = await getPreferredUnitsForUser(supabase, user.id);
 
       const { data: existing, error: existingError } = await supabase
         .from("fitness_goals")
@@ -2413,7 +2418,7 @@ export async function updateMyGoalAction(input: z.input<typeof updateMyGoalSchem
       if (payload.current_weight !== undefined) updates.current_weight = payload.current_weight;
       if (payload.target_weight !== undefined) updates.target_weight = payload.target_weight;
       if (payload.category !== undefined && shouldMirrorToWeight && payload.unit === undefined && !existing.unit) {
-        updates.unit = "kg";
+        updates.unit = weightUnit(unitSystem);
       }
       if (payload.unit !== undefined) updates.unit = payload.unit;
       if (payload.status !== undefined) updates.status = payload.status;
@@ -2775,7 +2780,7 @@ export async function logClientWorkoutAction(input: z.input<typeof logWorkoutSch
         date: payload.performed_on,
         activity_type: cardio.activity_type,
         duration_minutes: cardio.duration_minutes,
-        distance_km: cardio.distance_km ?? null,
+        distance: cardio.distance ?? null,
         calories_burned: cardio.calories_burned ?? null,
         average_heart_rate: cardio.average_heart_rate ?? null,
         reps: cardio.reps ?? null,
