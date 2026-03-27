@@ -52,6 +52,13 @@ type SendGoalCheckinReminderEvent = {
   };
 };
 
+type SendCycleReminderEvent = {
+  data: {
+    user_id: string;
+    days_until_next_period: number;
+  };
+};
+
 type Events = {
   "admin/run.reminders": { data: {} };
   "training/workout.completed": TrainingWorkoutCompletedEvent;
@@ -59,6 +66,7 @@ type Events = {
   "support/ticket.activity": SupportTicketActivityEvent;
   "notification/send.reminder": SendReminderEvent;
   "notification/send.goal-checkin-reminder": SendGoalCheckinReminderEvent;
+  "notifications/cycle.reminder": SendCycleReminderEvent;
 };
 // Create the schema to pass to the client
 export const InngestSchemas = new EventSchemas().fromRecord<Events>();

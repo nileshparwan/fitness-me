@@ -12,14 +12,8 @@ import { createClient } from "@/lib/supabase/server";
 import { Database, Json } from "@/types/database";
 import { resolveGoalTargetForDate, type SubjectRef } from "@/app/actions/_lib/resolve-nutrition-targets";
 
-type MealPlanRow = Database["public"]["Tables"]["meal_plans"]["Row"];
-type MealPlanInsert = Database["public"]["Tables"]["meal_plans"]["Insert"];
-type MealPlanUpdate = Database["public"]["Tables"]["meal_plans"]["Update"];
-type MealPlanMealRow = Database["public"]["Tables"]["meal_plan_meals"]["Row"];
-type MealPlanMealInsert = Database["public"]["Tables"]["meal_plan_meals"]["Insert"];
-type MealPlanAssignmentRow = Database["public"]["Tables"]["meal_plan_assignments"]["Row"];
-type MealPlanAssignmentInsert = Database["public"]["Tables"]["meal_plan_assignments"]["Insert"];
-type MealPlanAssignmentMealInsert = Database["public"]["Tables"]["meal_plan_assignment_meals"]["Insert"];
+type MealGroupRow = Database["public"]["Tables"]["meal_groups"]["Row"];
+type MealGroupAssignmentRow = Database["public"]["Tables"]["meal_group_assignments"]["Row"];
 type MealGroupPlanRow = Database["public"]["Tables"]["meal_group_plans"]["Row"];
 type MealGroupItemRow = Database["public"]["Tables"]["meal_group_items"]["Row"];
 type MealLogRow = Database["public"]["Tables"]["meal_logs"]["Row"];
@@ -73,16 +67,13 @@ const MEAL_TYPE_DISPLAY_ORDER: MealType[] = [
   "snacks",
 ];
 
-const PLAN_STATUSES = ["draft", "active", "archived"] as const;
-type MealPlanStatus = (typeof PLAN_STATUSES)[number];
-
 export type ManualDiaryItem = MealLogItemRow;
 export type ManualDiaryLog = MealLogRow & {
   items: ManualDiaryItem[];
 };
 
 export type ActiveNutritionPlan = {
-  source: "assignment" | "plan";
+  source: "assignment" | "template";
   id: string;
   meal_group_id: string | null;
   name: string;
@@ -147,38 +138,6 @@ const subjectSchema = z
     subject_client_id: z.string().uuid().nullable().optional(),
   })
   .optional();
-
-const planTargetsSchema = z.object({
-  daily_calorie_target: z.number().int().min(0).nullable().optional(),
-  daily_protein_target_g: z.number().min(0).nullable().optional(),
-  daily_carbs_target_g: z.number().min(0).nullable().optional(),
-  daily_fat_target_g: z.number().min(0).nullable().optional(),
-  meal_targets_json: z.record(z.string(), z.unknown()).optional(),
-});
-
-const upsertPlanSchema = z.object({
-  id: z.string().uuid().optional(),
-  name: z.string().trim().min(2).max(180),
-  description: z.string().trim().max(5000).nullable().optional(),
-  notes: z.string().trim().max(5000).nullable().optional(),
-  start_date: isoDate,
-  end_date: isoDate,
-  status: z.enum(PLAN_STATUSES).default("draft"),
-  is_public: z.boolean().default(false),
-  subject: subjectSchema,
-  targets: planTargetsSchema.optional(),
-});
-
-const assignPlanSchema = z.object({
-  plan_id: z.string().uuid(),
-  start_date: isoDate.optional(),
-  end_date: isoDate.optional(),
-  subject: z.object({
-    subject_user_id: z.string().uuid().nullable().optional(),
-    subject_client_id: z.string().uuid().nullable().optional(),
-  }),
-  notes: z.string().trim().max(5000).nullable().optional(),
-});
 
 const diaryDaySchema = z.object({
   performed_on: isoDate,
@@ -274,14 +233,6 @@ const logFromPlanSchema = z.object({
 const diaryNotesSchema = z.object({
   meal_log_id: z.string().uuid(),
   notes: z.string().trim().max(5000).nullable(),
-});
-
-const archivePlanSchema = z.object({
-  plan_id: z.string().uuid(),
-});
-
-const duplicatePlanSchema = z.object({
-  plan_id: z.string().uuid(),
 });
 
 const summarySchema = z.object({
@@ -391,32 +342,6 @@ async function resolveComplianceTargetsForDate(
   subject: SubjectRef,
   performedOn: string
 ): Promise<ComplianceTargetsSnapshot> {
-  let assignmentQuery = supabase
-    .from("meal_plan_assignments")
-    .select("daily_calorie_target, daily_protein_target_g, daily_carbs_target_g, daily_fat_target_g")
-    .eq("status", "active")
-    .lte("start_date", performedOn)
-    .gte("end_date", performedOn)
-    .order("start_date", { ascending: false })
-    .limit(1);
-  assignmentQuery = applySubjectFilters(assignmentQuery, subject);
-
-  const { data: assignment, error: assignmentError } = await assignmentQuery.maybeSingle();
-  if (assignmentError) throw new Error(assignmentError.message);
-
-  if (assignment) {
-    const assignmentSnapshot: ComplianceTargetsSnapshot = {
-      target_calories: normalizeComplianceTarget(assignment.daily_calorie_target),
-      target_protein_g: normalizeComplianceTarget(assignment.daily_protein_target_g),
-      target_carbs_g: normalizeComplianceTarget(assignment.daily_carbs_target_g),
-      target_fat_g: normalizeComplianceTarget(assignment.daily_fat_target_g),
-      target_source: "plan_assignment",
-    };
-    if (hasCompleteMacroTargets(assignmentSnapshot)) {
-      return assignmentSnapshot;
-    }
-  }
-
   const goalTarget = await resolveGoalTargetForDate(supabase, subject, performedOn);
   if (goalTarget.source === "fitness_goal") {
     const goalSnapshot: ComplianceTargetsSnapshot = {
@@ -840,36 +765,38 @@ async function getActiveNutritionPlanForDate(
   performedOn: string,
   supabase: SupabaseClient<Database>
 ): Promise<ActiveNutritionPlan | null> {
-  const mapAssignment = (assignment: MealPlanAssignmentRow, mealGroupId: string | null): ActiveNutritionPlan => ({
+  const emptyTargets = {} as Json;
+
+  const mapAssignment = (assignment: MealGroupAssignmentRow, name: string): ActiveNutritionPlan => ({
     source: "assignment",
     id: assignment.id,
-    meal_group_id: mealGroupId,
-    name: assignment.name,
+    meal_group_id: assignment.meal_group_id,
+    name,
     start_date: assignment.start_date,
     end_date: assignment.end_date,
-    daily_calorie_target: assignment.daily_calorie_target,
-    daily_protein_target_g: assignment.daily_protein_target_g,
-    daily_carbs_target_g: assignment.daily_carbs_target_g,
-    daily_fat_target_g: assignment.daily_fat_target_g,
-    meal_targets_json: assignment.meal_targets_json,
+    daily_calorie_target: null,
+    daily_protein_target_g: null,
+    daily_carbs_target_g: null,
+    daily_fat_target_g: null,
+    meal_targets_json: emptyTargets,
   });
 
-  const mapPlan = (plan: MealPlanRow, mealGroupId: string | null): ActiveNutritionPlan => ({
-    source: "plan",
-    id: plan.id,
-    meal_group_id: mealGroupId,
-    name: plan.name,
-    start_date: plan.start_date,
-    end_date: plan.end_date,
-    daily_calorie_target: plan.daily_calorie_target,
-    daily_protein_target_g: plan.daily_protein_target_g,
-    daily_carbs_target_g: plan.daily_carbs_target_g,
-    daily_fat_target_g: plan.daily_fat_target_g,
-    meal_targets_json: plan.meal_targets_json,
+  const mapTemplate = (template: MealGroupRow): ActiveNutritionPlan => ({
+    source: "template",
+    id: template.id,
+    meal_group_id: template.id,
+    name: template.name,
+    start_date: template.start_date ?? performedOn,
+    end_date: template.end_date ?? performedOn,
+    daily_calorie_target: null,
+    daily_protein_target_g: null,
+    daily_carbs_target_g: null,
+    daily_fat_target_g: null,
+    meal_targets_json: emptyTargets,
   });
 
   let assignmentQuery = supabase
-    .from("meal_plan_assignments")
+    .from("meal_group_assignments")
     .select("*")
     .eq("status", "active")
     .lte("start_date", performedOn)
@@ -879,51 +806,46 @@ async function getActiveNutritionPlanForDate(
 
   assignmentQuery = applySubjectFilters(assignmentQuery, subject);
 
-  let planQuery = supabase
-    .from("meal_plans")
-    .select("*")
-    .eq("status", "active")
-    .lte("start_date", performedOn)
-    .gte("end_date", performedOn)
-    .order("start_date", { ascending: false })
-    .limit(1);
-
-  planQuery = applySubjectFilters(planQuery, subject);
-
-  let mealGroupAssignmentQuery = supabase
-    .from("meal_group_assignments")
-    .select("meal_group_id")
-    .eq("status", "active")
-    .lte("start_date", performedOn)
-    .gte("end_date", performedOn)
-    .order("start_date", { ascending: false })
-    .limit(1);
-  mealGroupAssignmentQuery = applySubjectFilters(mealGroupAssignmentQuery, subject);
-
-  const [
-    { data: assignments, error: assignmentError },
-    { data: plans, error: planError },
-    { data: mealGroupAssignments, error: mealGroupAssignmentError },
-  ] = await Promise.all([
-    assignmentQuery,
-    planQuery,
-    mealGroupAssignmentQuery,
-  ]);
+  const { data: assignments, error: assignmentError } = await assignmentQuery;
   if (assignmentError) throw new Error(assignmentError.message);
-  if (planError) throw new Error(planError.message);
-  if (mealGroupAssignmentError && !isMissingRelationError(mealGroupAssignmentError)) {
-    throw new Error(mealGroupAssignmentError.message);
+
+  const assignment = (assignments?.[0] ?? null) as MealGroupAssignmentRow | null;
+  if (assignment) {
+    const groupIds = Array.from(new Set([assignment.template_group_id, assignment.meal_group_id].filter(Boolean)));
+    const { data: groups, error: groupsError } = await supabase
+      .from("meal_groups")
+      .select("id, name")
+      .in("id", groupIds);
+    if (groupsError) throw new Error(groupsError.message);
+
+    const groupsById = new Map((groups || []).map((row) => [row.id, row]));
+    const assignmentName =
+      groupsById.get(assignment.template_group_id)?.name ||
+      groupsById.get(assignment.meal_group_id)?.name ||
+      "Assigned meal template";
+
+    return mapAssignment(assignment, assignmentName);
   }
 
-  const mealGroupId = mealGroupAssignments?.[0]?.meal_group_id ?? null;
+  if (!subject.subject_user_id || subject.subject_client_id) {
+    return null;
+  }
 
-  const assignment = (assignments?.[0] ?? null) as MealPlanAssignmentRow | null;
-  if (assignment) return mapAssignment(assignment, mealGroupId);
+  const { data: templates, error: templatesError } = await supabase
+    .from("meal_groups")
+    .select("*")
+    .eq("owner_user_id", subject.subject_user_id)
+    .eq("is_snapshot", false)
+    .eq("status", "active")
+    .order("updated_at", { ascending: false })
+    .limit(50);
+  if (templatesError) throw new Error(templatesError.message);
 
-  const plan = (plans?.[0] ?? null) as MealPlanRow | null;
-  if (!plan) return null;
+  const activeTemplate =
+    ((templates || []) as MealGroupRow[]).find((row) => (!row.start_date || row.start_date <= performedOn) && (!row.end_date || row.end_date >= performedOn)) ||
+    null;
 
-  return mapPlan(plan, mealGroupId);
+  return activeTemplate ? mapTemplate(activeTemplate) : null;
 }
 
 export async function getNutritionActivePlanForDateAction(
@@ -1138,266 +1060,6 @@ export async function getNutritionDiaryDayAction(input: z.input<typeof diaryDayS
         active_plan: activePlan,
         progress: computeProgress(totals, activePlan),
       };
-    },
-  });
-}
-
-export async function listMyMealPlanTemplatesAction() {
-  return runTrackedAction({
-    eventName: "nutrition.manual.templates.list",
-    action: async () => {
-      const { supabase, user } = await requireActor();
-
-      const { data, error } = await supabase
-        .from("meal_plans")
-        .select("*")
-        .eq("user_id", user.id)
-        .eq("subject_user_id", user.id)
-        .neq("status", "archived")
-        .order("updated_at", { ascending: false })
-        .limit(100);
-
-      if (error) throw new Error(error.message);
-      return (data || []) as MealPlanRow[];
-    },
-  });
-}
-
-export async function upsertMealPlanAction(input: z.input<typeof upsertPlanSchema>) {
-  const payload = upsertPlanSchema.parse(input);
-  let subjectForActivity: SubjectRef | null = null;
-  return runTrackedAction({
-    eventName: payload.id ? "nutrition.manual.plan.update" : "nutrition.manual.plan.create",
-    payload: { plan_id: payload.id ?? null, status: payload.status, plan_name: payload.name },
-    getSuccessPayload: () => subjectForActivity ?? {},
-    action: async () => {
-      const { supabase, user } = await requireActor();
-      const subject = resolveSubject(payload.subject, user.id);
-      subjectForActivity = subject;
-
-      if (payload.start_date > payload.end_date) {
-        throw new Error("Start date must be on or before end date.");
-      }
-
-      const base: MealPlanInsert = {
-        user_id: user.id,
-        subject_user_id: subject.subject_user_id,
-        subject_client_id: subject.subject_client_id,
-        name: payload.name,
-        description: payload.description || null,
-        notes: payload.notes || null,
-        start_date: payload.start_date,
-        end_date: payload.end_date,
-        status: payload.status,
-        is_public: payload.is_public,
-        daily_calorie_target: payload.targets?.daily_calorie_target ?? null,
-        daily_protein_target_g: payload.targets?.daily_protein_target_g ?? null,
-        daily_carbs_target_g: payload.targets?.daily_carbs_target_g ?? null,
-        daily_fat_target_g: payload.targets?.daily_fat_target_g ?? null,
-        meal_targets_json: (payload.targets?.meal_targets_json || {}) as Json,
-      };
-
-      if (payload.id) {
-        const updates: MealPlanUpdate = {
-          name: base.name,
-          description: base.description,
-          notes: base.notes,
-          start_date: base.start_date,
-          end_date: base.end_date,
-          status: base.status,
-          is_public: base.is_public,
-          subject_user_id: base.subject_user_id,
-          subject_client_id: base.subject_client_id,
-          daily_calorie_target: base.daily_calorie_target,
-          daily_protein_target_g: base.daily_protein_target_g,
-          daily_carbs_target_g: base.daily_carbs_target_g,
-          daily_fat_target_g: base.daily_fat_target_g,
-          meal_targets_json: base.meal_targets_json,
-          archived_at: payload.status === "archived" ? new Date().toISOString() : null,
-        };
-        const { data, error } = await supabase.from("meal_plans").update(updates).eq("id", payload.id).select("*").single();
-        if (error) throw new Error(error.message);
-        revalidateNutritionPaths(subject.subject_client_id);
-        return data as MealPlanRow;
-      }
-
-      const { data, error } = await supabase.from("meal_plans").insert(base).select("*").single();
-      if (error) throw new Error(error.message);
-      revalidateNutritionPaths(subject.subject_client_id);
-      return data as MealPlanRow;
-    },
-  });
-}
-
-export async function archiveMealPlanAction(input: z.input<typeof archivePlanSchema>) {
-  const payload = archivePlanSchema.parse(input);
-  let activityContext: Record<string, unknown> = {};
-  return runTrackedAction({
-    eventName: "nutrition.manual.plan.archive",
-    payload,
-    getSuccessPayload: () => activityContext,
-    action: async () => {
-      const { supabase } = await requireActor();
-
-      const { data, error } = await supabase
-        .from("meal_plans")
-        .update({ status: "archived", archived_at: new Date().toISOString() })
-        .eq("id", payload.plan_id)
-        .select("name, subject_user_id, subject_client_id")
-        .single();
-      if (error) throw new Error(error.message);
-
-      activityContext = {
-        plan_name: data.name,
-        subject_user_id: data.subject_user_id,
-        subject_client_id: data.subject_client_id,
-      };
-      revalidateNutritionPaths(data.subject_client_id);
-      return { success: true };
-    },
-  });
-}
-
-export async function duplicateMealPlanAction(input: z.input<typeof duplicatePlanSchema>) {
-  const payload = duplicatePlanSchema.parse(input);
-  let activityContext: Record<string, unknown> = {};
-  return runTrackedAction({
-    eventName: "nutrition.manual.plan.duplicate",
-    payload,
-    getSuccessPayload: () => activityContext,
-    action: async () => {
-      const { supabase, user } = await requireActor();
-
-      const [{ data: original, error: originalError }, { data: meals, error: mealsError }] = await Promise.all([
-        supabase.from("meal_plans").select("*").eq("id", payload.plan_id).single(),
-        supabase.from("meal_plan_meals").select("*").eq("program_id", payload.plan_id).order("position", { ascending: true }),
-      ]);
-
-      if (originalError) throw new Error(originalError.message);
-      if (mealsError) throw new Error(mealsError.message);
-
-      const insertPlan: MealPlanInsert = {
-        user_id: user.id,
-        subject_user_id: original.subject_user_id,
-        subject_client_id: original.subject_client_id,
-        name: `Copy of ${original.name}`,
-        description: original.description,
-        notes: original.notes,
-        start_date: original.start_date,
-        end_date: original.end_date,
-        status: "draft",
-        is_public: false,
-        daily_calorie_target: original.daily_calorie_target,
-        daily_protein_target_g: original.daily_protein_target_g,
-        daily_carbs_target_g: original.daily_carbs_target_g,
-        daily_fat_target_g: original.daily_fat_target_g,
-        meal_targets_json: original.meal_targets_json,
-      };
-
-      const { data: copiedPlan, error: copyPlanError } = await supabase
-        .from("meal_plans")
-        .insert(insertPlan)
-        .select("*")
-        .single();
-      if (copyPlanError) throw new Error(copyPlanError.message);
-
-      activityContext = {
-        plan_name: copiedPlan.name,
-        subject_user_id: copiedPlan.subject_user_id,
-        subject_client_id: copiedPlan.subject_client_id,
-      };
-
-      if ((meals || []).length > 0) {
-        const clonedMeals: MealPlanMealInsert[] = (meals as MealPlanMealRow[]).map((meal) => ({
-          program_id: copiedPlan.id,
-          meal_type: normalizeMealType(meal.meal_type),
-          food_name: meal.food_name,
-          calories: meal.calories,
-          protein_g: meal.protein_g,
-          carbs_g: meal.carbs_g,
-          fats_g: meal.fats_g,
-          instructions: meal.instructions,
-          alternatives: meal.alternatives,
-          position: meal.position,
-          status: "active",
-        }));
-        const { error: cloneMealsError } = await supabase.from("meal_plan_meals").insert(clonedMeals);
-        if (cloneMealsError) throw new Error(cloneMealsError.message);
-      }
-
-      revalidateNutritionPaths(copiedPlan.subject_client_id);
-      return copiedPlan as MealPlanRow;
-    },
-  });
-}
-
-export async function assignMealPlanToSubjectAction(input: z.input<typeof assignPlanSchema>) {
-  const payload = assignPlanSchema.parse(input);
-  let planNameForActivity: string | null = null;
-  return runTrackedAction({
-    eventName: "nutrition.manual.plan.assign",
-    payload: {
-      plan_id: payload.plan_id,
-      subject_client_id: payload.subject.subject_client_id ?? null,
-      subject_user_id: payload.subject.subject_user_id ?? null,
-    },
-    getSuccessPayload: () => (planNameForActivity ? { plan_name: planNameForActivity } : {}),
-    action: async () => {
-      const { supabase, user } = await requireActor();
-      const subject = resolveSubject(payload.subject, user.id);
-
-      const [{ data: plan, error: planError }, { data: templateMeals, error: templateMealsError }] = await Promise.all([
-        supabase.from("meal_plans").select("*").eq("id", payload.plan_id).single(),
-        supabase.from("meal_plan_meals").select("*").eq("program_id", payload.plan_id).order("position", { ascending: true }),
-      ]);
-
-      if (planError) throw new Error(planError.message);
-      if (templateMealsError) throw new Error(templateMealsError.message);
-      planNameForActivity = plan.name;
-
-      const assignmentInsert: MealPlanAssignmentInsert = {
-        plan_id: plan.id,
-        assigned_by_user_id: user.id,
-        subject_user_id: subject.subject_user_id,
-        subject_client_id: subject.subject_client_id,
-        name: plan.name,
-        notes: payload.notes || plan.notes,
-        start_date: payload.start_date || plan.start_date,
-        end_date: payload.end_date || plan.end_date,
-        status: "active",
-        daily_calorie_target: plan.daily_calorie_target,
-        daily_protein_target_g: plan.daily_protein_target_g,
-        daily_carbs_target_g: plan.daily_carbs_target_g,
-        daily_fat_target_g: plan.daily_fat_target_g,
-        meal_targets_json: plan.meal_targets_json,
-      };
-
-      const { data: assignment, error: assignmentError } = await supabase
-        .from("meal_plan_assignments")
-        .insert(assignmentInsert)
-        .select("*")
-        .single();
-      if (assignmentError) throw new Error(assignmentError.message);
-
-      if ((templateMeals || []).length > 0) {
-        const snapshotRows: MealPlanAssignmentMealInsert[] = (templateMeals as MealPlanMealRow[]).map((meal) => ({
-          assignment_id: assignment.id,
-          meal_type: normalizeMealType(meal.meal_type),
-          item_name: meal.food_name,
-          calories: meal.calories,
-          protein_g: meal.protein_g,
-          carbs_g: meal.carbs_g,
-          fat_g: meal.fats_g,
-          notes: meal.instructions,
-          position: meal.position ?? 0,
-        }));
-
-        const { error: snapshotError } = await supabase.from("meal_plan_assignment_meals").insert(snapshotRows);
-        if (snapshotError) throw new Error(snapshotError.message);
-      }
-
-      revalidateNutritionPaths(subject.subject_client_id);
-      return assignment as MealPlanAssignmentRow;
     },
   });
 }
@@ -2063,29 +1725,6 @@ export async function getClientNutritionSummary7dAction(input: z.input<typeof su
         totalsByDay.set(day, (totalsByDay.get(day) || 0) + safeNumber(row.total_calories));
       }
 
-      const { data: assignments, error: assignmentsError } = await supabase
-        .from("meal_plan_assignments")
-        .select("start_date, end_date, daily_calorie_target")
-        .eq("subject_client_id", payload.client_id)
-        .is("subject_user_id", null)
-        .eq("status", "active");
-      if (assignmentsError) throw new Error(assignmentsError.message);
-
-      const { data: plans, error: plansError } = await supabase
-        .from("meal_plans")
-        .select("start_date, end_date, daily_calorie_target")
-        .eq("subject_client_id", payload.client_id)
-        .is("subject_user_id", null)
-        .eq("status", "active");
-      if (plansError) throw new Error(plansError.message);
-
-      const activeTargetForDay = (date: string) => {
-        const assignmentTarget = (assignments || []).find((row) => row.start_date <= date && row.end_date >= date)?.daily_calorie_target;
-        if (assignmentTarget && assignmentTarget > 0) return assignmentTarget;
-        const planTarget = (plans || []).find((row) => row.start_date <= date && row.end_date >= date)?.daily_calorie_target;
-        return planTarget && planTarget > 0 ? planTarget : null;
-      };
-
       const dailyValues = Array.from(totalsByDay.entries());
       const daysLoggedCount = dailyValues.length;
       const avgCalories =
@@ -2096,7 +1735,15 @@ export async function getClientNutritionSummary7dAction(input: z.input<typeof su
       let onTargetCount = 0;
       let offTargetCount = 0;
       for (const [day, calories] of dailyValues) {
-        const target = activeTargetForDay(day);
+        const goalTarget = await resolveGoalTargetForDate(
+          supabase,
+          { subject_client_id: payload.client_id, subject_user_id: null },
+          day
+        );
+        const target =
+          goalTarget.source === "fitness_goal" && goalTarget.calories && goalTarget.calories > 0
+            ? goalTarget.calories
+            : null;
         if (!target) continue;
         const delta = Math.abs(calories - target);
         if (delta <= target * 0.1) onTargetCount += 1;

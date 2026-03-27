@@ -31,6 +31,13 @@ export function SettingsHydrator() {
             fat: profile.default_fat,
           },
           compact_mode: profile.compact_mode,
+          gender: profile.gender,
+          fitness_level: profile.fitness_level,
+          coach_specialty: profile.coach_specialty,
+          is_pregnant: profile.is_pregnant,
+          due_date: profile.due_date,
+          is_postpartum: profile.is_postpartum,
+          postpartum_since: profile.postpartum_since,
         });
       } catch {
         // Keep cached values; pages that need hard guarantees fetch on the server.

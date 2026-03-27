@@ -45,7 +45,7 @@ export const sendGoalCheckinReminders = inngest.createFunction(
 
     const userIds = matchingUsers.map((user) => user.user_id);
     const dueGoals = await step.run("find-due-goals", async () => {
-      const { data, error } = await admin.rpc("get_goals_due_for_checkin", {
+      const { data, error } = await (admin as any).rpc("get_goals_due_for_checkin", {
         p_user_ids: userIds,
       });
       if (error) throw new Error(error.message);

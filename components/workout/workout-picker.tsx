@@ -3,7 +3,7 @@
 import * as React from "react";
 import { PlusCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/responsive-modal";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/app-sheet";
 import { WorkoutSelector } from "./workout-selector";
 
 export function WorkoutPicker({ programId }: { programId: string }) {

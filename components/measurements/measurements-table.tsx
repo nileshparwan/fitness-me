@@ -33,7 +33,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { useUnitSystem } from "@/stores/use-settings-store";
+import { Badge } from "@/components/ui/badge";
+import { useSettingsStore, useUnitSystem } from "@/stores/use-settings-store";
+import { getBodyFatCategory } from "@/utils/body-fat-ranges";
 import { displayCircumference, displayWeight, circumferenceUnit, weightUnit } from "@/utils/unit-conversion";
 
 type MeasurementsTableProps = {
@@ -92,8 +94,9 @@ function SortHeader({
 export function MeasurementsTable({ data, isLoading, onEdit }: MeasurementsTableProps) {
   const [sorting, setSorting] = useState<SortingState>([{ id: "date", desc: true }]);
   const [globalFilter, setGlobalFilter] = useState("");
-  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({ body_fat_category: false });
   const system = useUnitSystem();
+  const gender = useSettingsStore((state) => state.gender);
 
   const columns = useMemo<ColumnDef<BodyMeasurementRow>[]>(
     () => [
@@ -132,6 +135,36 @@ export function MeasurementsTable({ data, isLoading, onEdit }: MeasurementsTable
           />
         ),
         cell: ({ row }) => fmtPct(row.original.body_fat_percent),
+      },
+      {
+        id: "body_fat_category",
+        accessorFn: (row) =>
+          row.body_fat_percent == null
+            ? null
+            : getBodyFatCategory(row.body_fat_percent, gender).category,
+        header: ({ column }) => (
+          <SortHeader
+            label="Body Fat Category"
+            sorted={column.getIsSorted()}
+            onClick={(event) => column.toggleSorting(column.getIsSorted() === "asc", event.shiftKey)}
+          />
+        ),
+        cell: ({ row }) => {
+          if (row.original.body_fat_percent == null) return "—";
+          const category = getBodyFatCategory(row.original.body_fat_percent, gender);
+          return (
+            <Badge
+              variant="outline"
+              className="border-transparent px-2.5 py-1 text-xs"
+              style={{
+                backgroundColor: `${category.color}18`,
+                color: category.color,
+              }}
+            >
+              {category.category}
+            </Badge>
+          );
+        },
       },
       {
         id: "waist",
@@ -200,7 +233,7 @@ export function MeasurementsTable({ data, isLoading, onEdit }: MeasurementsTable
         ),
       },
     ],
-    [onEdit]
+    [gender, onEdit, system]
   );
 
   const table = useReactTable({
@@ -218,6 +251,7 @@ export function MeasurementsTable({ data, isLoading, onEdit }: MeasurementsTable
         source.date,
         source.weight,
         source.body_fat_percent,
+        source.body_fat_percent == null ? "" : getBodyFatCategory(source.body_fat_percent, gender).category,
         source.waist,
         source.hips,
         source.chest,

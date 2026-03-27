@@ -1,178 +1,162 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
-import { format, parseISO } from "date-fns";
-import { getPublicProgramWithMeals } from "@/app/actions/nutrition";
-import {
-    Accordion,
-    AccordionContent,
-    AccordionItem,
-    AccordionTrigger
-} from "@/components/ui/accordion";
+import { ArrowLeft, CalendarDays } from "lucide-react";
+
+import { getPublicMealGroupAction } from "@/app/actions/meal-groups";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
-import { CalendarDays, ChefHat, Info, ArrowLeft, Flame } from "lucide-react";
-import Link from "next/link";
 
-// Import your Analytics component
-import { NutritionAnalytics } from "@/components/nutrition/nutrition-analytics";
+const MEAL_DAY_LABELS = {
+  mon: "Monday",
+  tue: "Tuesday",
+  wed: "Wednesday",
+  thu: "Thursday",
+  fri: "Friday",
+  sat: "Saturday",
+  sun: "Sunday",
+} as const;
+
+const MEAL_TYPE_LABELS = {
+  water: "Water",
+  breakfast: "Breakfast",
+  snack: "Snack",
+  lunch: "Lunch",
+  pre_workout_meal: "Pre-workout Meal",
+  post_workout_meal: "Post-workout Meal",
+  dinner: "Dinner",
+  protein_drink: "Protein Drink",
+} as const;
+
+function formatDateRange(start: string | null, end: string | null) {
+  if (!start && !end) return "No duration";
+  if (start && !end) return `From ${start}`;
+  if (!start && end) return `Until ${end}`;
+  return `${start} → ${end}`;
+}
 
 export default async function PublicNutritionPage({ params }: { params: Promise<{ id: string }> }) {
-    // Await params in Next.js 15
-    const { id } = await params;
-    const data = await getPublicProgramWithMeals(id);
-    if (!data) return notFound();
+  const { id } = await params;
+  const data = await getPublicMealGroupAction(id);
+  if (!data) return notFound();
 
-    const { program } = data;
-    const safeMeals = data.meals;
+  const totals = data.plans.reduce(
+    (acc, plan) => {
+      acc.calories += plan.totals.calories;
+      acc.protein_g += plan.totals.protein_g;
+      acc.carbs_g += plan.totals.carbs_g;
+      acc.fat_g += plan.totals.fat_g;
+      acc.items += plan.items.length;
+      return acc;
+    },
+    { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0, items: 0 }
+  );
 
-    return (
-        <div className="min-h-screen bg-background p-4 md:p-8">
-            <div className="max-w-3xl mx-auto space-y-6">
-
-                {/* --- HEADER --- */}
-                <div className="space-y-4">
-                    <div className="bg-card rounded-xl border border-border p-6 shadow-sm">
-                        <div className="flex flex-col gap-2">
-                            <div className="flex items-center gap-2">
-                                <Badge variant="secondary" className="bg-blue-50 text-blue-700 hover:bg-blue-100 border-blue-200">
-                                    Shared Plan
-                                </Badge>
-                                {program.status === 'active' && (
-                                    <Badge className="bg-green-500 hover:bg-green-600">Active</Badge>
-                                )}
-                            </div>
-
-                            <h1 className="text-3xl font-bold tracking-tight text-foreground">{program.name}</h1>
-
-                            <div className="flex items-center gap-4 text-sm text-muted-foreground mt-1">
-                                <div className="flex items-center gap-1.5">
-                                    <CalendarDays className="h-4 w-4" />
-                                    <span>{format(parseISO(program.start_date), "MMM d, yyyy")} - {format(parseISO(program.end_date), "MMM d")}</span>
-                                </div>
-                                <span>•</span>
-                                <span>{safeMeals.length} Items</span>
-                            </div>
-
-                            {program.description && (
-                                <p className="mt-4 text-muted-foreground leading-relaxed border-l-4 border-border pl-4 italic">
-                                    {program.description}
-                                </p>
-                            )}
-                        </div>
-                    </div>
-                </div>
-
-                {/* --- ANALYTICS (Fixed at Top) --- */}
-                <div>
-                    <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3 pl-1">Overview</h2>
-                    {/* Reusing the compact analytics bar we built */}
-                    <NutritionAnalytics meals={safeMeals} />
-                </div>
-
-                {program.notes && (
-                    <p className="mt-4 text-muted-foreground leading-relaxed border-l-4 border-border pl-4 italic">
-                        {program.notes}
-                    </p>
-                )}
-
-                {/* --- MEAL LIST (ACCORDION) --- */}
-                <div>
-                    <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3 pl-1">Menu Schedule</h2>
-
-                    <Card className="overflow-hidden border-none shadow-sm">
-                        <Accordion type="single" collapsible className="w-full bg-card rounded-xl border border-border">
-                            {safeMeals.map((meal, index) => (
-                                <AccordionItem key={meal.id} value={meal.id} className="border-b last:border-0 px-2">
-                                    <AccordionTrigger className="hover:no-underline py-4 px-2 hover:bg-accent/35 rounded-lg transition-colors">
-                                        <div className="flex items-center justify-between w-full pr-4 text-left">
-                                            <div className="flex items-center gap-3 min-w-0">
-                                                {/* Number / Index */}
-                                                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium text-muted-foreground">
-                                                    {index + 1}
-                                                </span>
-
-                                                {/* Meal Info */}
-                                                <div className="min-w-0">
-                                                    <div className="flex items-center gap-2">
-                                                        <Badge variant="outline" className="text-[10px] h-5 px-1.5 uppercase tracking-wide text-muted-foreground">
-                                                            {meal.meal_type.replace('_', ' ')}
-                                                        </Badge>
-                                                        <span className="font-semibold text-foreground truncate">{meal.food_name}</span>
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            {/* Quick Calorie View in Trigger */}
-                                            <div className="hidden sm:flex items-center gap-1 text-sm font-medium text-muted-foreground shrink-0">
-                                                {meal.calories} <span className="text-xs text-muted-foreground font-normal">kcal</span>
-                                            </div>
-                                        </div>
-                                    </AccordionTrigger>
-
-                                    <AccordionContent className="px-4 pb-6 pt-2">
-                                        <div className="ml-9 space-y-6">
-
-                                            {/* Macros Grid */}
-                                            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm bg-muted/40 px-3 py-2 rounded-md border border-border w-fit">
-                                                {/* Calories */}
-                                                <div className="font-bold text-foreground">
-                                                    {meal.calories} <span className="font-normal text-muted-foreground">kcal</span>
-                                                </div>
-
-                                                {/* Divider (hidden on very small screens) */}
-                                                <div className="hidden xs:block h-3 w-px bg-border" />
-
-                                                {/* Macros */}
-                                                <div className="flex items-center gap-3 font-medium">
-                                                    <span className="text-chart-2">{meal.protein_g}p</span>
-                                                    <span className="text-chart-3">{meal.carbs_g}c</span>
-                                                    <span className="text-chart-4">{meal.fats_g}f</span>
-                                                </div>
-                                            </div>
-
-                                            {/* Instructions */}
-                                            {meal.instructions && (
-                                                <div className="space-y-2">
-                                                    <h4 className="text-sm font-semibold flex items-center gap-2 text-foreground">
-                                                        <ChefHat className="h-4 w-4 text-primary" /> Preparation
-                                                    </h4>
-                                                    <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">
-                                                        {meal.instructions}
-                                                    </p>
-                                                </div>
-                                            )}
-
-                                            {/* Alternatives */}
-                                            {meal.alternatives && (
-                                                <div className="space-y-2">
-                                                    <h4 className="text-sm font-semibold flex items-center gap-2 text-foreground">
-                                                        <Info className="h-4 w-4 text-chart-3" /> Alternatives
-                                                    </h4>
-                                                    <div className="text-sm bg-chart-3/15 text-chart-3 p-3 rounded-md border border-chart-3/35">
-                                                        {meal.alternatives}
-                                                    </div>
-                                                </div>
-                                            )}
-
-                                            {(!meal.instructions && !meal.alternatives) && (
-                                                <p className="text-sm text-muted-foreground italic">No additional details provided.</p>
-                                            )}
-                                        </div>
-                                    </AccordionContent>
-                                </AccordionItem>
-                            ))}
-
-                            {safeMeals.length === 0 && (
-                                <div className="p-12 text-center text-muted-foreground">
-                                    No meals have been added to this plan yet.
-                                </div>
-                            )}
-                        </Accordion>
-                    </Card>
-                </div>
-
+  return (
+    <div className="min-h-screen bg-background p-4 md:p-8">
+      <div className="mx-auto max-w-5xl space-y-6">
+        <div className="flex items-center justify-between gap-3">
+          <div className="space-y-2">
+            <Badge variant="secondary" className="rounded-full px-3 py-1">
+              Shared Meal Template
+            </Badge>
+            <h1 className="text-3xl font-bold tracking-tight text-foreground">{data.group.name}</h1>
+            <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+              <span className="inline-flex items-center gap-1.5">
+                <CalendarDays className="h-4 w-4" />
+                {formatDateRange(data.group.start_date, data.group.end_date)}
+              </span>
+              <span>{data.plans.length} day plans</span>
+              <span>{totals.items} items</span>
             </div>
+          </div>
+          <Button variant="outline" asChild className="rounded-xl">
+            <Link href="/login">
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Open App
+            </Link>
+          </Button>
         </div>
-    );
+
+        {data.group.description ? (
+          <Card className="rounded-2xl border border-border/60 p-5">
+            <p className="text-sm leading-7 text-muted-foreground">{data.group.description}</p>
+          </Card>
+        ) : null}
+
+        <div className="grid gap-4 md:grid-cols-4">
+          <Card className="rounded-2xl border border-border/60 p-4">
+            <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Calories</p>
+            <p className="mt-2 text-2xl font-semibold">{Math.round(totals.calories)}</p>
+          </Card>
+          <Card className="rounded-2xl border border-border/60 p-4">
+            <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Protein</p>
+            <p className="mt-2 text-2xl font-semibold">{Math.round(totals.protein_g)}g</p>
+          </Card>
+          <Card className="rounded-2xl border border-border/60 p-4">
+            <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Carbs</p>
+            <p className="mt-2 text-2xl font-semibold">{Math.round(totals.carbs_g)}g</p>
+          </Card>
+          <Card className="rounded-2xl border border-border/60 p-4">
+            <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Fat</p>
+            <p className="mt-2 text-2xl font-semibold">{Math.round(totals.fat_g)}g</p>
+          </Card>
+        </div>
+
+        <div className="space-y-4">
+          {data.plans.map((plan) => (
+            <Card key={plan.id} className="overflow-hidden rounded-2xl border border-border/60">
+              <div className="border-b border-border/60 px-5 py-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-xl font-semibold">{MEAL_DAY_LABELS[plan.day_of_week]}</h2>
+                  <Badge variant="outline" className="rounded-full px-3 py-1 text-xs uppercase tracking-[0.12em]">
+                    {plan.label}
+                  </Badge>
+                  <span className="text-sm text-muted-foreground">{Math.round(plan.totals.calories)} kcal</span>
+                </div>
+                {plan.notes ? <p className="mt-2 text-sm text-muted-foreground">{plan.notes}</p> : null}
+              </div>
+              <div className="divide-y divide-border/50">
+                {plan.items.length === 0 ? (
+                  <div className="px-5 py-8 text-sm text-muted-foreground">No items configured for this day.</div>
+                ) : (
+                  plan.items.map((item) => (
+                    <div key={item.id} className="flex flex-col gap-2 px-5 py-4 md:flex-row md:items-start md:justify-between">
+                      <div className="space-y-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge variant="secondary" className="rounded-full px-2.5 py-0.5 text-[10px] uppercase tracking-[0.12em]">
+                            {MEAL_TYPE_LABELS[item.type]}
+                          </Badge>
+                          <p className="text-base font-medium">{item.title}</p>
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          {item.quantity !== null && item.quantity !== undefined ? `${item.quantity}` : "No qty"}
+                          {item.unit ? ` ${item.unit}` : ""}
+                          {item.planned_time ? ` • ${item.planned_time}` : ""}
+                        </p>
+                        {item.notes ? <p className="text-sm text-muted-foreground">{item.notes}</p> : null}
+                      </div>
+                      <div className="text-sm text-muted-foreground md:text-right">
+                        <p>{Math.round(item.calories || 0)} kcal</p>
+                        <p>
+                          P {Math.round(item.protein_g || 0)}g • C {Math.round(item.carbs_g || 0)}g • F {Math.round(item.fat_g || 0)}g
+                        </p>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </Card>
+          ))}
+        </div>
+
+        {data.group.notes ? (
+          <Card className="rounded-2xl border border-border/60 p-5">
+            <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-muted-foreground">Coach Notes</h3>
+            <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-muted-foreground">{data.group.notes}</p>
+          </Card>
+        ) : null}
+      </div>
+    </div>
+  );
 }

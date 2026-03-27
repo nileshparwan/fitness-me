@@ -6,7 +6,7 @@ import { CalendarRange, Copy, Edit, Loader2, MoreVertical, Plus, Search, Trash2,
 import { toast } from "sonner";
 
 import type { MealGroupListRow, MealGroupStatus } from "@/app/actions/meal-groups";
-import { AssignMealGroupDialog } from "@/components/nutrition/meal-groups/assign-meal-group-dialog";
+import { AssignMealGroupSheet } from "@/components/nutrition/meal-groups/assign-meal-group-sheet";
 import { MEAL_GROUP_STATUS_LABELS } from "@/components/nutrition/meal-groups/meal-group-types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -541,7 +541,7 @@ export function MealGroupsDashboard() {
       </Sheet>
 
       {assignTarget ? (
-        <AssignMealGroupDialog
+        <AssignMealGroupSheet
           mealGroupId={assignTarget.id}
           mealGroupName={assignTarget.name}
           open={Boolean(assignTarget)}

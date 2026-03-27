@@ -1,9 +1,11 @@
 import type { Database } from "@/types/database";
+import type { GenderType } from "@/types/health";
 
 type AppRole = Database["public"]["Enums"]["user_role"];
 
 export type RoleNavContext = {
   role: AppRole;
+  gender?: GenderType | null;
 };
 
 const AUTH_ONLY_PREFIXES = [
@@ -15,6 +17,7 @@ const AUTH_ONLY_PREFIXES = [
   "/exercises",
   "/nutrition",
   "/supplements",
+  "/health",
   "/progress",
   "/measurements",
   "/check-in",
@@ -33,6 +36,7 @@ const USER_PREFIXES = [
   "/exercises",
   "/nutrition",
   "/supplements",
+  "/health",
   "/progress",
   "/measurements",
   "/check-in",
@@ -76,6 +80,7 @@ export function canAccessPathForRole(pathname: string, context: RoleNavContext) 
 export type SidebarItemConfig = {
   title: string;
   href: string;
+  badge?: string;
   icon:
     | "home"
     | "dumbbell"
@@ -144,6 +149,7 @@ const USER_WORKSPACE_SECTIONS: SidebarSectionConfig[] = [
     label: "Insights",
     items: [
       { title: "Progress", href: "/progress", icon: "trend" },
+      { title: "Goals", href: "/goals", icon: "target" },
       { title: "Measurements", href: "/measurements", icon: "ruler" },
       { title: "Health Check-in", href: "/check-in", icon: "activity" },
       { title: "Nutrition", href: "/progress/nutrition", icon: "nutrition" },
@@ -153,11 +159,14 @@ const USER_WORKSPACE_SECTIONS: SidebarSectionConfig[] = [
     label: "Support",
     items: [{ title: "Tickets", href: "/support", icon: "support" }],
   },
-  {
-    label: "Settings",
-    items: [{ title: "Goals", href: "/goals", icon: "target" }],
-  },
 ];
+
+function getCycleHealthSection(): SidebarSectionConfig {
+  return {
+    label: "Cycle Health",
+    items: [{ title: "Cycle Tracker", href: "/health/cycle", icon: "activity" }],
+  };
+}
 
 const SYSADMIN_SECTIONS: SidebarSectionConfig[] = [
   {
@@ -258,5 +267,11 @@ export function getSidebarSectionsForRole(context: RoleNavContext): SidebarSecti
     return SYSADMIN_SECTIONS;
   }
 
-  return USER_WORKSPACE_SECTIONS;
+  const sections = [...USER_WORKSPACE_SECTIONS];
+  const supportIndex = sections.findIndex((section) => section.label === "Support");
+  const cycleHealthSection = getCycleHealthSection();
+  if (cycleHealthSection) {
+    sections.splice(Math.max(0, supportIndex), 0, cycleHealthSection);
+  }
+  return sections;
 }

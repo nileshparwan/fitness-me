@@ -10,7 +10,7 @@ import {
     DialogHeader,
     DialogTitle,
     DialogDescription,
-} from "@/components/ui/responsive-modal";
+} from "@/components/ui/app-sheet";
 import { QRCodeSVG } from "qrcode.react";
 
 // NEW IMPORTS

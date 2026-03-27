@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { Download, Share2 } from "lucide-react";
 
@@ -11,6 +12,7 @@ import {
   type ProgressTrainingType,
 } from "@/app/actions/progress-overview";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ProgressFilterBar } from "@/components/progress/overview/progress-filter-bar";
 import { ProgressStatsBar } from "@/components/progress/overview/progress-stats-bar";
 import { ProgressInsights } from "@/components/progress/overview/progress-insights";
@@ -21,12 +23,23 @@ import { ComplianceRecoveryCard } from "@/components/progress/overview/complianc
 import { TrainingLoadCard } from "@/components/progress/overview/training-load-card";
 import { MuscleFocusCard } from "@/components/progress/overview/muscle-focus-card";
 import { WorkoutCalendarCard } from "@/components/progress/overview/workout-calendar-card";
+import { NutritionProgressPage } from "@/components/nutrition/progress/nutrition-progress-page";
+import { CycleTabContent } from "@/components/cycle/cycle-tab-content";
+import { CycleTabSkeleton } from "@/app/(dashboard)/(insights)/progress/_components/progress-section-skeletons";
 import { progressOverviewKeys } from "@/lib/query-keys-progress";
+
+const PROGRESS_TABS = ["overview", "body", "strength", "cardio", "nutrition", "health", "cycle"] as const;
+type ProgressTab = (typeof PROGRESS_TABS)[number];
 
 export default function ProgressPage() {
   const [range, setRange] = useState<ProgressRange>("30d");
   const [trainingType, setTrainingType] = useState<ProgressTrainingType>("mixed");
   const [compare, setCompare] = useState(false);
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  const requestedTab = searchParams.get("tab");
+  const activeTab: ProgressTab = PROGRESS_TABS.includes(requestedTab as ProgressTab) ? (requestedTab as ProgressTab) : "overview";
 
   const overviewQuery = useQuery({
     queryKey: progressOverviewKeys.bundle(range, trainingType, compare),
@@ -35,6 +48,11 @@ export default function ProgressPage() {
   });
   const overview = overviewQuery.data;
   const isLoadingOverview = overviewQuery.isLoading;
+  const setTab = (nextTab: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("tab", nextTab);
+    router.replace(`${pathname}?${params.toString()}`);
+  };
 
   return (
     <div className="page-shell section-gap overflow-x-hidden pb-16">
@@ -56,66 +74,135 @@ export default function ProgressPage() {
         </div>
       </header>
 
-      <ProgressFilterBar
-        range={range}
-        onRangeChange={setRange}
-        trainingType={trainingType}
-        onTrainingTypeChange={setTrainingType}
-        compare={compare}
-        onCompareChange={setCompare}
-      />
+      <Tabs value={activeTab} onValueChange={(value) => setTab(value)} className="space-y-6">
+        <TabsList variant="line" className="flex w-full flex-wrap gap-1 rounded-none bg-transparent p-0">
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="body">Body</TabsTrigger>
+          <TabsTrigger value="strength">Strength</TabsTrigger>
+          <TabsTrigger value="cardio">Cardio</TabsTrigger>
+          <TabsTrigger value="nutrition">Nutrition</TabsTrigger>
+          <TabsTrigger value="health">Health</TabsTrigger>
+          <TabsTrigger value="cycle">Cycle</TabsTrigger>
+        </TabsList>
 
-      <ProgressStatsBar data={overview?.summary} isLoading={isLoadingOverview} trainingType={trainingType} />
+        <TabsContent value="overview" className="space-y-6">
+          <ProgressFilterBar
+            range={range}
+            onRangeChange={setRange}
+            trainingType={trainingType}
+            onTrainingTypeChange={setTrainingType}
+            compare={compare}
+            onCompareChange={setCompare}
+          />
+          <ProgressStatsBar data={overview?.summary} isLoading={isLoadingOverview} trainingType={trainingType} />
+          <ProgressInsights insights={overview?.insights ?? []} isLoading={isLoadingOverview} />
+        </TabsContent>
 
-      <TrainingLoadCard
-        data={overview?.training_load.current}
-        compareData={overview?.training_load.compare ?? undefined}
-        compare={compare}
-        isLoading={isLoadingOverview}
-      />
+        <TabsContent value="body" className="space-y-6">
+          <ProgressFilterBar
+            range={range}
+            onRangeChange={setRange}
+            trainingType={trainingType}
+            onTrainingTypeChange={setTrainingType}
+            compare={compare}
+            onCompareChange={setCompare}
+          />
+          <BodyCompositionCard
+            series={overview?.body_composition.current ?? []}
+            compareSeries={overview?.body_composition.compare ?? []}
+            compare={compare}
+            isLoading={isLoadingOverview}
+          />
+        </TabsContent>
 
-      <ProgressInsights insights={overview?.insights ?? []} isLoading={isLoadingOverview} />
+        <TabsContent value="strength" className="space-y-6">
+          <ProgressFilterBar
+            range={range}
+            onRangeChange={setRange}
+            trainingType={trainingType}
+            onTrainingTypeChange={setTrainingType}
+            compare={compare}
+            onCompareChange={setCompare}
+          />
+          <section className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+            <StrengthProgressCard
+              data={overview?.strength.current}
+              compareData={overview?.strength.compare ?? undefined}
+              compare={compare}
+              isLoading={isLoadingOverview}
+              latestWeightKg={overview?.summary?.latest_weight ?? null}
+            />
+            <MuscleFocusCard
+              focusDistribution={overview?.strength.current?.focus_distribution ?? []}
+              muscleVolume={overview?.strength.current?.muscle_volume ?? []}
+              isLoading={isLoadingOverview}
+            />
+          </section>
+        </TabsContent>
 
-      <section className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-        <BodyCompositionCard
-          series={overview?.body_composition.current ?? []}
-          compareSeries={overview?.body_composition.compare ?? []}
-          compare={compare}
-          isLoading={isLoadingOverview}
-        />
-        <StrengthProgressCard
-          data={overview?.strength.current}
-          compareData={overview?.strength.compare ?? undefined}
-          compare={compare}
-          isLoading={isLoadingOverview}
-          latestWeightKg={overview?.summary?.latest_weight ?? null}
-        />
-      </section>
+        <TabsContent value="cardio" className="space-y-6">
+          <ProgressFilterBar
+            range={range}
+            onRangeChange={setRange}
+            trainingType={trainingType}
+            onTrainingTypeChange={setTrainingType}
+            compare={compare}
+            onCompareChange={setCompare}
+          />
+          <CardioProgressCard
+            data={overview?.cardio.current ?? { series: [], activity_breakdown: [], hr_zones_summary: null }}
+            compareData={overview?.cardio.compare ?? undefined}
+            compare={compare}
+            isLoading={isLoadingOverview}
+            vo2maxEstimate={overview?.summary?.vo2max_estimate ?? null}
+          />
+        </TabsContent>
 
-      <section className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-        <CardioProgressCard
-          data={overview?.cardio.current ?? { series: [], activity_breakdown: [], hr_zones_summary: null }}
-          compareData={overview?.cardio.compare ?? undefined}
-          compare={compare}
-          isLoading={isLoadingOverview}
-          vo2maxEstimate={overview?.summary?.vo2max_estimate ?? null}
-        />
-        <ComplianceRecoveryCard
-          data={overview?.compliance.current}
-          compareData={overview?.compliance.compare ?? undefined}
-          compare={compare}
-          isLoading={isLoadingOverview}
-        />
-      </section>
+        <TabsContent value="nutrition" className="space-y-6">
+          <NutritionProgressPage embedded={true} />
+        </TabsContent>
 
-      <section className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-        <MuscleFocusCard
-          focusDistribution={overview?.strength.current?.focus_distribution ?? []}
-          muscleVolume={overview?.strength.current?.muscle_volume ?? []}
-          isLoading={isLoadingOverview}
-        />
-        <WorkoutCalendarCard rows={overview?.compliance.current?.workout_calendar ?? []} isLoading={isLoadingOverview} />
-      </section>
+        <TabsContent value="health" className="space-y-6">
+          <ProgressFilterBar
+            range={range}
+            onRangeChange={setRange}
+            trainingType={trainingType}
+            onTrainingTypeChange={setTrainingType}
+            compare={compare}
+            onCompareChange={setCompare}
+          />
+          <section className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+            <TrainingLoadCard
+              data={overview?.training_load.current}
+              compareData={overview?.training_load.compare ?? undefined}
+              compare={compare}
+              isLoading={isLoadingOverview}
+            />
+            <ComplianceRecoveryCard
+              data={overview?.compliance.current}
+              compareData={overview?.compliance.compare ?? undefined}
+              compare={compare}
+              isLoading={isLoadingOverview}
+            />
+          </section>
+          <section className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+            <WorkoutCalendarCard rows={overview?.compliance.current?.workout_calendar ?? []} isLoading={isLoadingOverview} />
+            <div className="rounded-[16px] border border-white/10 bg-[#0f172b]/85 p-5">
+              <h2 className="text-xl font-semibold">Health Summary</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                HRV, resting heart rate, sleep, and readiness data are surfaced in the recovery card until the dedicated
+                health charts land.
+              </p>
+            </div>
+          </section>
+        </TabsContent>
+
+        <TabsContent value="cycle" className="space-y-6">
+          <Suspense fallback={<CycleTabSkeleton />}>
+            <CycleTabContent />
+          </Suspense>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

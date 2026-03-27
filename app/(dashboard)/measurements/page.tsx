@@ -8,7 +8,7 @@ import {
   type BodyMeasurementRow,
   type MeasurementSubject,
 } from "@/app/actions/body-measurements";
-import { LogMeasurementDialog } from "@/components/measurements/log-measurement-dialog";
+import { LogMeasurementSheet } from "@/components/measurements/log-measurement-sheet";
 import { MeasurementsTable } from "@/components/measurements/measurements-table";
 import { SubjectSelector } from "@/components/shared/subject-selector";
 import { Button } from "@/components/ui/button";
@@ -101,7 +101,7 @@ export default function MeasurementsPage() {
         }}
       />
 
-      <LogMeasurementDialog
+      <LogMeasurementSheet
         open={logOpen}
         subject={subject}
         prefillRow={editRow}

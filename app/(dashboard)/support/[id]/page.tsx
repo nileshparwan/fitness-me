@@ -22,7 +22,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/responsive-modal";
+} from "@/components/ui/app-sheet";
 import { Input } from "@/components/ui/input";
 import {
   DropdownMenu,

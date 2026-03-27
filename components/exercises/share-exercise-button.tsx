@@ -16,7 +16,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/responsive-modal";
+} from "@/components/ui/app-sheet";
 import { toast } from "sonner";
 import { QRCodeSVG } from "qrcode.react"; 
 

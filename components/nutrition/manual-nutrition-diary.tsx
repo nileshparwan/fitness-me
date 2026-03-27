@@ -240,7 +240,7 @@ export function ManualNutritionDiary({
   const [favoriteOverrides, setFavoriteOverrides] = useState<Record<string, boolean>>({});
 
   const [mealNotesDraft, setMealNotesDraft] = useState<Record<string, string>>({});
-  const [planTemplateId, setPlanTemplateId] = useState("");
+  const [mealTemplateId, setMealTemplateId] = useState("");
   const lastDateNavAtRef = useRef(0);
 
   const resolvedSubject = useMemo(() => {
@@ -798,7 +798,7 @@ export function ManualNutritionDiary({
   };
 
   const onLogFromPlan = async () => {
-    const mealGroupId = diaryQuery.data?.active_plan?.meal_group_id;
+    const mealGroupId = selectedMealGroupId || diaryQuery.data?.active_plan?.meal_group_id;
     if (!mealGroupId) return;
 
     try {
@@ -819,20 +819,22 @@ export function ManualNutritionDiary({
 
   const onAssignTemplateToClient = async () => {
     if (!showAssignmentTools || !subject?.subject_client_id) return;
-    if (!planTemplateId) {
-      toast.error("Select a plan template first.");
+    if (!mealTemplateId) {
+      toast.error("Select a meal template first.");
       return;
     }
 
     try {
       await mutations.assignPlan.mutateAsync({
-        plan_id: planTemplateId,
+        meal_group_id: mealTemplateId,
+        start_date: performedOn,
+        end_date: performedOn,
         subject: { subject_client_id: subject.subject_client_id },
       });
-      setPlanTemplateId("");
-      toast.success("Meal plan assigned to client");
+      setMealTemplateId("");
+      toast.success("Meal template assigned to client");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to assign plan");
+      toast.error(error instanceof Error ? error.message : "Unable to assign meal template");
     }
   };
 
@@ -851,7 +853,7 @@ export function ManualNutritionDiary({
   };
 
   const currentDate = new Date(`${performedOn}T00:00:00`);
-  const canLogFromPlan = Boolean(diaryQuery.data?.active_plan?.meal_group_id);
+  const canLogFromPlan = Boolean(selectedMealGroupId || diaryQuery.data?.active_plan?.meal_group_id);
   const hasDiaryEntries = (diaryQuery.data?.logs.length || 0) > 0;
 
   const navigateDateBy = (offsetDays: number) => {
@@ -934,7 +936,7 @@ export function ManualNutritionDiary({
               onClick={() => void onLogFromPlan()}
             >
               {logFromPlan.isPending ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : null}
-              Add from plan
+              Add from template
             </Button>
           ) : null}
         </div>
@@ -942,15 +944,15 @@ export function ManualNutritionDiary({
         {showAssignmentTools && subject?.subject_client_id ? (
           <div className="glass-subtle grid gap-3 p-3 md:grid-cols-[1fr_auto] md:items-end">
             <div className="space-y-2">
-              <Label className="text-xs text-muted-foreground">Assign meal plan template</Label>
-              <Select value={planTemplateId} onValueChange={setPlanTemplateId}>
+              <Label className="text-xs text-muted-foreground">Assign meal template</Label>
+              <Select value={mealTemplateId} onValueChange={setMealTemplateId}>
                 <SelectTrigger className="rounded-xl border-border/60 bg-muted/20">
-                  <SelectValue placeholder="Select template plan" />
+                  <SelectValue placeholder="Select meal template" />
                 </SelectTrigger>
                 <SelectContent>
-                  {(templatesQuery.data || []).map((plan) => (
-                    <SelectItem key={plan.id} value={plan.id}>
-                      {plan.name}
+                  {(templatesQuery.data || []).map((template) => (
+                    <SelectItem key={template.id} value={template.id}>
+                      {template.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -962,7 +964,7 @@ export function ManualNutritionDiary({
               disabled={mutations.assignPlan.isPending}
             >
               {mutations.assignPlan.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              Assign Plan
+              Assign Template
             </Button>
           </div>
         ) : null}
@@ -1012,7 +1014,7 @@ export function ManualNutritionDiary({
           {canLogFromPlan && !hasDiaryEntries ? (
             <div className="flex items-center justify-between gap-3 rounded-xl border border-border/60 bg-muted/20 px-4 py-3">
               <div className="space-y-0.5">
-                <p className="text-sm font-medium">{diaryQuery.data.active_plan?.name || "Today's plan"} is ready</p>
+                <p className="text-sm font-medium">{diaryQuery.data.active_plan?.name || "Today's template"} is ready</p>
                 <p className="text-xs text-muted-foreground">Import all planned meals into your diary in one tap.</p>
               </div>
               <Button

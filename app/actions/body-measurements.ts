@@ -329,3 +329,35 @@ export async function getBodyMeasurementForDate(
     },
   });
 }
+
+export async function getLatestBodyMeasurementAction(
+  subjectInput: MeasurementSubject
+): Promise<BodyMeasurementRow | null> {
+  const subject = subjectSchema.parse(subjectInput);
+
+  return runTrackedAction({
+    eventName: "body_measurements.latest",
+    payload: { subject_type: subject.type },
+    action: async () => {
+      const { supabase, user } = await requireActor();
+      const supabaseAny = supabase as any;
+      const subjectRef = resolveSubject(subject, user.id);
+
+      let query = supabaseAny
+        .from("body_measurements")
+        .select(
+          "id, date, weight, body_fat_percent, waist, hips, chest, neck, bicep_left, bicep_right, thigh_left, thigh_right, calf, notes"
+        )
+        .order("date", { ascending: false })
+        .limit(1);
+
+      query = applySubjectFilters(query, subjectRef);
+
+      const { data, error } = await query.maybeSingle();
+      if (error) throw new Error(error.message);
+      if (!data) return null;
+
+      return mapBodyMeasurementRow(data as BodyMeasurementTableRow);
+    },
+  });
+}

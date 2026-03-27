@@ -21,6 +21,8 @@ import {
 import {
   flexRender,
   getCoreRowModel,
+  getFacetedRowModel,
+  getFacetedUniqueValues,
   getFilteredRowModel,
   getPaginationRowModel,
   getSortedRowModel,
@@ -48,7 +50,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "@/components/ui/responsive-modal";
+} from "@/components/ui/app-sheet";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -79,6 +81,7 @@ import {
   TABLE_DEFAULT_SORTING_CREATED_AT_DESC,
   TABLE_PAGE_SIZE_OPTIONS_STANDARD,
 } from "@/utils/app-constants";
+import { buildCsv, downloadCsv } from "@/utils/csv-export";
 import { cn } from "@/utils";
 
 const BillingPlanDialog = dynamic(() =>
@@ -195,6 +198,23 @@ function dateLabel(value: string | null) {
   }).format(parsed);
 }
 
+function isDateWithinRange(value: string | null, from: string, to: string) {
+  if (!from && !to) return true;
+  if (!value) return false;
+  const parsed = value.includes("T") ? new Date(value) : new Date(`${value}T00:00:00.000Z`);
+  if (Number.isNaN(parsed.getTime())) return false;
+  const time = parsed.getTime();
+  if (from) {
+    const fromTime = new Date(`${from}T00:00:00.000Z`).getTime();
+    if (time < fromTime) return false;
+  }
+  if (to) {
+    const toTime = new Date(`${to}T23:59:59.999Z`).getTime();
+    if (time > toTime) return false;
+  }
+  return true;
+}
+
 function compactRelative(value: string) {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return "just now";
@@ -289,6 +309,8 @@ function KpiCard({
 export function CoachPaymentsDashboard({ initialData }: { initialData?: CoachPaymentsDashboardData | null }) {
   const [mode, setMode] = useState<ViewMode>("today");
   const [search, setSearch] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [isRecordOpen, setIsRecordOpen] = useState(false);
   const [selectedTransaction, setSelectedTransaction] = useState<CoachPaymentTransactionRow | null>(null);
   const [planDialogClient, setPlanDialogClient] = useState<{
@@ -566,6 +588,18 @@ export function CoachPaymentsDashboard({ initialData }: { initialData?: CoachPay
     () => paymentsQuery.data?.transactions || [],
     [paymentsQuery.data?.transactions]
   );
+  const filteredTransactionRows = useMemo(
+    () =>
+      transactionRows.filter(
+        (row) =>
+          isDateWithinRange(row.created_at, dateFrom, dateTo) &&
+          (!search.trim() ||
+            `${row.client_name} ${row.description || ""} ${paymentNotesBody(row.notes)} ${row.status} ${String(row.amount || "")}`
+              .toLowerCase()
+              .includes(search.trim().toLowerCase()))
+      ),
+    [dateFrom, dateTo, search, transactionRows]
+  );
   const totalRows = paymentsQuery.data?.transactions_total ?? 0;
   const totalPages = Math.max(1, Math.ceil(totalRows / Math.max(1, pagination.pageSize)));
   const billingPlansAvailable = paymentsQuery.data?.features.billing_plans_available ?? true;
@@ -680,7 +714,7 @@ export function CoachPaymentsDashboard({ initialData }: { initialData?: CoachPay
   );
 
   const table = useReactTable({
-    data: transactionRows,
+    data: filteredTransactionRows,
     columns,
     state: {
       sorting,
@@ -703,6 +737,8 @@ export function CoachPaymentsDashboard({ initialData }: { initialData?: CoachPay
     enableColumnResizing: true,
     columnResizeMode: "onChange",
     getCoreRowModel: getCoreRowModel(),
+    getFacetedRowModel: getFacetedRowModel(),
+    getFacetedUniqueValues: getFacetedUniqueValues(),
     getFilteredRowModel: getFilteredRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
@@ -710,6 +746,17 @@ export function CoachPaymentsDashboard({ initialData }: { initialData?: CoachPay
 
   const canPrevious = pagination.pageIndex > 0 && !paymentsQuery.isFetching;
   const canNext = Boolean(paymentsQuery.data?.has_more) && !paymentsQuery.isFetching;
+  const exportTransactionsCsv = useCallback(() => {
+    const csv = buildCsv(filteredTransactionRows, [
+      { header: "Client", value: (row) => row.client_name },
+      { header: "Description", value: (row) => row.description },
+      { header: "Notes", value: (row) => paymentNotesBody(row.notes) },
+      { header: "Date", value: (row) => dateLabel(row.created_at) },
+      { header: "Status", value: (row) => row.status },
+      { header: "Amount", value: (row) => formatCurrencyAmount(Number(row.amount || 0), row.currency) },
+    ]);
+    downloadCsv(`coach-payments-${new Date().toISOString().slice(0, 10)}.csv`, csv);
+  }, [filteredTransactionRows]);
 
   const goToNextPage = useCallback(() => {
     const targetPage = pagination.pageIndex + 1;
@@ -1059,48 +1106,78 @@ export function CoachPaymentsDashboard({ initialData }: { initialData?: CoachPay
           </div>
         ) : mode === "transactions" ? (
           <div className="mt-3 space-y-3">
-            <div className="flex flex-col gap-2 md:flex-row md:items-center">
-              <div className="relative flex-1">
-                <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  value={search}
-                  onChange={(event) => {
-                    setSearch(event.target.value);
-                    resetPage();
-                  }}
-                  className="rounded-xl border-border/60 bg-muted/20 pl-9"
-                  placeholder="Search payments..."
-                />
+            <div className="flex flex-col gap-2 xl:flex-row xl:items-center">
+              <div className="flex flex-1 flex-col gap-2 md:flex-row md:items-center">
+                <div className="relative flex-1">
+                  <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    value={search}
+                    onChange={(event) => {
+                      setSearch(event.target.value);
+                      resetPage();
+                    }}
+                    className="rounded-xl border-border/60 bg-muted/20 pl-9"
+                    placeholder="Search payments..."
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-2 md:w-auto">
+                  <Input
+                    type="date"
+                    value={dateFrom}
+                    onChange={(event) => {
+                      setDateFrom(event.target.value);
+                      resetPage();
+                    }}
+                    className="rounded-xl border-border/60 bg-muted/20"
+                    aria-label="Filter payments from date"
+                  />
+                  <Input
+                    type="date"
+                    value={dateTo}
+                    onChange={(event) => {
+                      setDateTo(event.target.value);
+                      resetPage();
+                    }}
+                    className="rounded-xl border-border/60 bg-muted/20"
+                    aria-label="Filter payments to date"
+                  />
+                </div>
               </div>
 
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" className="rounded-xl border-border/60">
-                    <Settings2 className="mr-2 h-4 w-4" />
-                    Columns
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-56 rounded-xl border-border/70 bg-card/95">
-                  <DropdownMenuLabel>Toggle Columns</DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  {table
-                    .getAllLeafColumns()
-                    .filter((column) => column.getCanHide())
-                    .map((column) => (
-                      <DropdownMenuItem
-                        key={column.id}
-                        onSelect={(event) => {
-                          event.preventDefault();
-                          column.toggleVisibility(!column.getIsVisible());
-                        }}
-                        className="flex items-center gap-2"
-                      >
-                        <Checkbox checked={column.getIsVisible()} aria-label={`Toggle ${COLUMN_LABELS[column.id] || column.id}`} />
-                        <span>{COLUMN_LABELS[column.id] || column.id}</span>
-                      </DropdownMenuItem>
-                    ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
+              <div className="flex items-center gap-2">
+                <Button type="button" variant="outline" className="rounded-xl border-border/60" onClick={exportTransactionsCsv}>
+                  Export CSV
+                </Button>
+
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" className="rounded-xl border-border/60">
+                      <Settings2 className="mr-2 h-4 w-4" />
+                      Columns
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-56 rounded-xl border-border/70 bg-card/95">
+                    <DropdownMenuLabel>Toggle Columns</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    {table
+                      .getAllLeafColumns()
+                      .filter((column) => column.getCanHide())
+                      .map((column) => (
+                        <DropdownMenuItem
+                          key={column.id}
+                          onSelect={(event) => {
+                            event.preventDefault();
+                            column.toggleVisibility(!column.getIsVisible());
+                          }}
+                          className="flex items-center gap-2"
+                        >
+                          <Checkbox checked={column.getIsVisible()} aria-label={`Toggle ${COLUMN_LABELS[column.id] || column.id}`} />
+                          <span>{COLUMN_LABELS[column.id] || column.id}</span>
+                        </DropdownMenuItem>
+                      ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
             </div>
 
             <div className="hidden overflow-hidden rounded-[10px] border border-border/60 md:block">

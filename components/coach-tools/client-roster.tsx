@@ -20,6 +20,12 @@ import {
 import {
   flexRender,
   getCoreRowModel,
+  getFacetedRowModel,
+  getFacetedUniqueValues,
+  getFilteredRowModel,
+  getPaginationRowModel,
+  getSortedRowModel,
+  type RowSelectionState,
   useReactTable,
   type ColumnDef,
   type PaginationState,
@@ -39,7 +45,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/responsive-modal";
+} from "@/components/ui/app-sheet";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -62,6 +68,7 @@ import {
   TABLE_DEFAULT_SORTING_UPDATED_AT_DESC,
   TABLE_PAGE_SIZE_OPTIONS_STANDARD,
 } from "@/utils/app-constants";
+import { buildCsv, downloadCsv } from "@/utils/csv-export";
 import { cn } from "@/utils";
 const DEFAULT_VISIBILITY: VisibilityState = {
   updated_at: true,
@@ -172,6 +179,7 @@ export function ClientRoster() {
   const [sorting, setSorting] = useState<SortingState>(TABLE_DEFAULT_SORTING_UPDATED_AT_DESC);
   const [pagination, setPagination] = useState<PaginationState>(TABLE_DEFAULT_PAGINATION_PAGE_0_SIZE_10);
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(DEFAULT_VISIBILITY);
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [createForm, setCreateForm] = useState<ClientFormState>(() => emptyFormState());
   const [editingForm, setEditingForm] = useState<ClientFormState | null>(null);
@@ -207,6 +215,7 @@ export function ClientRoster() {
 
   const resetPage = useCallback(() => {
     setPagination((current) => ({ ...current, pageIndex: 0 }));
+    setRowSelection({});
   }, []);
 
   const openCreateDialog = useCallback(() => {
@@ -280,6 +289,25 @@ export function ClientRoster() {
 
   const columns = useMemo<ColumnDef<ClientRowItem>[]>(
     () => [
+      {
+        id: "select",
+        enableHiding: false,
+        enableSorting: false,
+        header: ({ table }) => (
+          <Checkbox
+            checked={table.getIsAllPageRowsSelected() || (table.getIsSomePageRowsSelected() && "indeterminate")}
+            onCheckedChange={(value) => table.toggleAllPageRowsSelected(Boolean(value))}
+            aria-label="Select all rows"
+          />
+        ),
+        cell: ({ row }) => (
+          <Checkbox
+            checked={row.getIsSelected()}
+            onCheckedChange={(value) => row.toggleSelected(Boolean(value))}
+            aria-label={`Select ${displayClientName(row.original)}`}
+          />
+        ),
+      },
       {
         id: "client",
         accessorFn: (row) => displayClientName(row),
@@ -409,7 +437,10 @@ export function ClientRoster() {
       sorting,
       pagination,
       columnVisibility,
+      rowSelection,
     },
+    enableRowSelection: true,
+    getRowId: (row) => row.id,
     onSortingChange: (updater) => {
       setSorting((current) => (typeof updater === "function" ? updater(current) : updater));
       resetPage();
@@ -420,10 +451,16 @@ export function ClientRoster() {
     onColumnVisibilityChange: (updater) => {
       setColumnVisibility((current) => (typeof updater === "function" ? updater(current) : updater));
     },
+    onRowSelectionChange: setRowSelection,
     manualSorting: true,
     manualPagination: true,
     pageCount: totalPages,
     getCoreRowModel: getCoreRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
+    getFacetedRowModel: getFacetedRowModel(),
+    getFacetedUniqueValues: getFacetedUniqueValues(),
   });
 
   const canPrevious = pagination.pageIndex > 0 && !clientsQuery.isFetching;
@@ -442,6 +479,39 @@ export function ClientRoster() {
     table.setPageIndex(targetPage);
   }, [clientPages.length, clientsQuery, pagination.pageIndex, table]);
 
+  const selectedClientRows = table.getSelectedRowModel().rows.map((row) => row.original);
+  const exportClientsCsv = useCallback(() => {
+    const csv = buildCsv(rows, [
+      { header: "Client", value: (row) => displayClientName(row) },
+      { header: "Email", value: (row) => row.email || "" },
+      { header: "Phone", value: (row) => row.phone || "" },
+      { header: "Status", value: (row) => row.status },
+      { header: "Active Plans", value: (row) => row.active_plans_count },
+      { header: "Last Activity", value: (row) => relativeUpdatedAt(row.updated_at) },
+    ]);
+    downloadCsv(`client-roster-${new Date().toISOString().slice(0, 10)}.csv`, csv);
+  }, [rows]);
+  const archiveSelectedClients = useCallback(async () => {
+    if (selectedClientRows.length === 0) return;
+    const confirmed = window.confirm(`Archive ${selectedClientRows.length} selected clients?`);
+    if (!confirmed) return;
+
+    const result = await withToastFeedback(
+      (async () => {
+        for (const client of selectedClientRows) {
+          await mutations.removeClient.mutateAsync({ client_id: client.id });
+        }
+      })(),
+      {
+        loading: "Archiving selected clients...",
+        success: `${selectedClientRows.length} clients archived`,
+        error: "Unable to archive selected clients",
+      }
+    ).catch(() => null);
+    if (!result) return;
+    setRowSelection({});
+  }, [mutations.removeClient, selectedClientRows]);
+
   return (
     <div className="space-y-4 md:space-y-5">
       <section className="space-y-3">
@@ -454,6 +524,9 @@ export function ClientRoster() {
           </div>
 
           <div className="flex items-center gap-2">
+            <Button variant="outline" className="rounded-xl border-border/60" onClick={exportClientsCsv}>
+              Export CSV
+            </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" className="rounded-xl border-border/60">
@@ -489,6 +562,27 @@ export function ClientRoster() {
             </Button>
           </div>
         </div>
+
+        {selectedClientRows.length > 0 ? (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-chart-1/30 bg-chart-1/10 px-3 py-2 text-sm">
+            <p className="text-chart-1">{selectedClientRows.length} selected</p>
+            <div className="flex items-center gap-2">
+              <Button type="button" variant="outline" size="sm" className="rounded-xl border-border/60" onClick={() => setRowSelection({})}>
+                Clear
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                className="rounded-xl bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                onClick={() => void archiveSelectedClients()}
+                disabled={mutations.removeClient.isPending}
+              >
+                {mutations.removeClient.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Archive Selected
+              </Button>
+            </div>
+          </div>
+        ) : null}
 
         <div className="space-y-2">
           <div className="relative">
@@ -578,19 +672,27 @@ export function ClientRoster() {
               return (
                 <article key={client.id} className="group glass-surface rounded-[10px] border-border/60 p-3">
                   <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <div className="grid h-8 w-8 place-items-center rounded-full border border-chart-3/40 bg-chart-3/10 text-xs font-semibold text-chart-3">
-                          {getInitials(name)}
-                        </div>
-                        <Link
-                          href={`/clients/${client.id}`}
+                    <div className="flex min-w-0 items-start gap-2">
+                      <Checkbox
+                        checked={row.getIsSelected()}
+                        onCheckedChange={(value) => row.toggleSelected(Boolean(value))}
+                        aria-label={`Select ${name}`}
+                        className="mt-0.5"
+                      />
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <div className="grid h-8 w-8 place-items-center rounded-full border border-chart-3/40 bg-chart-3/10 text-xs font-semibold text-chart-3">
+                            {getInitials(name)}
+                          </div>
+                          <Link
+                            href={`/clients/${client.id}`}
                           className="truncate text-sm font-semibold transition-colors hover:text-chart-1 focus-visible:text-chart-1 group-hover:text-chart-1"
                         >
                           {name}
                         </Link>
+                        </div>
+                        <p className="mt-1 truncate text-xs text-muted-foreground">{client.email || "No email"}</p>
                       </div>
-                      <p className="mt-1 truncate text-xs text-muted-foreground">{client.email || "No email"}</p>
                     </div>
                     <Badge className={cn("rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-wide", statusClasses(client.status))}>
                       {client.status}

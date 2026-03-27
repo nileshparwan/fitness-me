@@ -1,9 +1,5 @@
-import { NutritionProgressPage } from "@/components/nutrition/progress/nutrition-progress-page";
+import { redirect } from "next/navigation";
 
 export default function NutritionProgressRoute() {
-  return (
-    <div className="page-shell">
-      <NutritionProgressPage />
-    </div>
-  );
+  redirect("/progress?tab=nutrition");
 }

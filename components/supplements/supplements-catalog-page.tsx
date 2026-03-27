@@ -3,8 +3,9 @@
 import { useState } from "react";
 import { Plus } from "lucide-react";
 
-import { CreateCustomSupplementDialog } from "@/components/supplements/create-custom-supplement-dialog";
-import { EditSupplementDialog } from "@/components/supplements/edit-supplement-dialog";
+import { AssignSupplementsSheet } from "@/components/supplements/assign-supplements-sheet";
+import { CreateCustomSupplementSheet } from "@/components/supplements/create-custom-supplement-sheet";
+import { EditSupplementSheet } from "@/components/supplements/edit-supplement-sheet";
 import { SupplementCatalogTable } from "@/components/supplements/supplement-catalog-table";
 import { Button } from "@/components/ui/button";
 import { useSupplementCatalog } from "@/hooks/use-supplements";
@@ -16,6 +17,8 @@ export function SupplementsCatalogPage() {
   const catalogQuery = useSupplementCatalog();
   const [createOpen, setCreateOpen] = useState(false);
   const [editingSupplement, setEditingSupplement] = useState<SupplementCatalogRow | null>(null);
+  const [assignOpen, setAssignOpen] = useState(false);
+  const [assignSupplementIds, setAssignSupplementIds] = useState<string[]>([]);
 
   return (
     <div className="section-gap">
@@ -39,10 +42,22 @@ export function SupplementsCatalogPage() {
         rows={catalogQuery.data || []}
         isLoading={catalogQuery.isLoading}
         onEditSupplement={(supplement) => setEditingSupplement(supplement)}
+        onBulkAssign={(supplements) => {
+          setAssignSupplementIds(supplements.map((supplement) => supplement.id));
+          setAssignOpen(true);
+        }}
       />
 
-      <CreateCustomSupplementDialog open={createOpen} onOpenChange={setCreateOpen} />
-      <EditSupplementDialog
+      <CreateCustomSupplementSheet open={createOpen} onOpenChange={setCreateOpen} />
+      <AssignSupplementsSheet
+        open={assignOpen}
+        onOpenChange={(open) => {
+          setAssignOpen(open);
+          if (!open) setAssignSupplementIds([]);
+        }}
+        initialSupplementIds={assignSupplementIds}
+      />
+      <EditSupplementSheet
         open={Boolean(editingSupplement)}
         onOpenChange={(open) => {
           if (!open) setEditingSupplement(null);

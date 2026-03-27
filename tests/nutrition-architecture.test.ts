@@ -11,7 +11,6 @@ import { useNutritionUiStore } from "@/stores/use-nutrition-ui-store";
 import { mealGroupKeys } from "@/lib/query-keys-meal-groups";
 import { nutritionDashboardKeys } from "@/lib/query-keys-nutrition-dashboard";
 import { nutritionKeys as legacyNutritionKeys } from "@/lib/query-keys-nutrition";
-import { nutritionProgramKeys } from "@/lib/query-keys-nutrition-program";
 import {
   classifyNutritionActivityType,
   describeNutritionActivity,
@@ -164,7 +163,7 @@ test("legacy query key adapters stay consistent with shared nutrition key factor
     nutritionDashboardKeys.activity({ subject_client_id: "c-1" }, 10, "g-1"),
     nutritionKeys.dashboardActivity({ subject_client_id: "c-1" }, 10, "g-1")
   );
-  assert.deepEqual(nutritionProgramKeys.plan("abc"), nutritionKeys.programById("abc"));
+  assert.deepEqual(nutritionKeys.templates(), ["nutrition", "templates"]);
   assert.deepEqual(nutritionKeys.mealGroupOptions(), [
     "nutrition",
     "groups",

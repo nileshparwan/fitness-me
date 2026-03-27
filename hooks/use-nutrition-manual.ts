@@ -12,25 +12,21 @@ import {
 import {
   addMealItemAction,
   addMealLogSectionAction,
-  archiveMealPlanAction,
-  assignMealPlanToSubjectAction,
   copyMealsFromDateAction,
-  duplicateMealPlanAction,
   getClientNutritionSummary7dAction,
   getNutritionActivePlanForDateAction,
   getNutritionDiaryDayAction,
   listFavoriteMealItemsAction,
-  listMyMealPlanTemplatesAction,
   logFromPlanAction,
   removeMealItemAction,
   toggleFavoriteMealItemAction,
   updateMealItemAction,
   updateMealLogNotesAction,
-  upsertMealPlanAction,
   type ManualDiaryItem,
   type NutritionDiaryDay,
   type MealType,
 } from "@/app/actions/nutrition-manual";
+import { assignMealGroupToSubjectAction, listMealGroupsAction } from "@/app/actions/meal-groups";
 import {
   nutritionKeys,
   type NutritionSubject,
@@ -202,7 +198,15 @@ export function useNutritionActivePlanForDate(performedOn: string, subject?: Nut
 export function useMealPlanTemplates() {
   return useQuery({
     queryKey: nutritionKeys.templates(),
-    queryFn: listMyMealPlanTemplatesAction,
+    queryFn: async () =>
+      (
+        await listMealGroupsAction({
+          page: 0,
+          page_size: 100,
+          status: "all",
+          include_snapshots: false,
+        })
+      ).rows,
     staleTime: 60_000,
     gcTime: 5 * 60_000,
     refetchOnWindowFocus: false,
@@ -271,7 +275,6 @@ export function useNutritionMutations(performedOn: string, subject?: NutritionSu
     });
   const invalidateDashboard = () => queryClient.invalidateQueries({ queryKey: nutritionKeys.dashboard() });
   const invalidateFavorites = () => queryClient.invalidateQueries({ queryKey: nutritionKeys.favorites() });
-  const invalidatePlans = () => queryClient.invalidateQueries({ queryKey: nutritionKeys.plans() });
   const invalidateTemplates = () => queryClient.invalidateQueries({ queryKey: nutritionKeys.templates() });
   const invalidateClientSummary = () => queryClient.invalidateQueries({ queryKey: nutritionKeys.clientSummary() });
   const invalidateActiveClientSummary = () =>
@@ -384,51 +387,18 @@ export function useNutritionMutations(performedOn: string, subject?: NutritionSu
     onSuccess: invalidateDiarySurface,
   });
 
-  const upsertPlan = useMutation({
-    mutationFn: upsertMealPlanAction,
-    onSuccess: async () => {
-      await Promise.all([
-        invalidatePlans(),
-        invalidateTemplates(),
-        invalidateDiarySurface(),
-      ]);
-    },
-  });
-
-  const duplicatePlan = useMutation({
-    mutationFn: duplicateMealPlanAction,
-    onSuccess: async () => {
-      await Promise.all([
-        invalidatePlans(),
-        invalidateTemplates(),
-      ]);
-    },
-  });
-
-  const archivePlan = useMutation({
-    mutationFn: archiveMealPlanAction,
-    onSuccess: async () => {
-      await Promise.all([
-        invalidatePlans(),
-        invalidateTemplates(),
-        invalidateDiarySurface(),
-      ]);
-    },
-  });
-
   const assignPlan = useMutation({
-    mutationFn: assignMealPlanToSubjectAction,
+    mutationFn: assignMealGroupToSubjectAction,
     onSuccess: async (_result, variables) => {
       await Promise.all([
         invalidateDay(),
         invalidateDashboard(),
-        invalidatePlans(),
         invalidateTemplates(),
         invalidateClientSummary(),
         invalidateActiveClientSummary(),
       ]);
 
-      if (variables.subject?.subject_client_id) {
+      if (variables.subject.subject_client_id) {
         await queryClient.invalidateQueries({
           queryKey: nutritionKeys.clientSummary7d(variables.subject.subject_client_id),
         });
@@ -449,9 +419,6 @@ export function useNutritionMutations(performedOn: string, subject?: NutritionSu
     copyFromDate,
     toggleFavorite,
     saveNotes,
-    upsertPlan,
-    duplicatePlan,
-    archivePlan,
     assignPlan,
   };
 }

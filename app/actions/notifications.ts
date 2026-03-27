@@ -4,7 +4,8 @@ import { z } from "zod";
 
 import { runTrackedAction } from "@/lib/events/dispatcher";
 import { createClient } from "@/lib/supabase/server";
-import type { Json, NotificationType } from "@/types/database";
+import type { Json } from "@/types/database";
+import type { NotificationType } from "@/types/notifications";
 
 const dismissNotificationSchema = z.object({
   id: z.string().uuid(),

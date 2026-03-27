@@ -1,16 +1,22 @@
 "use client";
 
-import { Apple, CheckCircle2, Droplets, Moon, Plus, Timer, UtensilsCrossed } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Apple, CheckCircle2, Droplets, Loader2, Moon, Plus, Timer, UtensilsCrossed } from "lucide-react";
 import Link from "next/link";
 
+import { useQuickLogData } from "@/hooks/use-quick-log-data";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { useUnitLabels } from "@/stores/use-settings-store";
+import { CyclePhaseWidget } from "@/components/dashboard/cycle-phase-widget";
+import { PregnancyStatusCard } from "@/components/dashboard/pregnancy-status-card";
+import { useUnitLabels, useUnitSystem } from "@/stores/use-settings-store";
+import { displayWeight } from "@/utils/unit-conversion";
 
 type ActivityRingMetric = {
   label: string;
@@ -98,10 +104,160 @@ function MacroProgress({ metric }: { metric: MacroMetric }) {
           {metric.consumed}/{metric.target} {metric.unit}
         </span>
       </div>
-      <div className="h-2 overflow-hidden rounded-full bg-muted">
-        <div className="h-full bg-primary transition-all" style={{ width: `${pct}%` }} />
-      </div>
+      <Progress value={pct} className="h-2" />
     </div>
+  );
+}
+
+function toInputValue(value: number | null | undefined) {
+  return value == null ? "" : String(value);
+}
+
+function parseNumberInput(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function QuickLogCard() {
+  const labels = useUnitLabels();
+  const system = useUnitSystem();
+  const { query, saveWeight, saveWaterIntake } = useQuickLogData();
+  const [bodyweight, setBodyweight] = useState("");
+  const [hydration, setHydration] = useState("");
+  const [readiness, setReadiness] = useState("steady");
+
+  const serverWeight = useMemo(
+    () => displayWeight(query.data?.measurement?.weight ?? null, system),
+    [query.data?.measurement?.weight, system]
+  );
+  const serverWater = query.data?.dailyActivity?.water_intake_ml ?? null;
+
+  useEffect(() => {
+    setBodyweight(toInputValue(serverWeight));
+  }, [serverWeight]);
+
+  useEffect(() => {
+    setHydration(toInputValue(serverWater));
+  }, [serverWater]);
+
+  const hasWeightChanged = useMemo(() => parseNumberInput(bodyweight) !== serverWeight, [bodyweight, serverWeight]);
+  const hasWaterChanged = useMemo(() => parseNumberInput(hydration) !== serverWater, [hydration, serverWater]);
+
+  const persistWeight = async () => {
+    const value = parseNumberInput(bodyweight);
+    if (value == null || !hasWeightChanged) return;
+    await saveWeight.mutateAsync(value);
+  };
+
+  const persistHydration = async () => {
+    const value = parseNumberInput(hydration);
+    if (!hasWaterChanged) return;
+    await saveWaterIntake.mutateAsync(value);
+  };
+
+  const resetFields = () => {
+    setBodyweight(toInputValue(serverWeight));
+    setHydration(toInputValue(serverWater));
+  };
+
+  const isSaving = saveWeight.isPending || saveWaterIntake.isPending;
+
+  return (
+    <Card className="border-border bg-card">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base">Quick Log</CardTitle>
+        <CardDescription>Capture critical daily data in under 30 seconds.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="space-y-2">
+          <Label htmlFor="bodyweight">Bodyweight ({labels.weight})</Label>
+          <div className="relative">
+            <Input
+              id="bodyweight"
+              type="number"
+              inputMode="decimal"
+              placeholder={`e.g. ${system === "imperial" ? "159.6" : "72.4"}`}
+              className="pr-10"
+              value={bodyweight}
+              onChange={(event) => setBodyweight(event.target.value)}
+              onBlur={() => {
+                void persistWeight();
+              }}
+            />
+            {saveWeight.isPending ? (
+              <Loader2 className="pointer-events-none absolute right-3 top-2.5 h-4 w-4 animate-spin text-muted-foreground" />
+            ) : null}
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="hydration">Water Intake (ml)</Label>
+          <div className="relative">
+            <Droplets className="pointer-events-none absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              id="hydration"
+              type="number"
+              inputMode="numeric"
+              className="pl-8 pr-10"
+              placeholder="e.g. 2200"
+              value={hydration}
+              onChange={(event) => setHydration(event.target.value)}
+              onBlur={() => {
+                void persistHydration();
+              }}
+            />
+            {saveWaterIntake.isPending ? (
+              <Loader2 className="pointer-events-none absolute right-3 top-2.5 h-4 w-4 animate-spin text-muted-foreground" />
+            ) : null}
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <Label>Readiness</Label>
+          <Select value={readiness} onValueChange={setReadiness}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="sharp">Sharp</SelectItem>
+              <SelectItem value="steady">Steady</SelectItem>
+              <SelectItem value="flat">Flat</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2 pt-1">
+          <Button
+            className="w-full"
+            disabled={isSaving || (!hasWeightChanged && !hasWaterChanged)}
+            onClick={() => {
+              void Promise.all([persistWeight(), persistHydration()]);
+            }}
+          >
+            {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
+            Save
+          </Button>
+          <Button variant="outline" className="w-full" onClick={resetFields} disabled={isSaving}>
+            <Timer className="mr-2 h-4 w-4" />
+            Reset
+          </Button>
+        </div>
+
+        <Button asChild variant="outline" className="w-full">
+          <Link href="/clients">Open Coach Tools</Link>
+        </Button>
+
+        <div className="rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+          <div className="mb-1 flex items-center gap-1 text-foreground">
+            <CheckCircle2 className="h-3.5 w-3.5 text-primary" />
+            Today&apos;s priority
+          </div>
+          Hit protein target and finish cooldown mobility for better next-day readiness.
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -116,7 +272,6 @@ export function UserDashboardOverview({
   macros = DEFAULT_MACROS,
   workouts = DEFAULT_WORKOUTS,
 }: UserDashboardOverviewProps) {
-  const labels = useUnitLabels();
   return (
     <div className="space-y-4 md:space-y-6">
       <section className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -211,63 +366,12 @@ export function UserDashboardOverview({
           </CardContent>
         </Card>
 
-        <Card className="border-border bg-card">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">Quick Log</CardTitle>
-            <CardDescription>Capture critical daily data in under 30 seconds.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="space-y-2">
-              <Label htmlFor="bodyweight">Bodyweight ({labels.weight})</Label>
-              <Input id="bodyweight" type="number" inputMode="decimal" placeholder="e.g. 72.4" />
-            </div>
+        <QuickLogCard />
+      </section>
 
-            <div className="space-y-2">
-              <Label htmlFor="hydration">Water Intake (ml)</Label>
-              <div className="relative">
-                <Droplets className="pointer-events-none absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input id="hydration" type="number" inputMode="numeric" className="pl-8" placeholder="e.g. 2200" />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Readiness</Label>
-              <Select defaultValue="steady">
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="sharp">Sharp</SelectItem>
-                  <SelectItem value="steady">Steady</SelectItem>
-                  <SelectItem value="flat">Flat</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2 pt-1">
-              <Button className="w-full">
-                <Plus className="mr-2 h-4 w-4" />
-                Save
-              </Button>
-              <Button variant="outline" className="w-full">
-                <Timer className="mr-2 h-4 w-4" />
-                Later
-              </Button>
-            </div>
-
-            <Button asChild variant="outline" className="w-full">
-              <Link href="/clients">Open Coach Tools</Link>
-            </Button>
-
-            <div className="rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-              <div className="mb-1 flex items-center gap-1 text-foreground">
-                <CheckCircle2 className="h-3.5 w-3.5 text-primary" />
-                Today&apos;s priority
-              </div>
-              Hit protein target and finish cooldown mobility for better next-day readiness.
-            </div>
-          </CardContent>
-        </Card>
+      <section className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+        <CyclePhaseWidget />
+        <PregnancyStatusCard />
       </section>
     </div>
   );

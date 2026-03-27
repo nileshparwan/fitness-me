@@ -9,7 +9,7 @@ import {
   type HealthSubject,
 } from "@/app/actions/daily-health-log";
 import { HealthLogTable } from "@/components/check-in/health-log-table";
-import { LogHealthDialog } from "@/components/check-in/log-health-dialog";
+import { LogHealthSheet } from "@/components/check-in/log-health-sheet";
 import { SubjectSelector } from "@/components/shared/subject-selector";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -100,7 +100,7 @@ export default function CheckInPage() {
         }}
       />
 
-      <LogHealthDialog
+      <LogHealthSheet
         open={logOpen}
         subject={subject}
         prefillRow={editRow}

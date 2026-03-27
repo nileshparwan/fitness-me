@@ -46,11 +46,13 @@ import {
 } from "@/components/ui/sidebar"
 import { cn } from "@/utils"
 import { useRole } from "@/hooks/use-role"
+import { useSettingsStore } from "@/stores/use-settings-store"
 import {
   getRoleHomePath,
   getSidebarSectionsForRole,
   type SidebarItemConfig
 } from "@/lib/auth/route-access"
+import { Badge } from "@/components/ui/badge"
 import { NavUser } from "./nav-user"
 
 const iconMap = {
@@ -106,6 +108,7 @@ function ItemRow({ item, pathname, expandedState, onToggle }: ItemRowProps) {
         <Link href={item.href}>
           <Icon />
           <span>{item.title}</span>
+          {item.badge ? <Badge variant="secondary" className="ml-auto rounded-full px-2 py-0.5 text-[10px]">{item.badge}</Badge> : null}
         </Link>
       </SidebarMenuButton>
 
@@ -143,16 +146,18 @@ function ItemRow({ item, pathname, expandedState, onToggle }: ItemRowProps) {
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const pathname = usePathname()
   const { data: roleContext, isLoading } = useRole()
+  const gender = useSettingsStore((state) => state.gender)
 
   const navContext = React.useMemo(() => {
     if (roleContext) {
       return {
         role: roleContext.role,
+        gender,
       }
     }
 
     return null
-  }, [roleContext])
+  }, [gender, roleContext])
 
   const sections = React.useMemo(() => (navContext ? getSidebarSectionsForRole(navContext) : []), [navContext])
   const homePath = navContext ? getRoleHomePath(navContext) : "/dashboard"

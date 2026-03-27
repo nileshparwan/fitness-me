@@ -50,7 +50,7 @@ AS $$
 DECLARE
   effective_height numeric;
 BEGIN
-  effective_height := new.height_cm;
+  effective_height := new.height;
   if effective_height is null and new.user_id is not null then
     select p.height into effective_height
     from public.profiles p
@@ -69,7 +69,7 @@ $$;
 
 DROP TRIGGER IF EXISTS trg_body_measurements_bmi ON public.body_measurements;
 CREATE TRIGGER trg_body_measurements_bmi
-BEFORE INSERT OR UPDATE OF weight, height_cm, user_id
+BEFORE INSERT OR UPDATE OF weight, height, user_id
 ON public.body_measurements
 FOR EACH ROW
 EXECUTE FUNCTION public.trigger_body_measurements_calculate_bmi();

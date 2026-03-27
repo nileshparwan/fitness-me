@@ -188,3 +188,14 @@
   - internal curated DB only (v1), or
   - external provider integration in v1.
 - Approve v1 score groups for micronutrients.
+
+## 6) QA Validation Result (2026-03-25)
+- **Status:** ✅ Validated (Phases A025-A026)
+- **Notes:** 
+  - `daily_macro_compliance` fact table is correctly implemented and snapshotted.
+  - "Partial Log" logic is verified (minimum 2 meal types required).
+  - Progress Overview bundled query (A-031) is confirmed as high-performance.
+- **Remaining Gaps:**
+  - Fitness goal historical fallback (Phase A1).
+  - Micronutrient capture and profiles (Phase B).
+

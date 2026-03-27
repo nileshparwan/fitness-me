@@ -758,36 +758,6 @@ async function resolveTargets(
   subject: SubjectRef,
   performedOn: string
 ): Promise<NutritionProgressTargets> {
-  let assignmentQuery = supabase
-    .from("meal_plan_assignments")
-    .select("name, daily_calorie_target, daily_protein_target_g, daily_carbs_target_g, daily_fat_target_g")
-    .eq("status", "active")
-    .lte("start_date", performedOn)
-    .gte("end_date", performedOn)
-    .order("start_date", { ascending: false })
-    .limit(1);
-  assignmentQuery = applySubjectFilters(assignmentQuery, subject);
-
-  const { data: assignment, error: assignmentError } = await assignmentQuery.maybeSingle();
-  if (assignmentError) throw new Error(assignmentError.message);
-
-  if (
-    assignment &&
-    safeNumber(assignment.daily_calorie_target) > 0 &&
-    safeNumber(assignment.daily_protein_target_g) > 0 &&
-    safeNumber(assignment.daily_carbs_target_g) > 0 &&
-    safeNumber(assignment.daily_fat_target_g) > 0
-  ) {
-    return {
-      calories: Math.round(safeNumber(assignment.daily_calorie_target)),
-      protein_g: Math.round(safeNumber(assignment.daily_protein_target_g)),
-      carbs_g: Math.round(safeNumber(assignment.daily_carbs_target_g)),
-      fat_g: Math.round(safeNumber(assignment.daily_fat_target_g)),
-      source: "plan_assignment",
-      plan_name: assignment.name ?? null,
-    };
-  }
-
   const goalTarget = await resolveGoalTargetForDate(supabase, subject, performedOn);
 
   if (goalTarget.source === "none") {

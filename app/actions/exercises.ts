@@ -23,6 +23,18 @@ export type HistoryEntry = {
 type WorkoutLogRow = Database["public"]["Tables"]["strength_sets"]["Row"];
 type CardioLogRow = Database["public"]["Tables"]["cardio_sessions"]["Row"];
 type WorkoutRow = Database["public"]["Tables"]["training_sessions"]["Row"];
+type ExerciseCategory = Database["public"]["Enums"]["exercise_category"];
+
+const EXERCISE_CATEGORIES = new Set<ExerciseCategory>(["strength", "cardio", "mind_body", "mobility"]);
+
+function normalizeExerciseCategory(value: string | null | undefined): ExerciseCategory | null {
+  const normalized = (value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_")
+    .replace(/_+/g, "_");
+  return EXERCISE_CATEGORIES.has(normalized as ExerciseCategory) ? (normalized as ExerciseCategory) : null;
+}
 
 export async function getExerciseHistory(exerciseName: string) {
   return runTrackedAction({
@@ -125,10 +137,13 @@ export async function getExercises({
         .range(pageParam * PAGE_SIZE, (pageParam + 1) * PAGE_SIZE - 1);
 
     if (search) {
-        query = query.ilike("name", `%${escapeLikePattern(search)}%`);
+      query = query.ilike("name", `%${escapeLikePattern(search)}%`);
     }
     if (category) {
-        query = query.ilike("category", `%${escapeLikePattern(category)}%`);
+      const normalizedCategory = normalizeExerciseCategory(category);
+      if (normalizedCategory) {
+        query = query.eq("category", normalizedCategory);
+      }
     }
 
     const { data, error, count } = await query;
@@ -152,29 +167,20 @@ export async function createExercise(values: ExerciseFormValues) {
         payload: { name: values.name, category: values.category },
         action: async () => {
     const supabase = await createClient();
-    const {
-        data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-        throw new Error("Unauthorized");
-    }
-
     const normalizedMuscleGroups = withParentMuscleGroups(values.muscle_groups, values.category);
-    const normalizedCategory = (values.category || "").trim().toLowerCase();
+    const normalizedCategory = normalizeExerciseCategory(values.category);
     if (normalizedCategory !== "cardio" && !hasMuscleFocusTag(normalizedMuscleGroups)) {
       throw new Error("Muscle groups must include one focus tag: push, pull, core, or legs.");
     }
 
     const { error } = await supabase.from("exercise_catalog").insert({
         name: values.name,
-        category: values.category,
+        category: normalizedCategory,
         muscle_groups: normalizedMuscleGroups,
         equipment: values.equipment,
         description: values.description,
         video_url: values.video_url || null,
         aliases: values.aliases,
-        created_by: user.id,
     });
 
     if (error) throw new Error(error.message);
@@ -219,7 +225,7 @@ export async function updateExercise(id: string, values: ExerciseFormValues) {
         action: async () => {
     const supabase = await createClient();
     const normalizedMuscleGroups = withParentMuscleGroups(values.muscle_groups, values.category);
-    const normalizedCategory = (values.category || "").trim().toLowerCase();
+    const normalizedCategory = normalizeExerciseCategory(values.category);
     if (normalizedCategory !== "cardio" && !hasMuscleFocusTag(normalizedMuscleGroups)) {
       throw new Error("Muscle groups must include one focus tag: push, pull, core, or legs.");
     }
@@ -228,7 +234,7 @@ export async function updateExercise(id: string, values: ExerciseFormValues) {
         .from("exercise_catalog")
         .update({
             name: values.name,
-            category: values.category,
+            category: normalizedCategory,
             muscle_groups: normalizedMuscleGroups,
             equipment: values.equipment,
             description: values.description,

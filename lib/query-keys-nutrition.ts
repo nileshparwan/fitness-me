@@ -64,11 +64,4 @@ export const nutritionKeys = {
   mealGroupAssignees: (mealGroupId: string, search: string) => [...nutritionKeys.mealGroupAssigneesRoot(mealGroupId), search] as const,
   mealGroupAssignableSubjects: () => [...nutritionKeys.groups(), "assignable-subjects"] as const,
   mealGroupOptions: () => [...nutritionKeys.groups(), "options", DEFAULT_NUTRITION_MEAL_GROUP_OPTIONS_PARAMS] as const,
-
-  programs: () => [...nutritionKeys.all, "programs"] as const,
-  programById: (programId: string) => [...nutritionKeys.programs(), programId] as const,
-  programOptions: () => [...nutritionKeys.programs(), "options"] as const,
-  programMealsRoot: () => [...nutritionKeys.programs(), "meals"] as const,
-  programMealsByProgramId: (programId: string) => [...nutritionKeys.programMealsRoot(), { program_id: programId }] as const,
-
 };

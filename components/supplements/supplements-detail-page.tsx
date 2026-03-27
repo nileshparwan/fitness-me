@@ -13,7 +13,7 @@ import {
   type SupplementAssignmentRow,
 } from "@/app/actions/supplements";
 import { AssignSupplementsSheet } from "@/components/supplements/assign-supplements-sheet";
-import { EditAssignmentDialog } from "@/components/supplements/edit-assignment-dialog";
+import { EditAssignmentSheet } from "@/components/supplements/edit-assignment-sheet";
 import { SupplementDetailTable } from "@/components/supplements/supplement-detail-table";
 import { Button } from "@/components/ui/button";
 import { useSupplementAssignments, useSupplementPeople, useSupplementSubjects, type SupplementSubject } from "@/hooks/use-supplements";
@@ -158,7 +158,7 @@ export function SupplementsDetailPage({ subject, profileId }: Props) {
         initialNutritionProgram={subjectSummary?.nutrition_program || null}
       />
 
-      <EditAssignmentDialog
+      <EditAssignmentSheet
         open={Boolean(editing)}
         onOpenChange={(nextOpen) => {
           if (!nextOpen) setEditing(null);

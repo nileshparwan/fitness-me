@@ -17,7 +17,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "@/components/ui/responsive-modal";
+} from "@/components/ui/app-sheet";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { useExerciseMutations } from "@/hooks/use-exercise";
 

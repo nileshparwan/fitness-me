@@ -35,6 +35,7 @@ type Props = {
   initialTitle?: string | null;
   initialWorkoutProgram?: string | null;
   initialNutritionProgram?: string | null;
+  initialSupplementIds?: string[] | null;
 };
 
 export function AssignSupplementsSheet({
@@ -46,6 +47,7 @@ export function AssignSupplementsSheet({
   initialTitle,
   initialWorkoutProgram,
   initialNutritionProgram,
+  initialSupplementIds,
 }: Props) {
   const isDesktop = useMediaQuery("(min-width: 768px)");
   const queryClient = useQueryClient();
@@ -72,7 +74,7 @@ export function AssignSupplementsSheet({
     setProfileId(initialProfileId || null);
     setStatus(initialStatus || "active");
     setTitle(initialTitle || "");
-    setSelectedSupplementIds([]);
+    setSelectedSupplementIds(initialSupplementIds || []);
     setSelectedWorkoutProgramId(null);
     setSelectedNutritionProgramId(null);
     setSelectedWorkoutProgramLabel(initialWorkoutProgram || "");
@@ -86,6 +88,7 @@ export function AssignSupplementsSheet({
     initialSubject,
     initialTitle,
     initialWorkoutProgram,
+    initialSupplementIds,
     open,
   ]);
 
@@ -168,7 +171,7 @@ export function AssignSupplementsSheet({
     if (!open) return;
     if (hasPrefilledSupplements) return;
     if (!profileId) {
-      setSelectedSupplementIds([]);
+      setSelectedSupplementIds(initialSupplementIds || []);
       setHasPrefilledSupplements(true);
       return;
     }
@@ -176,12 +179,13 @@ export function AssignSupplementsSheet({
     const existingIds = Array.from(
       new Set((existingAssignmentsQuery.data || []).map((row) => row.supplement_id))
     );
-    setSelectedSupplementIds(existingIds);
+    setSelectedSupplementIds(Array.from(new Set([...(initialSupplementIds || []), ...existingIds])));
     setHasPrefilledSupplements(true);
   }, [
     existingAssignmentsQuery.data,
     existingAssignmentsQuery.isLoading,
     hasPrefilledSupplements,
+    initialSupplementIds,
     open,
     profileId,
   ]);

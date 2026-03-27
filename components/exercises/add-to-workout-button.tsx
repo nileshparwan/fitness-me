@@ -10,7 +10,7 @@ import {
     DialogHeader,
     DialogTitle,
     DialogTrigger,
-} from "@/components/ui/responsive-modal";
+} from "@/components/ui/app-sheet";
 import {
     Command,
     CommandEmpty,

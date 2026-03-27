@@ -77,9 +77,9 @@ export const sendReminders = inngest.createFunction(
       });
     }
 
-    return { 
-      totalUsers: inactiveUsers.length + (await step.run("count-active", async () => 0)), // placeholder metric
-      remindedCount: inactiveUsers.length 
+    return {
+      totalUsers: inactiveUsers.length,
+      remindedCount: inactiveUsers.length
     };
   }
 );

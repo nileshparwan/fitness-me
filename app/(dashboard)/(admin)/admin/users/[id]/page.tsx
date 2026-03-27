@@ -58,7 +58,7 @@ export default function AdminUserDetailPage() {
             </Card>
             <Card className="native-surface">
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm text-muted-foreground">Meal Plans</CardTitle>
+                <CardTitle className="text-sm text-muted-foreground">Meal Templates</CardTitle>
               </CardHeader>
               <CardContent>
                 <p className="text-2xl font-bold">{data?.meal_plans.length ?? 0}</p>
@@ -88,7 +88,7 @@ export default function AdminUserDetailPage() {
 
             <Card className="native-surface">
               <CardHeader>
-                <CardTitle>Recent Meal Plans</CardTitle>
+                <CardTitle>Recent Meal Templates</CardTitle>
               </CardHeader>
               <CardContent className="space-y-2">
                 {(data?.meal_plans || []).slice(0, 8).map((plan) => (
@@ -100,7 +100,7 @@ export default function AdminUserDetailPage() {
                   </div>
                 ))}
                 {(data?.meal_plans.length || 0) === 0 && (
-                  <p className="text-sm text-muted-foreground">No meal plans found.</p>
+                  <p className="text-sm text-muted-foreground">No meal templates found.</p>
                 )}
               </CardContent>
             </Card>

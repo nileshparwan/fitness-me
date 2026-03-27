@@ -1,11 +1,32 @@
 import { z } from "zod";
 
+const genderSchema = z.enum(["male", "female", "non_binary", "prefer_not_to_say"]);
+const fitnessLevelSchema = z.enum(["beginner", "intermediate", "advanced", "athlete"]);
+const coachSpecialtySchema = z.enum([
+  "general_fitness",
+  "strength_and_conditioning",
+  "weight_management",
+  "womens_health",
+  "prenatal_and_postnatal",
+  "yoga_and_pilates",
+  "endurance_and_running",
+  "sport_specific",
+  "rehabilitation",
+]);
+
 export const profileSchema = z.object({
   full_name: z.string().trim().min(2).max(120),
   bio: z.string().trim().max(160).nullable().optional(),
   phone: z.string().trim().max(40).nullable().optional(),
   date_of_birth: z.string().date().nullable().optional(),
   avatar_url: z.url().nullable().optional(),
+  gender: genderSchema.nullable().optional(),
+  fitness_level: fitnessLevelSchema.nullable().optional(),
+  coach_specialty: coachSpecialtySchema.nullable().optional(),
+  is_pregnant: z.boolean().optional(),
+  due_date: z.string().date().nullable().optional(),
+  is_postpartum: z.boolean().optional(),
+  postpartum_since: z.string().date().nullable().optional(),
 });
 
 export const coachingDefaultsSchema = z.object({

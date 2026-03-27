@@ -42,7 +42,7 @@ export default function AdminDashboardPage() {
         />
         <CompactMetricCard title="Sessions" value={dashboard?.total_sessions ?? 0} isLoading={loadingDashboard} />
         <CompactMetricCard title="Strength Sets" value={dashboard?.total_strength_sets ?? 0} isLoading={loadingDashboard} />
-        <CompactMetricCard title="Meal Plans" value={dashboard?.total_meal_plans ?? 0} isLoading={loadingDashboard} />
+        <CompactMetricCard title="Meal Templates" value={dashboard?.total_meal_plans ?? 0} isLoading={loadingDashboard} />
         <CompactMetricCard title="Events (7d)" value={dashboard?.recent_events ?? 0} isLoading={loadingDashboard} />
       </section>
 

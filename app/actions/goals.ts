@@ -57,7 +57,6 @@ export async function listExercisesForGoalAction(
       let query = supabase
         .from("exercise_catalog")
         .select("id, name, category")
-        .eq("is_approved", true)
         .order("name", { ascending: true })
         .order("id", { ascending: true })
         .limit(payload.limit + 1);

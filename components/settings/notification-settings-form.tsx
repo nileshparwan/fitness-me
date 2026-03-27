@@ -21,20 +21,23 @@ const TIME_OPTIONS = Array.from({ length: 24 * 4 }, (_, index) => {
 });
 
 function getDefaultValues(initialValues: NotificationPreferencesInput | null): NotificationPreferencesInput {
-  return (
-    initialValues || {
-      timezone: "UTC",
-      meal_bell_enabled: true,
-      meal_push_enabled: false,
-      meal_reminder_time: "12:00",
-      checkin_bell_enabled: true,
-      checkin_push_enabled: false,
-      checkin_reminder_time: "08:00",
-      goal_bell_enabled: true,
-      goal_push_enabled: false,
-      goal_reminder_time: "09:00",
-    }
-  );
+  const defaults: NotificationPreferencesInput = {
+    timezone: "UTC",
+    meal_bell_enabled: true,
+    meal_push_enabled: false,
+    meal_reminder_time: "12:00",
+    checkin_bell_enabled: true,
+    checkin_push_enabled: false,
+    checkin_reminder_time: "08:00",
+    goal_bell_enabled: true,
+    goal_push_enabled: false,
+    goal_reminder_time: "09:00",
+    cycle_bell_enabled: true,
+    cycle_push_enabled: false,
+    cycle_reminder_days: 2,
+  };
+
+  return { ...defaults, ...initialValues };
 }
 
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
@@ -316,6 +319,41 @@ export function NotificationSettingsForm({ initialValues }: NotificationSettings
             </SelectContent>
           </Select>
         </div>
+      </div>
+
+      <div className="space-y-4 rounded-xl border border-border/60 bg-muted/20 p-4">
+          <h4 className="text-sm font-semibold">Cycle Reminders</h4>
+          <div className="flex items-center justify-between rounded-lg border border-border/50 bg-background/30 px-3 py-2.5">
+            <Label className="text-sm">Show in notification bell</Label>
+            <Switch
+              checked={values.cycle_bell_enabled}
+              onCheckedChange={(checked) => updateField("cycle_bell_enabled", checked)}
+            />
+          </div>
+          <div className="flex items-center justify-between rounded-lg border border-border/50 bg-background/30 px-3 py-2.5">
+            <Label className="text-sm">Mobile push notification</Label>
+            <Switch
+              checked={values.cycle_push_enabled}
+              onCheckedChange={(checked) => updateField("cycle_push_enabled", checked)}
+            />
+          </div>
+          <div className="grid gap-2">
+            <Label className="text-sm">Remind me</Label>
+            <Select
+              value={String(values.cycle_reminder_days)}
+              onValueChange={(value) => updateField("cycle_reminder_days", Number(value))}
+            >
+              <SelectTrigger className="h-10 rounded-[10px] border-border/60 bg-card/70">
+                <SelectValue placeholder="Select reminder interval" />
+              </SelectTrigger>
+              <SelectContent className="max-h-72">
+                <SelectItem value="1">1 day before</SelectItem>
+                <SelectItem value="2">2 days before</SelectItem>
+                <SelectItem value="3">3 days before</SelectItem>
+                <SelectItem value="5">5 days before</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
       </div>
 
       <div className="space-y-3 rounded-xl border border-border/60 bg-muted/20 p-4">

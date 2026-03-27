@@ -25,7 +25,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
-} from "@/components/ui/responsive-modal";
+} from "@/components/ui/app-sheet";
 
 // --- TAG INPUT COMPONENT (Unchanged) ---
 interface TagInputProps {

@@ -10,7 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "@/components/ui/responsive-modal";
+} from "@/components/ui/app-sheet";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useInfiniteQueryExercises } from "@/hooks/use-exercise";

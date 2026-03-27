@@ -1,6 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import type { NotificationType } from "@/types/database";
 import { inngest } from "../client";
+import type { NotificationType } from "@/types/notifications";
 
 type TicketContext = {
   id: string;

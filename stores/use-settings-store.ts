@@ -9,6 +9,8 @@ import {
   weightUnit,
   type UnitSystem,
 } from "@/utils/unit-conversion";
+import type { CoachSpecialty, FitnessLevel, GenderType } from "@/types/health";
+import { useShallow } from "zustand/react/shallow";
 
 export type PreferredUnits = UnitSystem;
 
@@ -23,6 +25,13 @@ type SettingsState = {
   compact_mode: boolean;
   hydrated: boolean;
   last_synced_at: number | null;
+  gender: GenderType | null;
+  fitness_level: FitnessLevel | null;
+  coach_specialty: CoachSpecialty | null;
+  is_pregnant: boolean;
+  due_date: string | null;
+  is_postpartum: boolean;
+  postpartum_since: string | null;
 };
 
 type SettingsActions = {
@@ -52,6 +61,13 @@ const initialState: SettingsState = {
   compact_mode: false,
   hydrated: false,
   last_synced_at: null,
+  gender: null,
+  fitness_level: null,
+  coach_specialty: null,
+  is_pregnant: false,
+  due_date: null,
+  is_postpartum: false,
+  postpartum_since: null,
 };
 
 export const useSettingsStore = create<SettingsStore>()(
@@ -83,6 +99,13 @@ export const useSettingsStore = create<SettingsStore>()(
         compact_mode: state.compact_mode,
         hydrated: state.hydrated,
         last_synced_at: state.last_synced_at,
+        gender: state.gender,
+        fitness_level: state.fitness_level,
+        coach_specialty: state.coach_specialty,
+        is_pregnant: state.is_pregnant,
+        due_date: state.due_date,
+        is_postpartum: state.is_postpartum,
+        postpartum_since: state.postpartum_since,
       }),
     }
   )
@@ -104,4 +127,18 @@ export function useUnitLabels() {
 
 export function useUnitSystem(): PreferredUnits {
   return useSettingsStore((state) => state.preferred_units);
+}
+
+export function useProfileMetadata() {
+  return useSettingsStore(
+    useShallow((state) => ({
+      gender: state.gender,
+      fitness_level: state.fitness_level,
+      coach_specialty: state.coach_specialty,
+      is_pregnant: state.is_pregnant,
+      due_date: state.due_date,
+      is_postpartum: state.is_postpartum,
+      postpartum_since: state.postpartum_since,
+    }))
+  );
 }

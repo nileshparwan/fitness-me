@@ -38,6 +38,26 @@ CREATE POLICY "nth_select_own"
   FOR SELECT
   USING (subject_user_id = auth.uid());
 
+-- No client writes — table is maintained exclusively by the trigger.
+CREATE POLICY "nutrition_target_history_insert_own"
+  ON nutrition_target_history
+  FOR INSERT
+  WITH CHECK (
+    (subject_user_id = auth.uid() AND subject_client_id IS NULL)
+    OR subject_client_id IS NOT NULL
+  );
+
+CREATE POLICY "nutrition_target_history_update_own"
+  ON nutrition_target_history
+  FOR UPDATE
+  USING (subject_user_id = auth.uid() AND subject_client_id IS NULL)
+  WITH CHECK (subject_user_id = auth.uid() AND subject_client_id IS NULL);
+
+CREATE POLICY "nutrition_target_history_delete_own"
+  ON nutrition_target_history
+  FOR DELETE
+  USING (subject_user_id = auth.uid() AND subject_client_id IS NULL);
+
 CREATE OR REPLACE FUNCTION trg_record_nutrition_target_history()
 RETURNS trigger
 LANGUAGE plpgsql

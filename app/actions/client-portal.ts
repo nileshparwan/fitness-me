@@ -30,7 +30,7 @@ type MealLogRow = Database["public"]["Tables"]["meal_logs"]["Row"];
 type MealLogInsert = Database["public"]["Tables"]["meal_logs"]["Insert"];
 type MealLogItemRow = Database["public"]["Tables"]["meal_log_items"]["Row"];
 type MealLogItemInsert = Database["public"]["Tables"]["meal_log_items"]["Insert"];
-type ClientFavoriteRow = Database["public"]["Tables"]["client_meal_item_favorites"]["Row"];
+type FavoriteRow = Database["public"]["Tables"]["meal_item_favorites"]["Row"];
 type CheckinRow = Database["public"]["Tables"]["client_checkins"]["Row"];
 type CheckinInsert = Database["public"]["Tables"]["client_checkins"]["Insert"];
 type ClientStepsRow = Database["public"]["Tables"]["client_steps_logs"]["Row"];
@@ -753,7 +753,7 @@ export async function getClientPortalMealPlanAction(performedOn?: string) {
       const date = safeDate || todayIso();
 
       const { data: assignment, error: assignmentError } = await admin
-        .from("meal_plan_assignments")
+        .from("meal_group_assignments")
         .select("*")
         .eq("subject_client_id", context.client.id)
         .eq("status", "active")
@@ -763,21 +763,34 @@ export async function getClientPortalMealPlanAction(performedOn?: string) {
         .limit(1)
         .maybeSingle();
       if (assignmentError) throw new Error(assignmentError.message);
-      if (assignment) return { source: "assignment" as const, plan: assignment };
+      if (!assignment) return { source: "assignment" as const, plan: null };
 
-      const { data: plan, error: planError } = await admin
-        .from("meal_plans")
-        .select("*")
-        .eq("subject_client_id", context.client.id)
-        .eq("status", "active")
-        .lte("start_date", date)
-        .gte("end_date", date)
-        .order("start_date", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (planError) throw new Error(planError.message);
+      const groupIds = Array.from(new Set([assignment.template_group_id, assignment.meal_group_id].filter(Boolean)));
+      const { data: groups, error: groupsError } = await admin
+        .from("meal_groups")
+        .select("id, name")
+        .in("id", groupIds);
+      if (groupsError) throw new Error(groupsError.message);
 
-      return { source: "plan" as const, plan: plan || null };
+      const groupsById = new Map((groups || []).map((row) => [row.id, row]));
+      const name =
+        groupsById.get(assignment.template_group_id)?.name ||
+        groupsById.get(assignment.meal_group_id)?.name ||
+        "Assigned meal template";
+
+      return {
+        source: "assignment" as const,
+        plan: {
+          id: assignment.id,
+          name,
+          start_date: assignment.start_date,
+          end_date: assignment.end_date,
+          daily_calorie_target: null,
+          daily_protein_target_g: null,
+          daily_carbs_target_g: null,
+          daily_fat_target_g: null,
+        },
+      };
     },
   });
 }
@@ -982,22 +995,25 @@ export async function listClientRecentMealItemsAction(input: z.input<typeof rece
   });
 }
 
-export async function listClientFavoriteMealItemsAction(input: z.input<typeof recentSchema>): Promise<ClientFavoriteRow[]> {
+export async function listClientFavoriteMealItemsAction(input: z.input<typeof recentSchema>): Promise<FavoriteRow[]> {
   const payload = recentSchema.parse(input);
   return runTrackedAction({
     eventName: "client.portal.meal_logging.favorites",
     payload,
     action: async () => {
       const { context } = await requirePortalAccess("meal_logging");
+      if (!context.client.linked_user_id) {
+        throw new Error("Client portal account is not linked to a user profile.");
+      }
       const admin = createAdminClient();
       const { data, error } = await admin
-        .from("client_meal_item_favorites")
+        .from("meal_item_favorites")
         .select("*")
-        .eq("client_id", context.client.id)
+        .eq("subject_user_id", context.client.linked_user_id)
         .order("last_used_at", { ascending: false })
         .limit(payload.limit);
       if (error) throw new Error(error.message);
-      return (data || []) as ClientFavoriteRow[];
+      return (data || []) as FavoriteRow[];
     },
   });
 }
@@ -1011,12 +1027,15 @@ export async function toggleClientFavoriteMealItemAction(
     payload: { item_name: payload.item.item_name },
     action: async () => {
       const { context } = await requirePortalAccess("meal_logging", true);
+      if (!context.client.linked_user_id) {
+        throw new Error("Client portal account is not linked to a user profile.");
+      }
       const admin = createAdminClient();
 
       let query = admin
-        .from("client_meal_item_favorites")
+        .from("meal_item_favorites")
         .select("*")
-        .eq("client_id", context.client.id)
+        .eq("subject_user_id", context.client.linked_user_id)
         .ilike("item_name", payload.item.item_name.trim());
       query = payload.item.unit
         ? query.eq("unit", payload.item.unit)
@@ -1026,7 +1045,7 @@ export async function toggleClientFavoriteMealItemAction(
 
       if (existing) {
         const { error: deleteError } = await admin
-          .from("client_meal_item_favorites")
+          .from("meal_item_favorites")
           .delete()
           .eq("id", existing.id);
         if (deleteError) throw new Error(deleteError.message);
@@ -1035,9 +1054,9 @@ export async function toggleClientFavoriteMealItemAction(
       }
 
       const { error: insertError } = await admin
-        .from("client_meal_item_favorites")
+        .from("meal_item_favorites")
         .insert({
-          client_id: context.client.id,
+          subject_user_id: context.client.linked_user_id,
           item_name: payload.item.item_name,
           quantity: payload.item.quantity ?? null,
           unit: payload.item.unit || null,

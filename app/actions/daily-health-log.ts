@@ -27,6 +27,11 @@ export type HealthCheckInRow = {
   energy_level: number | null;
 };
 
+export type DailyActivityQuickLogRow = {
+  date: string;
+  water_intake_ml: number | null;
+};
+
 type SubjectRef = {
   subject_user_id: string | null;
   subject_client_id: string | null;
@@ -51,6 +56,11 @@ const logDailyHealthSchema = z.object({
 
 const getSingleDateSchema = z.object({
   date: z.string().regex(datePattern, "Invalid date format"),
+});
+
+const updateDailyActivitySchema = z.object({
+  date: z.string().regex(datePattern, "Invalid date format"),
+  water_intake_ml: z.number().int().min(0).max(20000).nullish(),
 });
 
 const rangeSchema = z.enum(["7d", "30d", "90d", "all"]);
@@ -503,6 +513,86 @@ export async function getHealthCheckInForDate(
       }
 
       return hasValue ? row : null;
+    },
+  });
+}
+
+export async function getDailyActivityForDateAction(
+  subjectInput: HealthSubject,
+  dateInput: string
+): Promise<DailyActivityQuickLogRow | null> {
+  const subject = subjectSchema.parse(subjectInput);
+  const { date } = getSingleDateSchema.parse({ date: dateInput });
+
+  return runTrackedAction({
+    eventName: "daily_activity.detail",
+    payload: { subject_type: subject.type, date },
+    action: async () => {
+      const { supabase, user } = await requireActor();
+      const supabaseAny = supabase as any;
+      const subjectRef = resolveSubject(subject, user.id);
+
+      let query = supabaseAny
+        .from("daily_activity")
+        .select("date, water_intake_ml")
+        .eq("date", date);
+      query = applySubjectFilters(query, subjectRef);
+      query = query.limit(1);
+
+      const { data, error } = await query.maybeSingle();
+      if (error && !isMissingSchemaDependencyError(error)) {
+        throw new Error(error.message);
+      }
+      if (!data || error) return null;
+
+      return {
+        date: data.date,
+        water_intake_ml: data.water_intake_ml ?? null,
+      };
+    },
+  });
+}
+
+export type UpdateDailyActivityInput = z.infer<typeof updateDailyActivitySchema>;
+
+export async function updateDailyActivityAction(
+  subjectInput: HealthSubject,
+  input: UpdateDailyActivityInput
+): Promise<void> {
+  const subject = subjectSchema.parse(subjectInput);
+  const payload = updateDailyActivitySchema.parse(input);
+
+  return runTrackedAction({
+    eventName: "daily_activity.upsert",
+    payload: { subject_type: subject.type, date: payload.date },
+    action: async () => {
+      const { supabase, user } = await requireActor();
+      const supabaseAny = supabase as any;
+      const subjectRef = resolveSubject(subject, user.id);
+      const commonRef = {
+        user_id: subjectRef.subject_user_id,
+        subject_user_id: subjectRef.subject_user_id,
+        subject_client_id: subjectRef.subject_client_id,
+      };
+      const upsertConflict =
+        subject.type === "me" ? "subject_user_id,date" : "subject_client_id,date";
+
+      const result = await supabaseAny.from("daily_activity").upsert(
+        {
+          ...commonRef,
+          date: payload.date,
+          water_intake_ml: payload.water_intake_ml ?? null,
+          source: "manual",
+        },
+        {
+          onConflict: upsertConflict,
+          ignoreDuplicates: false,
+        }
+      );
+
+      if (result.error && !isMissingSchemaDependencyError(result.error)) {
+        throw new Error(result.error.message);
+      }
     },
   });
 }

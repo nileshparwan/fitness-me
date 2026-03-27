@@ -29,6 +29,7 @@ import {
   MEAL_TYPE_ICONS,
   MEAL_TYPE_LABELS,
 } from "@/components/nutrition/meal-groups/meal-group-types";
+import { ShareMealGroupSheet } from "@/components/nutrition/share-meal-group-sheet";
 import { DeleteConfirmSheet } from "@/components/nutrition/shared/delete-confirm-sheet";
 import { MealItemEditorSheet, type MealItemEditorValue } from "@/components/nutrition/shared/meal-item-editor-sheet";
 import { Badge } from "@/components/ui/badge";
@@ -630,6 +631,12 @@ export function MealGroupDetail({ mealGroupId }: { mealGroupId: string }) {
                 ))}
               </div>
               <div className="ml-auto flex flex-wrap gap-2">
+                <ShareMealGroupSheet
+                  mealGroupId={group.id}
+                  mealGroupName={group.name}
+                  isPublic={group.is_public}
+                  publicShareToken={group.public_share_token}
+                />
                 <Button variant="outline" className="rounded-xl border-border/60" onClick={() => setEditorOpen(true)}>
                   <Pencil className="mr-2 h-4 w-4" />
                   Edit Group

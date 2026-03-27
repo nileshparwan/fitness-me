@@ -19,6 +19,9 @@ const preferencesSchema = z.object({
   goal_bell_enabled: z.boolean(),
   goal_push_enabled: z.boolean(),
   goal_reminder_time: z.string().regex(hhmmRegex).default("09:00"),
+  cycle_bell_enabled: z.boolean().default(true),
+  cycle_push_enabled: z.boolean().default(true),
+  cycle_reminder_days: z.number().int().min(1).max(7).default(2),
 });
 
 export type NotificationPreferencesInput = z.infer<typeof preferencesSchema>;
@@ -50,7 +53,7 @@ export async function getNotificationPreferencesAction(): Promise<NotificationPr
       const { data, error } = await supabase
         .from("notification_preferences")
         .select(
-          "timezone, meal_bell_enabled, meal_push_enabled, meal_reminder_time, checkin_bell_enabled, checkin_push_enabled, checkin_reminder_time, goal_bell_enabled, goal_push_enabled, goal_reminder_time"
+          "timezone, meal_bell_enabled, meal_push_enabled, meal_reminder_time, checkin_bell_enabled, checkin_push_enabled, checkin_reminder_time, goal_bell_enabled, goal_push_enabled, goal_reminder_time, cycle_bell_enabled, cycle_push_enabled, cycle_reminder_days"
         )
         .eq("user_id", user.id)
         .maybeSingle();
@@ -69,6 +72,9 @@ export async function getNotificationPreferencesAction(): Promise<NotificationPr
         goal_bell_enabled: data.goal_bell_enabled,
         goal_push_enabled: data.goal_push_enabled,
         goal_reminder_time: normalizeDbTime(data.goal_reminder_time),
+        cycle_bell_enabled: data.cycle_bell_enabled,
+        cycle_push_enabled: data.cycle_push_enabled,
+        cycle_reminder_days: data.cycle_reminder_days,
       };
     },
   });
@@ -98,6 +104,9 @@ export async function upsertNotificationPreferencesAction(
           goal_bell_enabled: payload.goal_bell_enabled,
           goal_push_enabled: payload.goal_push_enabled,
           goal_reminder_time: toDbTime(payload.goal_reminder_time),
+          cycle_bell_enabled: payload.cycle_bell_enabled,
+          cycle_push_enabled: payload.cycle_push_enabled,
+          cycle_reminder_days: payload.cycle_reminder_days,
           updated_at: new Date().toISOString(),
         },
         { onConflict: "user_id" }

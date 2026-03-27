@@ -1,10 +1,12 @@
 "use client"
 
 import * as React from "react"
-import * as SheetPrimitive from "@radix-ui/react-dialog"
 import { XIcon } from "lucide-react"
 
 import { cn } from "@/utils/index"
+
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const SheetPrimitive = require("@radix-ui/react-dialog") as typeof import("@radix-ui/react-dialog")
 
 function Sheet({ ...props }: React.ComponentProps<typeof SheetPrimitive.Root>) {
   return <SheetPrimitive.Root data-slot="sheet" {...props} />

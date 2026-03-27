@@ -179,6 +179,11 @@ const archiveAssignmentSchema = z.object({
   assignment_id: z.string().uuid(),
 });
 
+const toggleMealGroupPublicShareSchema = z.object({
+  meal_group_id: z.string().uuid(),
+  is_public: z.boolean(),
+});
+
 const listAssignmentsSchema = z.object({
   subject: subjectSchema.optional(),
   status: z.enum(["all", "active", "paused", "completed", "archived"]).default("active"),
@@ -221,6 +226,14 @@ export type MealGroupDetail = {
   group: MealGroupRow;
   plans: MealGroupDayPlan[];
   assignments: MealAssignmentRow[];
+};
+
+export type PublicMealGroupDetail = {
+  group: Pick<
+    MealGroupRow,
+    "id" | "name" | "description" | "notes" | "start_date" | "end_date" | "status" | "is_public"
+  >;
+  plans: MealGroupDayPlan[];
 };
 
 type MealAssignmentView = MealAssignmentRow & {
@@ -831,6 +844,123 @@ export async function getMealGroupDetailAction(mealGroupId: string) {
         plans: detailPlans,
         assignments: (assignments || []) as MealAssignmentRow[],
       } satisfies MealGroupDetail;
+    },
+  });
+}
+
+export async function getPublicMealGroupAction(shareToken: string) {
+  const payload = z.string().uuid().parse(shareToken);
+  return runTrackedAction({
+    eventName: "nutrition.meal-groups.public.read",
+    payload: { share_token: payload },
+    action: async () => {
+      const admin = createAdminClient();
+      const { data: group, error: groupError } = await admin
+        .from("meal_groups")
+        .select("id, name, description, notes, start_date, end_date, status, is_public")
+        .eq("public_share_token", payload)
+        .eq("is_public", true)
+        .eq("is_snapshot", false)
+        .maybeSingle();
+      if (groupError) throw new Error(groupError.message);
+      if (!group) return null;
+
+      const [{ data: plans, error: plansError }, { data: items, error: itemsError }, { data: planTypes, error: planTypesError }] =
+        await Promise.all([
+          admin.from("meal_group_plans").select("*").eq("meal_group_id", group.id),
+          admin
+            .from("meal_group_items")
+            .select("*, meal_group_plans!inner(id, meal_group_id)")
+            .eq("meal_group_plans.meal_group_id", group.id)
+            .order("position", { ascending: true }),
+          admin
+            .from("meal_group_plan_types")
+            .select("*, meal_group_plans!inner(id, meal_group_id)")
+            .eq("meal_group_plans.meal_group_id", group.id)
+            .order("position", { ascending: true }),
+        ]);
+      if (plansError) throw new Error(plansError.message);
+      if (itemsError) throw new Error(itemsError.message);
+      if (planTypesError && !isMissingRelationError(planTypesError)) {
+        throw new Error(planTypesError.message);
+      }
+
+      const itemByPlan = new Map<string, MealItemRow[]>();
+      for (const row of ((items || []) as Array<MealItemRow>)) {
+        itemByPlan.set(row.meal_plan_id, [...(itemByPlan.get(row.meal_plan_id) || []), row]);
+      }
+
+      const typeByPlan = new Map<string, MealPlanTypeRow[]>();
+      for (const row of ((planTypes || []) as Array<MealPlanTypeRow>)) {
+        typeByPlan.set(row.meal_plan_id, [...(typeByPlan.get(row.meal_plan_id) || []), row]);
+      }
+
+      const detailPlans: MealGroupDayPlan[] = orderPlans((plans || []) as MealPlanRow[]).map((plan) => {
+        const dayItems = (itemByPlan.get(plan.id) || []).sort((a, b) => a.position - b.position);
+        const configuredTypes = (typeByPlan.get(plan.id) || [])
+          .sort((a, b) => a.position - b.position)
+          .map((row) => ({
+            id: row.id,
+            type: row.type,
+            position: row.position,
+            source: "configured" as const,
+          }));
+
+        const configuredTypeSet = new Set(configuredTypes.map((entry) => entry.type));
+        const inferredTypes = Array.from(new Set(dayItems.map((item) => item.type)))
+          .filter((type) => !configuredTypeSet.has(type))
+          .map((type, index) => ({
+            id: `inferred-${plan.id}-${type}`,
+            type,
+            position: configuredTypes.length + index + 1,
+            source: "inferred" as const,
+          }));
+
+        const totals = dayItems.reduce(
+          (acc, item) => {
+            acc.calories += item.calories || 0;
+            acc.protein_g += item.protein_g || 0;
+            acc.carbs_g += item.carbs_g || 0;
+            acc.fat_g += item.fat_g || 0;
+            return acc;
+          },
+          { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 }
+        );
+
+        return {
+          ...plan,
+          meal_types: [...configuredTypes, ...inferredTypes].sort((a, b) => a.position - b.position),
+          items: dayItems,
+          totals,
+        };
+      });
+
+      return {
+        group,
+        plans: detailPlans,
+      } satisfies PublicMealGroupDetail;
+    },
+  });
+}
+
+export async function toggleMealGroupPublicShareAction(
+  input: z.input<typeof toggleMealGroupPublicShareSchema>
+) {
+  const payload = toggleMealGroupPublicShareSchema.parse(input);
+  return runTrackedAction({
+    eventName: "nutrition.meal-groups.share.toggle",
+    payload,
+    action: async () => {
+      const { supabase } = await requireMealGroupAccess(payload.meal_group_id);
+      const { data, error } = await supabase
+        .from("meal_groups")
+        .update({ is_public: payload.is_public })
+        .eq("id", payload.meal_group_id)
+        .select("id, is_public, public_share_token")
+        .single();
+      if (error) throw new Error(error.message);
+      revalidateMealGroupPaths(payload.meal_group_id);
+      return data;
     },
   });
 }

@@ -6,21 +6,6 @@ export type Json =
   | { [key: string]: Json | undefined }
   | Json[]
 
-export type NotificationType =
-  | "goal_achieved"
-  | "checkin_submitted"
-  | "support_ticket_created"
-  | "support_ticket_updated"
-  | "support_ticket_comment_added"
-  | "support_ticket_comment_edited"
-  | "support_ticket_comment_deleted"
-  | "support_ticket_status_changed"
-  | "support_ticket_closed"
-  | "support_ticket_reopened"
-  | "meal_reminder"
-  | "health_checkin_reminder"
-  | "goal_checkin_reminder"
-
 export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
@@ -131,7 +116,7 @@ export type Database = {
           created_at: string | null
           date: string
           forearms_cm: number | null
-          height: number | null
+          height_cm: number | null
           hips: number | null
           id: string
           muscle_mass_kg: number | null
@@ -165,7 +150,7 @@ export type Database = {
           created_at?: string | null
           date: string
           forearms_cm?: number | null
-          height?: number | null
+          height_cm?: number | null
           hips?: number | null
           id?: string
           muscle_mass_kg?: number | null
@@ -199,7 +184,7 @@ export type Database = {
           created_at?: string | null
           date?: string
           forearms_cm?: number | null
-          height?: number | null
+          height_cm?: number | null
           hips?: number | null
           id?: string
           muscle_mass_kg?: number | null
@@ -229,11 +214,11 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "body_measurements_subject_user_id_fkey"
-            columns: ["subject_user_id"]
+            foreignKeyName: "body_measurements_subject_client_id_fkey"
+            columns: ["subject_client_id"]
             isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
+            referencedRelation: "coach_client_summary"
+            referencedColumns: ["client_id"]
           },
           {
             foreignKeyName: "body_measurements_user_id_fkey"
@@ -260,6 +245,7 @@ export type Database = {
           duration_minutes: number
           elevation_gain_m: number | null
           entry_sequence: number | null
+          execution_id: string | null
           id: string
           indoor_outdoor: string | null
           max_heart_rate: number | null
@@ -289,6 +275,7 @@ export type Database = {
           duration_minutes: number
           elevation_gain_m?: number | null
           entry_sequence?: number | null
+          execution_id?: string | null
           id?: string
           indoor_outdoor?: string | null
           max_heart_rate?: number | null
@@ -318,6 +305,7 @@ export type Database = {
           duration_minutes?: number
           elevation_gain_m?: number | null
           entry_sequence?: number | null
+          execution_id?: string | null
           id?: string
           indoor_outdoor?: string | null
           max_heart_rate?: number | null
@@ -333,6 +321,13 @@ export type Database = {
           workout_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "cardio_sessions_execution_id_fkey"
+            columns: ["execution_id"]
+            isOneToOne: false
+            referencedRelation: "workout_executions"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "cardio_sessions_user_id_fkey"
             columns: ["user_id"]
@@ -410,6 +405,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "client_auth_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "coach_client_summary"
+            referencedColumns: ["client_id"]
+          },
+          {
             foreignKeyName: "client_auth_created_by_user_id_fkey"
             columns: ["created_by_user_id"]
             isOneToOne: false
@@ -421,190 +423,6 @@ export type Database = {
             columns: ["updated_by_user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      client_checkins: {
-        Row: {
-          actioned_at: string | null
-          checkin_data: Json
-          created_at: string
-          created_by_client_id: string | null
-          created_by_user_id: string | null
-          id: string
-          notes: string | null
-          reviewed_at: string | null
-          status: Database["public"]["Enums"]["client_checkin_status"]
-          subject_client_id: string | null
-          subject_user_id: string | null
-          submitted_at: string
-          updated_at: string
-          urgent: boolean
-        }
-        Insert: {
-          actioned_at?: string | null
-          checkin_data?: Json
-          created_at?: string
-          created_by_client_id?: string | null
-          created_by_user_id?: string | null
-          id?: string
-          notes?: string | null
-          reviewed_at?: string | null
-          status?: Database["public"]["Enums"]["client_checkin_status"]
-          subject_client_id?: string | null
-          subject_user_id?: string | null
-          submitted_at?: string
-          updated_at?: string
-          urgent?: boolean
-        }
-        Update: {
-          actioned_at?: string | null
-          checkin_data?: Json
-          created_at?: string
-          created_by_client_id?: string | null
-          created_by_user_id?: string | null
-          id?: string
-          notes?: string | null
-          reviewed_at?: string | null
-          status?: Database["public"]["Enums"]["client_checkin_status"]
-          subject_client_id?: string | null
-          subject_user_id?: string | null
-          submitted_at?: string
-          updated_at?: string
-          urgent?: boolean
-        }
-        Relationships: [
-          {
-            foreignKeyName: "client_checkins_created_by_client_id_fkey"
-            columns: ["created_by_client_id"]
-            isOneToOne: false
-            referencedRelation: "clients"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "client_checkins_created_by_user_id_fkey"
-            columns: ["created_by_user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "client_checkins_subject_client_id_fkey"
-            columns: ["subject_client_id"]
-            isOneToOne: false
-            referencedRelation: "clients"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "client_checkins_subject_user_id_fkey"
-            columns: ["subject_user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      client_feature_access: {
-        Row: {
-          access_level: Database["public"]["Enums"]["client_module_access_level"]
-          client_id: string
-          configured_by_user_id: string | null
-          created_at: string
-          module_key: Database["public"]["Enums"]["client_module_key"]
-          updated_at: string
-        }
-        Insert: {
-          access_level?: Database["public"]["Enums"]["client_module_access_level"]
-          client_id: string
-          configured_by_user_id?: string | null
-          created_at?: string
-          module_key: Database["public"]["Enums"]["client_module_key"]
-          updated_at?: string
-        }
-        Update: {
-          access_level?: Database["public"]["Enums"]["client_module_access_level"]
-          client_id?: string
-          configured_by_user_id?: string | null
-          created_at?: string
-          module_key?: Database["public"]["Enums"]["client_module_key"]
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "client_feature_access_client_id_fkey"
-            columns: ["client_id"]
-            isOneToOne: false
-            referencedRelation: "clients"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "client_feature_access_configured_by_user_id_fkey"
-            columns: ["configured_by_user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      client_meal_item_favorites: {
-        Row: {
-          calories: number | null
-          carbs_g: number | null
-          client_id: string
-          created_at: string
-          fat_g: number | null
-          fiber_g: number | null
-          id: string
-          item_name: string
-          last_used_at: string
-          notes: string | null
-          protein_g: number | null
-          quantity: number | null
-          unit: string | null
-          updated_at: string
-          usage_count: number
-        }
-        Insert: {
-          calories?: number | null
-          carbs_g?: number | null
-          client_id: string
-          created_at?: string
-          fat_g?: number | null
-          fiber_g?: number | null
-          id?: string
-          item_name: string
-          last_used_at?: string
-          notes?: string | null
-          protein_g?: number | null
-          quantity?: number | null
-          unit?: string | null
-          updated_at?: string
-          usage_count?: number
-        }
-        Update: {
-          calories?: number | null
-          carbs_g?: number | null
-          client_id?: string
-          created_at?: string
-          fat_g?: number | null
-          fiber_g?: number | null
-          id?: string
-          item_name?: string
-          last_used_at?: string
-          notes?: string | null
-          protein_g?: number | null
-          quantity?: number | null
-          unit?: string | null
-          updated_at?: string
-          usage_count?: number
-        }
-        Relationships: [
-          {
-            foreignKeyName: "client_meal_item_favorites_client_id_fkey"
-            columns: ["client_id"]
-            isOneToOne: false
-            referencedRelation: "clients"
             referencedColumns: ["id"]
           },
         ]
@@ -676,11 +494,230 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "client_billing_plans_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "coach_client_summary"
+            referencedColumns: ["client_id"]
+          },
+          {
             foreignKeyName: "client_billing_plans_coach_id_fkey"
             columns: ["coach_id"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_checkins: {
+        Row: {
+          actioned_at: string | null
+          checkin_data: Json
+          created_at: string
+          created_by_client_id: string | null
+          created_by_user_id: string | null
+          id: string
+          notes: string | null
+          reviewed_at: string | null
+          status: Database["public"]["Enums"]["client_checkin_status"]
+          subject_client_id: string | null
+          subject_user_id: string | null
+          submitted_at: string
+          updated_at: string
+          urgent: boolean
+        }
+        Insert: {
+          actioned_at?: string | null
+          checkin_data?: Json
+          created_at?: string
+          created_by_client_id?: string | null
+          created_by_user_id?: string | null
+          id?: string
+          notes?: string | null
+          reviewed_at?: string | null
+          status?: Database["public"]["Enums"]["client_checkin_status"]
+          subject_client_id?: string | null
+          subject_user_id?: string | null
+          submitted_at?: string
+          updated_at?: string
+          urgent?: boolean
+        }
+        Update: {
+          actioned_at?: string | null
+          checkin_data?: Json
+          created_at?: string
+          created_by_client_id?: string | null
+          created_by_user_id?: string | null
+          id?: string
+          notes?: string | null
+          reviewed_at?: string | null
+          status?: Database["public"]["Enums"]["client_checkin_status"]
+          subject_client_id?: string | null
+          subject_user_id?: string | null
+          submitted_at?: string
+          updated_at?: string
+          urgent?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_checkins_created_by_client_id_fkey"
+            columns: ["created_by_client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_checkins_created_by_client_id_fkey"
+            columns: ["created_by_client_id"]
+            isOneToOne: false
+            referencedRelation: "coach_client_summary"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "client_checkins_created_by_user_id_fkey"
+            columns: ["created_by_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_checkins_subject_client_id_fkey"
+            columns: ["subject_client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_checkins_subject_client_id_fkey"
+            columns: ["subject_client_id"]
+            isOneToOne: false
+            referencedRelation: "coach_client_summary"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "client_checkins_subject_user_id_fkey"
+            columns: ["subject_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_feature_access: {
+        Row: {
+          access_level: Database["public"]["Enums"]["client_module_access_level"]
+          client_id: string
+          configured_by_user_id: string | null
+          created_at: string
+          module_key: Database["public"]["Enums"]["client_module_key"]
+          updated_at: string
+        }
+        Insert: {
+          access_level?: Database["public"]["Enums"]["client_module_access_level"]
+          client_id: string
+          configured_by_user_id?: string | null
+          created_at?: string
+          module_key: Database["public"]["Enums"]["client_module_key"]
+          updated_at?: string
+        }
+        Update: {
+          access_level?: Database["public"]["Enums"]["client_module_access_level"]
+          client_id?: string
+          configured_by_user_id?: string | null
+          created_at?: string
+          module_key?: Database["public"]["Enums"]["client_module_key"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_feature_access_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_feature_access_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "coach_client_summary"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "client_feature_access_configured_by_user_id_fkey"
+            columns: ["configured_by_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_meal_item_favorites: {
+        Row: {
+          calories: number | null
+          carbs_g: number | null
+          client_id: string
+          created_at: string
+          fat_g: number | null
+          fiber_g: number | null
+          id: string
+          item_name: string
+          last_used_at: string
+          notes: string | null
+          protein_g: number | null
+          quantity: number | null
+          unit: string | null
+          updated_at: string
+          usage_count: number
+        }
+        Insert: {
+          calories?: number | null
+          carbs_g?: number | null
+          client_id: string
+          created_at?: string
+          fat_g?: number | null
+          fiber_g?: number | null
+          id?: string
+          item_name: string
+          last_used_at?: string
+          notes?: string | null
+          protein_g?: number | null
+          quantity?: number | null
+          unit?: string | null
+          updated_at?: string
+          usage_count?: number
+        }
+        Update: {
+          calories?: number | null
+          carbs_g?: number | null
+          client_id?: string
+          created_at?: string
+          fat_g?: number | null
+          fiber_g?: number | null
+          id?: string
+          item_name?: string
+          last_used_at?: string
+          notes?: string | null
+          protein_g?: number | null
+          quantity?: number | null
+          unit?: string | null
+          updated_at?: string
+          usage_count?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_meal_item_favorites_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_meal_item_favorites_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "coach_client_summary"
+            referencedColumns: ["client_id"]
           },
         ]
       }
@@ -739,202 +776,15 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "client_payments_coach_id_fkey"
-            columns: ["coach_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      notifications: {
-        Row: {
-          body: string
-          created_at: string
-          data: Json
-          id: string
-          title: string
-          type: NotificationType
-          user_id: string
-        }
-        Insert: {
-          body: string
-          created_at?: string
-          data?: Json
-          id?: string
-          title: string
-          type: NotificationType
-          user_id: string
-        }
-        Update: {
-          body?: string
-          created_at?: string
-          data?: Json
-          id?: string
-          title?: string
-          type?: NotificationType
-          user_id?: string
-        }
-        Relationships: []
-      }
-      notification_preferences: {
-        Row: {
-          checkin_bell_enabled: boolean
-          checkin_push_enabled: boolean
-          checkin_reminder_time: string
-          created_at: string
-          goal_bell_enabled: boolean
-          goal_push_enabled: boolean
-          goal_reminder_time: string
-          meal_bell_enabled: boolean
-          meal_push_enabled: boolean
-          meal_reminder_time: string
-          timezone: string
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          checkin_bell_enabled?: boolean
-          checkin_push_enabled?: boolean
-          checkin_reminder_time?: string
-          created_at?: string
-          goal_bell_enabled?: boolean
-          goal_push_enabled?: boolean
-          goal_reminder_time?: string
-          meal_bell_enabled?: boolean
-          meal_push_enabled?: boolean
-          meal_reminder_time?: string
-          timezone?: string
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          checkin_bell_enabled?: boolean
-          checkin_push_enabled?: boolean
-          checkin_reminder_time?: string
-          created_at?: string
-          goal_bell_enabled?: boolean
-          goal_push_enabled?: boolean
-          goal_reminder_time?: string
-          meal_bell_enabled?: boolean
-          meal_push_enabled?: boolean
-          meal_reminder_time?: string
-          timezone?: string
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "notification_preferences_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: true
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      payment_logs: {
-        Row: {
-          amount: number | null
-          billing_plan_id: string | null
-          billing_type_snapshot: Database["public"]["Enums"]["billing_type"]
-          client_id: string
-          coach_id: string
-          created_at: string
-          id: string
-          notes: string | null
-          session_date: string
-          session_rate_snapshot: number
-          sessions_remaining_after: number | null
-          status: string
-          updated_at: string
-        }
-        Insert: {
-          amount?: number | null
-          billing_plan_id?: string | null
-          billing_type_snapshot: Database["public"]["Enums"]["billing_type"]
-          client_id: string
-          coach_id: string
-          created_at?: string
-          id?: string
-          notes?: string | null
-          session_date?: string
-          session_rate_snapshot: number
-          sessions_remaining_after?: number | null
-          status?: string
-          updated_at?: string
-        }
-        Update: {
-          amount?: number | null
-          billing_plan_id?: string | null
-          billing_type_snapshot?: Database["public"]["Enums"]["billing_type"]
-          client_id?: string
-          coach_id?: string
-          created_at?: string
-          id?: string
-          notes?: string | null
-          session_date?: string
-          session_rate_snapshot?: number
-          sessions_remaining_after?: number | null
-          status?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "payment_logs_billing_plan_id_fkey"
-            columns: ["billing_plan_id"]
-            isOneToOne: false
-            referencedRelation: "client_billing_plans"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "payment_logs_client_id_fkey"
+            foreignKeyName: "client_payments_client_id_fkey"
             columns: ["client_id"]
             isOneToOne: false
-            referencedRelation: "clients"
-            referencedColumns: ["id"]
+            referencedRelation: "coach_client_summary"
+            referencedColumns: ["client_id"]
           },
           {
-            foreignKeyName: "payment_logs_coach_id_fkey"
+            foreignKeyName: "client_payments_coach_id_fkey"
             columns: ["coach_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      push_subscriptions: {
-        Row: {
-          auth_secret: string
-          created_at: string
-          endpoint: string
-          id: string
-          public_key: string
-          user_agent: string | null
-          user_id: string
-        }
-        Insert: {
-          auth_secret: string
-          created_at?: string
-          endpoint: string
-          id?: string
-          public_key: string
-          user_agent?: string | null
-          user_id: string
-        }
-        Update: {
-          auth_secret?: string
-          created_at?: string
-          endpoint?: string
-          id?: string
-          public_key?: string
-          user_agent?: string | null
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "push_subscriptions_user_id_fkey"
-            columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -1059,6 +909,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "client_plan_assignments_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "coach_client_summary"
+            referencedColumns: ["client_id"]
+          },
+          {
             foreignKeyName: "client_plan_assignments_coach_id_fkey"
             columns: ["coach_id"]
             isOneToOne: false
@@ -1119,6 +976,13 @@ export type Database = {
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "client_sessions_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "coach_client_summary"
+            referencedColumns: ["client_id"]
+          },
         ]
       }
       client_steps_logs: {
@@ -1164,11 +1028,25 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "client_steps_logs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "coach_client_summary"
+            referencedColumns: ["client_id"]
+          },
+          {
             foreignKeyName: "client_steps_logs_created_by_client_id_fkey"
             columns: ["created_by_client_id"]
             isOneToOne: false
             referencedRelation: "clients"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_steps_logs_created_by_client_id_fkey"
+            columns: ["created_by_client_id"]
+            isOneToOne: false
+            referencedRelation: "coach_client_summary"
+            referencedColumns: ["client_id"]
           },
           {
             foreignKeyName: "client_steps_logs_created_by_user_id_fkey"
@@ -1231,11 +1109,25 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "client_tasks_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "coach_client_summary"
+            referencedColumns: ["client_id"]
+          },
+          {
             foreignKeyName: "client_tasks_created_by_client_id_fkey"
             columns: ["created_by_client_id"]
             isOneToOne: false
             referencedRelation: "clients"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_tasks_created_by_client_id_fkey"
+            columns: ["created_by_client_id"]
+            isOneToOne: false
+            referencedRelation: "coach_client_summary"
+            referencedColumns: ["client_id"]
           },
           {
             foreignKeyName: "client_tasks_created_by_user_id_fkey"
@@ -1386,6 +1278,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "coach_notes_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "coach_client_summary"
+            referencedColumns: ["client_id"]
+          },
+          {
             foreignKeyName: "coach_notes_coach_id_fkey"
             columns: ["coach_id"]
             isOneToOne: false
@@ -1485,6 +1384,94 @@ export type Database = {
           },
         ]
       }
+      daily_activity: {
+        Row: {
+          active_calories_burned: number | null
+          active_minutes: number | null
+          created_at: string
+          date: string
+          distance_km: number | null
+          energy_level: number | null
+          floors_climbed: number | null
+          id: string
+          raw_sync_data: Json | null
+          sedentary_minutes: number | null
+          sleep_hours: number | null
+          source: Database["public"]["Enums"]["wearable_provider"]
+          steps: number | null
+          subject_client_id: string | null
+          subject_user_id: string | null
+          total_calories_burned: number | null
+          updated_at: string
+          user_id: string | null
+          water_intake_ml: number | null
+        }
+        Insert: {
+          active_calories_burned?: number | null
+          active_minutes?: number | null
+          created_at?: string
+          date: string
+          distance_km?: number | null
+          energy_level?: number | null
+          floors_climbed?: number | null
+          id?: string
+          raw_sync_data?: Json | null
+          sedentary_minutes?: number | null
+          sleep_hours?: number | null
+          source?: Database["public"]["Enums"]["wearable_provider"]
+          steps?: number | null
+          subject_client_id?: string | null
+          subject_user_id?: string | null
+          total_calories_burned?: number | null
+          updated_at?: string
+          user_id?: string | null
+          water_intake_ml?: number | null
+        }
+        Update: {
+          active_calories_burned?: number | null
+          active_minutes?: number | null
+          created_at?: string
+          date?: string
+          distance_km?: number | null
+          energy_level?: number | null
+          floors_climbed?: number | null
+          id?: string
+          raw_sync_data?: Json | null
+          sedentary_minutes?: number | null
+          sleep_hours?: number | null
+          source?: Database["public"]["Enums"]["wearable_provider"]
+          steps?: number | null
+          subject_client_id?: string | null
+          subject_user_id?: string | null
+          total_calories_burned?: number | null
+          updated_at?: string
+          user_id?: string | null
+          water_intake_ml?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "daily_activity_subject_client_id_fkey"
+            columns: ["subject_client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "daily_activity_subject_client_id_fkey"
+            columns: ["subject_client_id"]
+            isOneToOne: false
+            referencedRelation: "coach_client_summary"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "daily_activity_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       daily_macro_compliance: {
         Row: {
           actual_calories: number
@@ -1561,118 +1548,144 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "daily_macro_compliance_subject_user_id_fkey"
-            columns: ["subject_user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      nutrition_target_history: {
-        Row: {
-          carbs_g: number | null
-          calories: number | null
-          created_at: string
-          effective_from: string
-          effective_to: string | null
-          fat_g: number | null
-          id: string
-          protein_g: number | null
-          source_id: string | null
-          source_type: string
-          subject_client_id: string | null
-          subject_user_id: string | null
-        }
-        Insert: {
-          carbs_g?: number | null
-          calories?: number | null
-          created_at?: string
-          effective_from: string
-          effective_to?: string | null
-          fat_g?: number | null
-          id?: string
-          protein_g?: number | null
-          source_id?: string | null
-          source_type: string
-          subject_client_id?: string | null
-          subject_user_id?: string | null
-        }
-        Update: {
-          carbs_g?: number | null
-          calories?: number | null
-          created_at?: string
-          effective_from?: string
-          effective_to?: string | null
-          fat_g?: number | null
-          id?: string
-          protein_g?: number | null
-          source_id?: string | null
-          source_type?: string
-          subject_client_id?: string | null
-          subject_user_id?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "nutrition_target_history_subject_client_id_fkey"
+            foreignKeyName: "daily_macro_compliance_subject_client_id_fkey"
             columns: ["subject_client_id"]
             isOneToOne: false
-            referencedRelation: "clients"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "nutrition_target_history_subject_user_id_fkey"
-            columns: ["subject_user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
+            referencedRelation: "coach_client_summary"
+            referencedColumns: ["client_id"]
           },
         ]
       }
       exercise_catalog: {
         Row: {
           aliases: string[] | null
-          category: string | null
+          category: Database["public"]["Enums"]["exercise_category"] | null
           created_at: string | null
-          created_by: string | null
           description: string | null
           equipment: string | null
           id: string
-          is_approved: boolean
           muscle_groups: string[] | null
           name: string
           video_url: string | null
         }
         Insert: {
           aliases?: string[] | null
-          category?: string | null
+          category?: Database["public"]["Enums"]["exercise_category"] | null
           created_at?: string | null
-          created_by?: string | null
           description?: string | null
           equipment?: string | null
           id?: string
-          is_approved?: boolean
           muscle_groups?: string[] | null
           name: string
           video_url?: string | null
         }
         Update: {
           aliases?: string[] | null
-          category?: string | null
+          category?: Database["public"]["Enums"]["exercise_category"] | null
           created_at?: string | null
-          created_by?: string | null
           description?: string | null
           equipment?: string | null
           id?: string
-          is_approved?: boolean
           muscle_groups?: string[] | null
           name?: string
           video_url?: string | null
         }
+        Relationships: []
+      }
+      exercise_prs: {
+        Row: {
+          best_estimated_1rm_kg: number
+          best_reps: number | null
+          best_set_at: string | null
+          best_set_date: string | null
+          best_weight_kg: number | null
+          created_at: string
+          exercise_id: string | null
+          exercise_key: string | null
+          exercise_name: string
+          id: string
+          source_execution_id: string | null
+          source_set_id: string | null
+          subject_client_id: string | null
+          subject_key: string | null
+          subject_user_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          best_estimated_1rm_kg: number
+          best_reps?: number | null
+          best_set_at?: string | null
+          best_set_date?: string | null
+          best_weight_kg?: number | null
+          created_at?: string
+          exercise_id?: string | null
+          exercise_key?: string | null
+          exercise_name: string
+          id?: string
+          source_execution_id?: string | null
+          source_set_id?: string | null
+          subject_client_id?: string | null
+          subject_key?: string | null
+          subject_user_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          best_estimated_1rm_kg?: number
+          best_reps?: number | null
+          best_set_at?: string | null
+          best_set_date?: string | null
+          best_weight_kg?: number | null
+          created_at?: string
+          exercise_id?: string | null
+          exercise_key?: string | null
+          exercise_name?: string
+          id?: string
+          source_execution_id?: string | null
+          source_set_id?: string | null
+          subject_client_id?: string | null
+          subject_key?: string | null
+          subject_user_id?: string | null
+          updated_at?: string
+        }
         Relationships: [
           {
-            foreignKeyName: "exercise_catalog_created_by_fkey"
-            columns: ["created_by"]
+            foreignKeyName: "exercise_prs_exercise_id_fkey"
+            columns: ["exercise_id"]
+            isOneToOne: false
+            referencedRelation: "exercise_catalog"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "exercise_prs_source_execution_id_fkey"
+            columns: ["source_execution_id"]
+            isOneToOne: false
+            referencedRelation: "workout_executions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "exercise_prs_source_set_id_fkey"
+            columns: ["source_set_id"]
+            isOneToOne: false
+            referencedRelation: "strength_sets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "exercise_prs_subject_client_id_fkey"
+            columns: ["subject_client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "exercise_prs_subject_client_id_fkey"
+            columns: ["subject_client_id"]
+            isOneToOne: false
+            referencedRelation: "coach_client_summary"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "exercise_prs_subject_user_id_fkey"
+            columns: ["subject_user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -1683,6 +1696,7 @@ export type Database = {
         Row: {
           assigned_by_id: string | null
           carbs_target: number | null
+          check_in_interval_days: number | null
           created_at: string | null
           current_value: number | null
           current_weight: number | null
@@ -1691,7 +1705,6 @@ export type Database = {
           fat_target: number | null
           goal_direction: string
           goal_type: string
-          check_in_interval_days: number | null
           id: string
           is_personal_goal: boolean
           linked_exercise_id: string | null
@@ -1702,7 +1715,7 @@ export type Database = {
           start_date: string
           start_value: number | null
           start_weight: number | null
-          status: string | null
+          status: string
           target_date: string | null
           target_value: number | null
           target_weight: number | null
@@ -1713,6 +1726,7 @@ export type Database = {
         Insert: {
           assigned_by_id?: string | null
           carbs_target?: number | null
+          check_in_interval_days?: number | null
           created_at?: string | null
           current_value?: number | null
           current_weight?: number | null
@@ -1721,7 +1735,6 @@ export type Database = {
           fat_target?: number | null
           goal_direction?: string
           goal_type: string
-          check_in_interval_days?: number | null
           id?: string
           is_personal_goal?: boolean
           linked_exercise_id?: string | null
@@ -1732,7 +1745,7 @@ export type Database = {
           start_date?: string
           start_value?: number | null
           start_weight?: number | null
-          status?: string | null
+          status?: string
           target_date?: string | null
           target_value?: number | null
           target_weight?: number | null
@@ -1743,6 +1756,7 @@ export type Database = {
         Update: {
           assigned_by_id?: string | null
           carbs_target?: number | null
+          check_in_interval_days?: number | null
           created_at?: string | null
           current_value?: number | null
           current_weight?: number | null
@@ -1751,7 +1765,6 @@ export type Database = {
           fat_target?: number | null
           goal_direction?: string
           goal_type?: string
-          check_in_interval_days?: number | null
           id?: string
           is_personal_goal?: boolean
           linked_exercise_id?: string | null
@@ -1762,7 +1775,7 @@ export type Database = {
           start_date?: string
           start_value?: number | null
           start_weight?: number | null
-          status?: string | null
+          status?: string
           target_date?: string | null
           target_value?: number | null
           target_weight?: number | null
@@ -1810,7 +1823,7 @@ export type Database = {
           progress_percent: number
           recorded_by_user_id: string | null
           snapshot_at: string
-          source: "auto_sync" | "manual"
+          source: string
           status: string
           target_value: number | null
           target_weight: number | null
@@ -1824,7 +1837,7 @@ export type Database = {
           progress_percent: number
           recorded_by_user_id?: string | null
           snapshot_at?: string
-          source?: "auto_sync" | "manual"
+          source?: string
           status?: string
           target_value?: number | null
           target_weight?: number | null
@@ -1838,7 +1851,7 @@ export type Database = {
           progress_percent?: number
           recorded_by_user_id?: string | null
           snapshot_at?: string
-          source?: "auto_sync" | "manual"
+          source?: string
           status?: string
           target_value?: number | null
           target_weight?: number | null
@@ -1934,6 +1947,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "meal_group_assignments_subject_client_id_fkey"
+            columns: ["subject_client_id"]
+            isOneToOne: false
+            referencedRelation: "coach_client_summary"
+            referencedColumns: ["client_id"]
+          },
+          {
             foreignKeyName: "meal_group_assignments_subject_user_id_fkey"
             columns: ["subject_user_id"]
             isOneToOne: false
@@ -1959,11 +1979,11 @@ export type Database = {
           id: string
           meal_plan_id: string
           notes: string | null
-          quantity: number | null
           planned_date: string | null
           planned_time: string | null
           position: number
           protein_g: number
+          quantity: number | null
           title: string
           type: Database["public"]["Enums"]["meal_item_type"]
           unit: string | null
@@ -1978,11 +1998,11 @@ export type Database = {
           id?: string
           meal_plan_id: string
           notes?: string | null
-          quantity?: number | null
           planned_date?: string | null
           planned_time?: string | null
           position?: number
           protein_g?: number
+          quantity?: number | null
           title: string
           type: Database["public"]["Enums"]["meal_item_type"]
           unit?: string | null
@@ -1997,11 +2017,11 @@ export type Database = {
           id?: string
           meal_plan_id?: string
           notes?: string | null
-          quantity?: number | null
           planned_date?: string | null
           planned_time?: string | null
           position?: number
           protein_g?: number
+          quantity?: number | null
           title?: string
           type?: Database["public"]["Enums"]["meal_item_type"]
           unit?: string | null
@@ -2017,6 +2037,51 @@ export type Database = {
           },
           {
             foreignKeyName: "meal_group_items_meal_plan_id_fkey"
+            columns: ["meal_plan_id"]
+            isOneToOne: false
+            referencedRelation: "meal_group_plans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      meal_group_plan_types: {
+        Row: {
+          created_at: string
+          created_by_user_id: string
+          id: string
+          meal_plan_id: string
+          position: number
+          type: Database["public"]["Enums"]["meal_item_type"]
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by_user_id: string
+          id?: string
+          meal_plan_id: string
+          position: number
+          type: Database["public"]["Enums"]["meal_item_type"]
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by_user_id?: string
+          id?: string
+          meal_plan_id?: string
+          position?: number
+          type?: Database["public"]["Enums"]["meal_item_type"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meal_group_plan_types_created_by_user_id_fkey"
+            columns: ["created_by_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meal_group_plan_types_meal_plan_id_fkey"
             columns: ["meal_plan_id"]
             isOneToOne: false
             referencedRelation: "meal_group_plans"
@@ -2072,61 +2137,18 @@ export type Database = {
           },
         ]
       }
-      meal_group_plan_types: {
-        Row: {
-          created_at: string
-          created_by_user_id: string
-          id: string
-          meal_plan_id: string
-          position: number
-          type: Database["public"]["Enums"]["meal_item_type"]
-          updated_at: string
-        }
-        Insert: {
-          created_at?: string
-          created_by_user_id: string
-          id?: string
-          meal_plan_id: string
-          position: number
-          type: Database["public"]["Enums"]["meal_item_type"]
-          updated_at?: string
-        }
-        Update: {
-          created_at?: string
-          created_by_user_id?: string
-          id?: string
-          meal_plan_id?: string
-          position?: number
-          type?: Database["public"]["Enums"]["meal_item_type"]
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "meal_group_plan_types_created_by_user_id_fkey"
-            columns: ["created_by_user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "meal_group_plan_types_meal_plan_id_fkey"
-            columns: ["meal_plan_id"]
-            isOneToOne: false
-            referencedRelation: "meal_group_plans"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       meal_groups: {
         Row: {
           created_at: string
           description: string | null
           end_date: string | null
           id: string
+          is_public: boolean
           is_snapshot: boolean
           name: string
           notes: string | null
           owner_user_id: string
+          public_share_token: string
           source_group_id: string | null
           start_date: string | null
           status: Database["public"]["Enums"]["meal_group_status"]
@@ -2137,10 +2159,12 @@ export type Database = {
           description?: string | null
           end_date?: string | null
           id?: string
+          is_public?: boolean
           is_snapshot?: boolean
           name: string
           notes?: string | null
           owner_user_id: string
+          public_share_token?: string
           source_group_id?: string | null
           start_date?: string | null
           status?: Database["public"]["Enums"]["meal_group_status"]
@@ -2151,10 +2175,12 @@ export type Database = {
           description?: string | null
           end_date?: string | null
           id?: string
+          is_public?: boolean
           is_snapshot?: boolean
           name?: string
           notes?: string | null
           owner_user_id?: string
+          public_share_token?: string
           source_group_id?: string | null
           start_date?: string | null
           status?: Database["public"]["Enums"]["meal_group_status"]
@@ -2312,6 +2338,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "meal_log_items_created_by_client_id_fkey"
+            columns: ["created_by_client_id"]
+            isOneToOne: false
+            referencedRelation: "coach_client_summary"
+            referencedColumns: ["client_id"]
+          },
+          {
             foreignKeyName: "meal_log_items_created_by_user_id_fkey"
             columns: ["created_by_user_id"]
             isOneToOne: false
@@ -2387,6 +2420,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "meal_log_sections_subject_client_id_fkey"
+            columns: ["subject_client_id"]
+            isOneToOne: false
+            referencedRelation: "coach_client_summary"
+            referencedColumns: ["client_id"]
+          },
+          {
             foreignKeyName: "meal_log_sections_subject_user_id_fkey"
             columns: ["subject_user_id"]
             isOneToOne: false
@@ -2459,6 +2499,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "meal_logs_created_by_client_id_fkey"
+            columns: ["created_by_client_id"]
+            isOneToOne: false
+            referencedRelation: "coach_client_summary"
+            referencedColumns: ["client_id"]
+          },
+          {
             foreignKeyName: "meal_logs_created_by_user_id_fkey"
             columns: ["created_by_user_id"]
             isOneToOne: false
@@ -2478,6 +2525,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "clients"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meal_logs_subject_client_id_fkey"
+            columns: ["subject_client_id"]
+            isOneToOne: false
+            referencedRelation: "coach_client_summary"
+            referencedColumns: ["client_id"]
           },
           {
             foreignKeyName: "meal_logs_subject_user_id_fkey"
@@ -2634,6 +2688,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "meal_plan_assignments_subject_client_id_fkey"
+            columns: ["subject_client_id"]
+            isOneToOne: false
+            referencedRelation: "coach_client_summary"
+            referencedColumns: ["client_id"]
+          },
+          {
             foreignKeyName: "meal_plan_assignments_subject_user_id_fkey"
             columns: ["subject_user_id"]
             isOneToOne: false
@@ -2774,6 +2835,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "meal_plans_subject_client_id_fkey"
+            columns: ["subject_client_id"]
+            isOneToOne: false
+            referencedRelation: "coach_client_summary"
+            referencedColumns: ["client_id"]
+          },
+          {
             foreignKeyName: "meal_plans_subject_user_id_fkey"
             columns: ["subject_user_id"]
             isOneToOne: false
@@ -2789,10 +2857,320 @@ export type Database = {
           },
         ]
       }
+      menstrual_cycles: {
+        Row: {
+          bloating: number | null
+          cramps: number | null
+          created_at: string
+          cycle_length_days: number | null
+          energy_level: number | null
+          headache: boolean | null
+          id: string
+          logged_by_user_id: string | null
+          mood: number | null
+          notes: string | null
+          period_end_date: string | null
+          period_length_days: number | null
+          period_start_date: string
+          phase: Database["public"]["Enums"]["menstrual_cycle_phase"] | null
+          subject_client_id: string | null
+          subject_user_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          bloating?: number | null
+          cramps?: number | null
+          created_at?: string
+          cycle_length_days?: number | null
+          energy_level?: number | null
+          headache?: boolean | null
+          id?: string
+          logged_by_user_id?: string | null
+          mood?: number | null
+          notes?: string | null
+          period_end_date?: string | null
+          period_length_days?: number | null
+          period_start_date: string
+          phase?: Database["public"]["Enums"]["menstrual_cycle_phase"] | null
+          subject_client_id?: string | null
+          subject_user_id?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          bloating?: number | null
+          cramps?: number | null
+          created_at?: string
+          cycle_length_days?: number | null
+          energy_level?: number | null
+          headache?: boolean | null
+          id?: string
+          logged_by_user_id?: string | null
+          mood?: number | null
+          notes?: string | null
+          period_end_date?: string | null
+          period_length_days?: number | null
+          period_start_date?: string
+          phase?: Database["public"]["Enums"]["menstrual_cycle_phase"] | null
+          subject_client_id?: string | null
+          subject_user_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "menstrual_cycles_logged_by_user_id_fkey"
+            columns: ["logged_by_user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "menstrual_cycles_subject_client_id_fkey"
+            columns: ["subject_client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "menstrual_cycles_subject_user_id_fkey"
+            columns: ["subject_user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notification_preferences: {
+        Row: {
+          checkin_bell_enabled: boolean
+          checkin_push_enabled: boolean
+          checkin_reminder_time: string
+          created_at: string
+          cycle_bell_enabled: boolean
+          cycle_push_enabled: boolean
+          cycle_reminder_days: number
+          goal_bell_enabled: boolean
+          goal_push_enabled: boolean
+          goal_reminder_time: string
+          meal_bell_enabled: boolean
+          meal_push_enabled: boolean
+          meal_reminder_time: string
+          timezone: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          checkin_bell_enabled?: boolean
+          checkin_push_enabled?: boolean
+          checkin_reminder_time?: string
+          created_at?: string
+          cycle_bell_enabled?: boolean
+          cycle_push_enabled?: boolean
+          cycle_reminder_days?: number
+          goal_bell_enabled?: boolean
+          goal_push_enabled?: boolean
+          goal_reminder_time?: string
+          meal_bell_enabled?: boolean
+          meal_push_enabled?: boolean
+          meal_reminder_time?: string
+          timezone?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          checkin_bell_enabled?: boolean
+          checkin_push_enabled?: boolean
+          checkin_reminder_time?: string
+          created_at?: string
+          cycle_bell_enabled?: boolean
+          cycle_push_enabled?: boolean
+          cycle_reminder_days?: number
+          goal_bell_enabled?: boolean
+          goal_push_enabled?: boolean
+          goal_reminder_time?: string
+          meal_bell_enabled?: boolean
+          meal_push_enabled?: boolean
+          meal_reminder_time?: string
+          timezone?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      notifications: {
+        Row: {
+          body: string
+          created_at: string
+          data: Json
+          id: string
+          title: string
+          type: string
+          user_id: string
+        }
+        Insert: {
+          body: string
+          created_at?: string
+          data?: Json
+          id?: string
+          title: string
+          type: string
+          user_id: string
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          data?: Json
+          id?: string
+          title?: string
+          type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      nutrition_target_history: {
+        Row: {
+          calories: number | null
+          carbs_g: number | null
+          created_at: string
+          effective_from: string
+          effective_to: string | null
+          fat_g: number | null
+          id: string
+          protein_g: number | null
+          source_id: string | null
+          source_type: string
+          subject_client_id: string | null
+          subject_user_id: string | null
+        }
+        Insert: {
+          calories?: number | null
+          carbs_g?: number | null
+          created_at?: string
+          effective_from: string
+          effective_to?: string | null
+          fat_g?: number | null
+          id?: string
+          protein_g?: number | null
+          source_id?: string | null
+          source_type: string
+          subject_client_id?: string | null
+          subject_user_id?: string | null
+        }
+        Update: {
+          calories?: number | null
+          carbs_g?: number | null
+          created_at?: string
+          effective_from?: string
+          effective_to?: string | null
+          fat_g?: number | null
+          id?: string
+          protein_g?: number | null
+          source_id?: string | null
+          source_type?: string
+          subject_client_id?: string | null
+          subject_user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nutrition_target_history_subject_client_id_fkey"
+            columns: ["subject_client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nutrition_target_history_subject_client_id_fkey"
+            columns: ["subject_client_id"]
+            isOneToOne: false
+            referencedRelation: "coach_client_summary"
+            referencedColumns: ["client_id"]
+          },
+        ]
+      }
+      payment_logs: {
+        Row: {
+          amount: number | null
+          billing_plan_id: string | null
+          billing_type_snapshot: Database["public"]["Enums"]["billing_type"]
+          client_id: string
+          coach_id: string
+          created_at: string
+          id: string
+          notes: string | null
+          session_date: string
+          session_rate_snapshot: number
+          sessions_remaining_after: number | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          amount?: number | null
+          billing_plan_id?: string | null
+          billing_type_snapshot: Database["public"]["Enums"]["billing_type"]
+          client_id: string
+          coach_id: string
+          created_at?: string
+          id?: string
+          notes?: string | null
+          session_date?: string
+          session_rate_snapshot: number
+          sessions_remaining_after?: number | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number | null
+          billing_plan_id?: string | null
+          billing_type_snapshot?: Database["public"]["Enums"]["billing_type"]
+          client_id?: string
+          coach_id?: string
+          created_at?: string
+          id?: string
+          notes?: string | null
+          session_date?: string
+          session_rate_snapshot?: number
+          sessions_remaining_after?: number | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_logs_billing_plan_id_fkey"
+            columns: ["billing_plan_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_plans"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_logs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_logs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "coach_client_summary"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "payment_logs_coach_id_fkey"
+            columns: ["coach_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar_url: string | null
           bio: string | null
+          coach_specialty: Database["public"]["Enums"]["coach_specialty"] | null
           compact_mode: boolean
           created_at: string
           date_of_birth: string | null
@@ -2802,17 +3180,22 @@ export type Database = {
           default_protein: number | null
           deleted_at: string | null
           deletion_reason: string | null
+          due_date: string | null
+          fitness_level: Database["public"]["Enums"]["fitness_level"] | null
           full_name: string | null
-          gender: string | null
+          gender: Database["public"]["Enums"]["gender_type"] | null
           has_password: boolean
           height: number | null
           id: string
           is_active: boolean
           is_blocked: boolean
           is_deleted: boolean
+          is_postpartum: boolean
+          is_pregnant: boolean
           onboarding_completed: boolean
           password_configured_at: string | null
           phone: string | null
+          postpartum_since: string | null
           preferred_units: string
           recoverable_until: string | null
           restored_at: string | null
@@ -2822,6 +3205,9 @@ export type Database = {
         Insert: {
           avatar_url?: string | null
           bio?: string | null
+          coach_specialty?:
+            | Database["public"]["Enums"]["coach_specialty"]
+            | null
           compact_mode?: boolean
           created_at?: string
           date_of_birth?: string | null
@@ -2831,17 +3217,22 @@ export type Database = {
           default_protein?: number | null
           deleted_at?: string | null
           deletion_reason?: string | null
+          due_date?: string | null
+          fitness_level?: Database["public"]["Enums"]["fitness_level"] | null
           full_name?: string | null
-          gender?: string | null
+          gender?: Database["public"]["Enums"]["gender_type"] | null
           has_password?: boolean
           height?: number | null
           id: string
           is_active?: boolean
           is_blocked?: boolean
           is_deleted?: boolean
+          is_postpartum?: boolean
+          is_pregnant?: boolean
           onboarding_completed?: boolean
           password_configured_at?: string | null
           phone?: string | null
+          postpartum_since?: string | null
           preferred_units?: string
           recoverable_until?: string | null
           restored_at?: string | null
@@ -2851,6 +3242,9 @@ export type Database = {
         Update: {
           avatar_url?: string | null
           bio?: string | null
+          coach_specialty?:
+            | Database["public"]["Enums"]["coach_specialty"]
+            | null
           compact_mode?: boolean
           created_at?: string
           date_of_birth?: string | null
@@ -2860,17 +3254,22 @@ export type Database = {
           default_protein?: number | null
           deleted_at?: string | null
           deletion_reason?: string | null
+          due_date?: string | null
+          fitness_level?: Database["public"]["Enums"]["fitness_level"] | null
           full_name?: string | null
-          gender?: string | null
+          gender?: Database["public"]["Enums"]["gender_type"] | null
           has_password?: boolean
           height?: number | null
           id?: string
           is_active?: boolean
           is_blocked?: boolean
           is_deleted?: boolean
+          is_postpartum?: boolean
+          is_pregnant?: boolean
           onboarding_completed?: boolean
           password_configured_at?: string | null
           phone?: string | null
+          postpartum_since?: string | null
           preferred_units?: string
           recoverable_until?: string | null
           restored_at?: string | null
@@ -2879,12 +3278,125 @@ export type Database = {
         }
         Relationships: []
       }
+      push_subscriptions: {
+        Row: {
+          auth_secret: string
+          created_at: string
+          endpoint: string
+          id: string
+          public_key: string
+          user_agent: string | null
+          user_id: string
+        }
+        Insert: {
+          auth_secret: string
+          created_at?: string
+          endpoint: string
+          id?: string
+          public_key: string
+          user_agent?: string | null
+          user_id: string
+        }
+        Update: {
+          auth_secret?: string
+          created_at?: string
+          endpoint?: string
+          id?: string
+          public_key?: string
+          user_agent?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      sleep_log: {
+        Row: {
+          awake_minutes: number | null
+          created_at: string
+          date: string
+          deep_sleep_minutes: number | null
+          id: string
+          light_sleep_minutes: number | null
+          raw_sync_data: Json | null
+          rem_sleep_minutes: number | null
+          sleep_end: string | null
+          sleep_score: number | null
+          sleep_start: string | null
+          source: Database["public"]["Enums"]["wearable_provider"]
+          subject_client_id: string | null
+          subject_user_id: string | null
+          total_duration_minutes: number | null
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          awake_minutes?: number | null
+          created_at?: string
+          date: string
+          deep_sleep_minutes?: number | null
+          id?: string
+          light_sleep_minutes?: number | null
+          raw_sync_data?: Json | null
+          rem_sleep_minutes?: number | null
+          sleep_end?: string | null
+          sleep_score?: number | null
+          sleep_start?: string | null
+          source?: Database["public"]["Enums"]["wearable_provider"]
+          subject_client_id?: string | null
+          subject_user_id?: string | null
+          total_duration_minutes?: number | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          awake_minutes?: number | null
+          created_at?: string
+          date?: string
+          deep_sleep_minutes?: number | null
+          id?: string
+          light_sleep_minutes?: number | null
+          raw_sync_data?: Json | null
+          rem_sleep_minutes?: number | null
+          sleep_end?: string | null
+          sleep_score?: number | null
+          sleep_start?: string | null
+          source?: Database["public"]["Enums"]["wearable_provider"]
+          subject_client_id?: string | null
+          subject_user_id?: string | null
+          total_duration_minutes?: number | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sleep_log_subject_client_id_fkey"
+            columns: ["subject_client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sleep_log_subject_client_id_fkey"
+            columns: ["subject_client_id"]
+            isOneToOne: false
+            referencedRelation: "coach_client_summary"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "sleep_log_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       strength_sets: {
         Row: {
           calculated_1rm: number | null
           created_at: string | null
           entry_sequence: number | null
           equipment_type: string | null
+          execution_id: string | null
           exercise_id: string | null
           exercise_name: string
           form_video_url: string | null
@@ -2911,6 +3423,7 @@ export type Database = {
           created_at?: string | null
           entry_sequence?: number | null
           equipment_type?: string | null
+          execution_id?: string | null
           exercise_id?: string | null
           exercise_name: string
           form_video_url?: string | null
@@ -2937,6 +3450,7 @@ export type Database = {
           created_at?: string | null
           entry_sequence?: number | null
           equipment_type?: string | null
+          execution_id?: string | null
           exercise_id?: string | null
           exercise_name?: string
           form_video_url?: string | null
@@ -2960,6 +3474,13 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "strength_sets_execution_id_fkey"
+            columns: ["execution_id"]
+            isOneToOne: false
+            referencedRelation: "workout_executions"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "strength_sets_exercise_id_fkey"
             columns: ["exercise_id"]
             isOneToOne: false
@@ -2975,53 +3496,6 @@ export type Database = {
           },
         ]
       }
-      supplement_catalog: {
-        Row: {
-          brand: string | null
-          category: string
-          categories: string[]
-          created_at: string
-          id: string
-          is_global: boolean
-          name: string
-          nutrients: Json
-          owner_user_id: string | null
-          serving_label: string
-        }
-        Insert: {
-          brand?: string | null
-          category: string
-          categories?: string[]
-          created_at?: string
-          id?: string
-          is_global?: boolean
-          name: string
-          nutrients?: Json
-          owner_user_id?: string | null
-          serving_label: string
-        }
-        Update: {
-          brand?: string | null
-          category?: string
-          categories?: string[]
-          created_at?: string
-          id?: string
-          is_global?: boolean
-          name?: string
-          nutrients?: Json
-          owner_user_id?: string | null
-          serving_label?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "supplement_catalog_owner_user_id_fkey"
-            columns: ["owner_user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       supplement_assignments: {
         Row: {
           assigned_by: string | null
@@ -3029,8 +3503,8 @@ export type Database = {
           default_servings: number
           id: string
           is_active: boolean
-          subject_profile_id: string
           subject_client_id: string | null
+          subject_profile_id: string
           subject_user_id: string | null
           supplement_id: string
           unit: string | null
@@ -3042,8 +3516,8 @@ export type Database = {
           default_servings?: number
           id?: string
           is_active?: boolean
-          subject_profile_id: string
           subject_client_id?: string | null
+          subject_profile_id: string
           subject_user_id?: string | null
           supplement_id: string
           unit?: string | null
@@ -3055,21 +3529,14 @@ export type Database = {
           default_servings?: number
           id?: string
           is_active?: boolean
-          subject_profile_id?: string
           subject_client_id?: string | null
+          subject_profile_id?: string
           subject_user_id?: string | null
           supplement_id?: string
           unit?: string | null
           updated_at?: string
         }
         Relationships: [
-          {
-            foreignKeyName: "supplement_assignments_assigned_by_fkey"
-            columns: ["assigned_by"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
           {
             foreignKeyName: "supplement_assignments_subject_client_id_fkey"
             columns: ["subject_client_id"]
@@ -3078,17 +3545,17 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "supplement_assignments_subject_client_id_fkey"
+            columns: ["subject_client_id"]
+            isOneToOne: false
+            referencedRelation: "coach_client_summary"
+            referencedColumns: ["client_id"]
+          },
+          {
             foreignKeyName: "supplement_assignments_subject_profile_id_fkey"
             columns: ["subject_profile_id"]
             isOneToOne: false
             referencedRelation: "supplement_subject_profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "supplement_assignments_subject_user_id_fkey"
-            columns: ["subject_user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
           {
@@ -3099,6 +3566,42 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      supplement_catalog: {
+        Row: {
+          brand: string | null
+          categories: string[] | null
+          category: string
+          created_at: string
+          id: string
+          is_global: boolean
+          name: string
+          nutrients: Json
+          owner_user_id: string | null
+        }
+        Insert: {
+          brand?: string | null
+          categories?: string[] | null
+          category: string
+          created_at?: string
+          id?: string
+          is_global?: boolean
+          name: string
+          nutrients?: Json
+          owner_user_id?: string | null
+        }
+        Update: {
+          brand?: string | null
+          categories?: string[] | null
+          category?: string
+          created_at?: string
+          id?: string
+          is_global?: boolean
+          name?: string
+          nutrients?: Json
+          owner_user_id?: string | null
+        }
+        Relationships: []
       }
       supplement_subject_profiles: {
         Row: {
@@ -3146,18 +3649,11 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "supplement_subject_profiles_subject_user_id_fkey"
-            columns: ["subject_user_id"]
+            foreignKeyName: "supplement_subject_profiles_subject_client_id_fkey"
+            columns: ["subject_client_id"]
             isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "supplement_subject_profiles_updated_by_fkey"
-            columns: ["updated_by"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
+            referencedRelation: "coach_client_summary"
+            referencedColumns: ["client_id"]
           },
         ]
       }
@@ -3222,13 +3718,6 @@ export type Database = {
             columns: ["ticket_id"]
             isOneToOne: false
             referencedRelation: "tickets"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "ticket_subscriptions_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -3404,6 +3893,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "training_plans_assigned_client_id_fkey"
+            columns: ["assigned_client_id"]
+            isOneToOne: false
+            referencedRelation: "coach_client_summary"
+            referencedColumns: ["client_id"]
+          },
+          {
             foreignKeyName: "training_plans_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
@@ -3531,6 +4027,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "training_sessions_created_by_client_id_fkey"
+            columns: ["created_by_client_id"]
+            isOneToOne: false
+            referencedRelation: "coach_client_summary"
+            referencedColumns: ["client_id"]
+          },
+          {
             foreignKeyName: "training_sessions_created_by_user_id_fkey"
             columns: ["created_by_user_id"]
             isOneToOne: false
@@ -3559,6 +4062,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "training_sessions_subject_client_id_fkey"
+            columns: ["subject_client_id"]
+            isOneToOne: false
+            referencedRelation: "coach_client_summary"
+            referencedColumns: ["client_id"]
+          },
+          {
             foreignKeyName: "training_sessions_subject_user_id_fkey"
             columns: ["subject_user_id"]
             isOneToOne: false
@@ -3574,12 +4084,224 @@ export type Database = {
           },
         ]
       }
+      vitals_log: {
+        Row: {
+          body_temperature_c: number | null
+          created_at: string
+          diastolic_bp: number | null
+          hrv_ms: number | null
+          id: string
+          raw_sync_data: Json | null
+          recorded_at: string
+          respiratory_rate: number | null
+          resting_heart_rate: number | null
+          source: Database["public"]["Enums"]["wearable_provider"]
+          spo2_percent: number | null
+          subject_client_id: string | null
+          subject_user_id: string | null
+          systolic_bp: number | null
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          body_temperature_c?: number | null
+          created_at?: string
+          diastolic_bp?: number | null
+          hrv_ms?: number | null
+          id?: string
+          raw_sync_data?: Json | null
+          recorded_at: string
+          respiratory_rate?: number | null
+          resting_heart_rate?: number | null
+          source?: Database["public"]["Enums"]["wearable_provider"]
+          spo2_percent?: number | null
+          subject_client_id?: string | null
+          subject_user_id?: string | null
+          systolic_bp?: number | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          body_temperature_c?: number | null
+          created_at?: string
+          diastolic_bp?: number | null
+          hrv_ms?: number | null
+          id?: string
+          raw_sync_data?: Json | null
+          recorded_at?: string
+          respiratory_rate?: number | null
+          resting_heart_rate?: number | null
+          source?: Database["public"]["Enums"]["wearable_provider"]
+          spo2_percent?: number | null
+          subject_client_id?: string | null
+          subject_user_id?: string | null
+          systolic_bp?: number | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vitals_log_subject_client_id_fkey"
+            columns: ["subject_client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vitals_log_subject_client_id_fkey"
+            columns: ["subject_client_id"]
+            isOneToOne: false
+            referencedRelation: "coach_client_summary"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "vitals_log_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      workout_execution_exercises: {
+        Row: {
+          created_at: string
+          distance_km: number | null
+          duration_minutes: number | null
+          execution_id: string
+          exercise_id: string | null
+          exercise_name: string
+          exercise_type: string
+          id: string
+          volume_kg: number | null
+        }
+        Insert: {
+          created_at?: string
+          distance_km?: number | null
+          duration_minutes?: number | null
+          execution_id: string
+          exercise_id?: string | null
+          exercise_name: string
+          exercise_type: string
+          id?: string
+          volume_kg?: number | null
+        }
+        Update: {
+          created_at?: string
+          distance_km?: number | null
+          duration_minutes?: number | null
+          execution_id?: string
+          exercise_id?: string | null
+          exercise_name?: string
+          exercise_type?: string
+          id?: string
+          volume_kg?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workout_execution_exercises_execution_id_fkey"
+            columns: ["execution_id"]
+            isOneToOne: false
+            referencedRelation: "workout_executions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workout_execution_exercises_exercise_id_fkey"
+            columns: ["exercise_id"]
+            isOneToOne: false
+            referencedRelation: "exercise_catalog"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      workout_executions: {
+        Row: {
+          actor_user_id: string
+          created_at: string
+          id: string
+          logged_at: string
+          notes: string | null
+          performed_on: string
+          source: string
+          subject_client_id: string | null
+          subject_key: string | null
+          subject_user_id: string | null
+          template_workout_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          actor_user_id: string
+          created_at?: string
+          id?: string
+          logged_at?: string
+          notes?: string | null
+          performed_on: string
+          source?: string
+          subject_client_id?: string | null
+          subject_key?: string | null
+          subject_user_id?: string | null
+          template_workout_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          actor_user_id?: string
+          created_at?: string
+          id?: string
+          logged_at?: string
+          notes?: string | null
+          performed_on?: string
+          source?: string
+          subject_client_id?: string | null
+          subject_key?: string | null
+          subject_user_id?: string | null
+          template_workout_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workout_executions_actor_user_id_fkey"
+            columns: ["actor_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workout_executions_subject_client_id_fkey"
+            columns: ["subject_client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workout_executions_subject_client_id_fkey"
+            columns: ["subject_client_id"]
+            isOneToOne: false
+            referencedRelation: "coach_client_summary"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "workout_executions_subject_user_id_fkey"
+            columns: ["subject_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workout_executions_template_workout_id_fkey"
+            columns: ["template_workout_id"]
+            isOneToOne: false
+            referencedRelation: "training_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       coach_client_summary: {
         Row: {
           active_goals_count: number | null
           at_risk_goals_count: number | null
+          avatar_url: string | null
           checkins_last_30d: number | null
           client_id: string | null
           client_since: string | null
@@ -3602,12 +4324,30 @@ export type Database = {
           sessions_today_count: number | null
           sessions_today_pending_count: number | null
           urgent_checkins: number | null
-          avatar_url: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "clients_linked_user_id_fkey"
+            columns: ["linked_user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "clients_primary_coach_id_fkey"
+            columns: ["coach_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Functions: {
+      _normalize_exercise_muscle_groups: {
+        Args: { input_category: string; input_muscles: string[] }
+        Returns: string[]
+      }
       can_access_meal_group: {
         Args: { target_group_id: string }
         Returns: boolean
@@ -3624,10 +4364,6 @@ export type Database = {
         Args: { _week_start?: string }
         Returns: undefined
       }
-      get_user_role: {
-        Args: never
-        Returns: Database["public"]["Enums"]["user_role"]
-      }
       get_coach_goal_history: {
         Args: { p_coach_id: string; p_limit?: number }
         Returns: {
@@ -3636,13 +4372,9 @@ export type Database = {
           snapshot_at: string
         }[]
       }
-      get_goals_due_for_checkin: {
-        Args: { p_user_ids: string[] }
-        Returns: {
-          goal_id: string
-          goal_type: string
-          user_id: string
-        }[]
+      get_user_role: {
+        Args: never
+        Returns: Database["public"]["Enums"]["user_role"]
       }
       has_client_coach_access: {
         Args: { target_client_id: string }
@@ -3653,6 +4385,10 @@ export type Database = {
           target_subject_client_id: string
           target_subject_user_id: string
         }
+        Returns: boolean
+      }
+      is_active_or_historical_coach_for_student: {
+        Args: { p_coach_id: string; p_student_id: string }
         Returns: boolean
       }
       is_linked_client_user: {
@@ -3690,11 +4426,25 @@ export type Database = {
       client_status: "active" | "paused" | "blocked" | "archived"
       client_task_status: "pending" | "completed" | "overdue"
       coach_note_tag:
-        | "general"
         | "injury"
         | "nutrition"
         | "psychology"
+        | "form"
         | "milestone"
+        | "general"
+      coach_specialty:
+        | "general_fitness"
+        | "strength_and_conditioning"
+        | "weight_management"
+        | "womens_health"
+        | "prenatal_and_postnatal"
+        | "yoga_and_pilates"
+        | "endurance_and_running"
+        | "sport_specific"
+        | "rehabilitation"
+      exercise_category: "strength" | "cardio" | "mind_body" | "mobility"
+      fitness_level: "beginner" | "intermediate" | "advanced" | "athlete"
+      gender_type: "male" | "female" | "non_binary" | "prefer_not_to_say"
       injury_severity: "mild" | "moderate" | "severe"
       meal_assignment_status: "draft" | "active" | "archived"
       meal_day_of_week: "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun"
@@ -3715,15 +4465,16 @@ export type Database = {
         | "protein_drink"
       meal_log_type:
         | "breakfast"
-        | "snack"
         | "lunch"
-        | "pre_workout_meal"
-        | "post_workout_meal"
         | "dinner"
-        | "protein_drink"
-        | "water"
         | "snacks"
         | "other"
+        | "snack"
+        | "pre_workout_meal"
+        | "post_workout_meal"
+        | "protein_drink"
+        | "water"
+      menstrual_cycle_phase: "menstrual" | "follicular" | "ovulatory" | "luteal"
       nutrition_tracking_mode: "macro" | "habit" | "intuitive"
       payment_method: "cash" | "bank_transfer" | "card" | "other"
       payment_status: "pending" | "paid"
@@ -3899,12 +4650,27 @@ export const Constants = {
       client_status: ["active", "paused", "blocked", "archived"],
       client_task_status: ["pending", "completed", "overdue"],
       coach_note_tag: [
-        "general",
         "injury",
         "nutrition",
         "psychology",
+        "form",
         "milestone",
+        "general",
       ],
+      coach_specialty: [
+        "general_fitness",
+        "strength_and_conditioning",
+        "weight_management",
+        "womens_health",
+        "prenatal_and_postnatal",
+        "yoga_and_pilates",
+        "endurance_and_running",
+        "sport_specific",
+        "rehabilitation",
+      ],
+      exercise_category: ["strength", "cardio", "mind_body", "mobility"],
+      fitness_level: ["beginner", "intermediate", "advanced", "athlete"],
+      gender_type: ["male", "female", "non_binary", "prefer_not_to_say"],
       injury_severity: ["mild", "moderate", "severe"],
       meal_assignment_status: ["draft", "active", "archived"],
       meal_day_of_week: ["mon", "tue", "wed", "thu", "fri", "sat", "sun"],
@@ -3927,16 +4693,17 @@ export const Constants = {
       ],
       meal_log_type: [
         "breakfast",
-        "snack",
         "lunch",
-        "pre_workout_meal",
-        "post_workout_meal",
         "dinner",
-        "protein_drink",
-        "water",
         "snacks",
         "other",
+        "snack",
+        "pre_workout_meal",
+        "post_workout_meal",
+        "protein_drink",
+        "water",
       ],
+      menstrual_cycle_phase: ["menstrual", "follicular", "ovulatory", "luteal"],
       nutrition_tracking_mode: ["macro", "habit", "intuitive"],
       payment_method: ["cash", "bank_transfer", "card", "other"],
       payment_status: ["pending", "paid"],

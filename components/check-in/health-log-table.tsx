@@ -6,6 +6,8 @@ import {
   type ColumnDef,
   flexRender,
   getCoreRowModel,
+  getFacetedRowModel,
+  getFacetedUniqueValues,
   getFilteredRowModel,
   getPaginationRowModel,
   getSortedRowModel,
@@ -33,6 +35,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { buildCsv, downloadCsv } from "@/utils/csv-export";
 
 type HealthLogTableProps = {
   data: HealthCheckInRow[];
@@ -228,6 +231,8 @@ export function HealthLogTable({ data, isLoading, onEdit }: HealthLogTableProps)
       return haystack.includes(query);
     },
     getCoreRowModel: getCoreRowModel(),
+    getFacetedRowModel: getFacetedRowModel(),
+    getFacetedUniqueValues: getFacetedUniqueValues(),
     getFilteredRowModel: getFilteredRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
@@ -237,18 +242,39 @@ export function HealthLogTable({ data, isLoading, onEdit }: HealthLogTableProps)
   });
 
   const visibleColumns = table.getAllLeafColumns().filter((column) => column.getCanHide());
+  const handleExportCsv = () => {
+    const csv = buildCsv(
+      table.getFilteredRowModel().rows.map((row) => row.original),
+      [
+        { header: "Date", value: (row) => formatDateLabel(row.date) },
+        { header: "Sleep Hours", value: (row) => row.sleep_hours ?? "" },
+        { header: "Sleep Quality", value: (row) => row.sleep_score != null ? fmtSleepScore(row.sleep_score) : "" },
+        { header: "HRV (ms)", value: (row) => row.hrv_ms ?? "" },
+        { header: "Resting Heart Rate (bpm)", value: (row) => row.resting_heart_rate ?? "" },
+        { header: "Steps", value: (row) => row.steps ?? "" },
+        { header: "Energy Level", value: (row) => row.energy_level ?? "" },
+      ]
+    );
+    downloadCsv(`health-log-${new Date().toISOString().slice(0, 10)}.csv`, csv);
+  };
 
   return (
     <section className="space-y-3 rounded-[10px] border border-border/60 bg-card/70 p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="relative w-[260px] max-w-full">
-          <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            value={globalFilter}
-            onChange={(event) => setGlobalFilter(event.target.value)}
-            placeholder="Search health logs"
-            className="h-9 rounded-xl border-border/60 bg-muted/20 pl-9"
-          />
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative w-[260px] max-w-full">
+            <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              value={globalFilter}
+              onChange={(event) => setGlobalFilter(event.target.value)}
+              placeholder="Search health logs"
+              className="h-9 rounded-xl border-border/60 bg-muted/20 pl-9"
+            />
+          </div>
+
+          <Button type="button" variant="outline" size="sm" className="rounded-xl border-border/60" onClick={handleExportCsv}>
+            Export CSV
+          </Button>
         </div>
 
         <DropdownMenu>

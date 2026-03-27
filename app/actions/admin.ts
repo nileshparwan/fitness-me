@@ -38,8 +38,7 @@ type ListUsersResponse = Awaited<
 type AuthAdminUser = NonNullable<ListUsersResponse["data"]>["users"][number];
 type TrainingSessionRow = Database["public"]["Tables"]["training_sessions"]["Row"];
 type StrengthSetRow = Database["public"]["Tables"]["strength_sets"]["Row"];
-type MealPlanRow = Database["public"]["Tables"]["meal_plans"]["Row"];
-type MealPlanMealRow = Database["public"]["Tables"]["meal_plan_meals"]["Row"];
+type MealGroupRow = Database["public"]["Tables"]["meal_groups"]["Row"];
 type TicketRow = Database["public"]["Tables"]["tickets"]["Row"];
 type AppRole = Database["public"]["Enums"]["user_role"];
 
@@ -170,13 +169,13 @@ export async function getAdminDashboardStats() {
           .select("created_at", { count: "exact" })
           .gte("created_at", throughputStart),
         admin.from("strength_sets").select("id", { count: "exact", head: true }),
-        admin.from("meal_plans").select("created_at", { count: "exact" }).gte("created_at", throughputStart),
+        admin.from("meal_groups").select("created_at", { count: "exact" }).eq("is_snapshot", false).gte("created_at", throughputStart),
         admin.from("tickets").select("created_at", { count: "exact" }).gte("created_at", throughputStart),
         safeCount("analytics_events", (q) =>
           q.gte("created_at", new Date(Date.now() - 7 * 86400000).toISOString())
         ),
         safeCount("training_sessions"),
-        safeCount("meal_plans"),
+        safeCount("meal_groups", (q) => q.eq("is_snapshot", false)),
       ]);
 
       if (sessionsRes.error) throw new Error(sessionsRes.error.message);
@@ -197,7 +196,7 @@ export async function getAdminDashboardStats() {
         const key = toIsoDay(row.created_at);
         if (key && throughputDates.includes(key)) incrementMapValue(actionMap, key);
       }
-      for (const row of (mealPlansRes.data || []) as Pick<MealPlanRow, "created_at">[]) {
+      for (const row of (mealPlansRes.data || []) as Pick<MealGroupRow, "created_at">[]) {
         const key = toIsoDay(row.created_at);
         if (key && throughputDates.includes(key)) incrementMapValue(actionMap, key);
       }
@@ -378,9 +377,10 @@ export async function getAdminUserDetail(userId: string) {
           .order("created_at", { ascending: false })
           .limit(50),
         admin
-          .from("meal_plans")
+          .from("meal_groups")
           .select("*")
-          .eq("user_id", userId)
+          .eq("owner_user_id", userId)
+          .eq("is_snapshot", false)
           .order("created_at", { ascending: false })
           .limit(50),
         admin.from("training_sessions").select("id").eq("user_id", userId),
@@ -412,12 +412,12 @@ export async function getAdminUserDetail(userId: string) {
         duration_minutes: row.duration_minutes,
       }));
 
-      const mealPlans = ((mealPlansRes.data || []) as MealPlanRow[]).map((row) => ({
+      const mealPlans = ((mealPlansRes.data || []) as MealGroupRow[]).map((row) => ({
         id: row.id,
         name: row.name,
         status: row.status,
-        start_date: row.start_date,
-        end_date: row.end_date,
+        start_date: row.start_date ?? row.created_at.slice(0, 10),
+        end_date: row.end_date ?? row.created_at.slice(0, 10),
       }));
 
       return {
@@ -573,17 +573,27 @@ export async function getAdminNutritionStats(_days = 30) {
 
       const [plansRes, mealsRes] = await Promise.all([
         admin
-          .from("meal_plans")
-          .select("id, user_id, status, created_at")
+          .from("meal_groups")
+          .select("id, owner_user_id, status, created_at")
+          .eq("is_snapshot", false)
           .gte("created_at", startDate),
-        admin.from("meal_plan_meals").select("meal_type, calories, protein_g"),
+        admin.from("meal_group_items").select("type, calories, protein_g"),
       ]);
 
       if (plansRes.error) throw new Error(plansRes.error.message);
       if (mealsRes.error) throw new Error(mealsRes.error.message);
 
-      const plans = (plansRes.data || []) as Pick<MealPlanRow, "id" | "user_id" | "status" | "created_at">[];
-      const meals = (mealsRes.data || []) as Pick<MealPlanMealRow, "meal_type" | "calories" | "protein_g">[];
+      const plans = (plansRes.data || []) as Array<{
+        id: string;
+        owner_user_id: string;
+        status: string | null;
+        created_at: string;
+      }>;
+      const meals = (mealsRes.data || []) as Array<{
+        type: string | null;
+        calories: number | null;
+        protein_g: number | null;
+      }>;
 
       const planMap = new Map<string, number>();
       const statusMap = new Map<string, number>();
@@ -593,7 +603,7 @@ export async function getAdminNutritionStats(_days = 30) {
         if (!isoDate || !isoRangeSet.has(isoDate)) continue;
         incrementMapValue(planMap, isoDate);
         incrementMapValue(statusMap, (plan.status || "unknown").toLowerCase());
-        uniqueAthletes.add(plan.user_id);
+        uniqueAthletes.add(plan.owner_user_id);
       }
 
       const mealTypeMap = new Map<string, number>();
@@ -602,7 +612,7 @@ export async function getAdminNutritionStats(_days = 30) {
       let caloriesCount = 0;
       let proteinCount = 0;
       for (const meal of meals) {
-        const type = (meal.meal_type || "other").toLowerCase();
+        const type = (meal.type || "other").toLowerCase();
         incrementMapValue(mealTypeMap, type);
         if (typeof meal.calories === "number") {
           caloriesSum += meal.calories;

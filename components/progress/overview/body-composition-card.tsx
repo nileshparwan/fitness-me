@@ -12,11 +12,13 @@ import {
 } from "recharts";
 
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useUnitLabels, useUnitSystem } from "@/stores/use-settings-store";
+import { useUnitLabels, useUnitSystem, useSettingsStore } from "@/stores/use-settings-store";
 import { displayCircumference, displayWeight } from "@/utils/unit-conversion";
 import { cn } from "@/utils";
 import type { BodyCompositionSeries } from "@/app/actions/progress-overview";
+import { getBodyFatCategory } from "@/utils/body-fat-ranges";
 
 type Props = {
   series: BodyCompositionSeries;
@@ -130,6 +132,7 @@ export function BodyCompositionCard({ series, compareSeries, compare, isLoading 
   const [activeKeys, setActiveKeys] = useState<MetricKey[]>(DEFAULT_ACTIVE);
   const system = useUnitSystem();
   const labels = useUnitLabels();
+  const gender = useSettingsStore((state) => state.gender);
 
   const metrics = useMemo<Metric[]>(
     () =>
@@ -192,6 +195,11 @@ export function BodyCompositionCard({ series, compareSeries, compare, isLoading 
 
   const primaryMetrics = metrics.filter((metric) => !metric.more);
   const extraMetrics = metrics.filter((metric) => metric.more);
+  const latestBodyFat = [...series].reverse().find((row) => row.body_fat_pct !== null && row.body_fat_pct !== undefined);
+  const bodyFatCategory =
+    gender && latestBodyFat?.body_fat_pct !== null && latestBodyFat?.body_fat_pct !== undefined
+      ? getBodyFatCategory(latestBodyFat.body_fat_pct, gender)
+      : null;
 
   if (isLoading) {
     return <Skeleton className="h-[520px] rounded-[16px]" />;
@@ -201,15 +209,32 @@ export function BodyCompositionCard({ series, compareSeries, compare, isLoading 
     <section className="rounded-[16px] border border-white/10 bg-[#0f172b]/85 p-4">
       <div className="flex items-center justify-between gap-3">
         <h2 className="text-xl font-semibold">Body Composition</h2>
-        <Button
-          type="button"
-          size="sm"
-          variant="ghost"
-          className="h-8 rounded-[8px] px-3 text-xs text-muted-foreground hover:bg-white/10 hover:text-white"
-          onClick={() => setShowMore((prev) => !prev)}
-        >
-          + More
-        </Button>
+        <div className="flex items-center gap-2">
+          {bodyFatCategory ? (
+            <Badge
+              variant="outline"
+              className="border-transparent px-3 py-1 text-xs font-medium"
+              style={{
+                backgroundColor: `${bodyFatCategory.color}20`,
+                color: bodyFatCategory.color,
+              }}
+              title={`Based on ACE classifications for ${gender === "female" ? "female" : gender === "male" ? "male" : "female"} users`}
+            >
+              {bodyFatCategory.category} ●
+            </Badge>
+          ) : gender ? null : (
+            <span className="text-xs text-muted-foreground">Set gender in profile settings for personalised context.</span>
+          )}
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="h-8 rounded-[8px] px-3 text-xs text-muted-foreground hover:bg-white/10 hover:text-white"
+            onClick={() => setShowMore((prev) => !prev)}
+          >
+            + More
+          </Button>
+        </div>
       </div>
 
       <div className="mt-3 flex flex-wrap gap-2">

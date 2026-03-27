@@ -7,7 +7,8 @@ import type { RealtimePostgresInsertPayload } from "@supabase/supabase-js";
 import type { NotificationRow } from "@/app/actions/notifications";
 import { notificationKeys } from "@/lib/query-keys";
 import { createClient } from "@/lib/supabase/client";
-import type { Database, Json, NotificationType } from "@/types/database";
+import type { Database, Json } from "@/types/database";
+import type { NotificationType } from "@/types/notifications";
 
 type NotificationInsertRow = Database["public"]["Tables"]["notifications"]["Row"];
 

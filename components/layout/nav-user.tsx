@@ -30,12 +30,15 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar"
 import { useUser } from "@/hooks/use-user"
+import { Badge } from "@/components/ui/badge"
+import { useSettingsStore } from "@/stores/use-settings-store"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 
 export function NavUser({ user }: { user: any }) {
   const { isMobile } = useSidebar()
   const { data: userData } = useUser()
+  const coach_specialty = useSettingsStore((state) => state.coach_specialty)
   const router = useRouter()
   const supabase = createClient()
 
@@ -70,6 +73,9 @@ export function NavUser({ user }: { user: any }) {
 
   // 6. Avatar URL from profiles table
   const avatarUrl = profile?.avatar_url;
+  const specialtyLabel = coach_specialty
+    ? coach_specialty.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase())
+    : null;
   // --- LOGIC END ---
 
   return (
@@ -89,6 +95,7 @@ export function NavUser({ user }: { user: any }) {
               <div className="grid flex-1 text-left text-sm leading-tight">
                 <span className="truncate font-semibold">{name}</span>
                 <span className="truncate text-xs">{email}</span>
+                {specialtyLabel ? <Badge variant="secondary" className="mt-1 w-fit rounded-full px-2 py-0.5 text-[10px]">{specialtyLabel}</Badge> : null}
               </div>
               <ChevronsUpDown className="ml-auto size-4" />
             </SidebarMenuButton>
@@ -108,6 +115,7 @@ export function NavUser({ user }: { user: any }) {
                 <div className="grid flex-1 text-left text-sm leading-tight">
                   <span className="truncate font-semibold">{name}</span>
                   <span className="truncate text-xs">{email}</span>
+                  {specialtyLabel ? <Badge variant="secondary" className="mt-1 w-fit rounded-full px-2 py-0.5 text-[10px]">{specialtyLabel}</Badge> : null}
                 </div>
               </div>
             </DropdownMenuLabel>

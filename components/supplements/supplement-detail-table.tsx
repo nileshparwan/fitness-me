@@ -149,7 +149,7 @@ export function SupplementDetailTable({ rows, isLoading, onEdit, onRemove }: Pro
         ),
         cell: ({ row }) => (
           <span className="text-sm tabular-nums">
-            {row.original.default_servings} {row.original.unit || row.original.serving_label}
+            {row.original.default_servings} {row.original.unit || "unit"}
           </span>
         ),
       },

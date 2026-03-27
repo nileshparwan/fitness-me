@@ -69,7 +69,9 @@ export function ProgramTimeline({ items, programId }: { items: UIProgramItem[], 
 
 const TimelineItem = memo(function TimelineItem({ item, index, programId }: { item: UIProgramItem, index: number, programId: string }) {
   const router = useRouter();
-  const { removeItem } = useProgramStore();
+  const removeItem = useProgramStore((state) => state.removeItem);
+  const setItems = useProgramStore((state) => state.setItems);
+  const programItems = useProgramStore((state) => state.items);
   
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id });
 
@@ -80,25 +82,27 @@ const TimelineItem = memo(function TimelineItem({ item, index, programId }: { it
     zIndex: isDragging ? 50 : "auto",
   };
 
-  // @ts-ignore 
-  const exerciseCount = item.workouts?.strength_sets?.[0]?.count ?? 0;
+  const workoutWithStrengthSets = item.workouts as
+    | ({ strength_sets?: Array<{ count: number | null }> } & typeof item.workouts)
+    | undefined;
+  const exerciseCount = workoutWithStrengthSets?.strength_sets?.[0]?.count ?? 0;
 
   const handleRemove = async (e: React.MouseEvent) => {
     e.preventDefault();   // Prevent default link behavior
     e.stopPropagation();  // Stop bubbling to Card click
-    
-    // 1. Optimistic Update
+
+    const previousItems = programItems;
     removeItem(item.id);
-    
+
     try {
-      // 2. Server Update
       await withToastFeedback(removeItemsFromProgram([item.id], programId), {
         loading: "Removing item...",
         success: "Removed",
         error: "Failed to remove",
       });
-    } catch {
-      // Ideally, you would revert the optimistic update here if needed
+    } catch (error) {
+      setItems(previousItems);
+      toast.error(error instanceof Error ? error.message : "Failed to remove workout from program");
     }
   };
 

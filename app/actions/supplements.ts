@@ -76,7 +76,6 @@ export type SupplementAssignmentRow = {
   brand: string | null;
   category: SupplementCategory;
   categories: SupplementCategory[];
-  serving_label: string;
   nutrients: Record<string, number>;
   default_servings: number;
   unit: string | null;
@@ -400,7 +399,7 @@ function revalidateSupplementPaths(subject: SubjectRef) {
   }
 }
 
-type CatalogRef = Pick<SupplementCatalogRow, "id" | "name" | "brand" | "category" | "categories" | "serving_label" | "nutrients">;
+type CatalogRef = Pick<SupplementCatalogRow, "id" | "name" | "brand" | "category" | "categories" | "nutrients">;
 
 type AssignmentWithCatalog = Pick<
   SupplementAssignmentRowDb,
@@ -424,7 +423,6 @@ function assignmentToUiRow(row: AssignmentWithCatalog): SupplementAssignmentRow 
     brand: supplement.brand,
     category: categories[0] || "other",
     categories,
-    serving_label: supplement.serving_label,
     nutrients: normalizeNutrients(supplement.nutrients),
     default_servings: Number(row.default_servings || 1),
     unit: row.unit || null,
@@ -489,7 +487,6 @@ export async function createCustomSupplementAction(
         brand: null,
         category: categories[0] || "other",
         categories,
-        serving_label: "unit",
         nutrients: {},
         is_global: false,
         owner_user_id: user.id,
@@ -528,7 +525,6 @@ export async function updateCustomSupplementAction(
         category: categories[0] || "other",
         categories,
         brand: null,
-        serving_label: "unit",
         nutrients: {},
         is_global: false,
         owner_user_id: user.id,
@@ -780,7 +776,7 @@ export async function listAssignmentsAction(
       let query = supabase
         .from("supplement_assignments")
         .select(
-          "id, supplement_id, default_servings, unit, updated_at, supplement:supplement_catalog(id, name, brand, category, categories, serving_label, nutrients)"
+          "id, supplement_id, default_servings, unit, updated_at, supplement:supplement_catalog(id, name, brand, category, categories, nutrients)"
         )
         .eq("is_active", true)
         .order("updated_at", { ascending: false })

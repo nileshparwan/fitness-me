@@ -25,6 +25,7 @@ import {
 import { useRole } from "@/hooks/use-role";
 import { useUser } from "@/hooks/use-user";
 import { createClient } from "@/lib/supabase/client";
+import { useSettingsStore } from "@/stores/use-settings-store";
 import {
   getMobileTabsForRole,
   getSidebarSectionsForRole,
@@ -100,9 +101,10 @@ export function MobileBottomNav() {
   const [menuOpen, setMenuOpen] = useState(false);
   const roleQuery = useRole();
   const userQuery = useUser();
+  const gender = useSettingsStore((state) => state.gender);
 
   const roleContext = roleQuery.data
-    ? ({ role: roleQuery.data.role } satisfies RoleNavContext)
+    ? ({ role: roleQuery.data.role, gender } satisfies RoleNavContext)
     : null;
 
   const tabs = useMemo(() => {

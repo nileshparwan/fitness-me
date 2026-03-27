@@ -1,5 +1,7 @@
 import { useSyncExternalStore } from "react"
 
+const getServerSnapshot = () => false;
+
 export function useMediaQuery(query: string) {
   const subscribe = (onStoreChange: () => void) => {
     if (typeof window === "undefined") return () => {};
@@ -14,5 +16,5 @@ export function useMediaQuery(query: string) {
     return window.matchMedia(query).matches;
   };
 
-  return useSyncExternalStore(subscribe, getSnapshot, () => false);
+  return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 }

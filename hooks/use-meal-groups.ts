@@ -16,6 +16,7 @@ import {
   listMealGroupAssigneesAction,
   listMealGroupAssignmentsAction,
   listMealGroupsAction,
+  toggleMealGroupPublicShareAction,
   updateMealGroupAssignmentAction,
   updateMealItemAction,
   updateMealPlanNoteAction,
@@ -274,6 +275,16 @@ export function useMealGroupMutations() {
     },
   });
 
+  const togglePublicShare = useMutation({
+    mutationFn: toggleMealGroupPublicShareAction,
+    onSuccess: async (result, variables) => {
+      await Promise.all([
+        invalidateMealGroupList(),
+        invalidateMealGroupDetailById(result?.id || variables.meal_group_id),
+      ]);
+    },
+  });
+
   return {
     upsertGroup,
     deleteGroup,
@@ -287,5 +298,6 @@ export function useMealGroupMutations() {
     assignGroup,
     updateAssignment,
     archiveAssignment,
+    togglePublicShare,
   };
 }
