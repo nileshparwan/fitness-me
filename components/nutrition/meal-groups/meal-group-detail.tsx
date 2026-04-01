@@ -15,9 +15,7 @@ import {
   useClearNutritionMealGroupMealTypeOrder,
   useNutritionMealGroupMealTypeOrder,
   useSetNutritionMealGroupMealTypeOrder,
-  useSetNutritionNavigationSource,
   useSetNutritionSelectedMealGroupId,
-  useSetNutritionViewMode,
 } from "@/stores/use-nutrition-ui-store";
 import { MealGroupAssigneeDropdown } from "@/components/nutrition/meal-groups/meal-group-assignee-dropdown";
 import {
@@ -86,8 +84,6 @@ export function MealGroupDetail({ mealGroupId }: { mealGroupId: string }) {
   const detailQuery = useNutritionMealGroup(mealGroupId);
   const mutations = useNutritionGroupMutations();
   const nutritionMutations = useNutritionMutations(todayIsoDate(), undefined, mealGroupId);
-  const setViewMode = useSetNutritionViewMode();
-  const setNavigationSource = useSetNutritionNavigationSource();
   const setSelectedMealGroupId = useSetNutritionSelectedMealGroupId();
 
   const [selectedDay, setSelectedDay] = useState<MealDayOfWeek>("mon");
@@ -117,10 +113,8 @@ export function MealGroupDetail({ mealGroupId }: { mealGroupId: string }) {
   const [dayNotesDraft, setDayNotesDraft] = useState("");
 
   useEffect(() => {
-    setViewMode("groups");
-    setNavigationSource("groups");
     setSelectedMealGroupId(mealGroupId);
-  }, [mealGroupId, setNavigationSource, setSelectedMealGroupId, setViewMode]);
+  }, [mealGroupId, setSelectedMealGroupId]);
 
   const data = detailQuery.data;
   const group = data?.group || null;

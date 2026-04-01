@@ -29429,3 +29429,302 @@ Change the label span to reflect the pending state:
 - Validation:
   - `npm run typecheck` passed.
   - `npm run lint` passed.
+
+---
+
+### [A-062] Meal log codebase audit — refactor, cleanup, legacy removal (2026-04-01)
+
+Full sweep of the meal logging feature after the recent rounds of changes. Remove dead code, consolidate duplicates, and clean up the DB seed script. No behaviour changes — this is a structural cleanup only.
+
+---
+
+#### 1. Extract `toDateInput` to a shared utility
+
+**Problem**: The function is copy-pasted identically in **16 files**:
+
+```
+app/actions/body-measurements.ts
+app/actions/nutrition-progress.ts
+app/actions/progress-overview.ts
+app/actions/workout.ts
+app/actions/daily-health-log.ts
+stores/use-nutrition-ui-store.ts
+components/nutrition/manual-nutrition-diary.tsx
+components/nutrition/meal-planner/meal-planner-page.tsx
+components/check-in/log-health-sheet.tsx
+components/cycle/cycle-log-sheet.tsx
+components/progress/overview/workout-calendar-card.tsx
+components/measurements/log-measurement-sheet.tsx
+components/workout/log-workout-dialog.tsx
+hooks/use-nutrition-dashboard.ts
+hooks/use-nutrition-data.ts
+hooks/use-quick-log-data.ts
+```
+
+**Fix**:
+1. Add `toDateInput(date: Date): string` to `lib/utils/date.ts` (create file if not exists, or add to existing date utils).
+2. Delete the local definition from each of the 16 files above and replace with an import from `@/lib/utils/date`.
+
+---
+
+#### 2. Remove duplicate `mealTypeOrderRank` and `MEAL_TYPE_DISPLAY_ORDER` from `nutrition-manual.ts`
+
+**Problem**: `app/actions/nutrition-manual.ts` defines a private `MEAL_TYPE_DISPLAY_ORDER` constant (line 58) and a private `mealTypeOrderRank()` function (line 274) that duplicate the exported versions in `lib/nutrition/meal-ui.ts`.
+
+**Fix**:
+1. Delete `MEAL_TYPE_DISPLAY_ORDER` and `mealTypeOrderRank` from `nutrition-manual.ts`.
+2. Import `mealTypeOrderRank` from `@/lib/nutrition/meal-ui` and use it at the two call sites (lines 757 and 1116).
+
+---
+
+#### 3. De-duplicate `NutritionSubjectType`
+
+**Problem**: The type `"self" | "user" | "client"` is defined twice:
+- `stores/use-nutrition-ui-store.ts` (line 7) — exported
+- `lib/nutrition/subject.ts` (line 3) — private, not exported
+
+**Fix**:
+1. Delete the private definition from `lib/nutrition/subject.ts`.
+2. Import `NutritionSubjectType` from `@/stores/use-nutrition-ui-store` in `subject.ts`.
+
+---
+
+#### 4. Remove `viewMode` and `navigationSource` from the store
+
+**Problem**: The store tracks `viewMode` and `navigationSource` state. Multiple components call `setViewMode` and `setNavigationSource` to write to it. However, **no component ever reads these values** — there is no `useNutritionUiStore(state => state.viewMode)` call anywhere in the app outside of tests. The state is written but never consumed.
+
+**Fix**:
+1. Remove `viewMode`, `navigationSource` from `NutritionUiState` in `use-nutrition-ui-store.ts`.
+2. Remove `setViewMode`, `setNavigationSource` from `NutritionUiActions`.
+3. Remove their implementations and the two exported selector hooks (`useSetNutritionViewMode`, `useSetNutritionNavigationSource`).
+4. Remove all call sites in:
+   - `components/nutrition/manual-nutrition-diary.tsx`
+   - `components/nutrition/meal-groups/meal-groups-dashboard.tsx`
+   - `components/nutrition/meal-groups/meal-group-detail.tsx`
+   - `components/nutrition/client-nutrition-workspace.tsx`
+   - `components/nutrition/meal-planner/meal-planner-page.tsx`
+5. Update `tests/nutrition-architecture.test.ts` — remove assertions on `state.viewMode` and `state.navigationSource`.
+
+---
+
+#### 5. Clean up `db.seed.ts` — remove legacy `meal_plans` / `meal_plan_assignments` references
+
+**Problem**: `scripts/db.seed.ts` still queries and seeds the old `meal_plans`, `meal_plan_assignments`, and `meal_plan_assignment_meals` tables (lines ~835–1034). These tables were replaced by `meal_groups` + `meal_group_assignments` during the domain consolidation migration. The seed script will fail or insert dead data against tables that no longer exist.
+
+**Fix**:
+1. Delete all `.from("meal_plans")`, `.from("meal_plan_assignments")`, and `.from("meal_plan_assignment_meals")` blocks from `db.seed.ts`.
+2. Replace with seed data against the current `meal_groups` + `meal_group_assignments` + `meal_group_plans` + `meal_group_items` tables if a seeded nutrition plan is still desired.
+3. Remove any `IDS.mealPlanUserA`, `IDS.mealPlanClientA`, etc. that only existed for the old tables.
+
+---
+
+#### 6. Rename misleading `meal_plans` labels in `admin.ts` and admin UI
+
+**Problem**: `app/actions/admin.ts` queries `meal_groups` but stores the result in variables named `mealPlans`/`totalMealPlans`/`active_meal_plans` and returns them as `meal_plans`. The admin UI pages then display these under the label "Meal Templates" / "Plans" / "Active". The variable/key names are misleading and left over from before the rename.
+
+**Fix** (rename only — no logic change):
+- In `admin.ts`: rename `mealPlansRes` → `mealGroupsRes`, `totalMealPlans` → `totalMealGroups`, `mealPlans` → `mealGroups`, `total_meal_plans` → `total_meal_groups`, `active_meal_plans` → `active_meal_groups`.
+- Update the admin page components that read these keys accordingly.
+
+---
+
+#### 7. Delete `canAccessMealGroupAdmin` if still present
+
+**Problem**: `canAccessMealGroupAdmin` was added by the engineer as a helper but was made redundant when the admin-client gate was removed from `getOrCreateMealLog` (A-059-FIX). Confirm it has been deleted. If it still exists in `nutrition-manual.ts`, delete it.
+
+**Verify**: `grep -n "canAccessMealGroupAdmin" app/actions/nutrition-manual.ts` must return empty.
+
+---
+
+#### 8. Add `"already_logged"` to `logFromPlanAction` skipped reasons (ties into A-061)
+
+This is part of A-061 but calling it out explicitly: when adding the `alreadyImported` guard, the return type union needs the new literal:
+
+```ts
+// Existing union (extend it):
+reason: "no_plan_for_day" | "no_items_for_day" | "already_logged"
+```
+
+Make sure the TypeScript return type of `logFromPlanAction` reflects this so the client-side handler can narrow it properly.
+
+---
+
+#### Steps summary
+
+1. Create / update `lib/utils/date.ts` — export `toDateInput`. Remove local copies from all 16 files.
+2. `nutrition-manual.ts` — delete `MEAL_TYPE_DISPLAY_ORDER` + `mealTypeOrderRank`; import from `meal-ui`.
+3. `lib/nutrition/subject.ts` — delete local `NutritionSubjectType`; import from store.
+4. `use-nutrition-ui-store.ts` — remove `viewMode` + `navigationSource` state, actions, and exported hooks. Remove all call sites.
+5. `scripts/db.seed.ts` — remove all legacy `meal_plans` / `meal_plan_assignments` blocks.
+6. `app/actions/admin.ts` + admin pages — rename `meal_plans` keys to `meal_groups`.
+7. Confirm `canAccessMealGroupAdmin` is gone.
+8. Extend `logFromPlanAction` return type with `"already_logged"` reason (A-061 step).
+9. `npm run typecheck` → zero errors.
+10. `npm run lint` → zero errors.
+
+---
+
+### [A-062-REV] Meal log codebase audit — second pass after engineer refactor (2026-04-01)
+
+Re-ran the full audit. A-062 items 7 and 8 are confirmed done. All others remain outstanding, plus new issues found. Steps below are the complete remaining work.
+
+---
+
+#### STATUS: A-062 items carried over (not yet done)
+
+| Item | Status |
+|------|--------|
+| 1. Extract `toDateInput` to shared util | NOT DONE — 16 copies still exist |
+| 2. Remove duplicate `mealTypeOrderRank` from `nutrition-manual.ts` | NOT DONE |
+| 3. De-duplicate `NutritionSubjectType` | NOT DONE |
+| 4. Remove `viewMode` / `navigationSource` from store and all call sites | NOT DONE — still called in diary and planner |
+| 5. `db.seed.ts` legacy `meal_plans` blocks | NOT DONE |
+| 6. Rename `meal_plans` keys in `admin.ts` | NOT DONE |
+| 7. `canAccessMealGroupAdmin` deleted | ✓ DONE |
+| 8. `"already_logged"` reason in `logFromPlanAction` | ✓ DONE |
+
+---
+
+#### Step 1 — Extract `toDateInput` to `lib/utils/date.ts`
+
+`lib/utils/` exists (`pagination.ts`, `search.ts` are there). Create `lib/utils/date.ts`:
+
+```ts
+export function toDateInput(date: Date): string {
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, "0");
+  const day = `${date.getDate()}`.padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+```
+
+Delete the local `toDateInput` function from each of these 16 files and replace with `import { toDateInput } from "@/lib/utils/date"`:
+
+```
+app/actions/body-measurements.ts (line 97)
+app/actions/nutrition-progress.ts (line 55)
+app/actions/progress-overview.ts (line 237)
+app/actions/workout.ts (line 52)
+app/actions/daily-health-log.ts (line 68)
+stores/use-nutrition-ui-store.ts (line 79)
+components/progress/overview/workout-calendar-card.tsx (line 21)
+components/check-in/log-health-sheet.tsx (line 45)
+components/cycle/cycle-log-sheet.tsx (line 54)
+components/nutrition/manual-nutrition-diary.tsx (line 130) ← uses date-fns format(), replace with shared util
+components/nutrition/meal-planner/meal-planner-page.tsx (line 62)
+components/workout/log-workout-dialog.tsx (line 22)
+components/measurements/log-measurement-sheet.tsx (line 54)
+hooks/use-nutrition-dashboard.ts (line 14)
+hooks/use-nutrition-data.ts (line 63)
+hooks/use-quick-log-data.ts (line 15)
+```
+
+Note: `manual-nutrition-diary.tsx` currently uses `format(date, "yyyy-MM-dd")` from date-fns. Replace with the shared util and remove the date-fns import if it becomes unused.
+
+---
+
+#### Step 2 — Remove duplicate `mealTypeOrderRank` and `MEAL_TYPE_DISPLAY_ORDER` from `nutrition-manual.ts`
+
+`lib/nutrition/meal-ui.ts` already exports `mealTypeOrderRank`. The private copy in `nutrition-manual.ts` (lines 58–69 constant, lines 274–276 function) is redundant.
+
+- Delete `MEAL_TYPE_DISPLAY_ORDER` (lines 58–69) from `nutrition-manual.ts`.
+- Delete `mealTypeOrderRank` (lines 274–276) from `nutrition-manual.ts`.
+- Add `import { mealTypeOrderRank } from "@/lib/nutrition/meal-ui"` at the top of `nutrition-manual.ts`.
+- The two call sites (lines 757 and 1124) will use the imported version — no other change needed.
+
+---
+
+#### Step 3 — De-duplicate `NutritionSubjectType`
+
+- In `lib/nutrition/subject.ts` line 3: delete the private `type NutritionSubjectType = "self" | "user" | "client"`.
+- Add `import type { NutritionSubjectType } from "@/stores/use-nutrition-ui-store"` to `subject.ts`.
+
+---
+
+#### Step 4 — Remove `viewMode` and `navigationSource` from store and all call sites
+
+These fields are written but **nothing reads them** — no selector hook, no component reads `state.viewMode` or `state.navigationSource`.
+
+In `stores/use-nutrition-ui-store.ts`:
+- Remove `viewMode: NutritionViewMode` and `navigationSource: NutritionNavigationSource` from `NutritionUiState`.
+- Remove `setViewMode` and `setNavigationSource` from `NutritionUiActions`.
+- Remove the `NutritionViewMode` and `NutritionNavigationSource` type aliases if used nowhere else.
+- Remove their initialisation in `initialState()`.
+- Remove their action implementations.
+- Remove the two exported hooks `useSetNutritionViewMode` and `useSetNutritionNavigationSource`.
+
+Remove all call sites:
+
+| File | Lines to remove |
+|------|----------------|
+| `components/nutrition/manual-nutrition-diary.tsx` | import lines 54, 57; `const setViewMode`, `const setNavigationSource` (lines 235–236); `setViewMode("diary")`, `setNavigationSource("diary")` (lines 296–297) and their deps in the useEffect dep array |
+| `components/nutrition/meal-planner/meal-planner-page.tsx` | import lines 41, 44; `const setViewMode`, `const setNavigationSource` (lines 192–193); `setViewMode("planner")`, `setNavigationSource("planner")` (lines 275–276) and their deps |
+| `components/nutrition/meal-groups/meal-groups-dashboard.tsx` | same pattern — remove imports, consts, and calls |
+| `components/nutrition/meal-groups/meal-group-detail.tsx` | same pattern |
+| `components/nutrition/client-nutrition-workspace.tsx` | same pattern |
+
+Update `tests/nutrition-architecture.test.ts` — remove assertions on `state.viewMode` and `state.navigationSource`.
+
+---
+
+#### Step 5 — Clean `db.seed.ts` — remove all legacy `meal_plans` / `meal_plan_assignments` / `meal_plan_assignment_meals` blocks
+
+These tables no longer exist in the schema. The seed will throw at runtime. Remove:
+- All `.from("meal_plans")` blocks (lines ~835–843, ~856)
+- All `.from("meal_plan_assignments")` blocks (lines ~845–853, ~991)
+- All `.from("meal_plan_assignment_meals")` blocks (line ~1034)
+- Any `upsertMany("meal_plans", ...)`, `upsertMany("meal_plan_assignments", ...)`, `upsertMany("meal_plan_assignment_meals", ...)` calls
+- Any `IDS` keys that only exist for those old tables (`mealPlanUserA`, `mealPlanClientA`, `mealAssignUserA`, etc.)
+
+If seeded nutrition data is still desired, replace with `meal_groups` + `meal_group_assignments` + `meal_group_plans` + `meal_group_items` inserts that match the current schema.
+
+---
+
+#### Step 6 — Rename legacy `meal_plans` variable names in `admin.ts`
+
+The variables query `meal_groups` but are named after the old schema. Rename throughout `app/actions/admin.ts`:
+
+| Old name | New name |
+|----------|----------|
+| `mealPlansRes` | `mealGroupsRes` |
+| `totalMealPlans` | `totalMealGroups` |
+| `mealPlans` (local variable) | `mealGroups` |
+| `total_meal_plans` (returned key) | `total_meal_groups` |
+| `active_meal_plans` (returned key) | `active_meal_groups` |
+| `meal_plans` (returned key on user detail) | `meal_groups` |
+
+Update the consuming admin UI pages that read these keys:
+- `app/(dashboard)/(admin)/admin/users/[id]/page.tsx` — `data?.meal_plans` → `data?.meal_groups`
+- `app/(dashboard)/(admin)/admin/nutrition/page.tsx` — `total_meal_plans`, `active_meal_plans` keys
+- `app/(dashboard)/(admin)/admin/page.tsx` — `total_meal_plans` key
+
+---
+
+#### Acceptance criteria
+
+- `npm run typecheck` → zero errors
+- `npm run lint` → zero errors
+- `grep -rn "function toDateInput" --include="*.ts" --include="*.tsx"` → empty (all gone, only lives in `lib/utils/date.ts`)
+- `grep -n "MEAL_TYPE_DISPLAY_ORDER\|function mealTypeOrderRank" app/actions/nutrition-manual.ts` → empty
+- `grep -n "NutritionSubjectType" lib/nutrition/subject.ts` → only the import line, no definition
+- `grep -rn "viewMode\|navigationSource" stores/use-nutrition-ui-store.ts` → empty (only the `resetNutritionUiState` comment if any)
+- `grep -rn "setViewMode\|setNavigationSource" components/` → empty
+- `grep -rn "meal_plans\b\|meal_plan_assignments\b" scripts/db.seed.ts` → empty
+- `grep -n "totalMealPlans\|mealPlansRes\|total_meal_plans\|active_meal_plans" app/actions/admin.ts` → empty
+
+### [E-065] Engineer Update — A-062-REV implemented (2026-04-01)
+
+Applied the A-062-REV cleanup across shared utilities, nutrition state, seed data, and admin naming.
+
+- Added shared [`toDateInput`](/Users/koshalparwan/Documents/sandbox/fitness-tracker/lib/utils/date.ts) and replaced the local helper copies across the listed action/component/hook files.
+- Removed the duplicate `MEAL_TYPE_DISPLAY_ORDER` / `mealTypeOrderRank` copy from [`nutrition-manual.ts`](/Users/koshalparwan/Documents/sandbox/fitness-tracker/app/actions/nutrition-manual.ts) and now import `mealTypeOrderRank` from `meal-ui`.
+- De-duplicated `NutritionSubjectType` in [`subject.ts`](/Users/koshalparwan/Documents/sandbox/fitness-tracker/lib/nutrition/subject.ts) by importing the store type.
+- Removed dead `viewMode` / `navigationSource` state, actions, exports, and call sites from the nutrition UI store and nutrition surfaces, and updated [`nutrition-architecture.test.ts`](/Users/koshalparwan/Documents/sandbox/fitness-tracker/tests/nutrition-architecture.test.ts).
+- Deleted the legacy `meal_plans` / `meal_plan_assignments` seed blocks and obsolete IDs from [`db.seed.ts`](/Users/koshalparwan/Documents/sandbox/fitness-tracker/scripts/db.seed.ts).
+- Renamed the old admin `meal_plans` payload/variable names to `meal_groups` equivalents in [`admin.ts`](/Users/koshalparwan/Documents/sandbox/fitness-tracker/app/actions/admin.ts) and the consuming admin pages.
+- Verified `canAccessMealGroupAdmin` is absent and the earlier `"already_logged"` union work remains in place.
+
+Validation:
+
+- `npm run typecheck` ✓
+- `npm run lint` ✓

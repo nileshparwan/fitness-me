@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { runTrackedAction } from "@/lib/events/dispatcher";
+import { toDateInput } from "@/lib/utils/date";
 import { Database } from "@/types/database";
 import { CardioSetMeta, serializeCardioNotes } from "@/utils/cardio-notes";
 import {
@@ -47,10 +48,6 @@ function toNullableNumber(value: number | string | undefined): number | null {
   if (value === undefined || value === null || value === "") return null;
   const num = Number(value);
   return Number.isFinite(num) ? num : null;
-}
-
-function toDateInput(date: Date) {
-  return date.toISOString().slice(0, 10);
 }
 
 function parseDateInput(value: string) {

@@ -8,6 +8,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 
+import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useUnitLabels, useUnitSystem } from "@/stores/use-settings-store";
 import { displayWeight } from "@/utils/unit-conversion";
@@ -95,12 +96,12 @@ export function MuscleFocusCard({ focusDistribution, muscleVolume, isLoading }: 
                   <span>{titleCase(row.focus)}</span>
                   <span>{row.pct}%</span>
                 </div>
-                <div className="mt-1 h-2 rounded-full bg-[#1f2a44]">
-                  <div
-                    className="h-full rounded-full bg-[#5b9cff]"
-                    style={{ width: `${Math.min(100, row.pct)}%` }}
-                  />
-                </div>
+                <Progress
+                  value={Math.min(100, row.pct)}
+                  className="mt-1 h-2 bg-[#1f2a44]"
+                  indicatorClassName="bg-[#5b9cff]"
+                  animationDurationMs={1000}
+                />
               </div>
             ))}
 
@@ -113,12 +114,12 @@ export function MuscleFocusCard({ focusDistribution, muscleVolume, isLoading }: 
                   <span className="capitalize">{row.muscle_group.replace(/_/g, " ")}</span>
                   <span>{displayWeight(row.volume_kg, system)?.toLocaleString()} {labels.weight} · {row.pct}%</span>
                 </div>
-                <div className="mt-1 h-2 rounded-full bg-[#1f2a44]">
-                  <div
-                    className="h-full rounded-full bg-[#5b9cff]"
-                    style={{ width: `${Math.min(100, row.pct)}%` }}
-                  />
-                </div>
+                <Progress
+                  value={Math.min(100, row.pct)}
+                  className="mt-1 h-2 bg-[#1f2a44]"
+                  indicatorClassName="bg-[#5b9cff]"
+                  animationDurationMs={1000}
+                />
               </div>
             ))}
           </div>

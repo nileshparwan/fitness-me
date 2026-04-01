@@ -56,8 +56,8 @@ export default function AdminNutritionPage() {
       </div>
 
       <section className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6">
-        <CompactMetricCard title="Plans" value={data?.total_meal_plans ?? 0} isLoading={isLoading} />
-        <CompactMetricCard title="Active" value={data?.active_meal_plans ?? 0} isLoading={isLoading} />
+        <CompactMetricCard title="Plans" value={data?.total_meal_groups ?? 0} isLoading={isLoading} />
+        <CompactMetricCard title="Active" value={data?.active_meal_groups ?? 0} isLoading={isLoading} />
         <CompactMetricCard title="Meals" value={data?.total_meals ?? 0} isLoading={isLoading} />
         <CompactMetricCard title="Athletes" value={data?.unique_athletes ?? 0} isLoading={isLoading} />
         <CompactMetricCard title="Kcal/Meal" value={data?.avg_calories_per_meal ?? 0} isLoading={isLoading} />

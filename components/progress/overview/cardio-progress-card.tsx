@@ -11,6 +11,7 @@ import {
   Bar,
 } from "recharts";
 
+import { AnimatedFill } from "@/components/ui/animated-fill";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { PROGRESS_CARDIO_HR_ZONES } from "@/utils/app-constants";
@@ -194,14 +195,15 @@ export function CardioProgressCard({ data, compareData, compare, isLoading, vo2m
               {PROGRESS_CARDIO_HR_ZONES.map((zone) => {
                 const value = data.hr_zones_summary?.[zone.key] ?? 0;
                 return (
-                <div
+                <AnimatedFill
                   key={zone.key}
-                  style={{ width: `${value}%`, background: zone.color }}
+                  width={value}
+                  style={{ background: zone.color }}
                   className="grid min-w-[36px] place-items-center text-[10px] font-semibold text-[#08101f]"
                   title={`${zone.shortLabel}: ${value}%`}
                 >
                   {value > 9 ? `${zone.shortLabel} ${value}%` : ""}
-                </div>
+                </AnimatedFill>
                 );
               })}
             </div>

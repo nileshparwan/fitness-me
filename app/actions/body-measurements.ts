@@ -4,6 +4,7 @@ import { z } from "zod";
 
 import { runTrackedAction } from "@/lib/events/dispatcher";
 import { createClient } from "@/lib/supabase/server";
+import { toDateInput } from "@/lib/utils/date";
 import type { Database } from "@/types/database";
 import { storageCircumference, storageWeight, type UnitSystem } from "@/utils/unit-conversion";
 
@@ -93,10 +94,6 @@ const MEASUREMENT_FIELDS: Array<keyof LogBodyMeasurementInput> = [
   "thigh_right",
   "calf",
 ];
-
-function toDateInput(date: Date) {
-  return date.toISOString().slice(0, 10);
-}
 
 function parseDateInput(value: string) {
   const [year, month, day] = value.split("-").map(Number);

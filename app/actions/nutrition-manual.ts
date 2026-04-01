@@ -5,7 +5,7 @@ import { z } from "zod";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { runTrackedAction } from "@/lib/events/dispatcher";
-import { nextSequentialPosition } from "@/lib/nutrition/meal-ui";
+import { mealTypeOrderRank, nextSequentialPosition } from "@/lib/nutrition/meal-ui";
 import { mealUnitInputSchema } from "@/lib/nutrition/meal-units";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -54,19 +54,6 @@ export type MealType = (typeof MEAL_TYPES)[number];
 const optionalMealTypeSchema = z
   .preprocess((value) => (value === "$undefined" || value === undefined || value === null || value === "" ? undefined : value), z.enum(MEAL_TYPES))
   .optional();
-
-const MEAL_TYPE_DISPLAY_ORDER: MealType[] = [
-  "water",
-  "breakfast",
-  "snack",
-  "lunch",
-  "pre_workout_meal",
-  "post_workout_meal",
-  "dinner",
-  "protein_drink",
-  "other",
-  "snacks",
-];
 
 export type ManualDiaryItem = MealLogItemRow;
 export type ManualDiaryLog = MealLogRow & {
@@ -271,11 +258,6 @@ function toMealPlanItemType(mealType: MealType): MealGroupItemInsert["type"] | n
   return mealType === "snacks" ? "snack" : mealType;
 }
 
-function mealTypeOrderRank(type: MealType) {
-  const index = MEAL_TYPE_DISPLAY_ORDER.indexOf(type);
-  return index >= 0 ? index : MEAL_TYPE_DISPLAY_ORDER.length + 1;
-}
-
 function isMissingRelationError(error: { code?: string; message?: string } | null) {
   if (!error) return false;
   const message = error.message || "";
@@ -356,7 +338,7 @@ async function resolveComplianceTargetsForDate(
   performedOn: string
 ): Promise<ComplianceTargetsSnapshot> {
   const goalTarget = await resolveGoalTargetForDate(supabase, subject, performedOn);
-  if (goalTarget.source === "fitness_goal") {
+  if (goalTarget.source !== "none") {
     const goalSnapshot: ComplianceTargetsSnapshot = {
       target_calories: normalizeComplianceTarget(goalTarget.calories),
       target_protein_g: normalizeComplianceTarget(goalTarget.protein_g),
@@ -779,6 +761,14 @@ async function getActiveNutritionPlanForDate(
   supabase: SupabaseClient<Database>
 ): Promise<ActiveNutritionPlan | null> {
   const emptyTargets = {} as Json;
+  const goalTarget = await resolveGoalTargetForDate(supabase, subject, performedOn);
+
+  const targetSnapshot = {
+    daily_calorie_target: goalTarget.source !== "none" ? goalTarget.calories : null,
+    daily_protein_target_g: goalTarget.source !== "none" ? goalTarget.protein_g : null,
+    daily_carbs_target_g: goalTarget.source !== "none" ? goalTarget.carbs_g : null,
+    daily_fat_target_g: goalTarget.source !== "none" ? goalTarget.fat_g : null,
+  };
 
   const mapAssignment = (assignment: MealGroupAssignmentRow, name: string): ActiveNutritionPlan => ({
     source: "assignment",
@@ -787,10 +777,10 @@ async function getActiveNutritionPlanForDate(
     name,
     start_date: assignment.start_date,
     end_date: assignment.end_date,
-    daily_calorie_target: null,
-    daily_protein_target_g: null,
-    daily_carbs_target_g: null,
-    daily_fat_target_g: null,
+    daily_calorie_target: targetSnapshot.daily_calorie_target,
+    daily_protein_target_g: targetSnapshot.daily_protein_target_g,
+    daily_carbs_target_g: targetSnapshot.daily_carbs_target_g,
+    daily_fat_target_g: targetSnapshot.daily_fat_target_g,
     meal_targets_json: emptyTargets,
   });
 
@@ -801,10 +791,10 @@ async function getActiveNutritionPlanForDate(
     name: template.name,
     start_date: template.start_date ?? performedOn,
     end_date: template.end_date ?? performedOn,
-    daily_calorie_target: null,
-    daily_protein_target_g: null,
-    daily_carbs_target_g: null,
-    daily_fat_target_g: null,
+    daily_calorie_target: targetSnapshot.daily_calorie_target,
+    daily_protein_target_g: targetSnapshot.daily_protein_target_g,
+    daily_carbs_target_g: targetSnapshot.daily_carbs_target_g,
+    daily_fat_target_g: targetSnapshot.daily_fat_target_g,
     meal_targets_json: emptyTargets,
   });
 
@@ -1869,7 +1859,7 @@ export async function getClientNutritionSummary7dAction(input: z.input<typeof su
           day
         );
         const target =
-          goalTarget.source === "fitness_goal" && goalTarget.calories && goalTarget.calories > 0
+          goalTarget.source !== "none" && goalTarget.calories && goalTarget.calories > 0
             ? goalTarget.calories
             : null;
         if (!target) continue;

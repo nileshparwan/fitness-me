@@ -23,6 +23,7 @@ import {
   type HealthSubject,
 } from "@/app/actions/daily-health-log";
 import { useMediaQuery } from "@/hooks/use-media-query";
+import { toDateInput } from "@/lib/utils/date";
 
 type LogHealthSheetProps = {
   open: boolean;
@@ -41,10 +42,6 @@ type FormState = {
   steps: string;
   energy_level: number | null;
 };
-
-function toDateInput(date: Date) {
-  return date.toISOString().slice(0, 10);
-}
 
 function subjectKey(subject: HealthSubject) {
   return subject.type === "me" ? "me" : `client:${subject.id}`;

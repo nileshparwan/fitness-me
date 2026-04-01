@@ -4,6 +4,7 @@ import { z } from "zod";
 
 import { runTrackedAction } from "@/lib/events/dispatcher";
 import { createClient } from "@/lib/supabase/server";
+import { toDateInput } from "@/lib/utils/date";
 import type { Database } from "@/types/database";
 import type {
   NutritionInsight,
@@ -51,10 +52,6 @@ const nutritionProgressSchema = z.object({
   start_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   end_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 });
-
-function toDateInput(date: Date) {
-  return date.toISOString().slice(0, 10);
-}
 
 function parseDateInput(value: string) {
   const [year, month, day] = value.split("-").map(Number);

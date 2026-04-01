@@ -31,6 +31,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
 import { useClientsDashboard, useClientsDashboardRealtime } from "@/hooks/use-clients-dashboard";
 import {
   formatCurrencyAmount,
@@ -410,12 +411,12 @@ export function ClientsDashboard() {
                         </span>
                         <span className="text-muted-foreground">{row.target_date ? `Due ${dateLabel(row.target_date)}` : "No deadline"}</span>
                       </div>
-                      <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted/70">
-                        <div
-                          className={cn("h-full rounded-full transition-all", GOAL_BAR_COLORS[index % GOAL_BAR_COLORS.length])}
-                          style={{ width: `${Math.max(0, Math.min(100, row.progress_percent))}%` }}
-                        />
-                      </div>
+                      <Progress
+                        value={Math.max(0, Math.min(100, row.progress_percent))}
+                        className="mt-1.5 h-1.5 bg-muted/70"
+                        indicatorClassName={GOAL_BAR_COLORS[index % GOAL_BAR_COLORS.length]}
+                        animationDurationMs={1000}
+                      />
                     </div>
                   ))
                 )}

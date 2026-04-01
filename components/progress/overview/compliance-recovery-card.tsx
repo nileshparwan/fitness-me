@@ -13,6 +13,8 @@ import {
   YAxis,
 } from "recharts";
 
+import { AnimatedFill } from "@/components/ui/animated-fill";
+import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/utils";
 import type { ComplianceRecoveryData } from "@/app/actions/progress-overview";
@@ -207,14 +209,15 @@ export function ComplianceRecoveryCard({ data, compareData, compare, isLoading }
                     (data.sleep_stages_last?.awake_minutes ?? 0);
                   const width = total > 0 ? ((segment.minutes || 0) / total) * 100 : 0;
                   return (
-                    <div
+                    <AnimatedFill
                       key={segment.label}
+                      width={width}
                       className="grid place-items-center text-[10px] font-medium text-[#08101f]"
-                      style={{ width: `${width}%`, background: segment.color }}
+                      style={{ background: segment.color }}
                       title={`${segment.label}: ${minutesToLabel(segment.minutes)}`}
                     >
                       {width > 18 ? segment.label : ""}
-                    </div>
+                    </AnimatedFill>
                   );
                 })}
             </div>
@@ -326,12 +329,12 @@ export function ComplianceRecoveryCard({ data, compareData, compare, isLoading }
                   <p className="font-medium">{habit.name}</p>
                   <p className="text-muted-foreground">🔥 {habit.streak_days}d</p>
                 </div>
-                <div className="mt-2 h-2 rounded-full bg-[#1f2a44]">
-                  <div
-                    className="h-full rounded-full bg-[#5ed28f]"
-                    style={{ width: `${habit.completion_pct_range}%` }}
-                  />
-                </div>
+                <Progress
+                  value={habit.completion_pct_range}
+                  className="mt-2 h-2 bg-[#1f2a44]"
+                  indicatorClassName="bg-[#5ed28f]"
+                  animationDurationMs={1000}
+                />
                 <p className="mt-1 text-xs text-muted-foreground">{habit.completion_pct_range}% completed</p>
               </div>
             ))}

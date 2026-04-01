@@ -17,6 +17,7 @@ import { DeleteConfirmSheet } from "@/components/nutrition/shared/delete-confirm
 import { MealItemEditorSheet, type MealItemEditorValue } from "@/components/nutrition/shared/meal-item-editor-sheet";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
@@ -28,6 +29,7 @@ import {
 } from "@/hooks/use-nutrition-data";
 import { useFavoriteMealItems, useNutritionActivePlanForDate, useNutritionMutations } from "@/hooks/use-nutrition-manual";
 import { useMediaQuery } from "@/hooks/use-media-query";
+import { computeNutritionVisualPercent, type NutritionProgressMetric } from "@/lib/nutrition/progress-bars";
 import { normalizeMealUnit } from "@/lib/nutrition/meal-units";
 import {
   useNutritionActiveSubject,
@@ -36,13 +38,12 @@ import {
   useNutritionSelectedMealGroupId,
   useNutritionSelectedPlannerDay,
   useSetNutritionPlannerMealTypeOrder,
-  useSetNutritionNavigationSource,
   useSetNutritionSelectedMealGroupId,
   useSetNutritionSelectedPlannerDay,
-  useSetNutritionViewMode,
 } from "@/stores/use-nutrition-ui-store";
 import { useUnitLabels } from "@/stores/use-settings-store";
 import { currentMealDay } from "@/lib/nutrition/meal-ui";
+import { toDateInput } from "@/lib/utils/date";
 import { withToastFeedback } from "@/lib/ui/toast-feedback";
 import { cn } from "@/utils";
 
@@ -57,13 +58,6 @@ function clampInt(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, Math.round(value)));
 }
 
-function toDateInput(date: Date) {
-  const year = date.getFullYear();
-  const month = `${date.getMonth() + 1}`.padStart(2, "0");
-  const day = `${date.getDate()}`.padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
 function computeProgressPercent(value: number, target: number | null) {
   if (!target || target <= 0) return null;
   const percent = Math.round((value / target) * 100);
@@ -72,18 +66,26 @@ function computeProgressPercent(value: number, target: number | null) {
 }
 
 function ProgressBar({
+  metric,
   label,
   value,
   target,
   pct,
 }: {
+  metric: NutritionProgressMetric;
   label: string;
   value: number;
   target: number | null;
   pct: number | null;
 }) {
-  const percent = clampInt(pct ?? 0, 0, 160);
-  const warning = pct !== null && pct > 110;
+  const percent = computeNutritionVisualPercent({
+    metric,
+    value,
+    target,
+    explicitPercent: pct,
+    maxPercent: 160,
+  });
+  const warning = percent > 110;
 
   return (
     <div className="space-y-1.5">
@@ -94,12 +96,13 @@ function ProgressBar({
           {target ? ` / ${Math.round(target)}` : ""}
         </span>
       </div>
-      <div className="h-2 w-full overflow-hidden rounded-full bg-muted/70">
-        <div
-          className={cn("h-full rounded-full transition-all", warning ? "bg-chart-4" : "bg-chart-2")}
-          style={{ width: `${percent}%` }}
-        />
-      </div>
+      <Progress
+        value={percent}
+        max={160}
+        className="h-2 bg-muted/70"
+        indicatorClassName={warning ? "bg-chart-4" : "bg-chart-2"}
+        animationDurationMs={1000}
+      />
     </div>
   );
 }
@@ -178,8 +181,6 @@ export function MealPlannerPage() {
   const setCustomSectionOrderByDay = useSetNutritionPlannerMealTypeOrder();
   const clearCustomSectionOrderByDay = useClearNutritionPlannerMealTypeOrder();
   const setSelectedDay = useSetNutritionSelectedPlannerDay();
-  const setViewMode = useSetNutritionViewMode();
-  const setNavigationSource = useSetNutritionNavigationSource();
   const resolvedSubject = useMemo(
     () => resolveNutritionSubject(activeSubjectType, activeSubjectId),
     [activeSubjectId, activeSubjectType]
@@ -259,11 +260,6 @@ export function MealPlannerPage() {
   useEffect(() => {
     setIsClientReady(true);
   }, []);
-
-  useEffect(() => {
-    setViewMode("planner");
-    setNavigationSource("planner");
-  }, [setNavigationSource, setViewMode]);
 
   useEffect(() => {
     if (!selectedMealGroupId) return;
@@ -747,24 +743,28 @@ export function MealPlannerPage() {
         <section className="glass-surface surface-pad space-y-3">
           <div className="grid gap-3 md:grid-cols-2">
             <ProgressBar
+              metric="calories"
               label="Calories"
               value={selectedPlan.totals.calories ?? 0}
               target={activePlan.daily_calorie_target}
               pct={plannerProgress.calories_pct}
             />
             <ProgressBar
+              metric="protein"
               label={`Protein (${units.macro})`}
               value={selectedPlan.totals.protein_g ?? 0}
               target={activePlan.daily_protein_target_g}
               pct={plannerProgress.protein_pct}
             />
             <ProgressBar
+              metric="carbs"
               label={`Carbs (${units.macro})`}
               value={selectedPlan.totals.carbs_g ?? 0}
               target={activePlan.daily_carbs_target_g}
               pct={plannerProgress.carbs_pct}
             />
             <ProgressBar
+              metric="fat"
               label={`Fat (${units.macro})`}
               value={selectedPlan.totals.fat_g ?? 0}
               target={activePlan.daily_fat_target_g}

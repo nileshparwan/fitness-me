@@ -1,6 +1,5 @@
 import type { NutritionSubject } from "@/lib/query-keys-nutrition";
-
-type NutritionSubjectType = "self" | "user" | "client";
+import type { NutritionSubjectType } from "@/stores/use-nutrition-ui-store";
 
 export function resolveNutritionSubject(subjectType: NutritionSubjectType, subjectId: string | null): NutritionSubject | undefined {
   if (!subjectId || subjectType === "self") return undefined;

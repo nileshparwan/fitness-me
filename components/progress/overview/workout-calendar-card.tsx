@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { toDateInput } from "@/lib/utils/date";
 
 type WorkoutCalendarRow = {
   date: string;
@@ -17,10 +18,6 @@ type Props = {
   rows: WorkoutCalendarRow[];
   isLoading: boolean;
 };
-
-function toDateInput(date: Date) {
-  return date.toISOString().slice(0, 10);
-}
 
 function parseDateInput(value: string) {
   const [year, month, day] = value.split("-").map(Number);

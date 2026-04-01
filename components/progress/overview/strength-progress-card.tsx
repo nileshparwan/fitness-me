@@ -12,6 +12,7 @@ import {
   YAxis,
 } from "recharts";
 
+import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { StrengthProgressData } from "@/app/actions/progress-overview";
 import { PROGRESS_STRENGTH_LEVELS, PROGRESS_STRENGTH_STANDARDS } from "@/utils/app-constants";
@@ -227,12 +228,12 @@ export function StrengthProgressCard({ data, compareData, compare, isLoading, la
                         {formatMetric(row.value)} {labels.weight} · {PROGRESS_STRENGTH_LEVELS[levelIndex]}
                       </p>
                     </div>
-                    <div className="mt-2 h-2 rounded-full bg-[#1f2a44]">
-                      <div
-                        className="h-full rounded-full bg-[#5b9cff]"
-                        style={{ width: `${progress}%` }}
-                      />
-                    </div>
+                    <Progress
+                      value={progress}
+                      className="mt-2 h-2 bg-[#1f2a44]"
+                      indicatorClassName="bg-[#5b9cff]"
+                      animationDurationMs={1000}
+                    />
                   </div>
                 );
               })}

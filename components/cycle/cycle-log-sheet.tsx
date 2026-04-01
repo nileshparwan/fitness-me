@@ -28,6 +28,7 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useMediaQuery } from "@/hooks/use-media-query";
+import { toDateInput } from "@/lib/utils/date";
 import { cn } from "@/utils";
 
 type CycleLogSheetProps = {
@@ -50,10 +51,6 @@ type FormState = {
   headache: boolean;
   notes: string;
 };
-
-function toDateInput(date: Date) {
-  return date.toISOString().slice(0, 10);
-}
 
 function parseDateInput(value: string | null) {
   if (!value) return undefined;

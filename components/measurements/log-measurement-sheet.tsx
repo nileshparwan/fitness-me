@@ -23,6 +23,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { toDateInput } from "@/lib/utils/date";
 import { useUnitLabels, useUnitSystem } from "@/stores/use-settings-store";
 import { displayCircumference, displayWeight } from "@/utils/unit-conversion";
 import { cn } from "@/utils";
@@ -50,10 +51,6 @@ type FormState = {
   calf: string;
   notes: string;
 };
-
-function toDateInput(date: Date) {
-  return date.toISOString().slice(0, 10);
-}
 
 function subjectKey(subject: MeasurementSubject) {
   return subject.type === "me" ? "me" : `client:${subject.id}`;

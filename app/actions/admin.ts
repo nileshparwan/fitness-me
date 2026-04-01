@@ -22,7 +22,7 @@ type AdminUsersPage = {
     email: string | null;
     role: Database["public"]["Enums"]["user_role"];
     sessions_count: number;
-    meal_plans_count: number;
+    meal_groups_count: number;
     goals_count: number;
     last_activity: string | null;
     is_blocked: boolean;
@@ -162,7 +162,7 @@ export async function getAdminDashboardStats() {
       const throughputDates = buildIsoDateRange(30);
       const throughputStart = `${throughputDates[0]}T00:00:00.000Z`;
 
-      const [users, sessionsRes, setsRes, mealPlansRes, ticketsRes, recentEvents, totalSessions, totalMealPlans] = await Promise.all([
+      const [users, sessionsRes, setsRes, mealGroupsRes, ticketsRes, recentEvents, totalSessions, totalMealGroups] = await Promise.all([
         listAllAuthUsers(),
         admin
           .from("training_sessions")
@@ -179,7 +179,7 @@ export async function getAdminDashboardStats() {
       ]);
 
       if (sessionsRes.error) throw new Error(sessionsRes.error.message);
-      if (mealPlansRes.error) throw new Error(mealPlansRes.error.message);
+      if (mealGroupsRes.error) throw new Error(mealGroupsRes.error.message);
       if (ticketsRes.error) throw new Error(ticketsRes.error.message);
 
       const roleMap = await getProfileRoleMap(users.map((user) => user.id));
@@ -196,7 +196,7 @@ export async function getAdminDashboardStats() {
         const key = toIsoDay(row.created_at);
         if (key && throughputDates.includes(key)) incrementMapValue(actionMap, key);
       }
-      for (const row of (mealPlansRes.data || []) as Pick<MealGroupRow, "created_at">[]) {
+      for (const row of (mealGroupsRes.data || []) as Pick<MealGroupRow, "created_at">[]) {
         const key = toIsoDay(row.created_at);
         if (key && throughputDates.includes(key)) incrementMapValue(actionMap, key);
       }
@@ -220,7 +220,7 @@ export async function getAdminDashboardStats() {
         currently_logged_in_admins: currentlyLoggedInAdmins,
         total_sessions: totalSessions,
         total_strength_sets: setsRes.count ?? 0,
-        total_meal_plans: totalMealPlans,
+        total_meal_groups: totalMealGroups,
         recent_events: recentEvents,
         platform_throughput_30d: platformThroughput30d,
       };
@@ -262,7 +262,7 @@ export async function getAdminUsers(search = "", page = 1, pageSize = 100): Prom
       email: u.email ?? null,
       role: flags?.role ?? resolveUserRole(u),
       sessions_count: 0,
-      meal_plans_count: 0,
+      meal_groups_count: 0,
       goals_count: 0,
       last_activity: u.last_sign_in_at ?? null,
       is_blocked: flags?.is_blocked ?? false,
@@ -369,7 +369,7 @@ export async function getAdminUserDetail(userId: string) {
       await requireAdminUser();
       const admin = createAdminClient();
 
-      const [sessionsRes, mealPlansRes, userWorkoutIdsRes] = await Promise.all([
+      const [sessionsRes, mealGroupsRes, userWorkoutIdsRes] = await Promise.all([
         admin
           .from("training_sessions")
           .select("id, name, date, status, duration_minutes, created_at")
@@ -387,7 +387,7 @@ export async function getAdminUserDetail(userId: string) {
       ]);
 
       if (sessionsRes.error) throw new Error(sessionsRes.error.message);
-      if (mealPlansRes.error) throw new Error(mealPlansRes.error.message);
+      if (mealGroupsRes.error) throw new Error(mealGroupsRes.error.message);
       if (userWorkoutIdsRes.error) throw new Error(userWorkoutIdsRes.error.message);
 
       const workoutIds = ((userWorkoutIdsRes.data || []) as Pick<TrainingSessionRow, "id">[]).map((row) => row.id);
@@ -412,7 +412,7 @@ export async function getAdminUserDetail(userId: string) {
         duration_minutes: row.duration_minutes,
       }));
 
-      const mealPlans = ((mealPlansRes.data || []) as MealGroupRow[]).map((row) => ({
+      const mealGroups = ((mealGroupsRes.data || []) as MealGroupRow[]).map((row) => ({
         id: row.id,
         name: row.name,
         status: row.status,
@@ -422,7 +422,7 @@ export async function getAdminUserDetail(userId: string) {
 
       return {
         sessions,
-        meal_plans: mealPlans,
+        meal_groups: mealGroups,
         strength_sets_count: strengthSetsCount,
       };
     },
@@ -653,8 +653,8 @@ export async function getAdminNutritionStats(_days = 30) {
         .sort((a, b) => b.count - a.count);
 
       return {
-        total_meal_plans: plans.length,
-        active_meal_plans: plans.filter((plan) => plan.status?.toLowerCase() === "active").length,
+        total_meal_groups: plans.length,
+        active_meal_groups: plans.filter((plan) => plan.status?.toLowerCase() === "active").length,
         total_meals: meals.length,
         unique_athletes: uniqueAthletes.size,
         avg_calories_per_meal: caloriesCount > 0 ? Number((caloriesSum / caloriesCount).toFixed(1)) : 0,

@@ -8,6 +8,7 @@ import type { Database } from "@/types/database";
 import { estimateOneRepMax } from "@/utils/fitness-logic";
 import { extractMuscleFocusTag } from "@/lib/exercises/muscle-groups";
 import { fetchExecutionRowsForUserScope, getLinkedClientIdsForUser } from "@/lib/training/execution-scope";
+import { toDateInput } from "@/lib/utils/date";
 
 export type ProgressRange = "7d" | "30d" | "90d";
 export type ProgressTrainingType = "all" | "strength" | "cardio" | "mixed";
@@ -233,10 +234,6 @@ const RANGE_DAYS: Record<ProgressRange, number> = {
   "30d": 30,
   "90d": 90,
 };
-
-function toDateInput(date: Date) {
-  return date.toISOString().slice(0, 10);
-}
 
 function parseDateInput(value: string) {
   const [year, month, day] = value.split("-").map(Number);

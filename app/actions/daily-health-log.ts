@@ -4,6 +4,7 @@ import { z } from "zod";
 
 import { runTrackedAction } from "@/lib/events/dispatcher";
 import { createClient } from "@/lib/supabase/server";
+import { toDateInput } from "@/lib/utils/date";
 
 export type HealthSubject = { type: "me" } | { type: "client"; id: string };
 
@@ -64,10 +65,6 @@ const updateDailyActivitySchema = z.object({
 });
 
 const rangeSchema = z.enum(["7d", "30d", "90d", "all"]);
-
-function toDateInput(date: Date) {
-  return date.toISOString().slice(0, 10);
-}
 
 function parseDateInput(value: string) {
   const [year, month, day] = value.split("-").map(Number);

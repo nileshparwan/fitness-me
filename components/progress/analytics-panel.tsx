@@ -2,6 +2,7 @@
 
 import { Database } from "@/types/database";
 import { Dumbbell, Zap, RotateCcw } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
 import { cn } from "@/utils";
 import { LucideIcon } from "lucide-react";
 import { useUnitLabels, useUnitSystem } from "@/stores/use-settings-store";
@@ -43,14 +44,13 @@ export function AnalyticsPanel({ logs }: { logs: WorkoutLog[] }) {
       <div>
         <div className="text-lg font-bold leading-tight sm:text-[1.05rem]">{value}</div>
         
-        {/* FIX: Replaced <Progress> component with a custom div structure to avoid TS Error */}
         {progress !== undefined && (
-          <div className="h-1.5 w-full bg-muted rounded-full mt-2 overflow-hidden">
-            <div 
-              className={cn("h-full rounded-full transition-all duration-500", colorClass?.replace('text-', 'bg-'))} 
-              style={{ width: `${Math.min(progress, 100)}%` }} 
-            />
-          </div>
+          <Progress
+            value={Math.min(progress, 100)}
+            className="mt-2 h-1.5 bg-muted"
+            indicatorClassName={colorClass?.replace("text-", "bg-")}
+            animationDurationMs={1000}
+          />
         )}
         
         {subtext && <p className="text-[10px] text-muted-foreground mt-1 truncate">{subtext}</p>}

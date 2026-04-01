@@ -3,10 +3,9 @@ import { create } from "zustand";
 import { createJSONStorage, persist, type StateStorage } from "zustand/middleware";
 
 import { currentMealDay } from "@/lib/nutrition/meal-ui";
+import { toDateInput } from "@/lib/utils/date";
 
 export type NutritionSubjectType = "self" | "user" | "client";
-type NutritionViewMode = "dashboard" | "diary" | "planner" | "groups";
-type NutritionNavigationSource = "direct" | "dashboard" | "diary" | "planner" | "groups" | "client-workspace";
 type NutritionPlannerDay = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
 
 type NutritionDiaryFilters = {
@@ -43,8 +42,6 @@ type NutritionUiState = {
   mealGroupMealTypeOrderByGroup: Record<string, Partial<Record<NutritionPlannerDay, string[]>>>;
   diaryFilters: NutritionDiaryFilters;
   plannerFilters: NutritionPlannerFilters;
-  viewMode: NutritionViewMode;
-  navigationSource: NutritionNavigationSource;
   recentDiaryItems: NutritionRecentDiaryItem[];
 };
 
@@ -61,8 +58,6 @@ type NutritionUiActions = {
   clearMealGroupMealTypeOrder: (mealGroupId: string, day: NutritionPlannerDay) => void;
   setDiaryFilters: (value: Partial<NutritionDiaryFilters>) => void;
   setPlannerFilters: (value: Partial<NutritionPlannerFilters>) => void;
-  setViewMode: (value: NutritionViewMode) => void;
-  setNavigationSource: (value: NutritionNavigationSource) => void;
   pushRecentDiaryItem: (value: NutritionRecentDiaryItem) => void;
   resetNutritionUiState: () => void;
 };
@@ -75,13 +70,6 @@ const noopStorage: StateStorage = {
   removeItem: () => {},
 };
 const EMPTY_MEAL_TYPE_ORDER: string[] = [];
-
-function toDateInput(date: Date) {
-  const year = date.getFullYear();
-  const month = `${date.getMonth() + 1}`.padStart(2, "0");
-  const day = `${date.getDate()}`.padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
 
 function initialState(): NutritionUiState {
   return {
@@ -100,8 +88,6 @@ function initialState(): NutritionUiState {
     plannerFilters: {
       meal_type: null,
     },
-    viewMode: "dashboard",
-    navigationSource: "direct",
     recentDiaryItems: [],
   };
 }
@@ -212,8 +198,6 @@ export const useNutritionUiStore = create<NutritionUiStore>()(
             ...value,
           },
         })),
-      setViewMode: (value) => set({ viewMode: value }),
-      setNavigationSource: (value) => set({ navigationSource: value }),
       pushRecentDiaryItem: (value) =>
         set((state) => {
           const keyName = value.item_name.trim().toLowerCase();
@@ -291,10 +275,6 @@ export const useSetNutritionMealGroupMealTypeOrder = () => useNutritionUiStore((
 export const useClearNutritionMealGroupMealTypeOrder = () => useNutritionUiStore((state) => state.clearMealGroupMealTypeOrder);
 
 export const useSetNutritionDiaryFilters = () => useNutritionUiStore((state) => state.setDiaryFilters);
-
-export const useSetNutritionViewMode = () => useNutritionUiStore((state) => state.setViewMode);
-
-export const useSetNutritionNavigationSource = () => useNutritionUiStore((state) => state.setNavigationSource);
 
 export const useNutritionRecentDiaryItems = () => useNutritionUiStore((state) => state.recentDiaryItems);
 export const usePushNutritionRecentDiaryItem = () => useNutritionUiStore((state) => state.pushRecentDiaryItem);

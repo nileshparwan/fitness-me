@@ -24,9 +24,7 @@ import { useNutritionGroupMutations, useNutritionMealGroups } from "@/hooks/use-
 import { withToastFeedback } from "@/lib/ui/toast-feedback";
 import {
   useNutritionSelectedMealGroupId,
-  useSetNutritionNavigationSource,
   useSetNutritionSelectedMealGroupId,
-  useSetNutritionViewMode,
 } from "@/stores/use-nutrition-ui-store";
 import { cn } from "@/utils";
 
@@ -76,8 +74,6 @@ export function MealGroupsDashboard() {
   const [duplicateTarget, setDuplicateTarget] = useState<MealGroupListRow | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<MealGroupListRow | null>(null);
 
-  const setViewMode = useSetNutritionViewMode();
-  const setNavigationSource = useSetNutritionNavigationSource();
   const selectedMealGroupId = useNutritionSelectedMealGroupId();
   const setSelectedMealGroupId = useSetNutritionSelectedMealGroupId();
 
@@ -90,11 +86,6 @@ export function MealGroupsDashboard() {
     includeSnapshots: false,
   });
   const mutations = useNutritionGroupMutations();
-
-  useEffect(() => {
-    setViewMode("groups");
-    setNavigationSource("groups");
-  }, [setNavigationSource, setViewMode]);
 
   const rows = useMemo(() => query.data?.rows || [], [query.data?.rows]);
 

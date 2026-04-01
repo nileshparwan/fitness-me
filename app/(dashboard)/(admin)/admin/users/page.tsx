@@ -145,7 +145,7 @@ export default function AdminUsersPage() {
                     </Select>
                   </TableCell>
                   <TableCell>{row.sessions_count}</TableCell>
-                  <TableCell>{row.meal_plans_count}</TableCell>
+                  <TableCell>{row.meal_groups_count}</TableCell>
                   <TableCell>{row.goals_count}</TableCell>
                   <TableCell>
                     {row.last_activity

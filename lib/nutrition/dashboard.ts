@@ -2,8 +2,8 @@ export type NutritionDashboardMacro = {
   key: "protein" | "carbs" | "fat";
   label: string;
   grams: number;
-  targetGrams: number;
-  percent: number;
+  targetGrams: number | null;
+  percent: number | null;
 };
 
 export type NutritionDashboardQuickAction = {
@@ -28,6 +28,7 @@ export type NutritionDashboardData = {
   dateLabel: string;
   consumedCalories: number;
   targetCalories: number;
+  calorieTarget: number | null;
   activePlanName: string | null;
   macros: NutritionDashboardMacro[];
   quickActions: NutritionDashboardQuickAction[];

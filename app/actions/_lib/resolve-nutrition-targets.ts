@@ -12,7 +12,7 @@ export type ResolvedNutritionTarget = {
   protein_g: number | null;
   carbs_g: number | null;
   fat_g: number | null;
-  source: "fitness_goal" | "none";
+  source: "fitness_goal" | "profile_default" | "none";
 };
 
 async function resolveHistorySubjectUserId(
@@ -54,7 +54,31 @@ export async function resolveGoalTargetForDate(
 
   if (error) throw new Error(error.message);
   if (!historyRow) {
-    return { calories: null, protein_g: null, carbs_g: null, fat_g: null, source: "none" };
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select("default_calories, default_protein, default_carbs, default_fat")
+      .eq("id", targetUserId)
+      .maybeSingle();
+
+    if (profileError) throw new Error(profileError.message);
+
+    const hasProfileDefaults =
+      profile &&
+      [profile.default_calories, profile.default_protein, profile.default_carbs, profile.default_fat].some(
+        (value) => typeof value === "number" && Number.isFinite(value) && value > 0
+      );
+
+    if (!hasProfileDefaults) {
+      return { calories: null, protein_g: null, carbs_g: null, fat_g: null, source: "none" };
+    }
+
+    return {
+      calories: profile.default_calories,
+      protein_g: profile.default_protein,
+      carbs_g: profile.default_carbs,
+      fat_g: profile.default_fat,
+      source: "profile_default",
+    };
   }
 
   return {

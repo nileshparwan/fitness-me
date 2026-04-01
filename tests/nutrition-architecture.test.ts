@@ -43,8 +43,6 @@ test("nutrition ui store supports focused cross-page updates", () => {
   store.getState().setActiveSubject("client", "client-77");
   store.getState().setDiaryFilters({ favorites_meal_type: "breakfast" });
   store.getState().setPlannerFilters({ meal_type: "dinner" });
-  store.getState().setViewMode("planner");
-  store.getState().setNavigationSource("planner");
 
   const state = store.getState();
   assert.equal(state.selectedDate, "2026-03-08");
@@ -54,8 +52,6 @@ test("nutrition ui store supports focused cross-page updates", () => {
   assert.equal(state.activeSubjectId, "client-77");
   assert.equal(state.diaryFilters.favorites_meal_type, "breakfast");
   assert.equal(state.plannerFilters.meal_type, "dinner");
-  assert.equal(state.viewMode, "planner");
-  assert.equal(state.navigationSource, "planner");
 });
 
 test("recent diary items are deduped and capped at 10 entries", () => {

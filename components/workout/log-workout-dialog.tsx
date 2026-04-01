@@ -12,15 +12,12 @@ import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
+import { toDateInput } from "@/lib/utils/date";
 
 interface LogWorkoutDialogProps {
   workoutId: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-}
-
-function toDateInput(date: Date) {
-  return date.toISOString().slice(0, 10);
 }
 
 export function LogWorkoutDialog({ workoutId, open, onOpenChange }: LogWorkoutDialogProps) {

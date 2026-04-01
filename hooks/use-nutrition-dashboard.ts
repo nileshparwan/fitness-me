@@ -9,14 +9,8 @@ import { listNutritionDashboardActivityAction } from "@/app/actions/nutrition-da
 import { NUTRITION_DASHBOARD_QUICK_ACTIONS, type NutritionDashboardData } from "@/lib/nutrition/dashboard";
 import { resolveNutritionSubject } from "@/lib/nutrition/subject";
 import { nutritionKeys } from "@/lib/query-keys-nutrition";
+import { toDateInput } from "@/lib/utils/date";
 import { useNutritionActiveSubject } from "@/stores/use-nutrition-ui-store";
-
-function toDateInput(date: Date) {
-  const year = date.getFullYear();
-  const month = `${date.getMonth() + 1}`.padStart(2, "0");
-  const day = `${date.getDate()}`.padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
 
 function formatIsoDateLabel(value: string) {
   const [year, month, day] = value.split("-").map((part) => Number(part));
@@ -34,6 +28,12 @@ function clampPercent(value: number | null) {
   return Math.max(0, Math.min(100, Math.round(value)));
 }
 
+function normalizeTarget(value: number | null | undefined) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  const rounded = Math.round(value);
+  return rounded > 0 ? rounded : null;
+}
+
 function relativeTimeLabel(value: string) {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return "just now";
@@ -46,7 +46,7 @@ export function useNutritionDashboard() {
   const today = useMemo(() => toDateInput(new Date()), []);
 
   const diaryQuery = useQuery({
-    queryKey: nutritionKeys.diaryDay(today, subject, undefined),
+    queryKey: nutritionKeys.dashboardSummary(subject, today, undefined),
     queryFn: () =>
       getNutritionDiaryDayAction({
         performed_on: today,
@@ -83,14 +83,16 @@ export function useNutritionDashboard() {
     const carbs = Math.round(Number(totals?.carbs_g || 0));
     const fat = Math.round(Number(totals?.fat_g || 0));
 
-    const proteinTarget = Math.round(Number(targets?.daily_protein_target_g || 0));
-    const carbsTarget = Math.round(Number(targets?.daily_carbs_target_g || 0));
-    const fatTarget = Math.round(Number(targets?.daily_fat_target_g || 0));
+    const calorieTarget = normalizeTarget(targets?.daily_calorie_target);
+    const proteinTarget = normalizeTarget(targets?.daily_protein_target_g);
+    const carbsTarget = normalizeTarget(targets?.daily_carbs_target_g);
+    const fatTarget = normalizeTarget(targets?.daily_fat_target_g);
 
     return {
       dateLabel: formatIsoDateLabel(diary?.performed_on || today),
       consumedCalories: calories,
-      targetCalories: Math.round(Number(targets?.daily_calorie_target || Math.max(calories, 1))),
+      targetCalories: calorieTarget ?? Math.max(calories, 1),
+      calorieTarget,
       activePlanName: targets?.name ?? null,
       macros: [
         {
@@ -98,21 +100,36 @@ export function useNutritionDashboard() {
           label: "Protein",
           grams: protein,
           targetGrams: proteinTarget,
-          percent: clampPercent(diary?.progress.protein_pct ?? (proteinTarget > 0 ? (protein / proteinTarget) * 100 : 0)),
+          percent:
+            diary?.progress.protein_pct == null
+              ? proteinTarget
+                ? clampPercent((protein / proteinTarget) * 100)
+                : null
+              : clampPercent(diary.progress.protein_pct),
         },
         {
           key: "carbs",
           label: "Carbs",
           grams: carbs,
           targetGrams: carbsTarget,
-          percent: clampPercent(diary?.progress.carbs_pct ?? (carbsTarget > 0 ? (carbs / carbsTarget) * 100 : 0)),
+          percent:
+            diary?.progress.carbs_pct == null
+              ? carbsTarget
+                ? clampPercent((carbs / carbsTarget) * 100)
+                : null
+              : clampPercent(diary.progress.carbs_pct),
         },
         {
           key: "fat",
           label: "Fat",
           grams: fat,
           targetGrams: fatTarget,
-          percent: clampPercent(diary?.progress.fat_pct ?? (fatTarget > 0 ? (fat / fatTarget) * 100 : 0)),
+          percent:
+            diary?.progress.fat_pct == null
+              ? fatTarget
+                ? clampPercent((fat / fatTarget) * 100)
+                : null
+              : clampPercent(diary.progress.fat_pct),
         },
       ],
       quickActions: NUTRITION_DASHBOARD_QUICK_ACTIONS,

@@ -15,6 +15,7 @@ import {
   type MealGroupListParams,
 } from "@/lib/query-keys-nutrition";
 import { resolveNutritionSubject } from "@/lib/nutrition/subject";
+import { toDateInput } from "@/lib/utils/date";
 import {
   useNutritionActiveSubject,
   useNutritionSelectedMealGroupId,
@@ -59,13 +60,6 @@ type AutoMealGroupSelectionParams = {
   subject?: MealGroupSubject;
   enabled?: boolean;
 };
-
-function toDateInput(date: Date) {
-  const year = date.getFullYear();
-  const month = `${date.getMonth() + 1}`.padStart(2, "0");
-  const day = `${date.getDate()}`.padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
 
 function pickCurrentAssignmentGroupId(
   assignments:

@@ -24,6 +24,7 @@ import { MealItemEditorSheet, type MealItemEditorValue } from "@/components/nutr
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -50,16 +51,16 @@ import {
   useSetNutritionActiveSubject,
   useSetNutritionDiaryFilters,
   useSetNutritionDiaryMealTypeOrder,
-  useSetNutritionNavigationSource,
   useSetNutritionSelectedDate,
   useSetNutritionSelectedMealGroupId,
-  useSetNutritionViewMode,
 } from "@/stores/use-nutrition-ui-store";
 import { useUnitLabels } from "@/stores/use-settings-store";
 import { useMediaQuery } from "@/hooks/use-media-query";
+import { computeNutritionVisualPercent, type NutritionProgressMetric } from "@/lib/nutrition/progress-bars";
 import { normalizeMealUnit } from "@/lib/nutrition/meal-units";
 import type { NutritionSubject } from "@/lib/query-keys-nutrition";
 import { canNavigateDate, isMealGroupSelected, mealTypeOrderRank } from "@/lib/nutrition/meal-ui";
+import { toDateInput } from "@/lib/utils/date";
 import { withToastFeedback } from "@/lib/ui/toast-feedback";
 import { cn } from "@/utils";
 
@@ -125,10 +126,6 @@ function favoriteItemKey(itemName: string, unit: string | null | undefined) {
   return `${itemName.trim().toLowerCase()}::${canonicalUnit || unit || ""}`;
 }
 
-function toDateInput(date: Date) {
-  return format(date, "yyyy-MM-dd");
-}
-
 function toSafeInt(value: number | string | null | undefined) {
   const parsed = Number(value ?? 0);
   if (!Number.isFinite(parsed)) return 0;
@@ -172,18 +169,26 @@ function SectionIcon({ section, className }: { section: DiaryMealSection; classN
 }
 
 function ProgressBar({
+  metric,
   label,
   value,
   target,
   pct,
 }: {
+  metric: NutritionProgressMetric;
   label: string;
   value: number;
   target: number | null;
   pct: number | null;
 }) {
-  const percent = Math.max(0, Math.min(160, Math.round(pct ?? 0)));
-  const warning = pct !== null && pct > 110;
+  const percent = computeNutritionVisualPercent({
+    metric,
+    value,
+    target,
+    explicitPercent: pct,
+    maxPercent: 160,
+  });
+  const warning = percent > 110;
 
   return (
     <div className="space-y-1.5">
@@ -194,12 +199,13 @@ function ProgressBar({
           {target ? ` / ${Math.round(target)}` : ""}
         </span>
       </div>
-      <div className="h-2 w-full overflow-hidden rounded-full bg-muted/70">
-        <div
-          className={cn("h-full rounded-full transition-all", warning ? "bg-chart-4" : "bg-chart-2")}
-          style={{ width: `${percent}%` }}
-        />
-      </div>
+      <Progress
+        value={percent}
+        max={160}
+        className="h-2 bg-muted/70"
+        indicatorClassName={warning ? "bg-chart-4" : "bg-chart-2"}
+        animationDurationMs={1000}
+      />
     </div>
   );
 }
@@ -221,8 +227,6 @@ export function ManualNutritionDiary({
   const setPerformedOn = useSetNutritionSelectedDate();
   const selectedMealGroupId = useNutritionSelectedMealGroupId();
   const setSelectedMealGroupId = useSetNutritionSelectedMealGroupId();
-  const setViewMode = useSetNutritionViewMode();
-  const setNavigationSource = useSetNutritionNavigationSource();
   const setDiaryFilters = useSetNutritionDiaryFilters();
   const setActiveSubject = useSetNutritionActiveSubject();
 
@@ -280,11 +284,6 @@ export function ManualNutritionDiary({
 
   const mutations = useNutritionMutations(performedOn, resolvedSubject, selectedMealGroupId || null);
   const logFromPlan = useLogFromPlan(performedOn, resolvedSubject);
-
-  useEffect(() => {
-    setViewMode("diary");
-    setNavigationSource("diary");
-  }, [setNavigationSource, setViewMode]);
 
   useEffect(() => {
     if (!selectedMealGroupId) return;
@@ -1039,24 +1038,28 @@ export function ManualNutritionDiary({
             <section className="glass-surface surface-pad space-y-3">
               <div className="grid gap-3 md:grid-cols-2">
                 <ProgressBar
+                  metric="calories"
                   label="Calories"
                   value={diaryQuery.data.totals.calories}
                   target={diaryQuery.data.active_plan.daily_calorie_target}
                   pct={diaryQuery.data.progress.calories_pct}
                 />
                 <ProgressBar
+                  metric="protein"
                   label={`Protein (${units.macro})`}
                   value={diaryQuery.data.totals.protein_g}
                   target={diaryQuery.data.active_plan.daily_protein_target_g}
                   pct={diaryQuery.data.progress.protein_pct}
                 />
                 <ProgressBar
+                  metric="carbs"
                   label={`Carbs (${units.macro})`}
                   value={diaryQuery.data.totals.carbs_g}
                   target={diaryQuery.data.active_plan.daily_carbs_target_g}
                   pct={diaryQuery.data.progress.carbs_pct}
                 />
                 <ProgressBar
+                  metric="fat"
                   label={`Fat (${units.macro})`}
                   value={diaryQuery.data.totals.fat_g}
                   target={diaryQuery.data.active_plan.daily_fat_target_g}

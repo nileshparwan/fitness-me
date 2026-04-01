@@ -8,11 +8,7 @@ import { toast } from "sonner";
 import { useClientDetail, useClientNotes } from "@/hooks/use-coach-tools";
 import { useCoachClientPortalMutations, useCoachClientPortalSettings } from "@/hooks/use-client-portal";
 import { useNutritionMealGroup, useNutritionMealGroupAssignments } from "@/hooks/use-nutrition-data";
-import {
-  useSetNutritionActiveSubject,
-  useSetNutritionNavigationSource,
-  useSetNutritionViewMode,
-} from "@/stores/use-nutrition-ui-store";
+import { useSetNutritionActiveSubject } from "@/stores/use-nutrition-ui-store";
 import { MEAL_DAY_LABELS, MEAL_DAY_ORDER } from "@/components/nutrition/meal-groups/meal-group-types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -55,8 +51,6 @@ function badgeColorForTag(tag: string) {
 }
 
 export function ClientNutritionWorkspace({ clientId }: { clientId: string }) {
-  const setViewMode = useSetNutritionViewMode();
-  const setNavigationSource = useSetNutritionNavigationSource();
   const setActiveSubject = useSetNutritionActiveSubject();
 
   const clientQuery = useClientDetail(clientId);
@@ -76,10 +70,8 @@ export function ClientNutritionWorkspace({ clientId }: { clientId: string }) {
   const [notesPage, setNotesPage] = useState(0);
 
   useEffect(() => {
-    setViewMode("diary");
-    setNavigationSource("client-workspace");
     setActiveSubject("client", clientId);
-  }, [clientId, setActiveSubject, setNavigationSource, setViewMode]);
+  }, [clientId, setActiveSubject]);
 
   useEffect(() => {
     if (!assignmentsQuery.data?.length) {

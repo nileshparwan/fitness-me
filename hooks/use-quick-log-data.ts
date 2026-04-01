@@ -10,11 +10,8 @@ import {
   getDailyActivityForDateAction,
   updateDailyActivityAction,
 } from "@/app/actions/daily-health-log";
+import { toDateInput } from "@/lib/utils/date";
 import { useUnitSystem } from "@/stores/use-settings-store";
-
-function toDateInput(date: Date) {
-  return date.toISOString().slice(0, 10);
-}
 
 export function useQuickLogData(date = toDateInput(new Date())) {
   const queryClient = useQueryClient();
