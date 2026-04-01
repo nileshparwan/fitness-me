@@ -1,6 +1,6 @@
 "use client";
 
-import { Loader2 } from "lucide-react";
+import { Loader2, Send } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -28,8 +28,8 @@ export function CommentComposer({
       />
       <div className="flex justify-end">
         <Button onClick={onSubmit} disabled={isPending || value.trim().length === 0}>
-          {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-          Post Comment
+          {isPending ? <Loader2 className="mr-0 h-4 w-4 animate-spin sm:mr-2" /> : <Send className="mr-0 h-4 w-4 sm:mr-2" />}
+          <span className="hidden sm:inline">Post Comment</span>
         </Button>
       </div>
     </div>

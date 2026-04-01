@@ -1,11 +1,15 @@
 "use client";
 
-import { useTransition } from "react";
-import { useForm } from "react-hook-form";
+import { useState, useTransition } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { Loader2, Save } from "lucide-react";
+import { toast } from "sonner";
 
 import { updateProfile, type SettingsProfilePayload } from "@/app/actions/settings";
 import { Button } from "@/components/ui/button";
+import { Dropzone } from "@/components/ui/dropzone";
 import {
   Form,
   FormControl,
@@ -21,6 +25,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { withToastFeedback } from "@/lib/ui/toast-feedback";
 import { profileSchema, type ProfileFormValues } from "@/lib/validations/settings";
+import { compressToBase64, dataUrlSizeBytes } from "@/utils/image";
 
 type ProfileSettingsFormProps = {
   profile: SettingsProfilePayload;
@@ -52,10 +57,68 @@ const COACH_SPECIALTY_OPTIONS: Array<{ value: NonNullable<ProfileFormValues["coa
   { value: "rehabilitation", label: "Rehabilitation" },
 ];
 
+function ProfileAvatarUpload({
+  value,
+  onChange,
+}: {
+  value: string | null;
+  onChange: (value: string | null) => void;
+}) {
+  const [isConverting, setIsConverting] = useState(false);
+  const previewBytes = dataUrlSizeBytes(value);
+
+  const handleFiles = async (files: File[]) => {
+    const file = files[0];
+    if (!file) return;
+    setIsConverting(true);
+    try {
+      const base64 = await compressToBase64(file);
+      onChange(base64);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Image processing failed.");
+    } finally {
+      setIsConverting(false);
+    }
+  };
+
+  return (
+    <div className="space-y-3">
+      <FormLabel>Profile Photo <span className="text-muted-foreground">(optional)</span></FormLabel>
+      {value ? (
+        <div className="flex items-center gap-3 rounded-2xl border border-border/60 bg-background/40 p-3">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={value} alt="Profile photo" className="h-16 w-16 rounded-full object-cover ring-2 ring-border/50" />
+          <div className="space-y-1 text-sm">
+            <p className="font-medium">Photo uploaded</p>
+            {previewBytes > 0 ? <p className="text-xs text-muted-foreground">Photo saved ({Math.round(previewBytes / 1000)} KB)</p> : null}
+            <button
+              type="button"
+              className="text-xs text-destructive hover:underline"
+              onClick={() => onChange(null)}
+            >
+              Remove photo
+            </button>
+          </div>
+        </div>
+      ) : null}
+      <Dropzone
+        onDrop={handleFiles}
+        accept={{ "image/*": [".jpg", ".jpeg", ".png", ".webp"] }}
+        maxFiles={1}
+        maxSize={5 * 1024 * 1024}
+        disabled={isConverting}
+        onError={(message) => toast.error(message)}
+      />
+      {isConverting ? <p className="text-xs text-muted-foreground">Processing...</p> : null}
+    </div>
+  );
+}
+
 export function ProfileSettingsForm({ profile }: ProfileSettingsFormProps) {
   const [isPending, startTransition] = useTransition();
+  const queryClient = useQueryClient();
   const form = useForm<ProfileFormValues>({
-    resolver: zodResolver(profileSchema),
+    resolver: zodResolver(profileSchema) as Resolver<ProfileFormValues>,
     defaultValues: {
       full_name: profile.full_name || "",
       phone: profile.phone || null,
@@ -75,11 +138,14 @@ export function ProfileSettingsForm({ profile }: ProfileSettingsFormProps) {
 
   const onSubmit = (values: ProfileFormValues) => {
     startTransition(async () => {
-      await withToastFeedback(updateProfile(values), {
+      const result = await withToastFeedback(updateProfile(values), {
         loading: "Updating profile...",
         success: "Profile saved",
         error: "Unable to save profile",
       }).catch(() => null);
+      if (result) {
+        void queryClient.invalidateQueries({ queryKey: ["user"] });
+      }
     });
   };
 
@@ -323,14 +389,7 @@ export function ProfileSettingsForm({ profile }: ProfileSettingsFormProps) {
             name="avatar_url"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Avatar URL</FormLabel>
-                <FormControl>
-                  <Input
-                    value={field.value || ""}
-                    onChange={(event) => field.onChange(event.target.value || null)}
-                    placeholder="https://..."
-                  />
-                </FormControl>
+                <ProfileAvatarUpload value={field.value ?? null} onChange={field.onChange} />
                 <FormMessage />
               </FormItem>
             )}
@@ -338,7 +397,8 @@ export function ProfileSettingsForm({ profile }: ProfileSettingsFormProps) {
 
           <div className="flex justify-end">
             <Button type="submit" disabled={isPending}>
-              {isPending ? "Saving..." : "Save Changes"}
+              {isPending ? <Loader2 className="mr-0 h-4 w-4 animate-spin sm:mr-2" /> : <Save className="mr-0 h-4 w-4 sm:mr-2" />}
+              <span className="hidden sm:inline">{isPending ? "Saving..." : "Save Changes"}</span>
             </Button>
           </div>
         </section>

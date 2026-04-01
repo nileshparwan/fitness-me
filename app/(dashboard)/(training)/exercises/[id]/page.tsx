@@ -50,12 +50,12 @@ export default async function ExerciseDetailPage({ params }: PageProps) {
     <div className="page-shell section-gap mx-auto flex h-full w-full max-w-7xl flex-col">
       {/* Header Navigation */}
       <div className="flex items-center justify-between">
-        <Link
-          href="/exercises"
-          className="flex items-center text-sm text-muted-foreground hover:text-primary transition-colors"
-        >
-          <ArrowLeft className="mr-2 h-4 w-4" /> Back to Library
-        </Link>
+        <Button asChild variant="ghost" size="sm" className="w-fit text-muted-foreground hover:text-primary">
+          <Link href="/exercises">
+            <ArrowLeft className="mr-0 h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Back to Library</span>
+          </Link>
+        </Button>
         <div className="flex gap-2">
           <ShareExerciseButton exercise={exercise} />
           <AddToWorkoutButton exercise={exercise} />

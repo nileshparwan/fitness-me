@@ -53,6 +53,7 @@ export function useMealGroupDetail(mealGroupId: string) {
     queryKey: mealGroupKeys.detailById(mealGroupId),
     queryFn: () => getMealGroupDetailAction(mealGroupId),
     enabled: Boolean(mealGroupId),
+    retry: false,
     staleTime: 45_000,
     gcTime: 5 * 60_000,
     refetchOnWindowFocus: false,

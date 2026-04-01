@@ -30,13 +30,14 @@ import {
   Dumbbell,
   Eye,
   ExternalLink,
+  Info,
   Loader2,
   Mail,
   Pencil,
   Plus,
   Search,
-  Settings2,
   Shield,
+  SlidersHorizontal,
   Target,
   Trash2,
   UtensilsCrossed,
@@ -45,6 +46,7 @@ import { toast } from "sonner";
 
 import type { CoachNoteTag, PaymentMethod, PaymentStatus, SessionLocationType, SessionSlot } from "@/app/actions/coach-tools";
 import { ClientGoalsMedicalTab } from "@/components/coach-tools/client-goals-medical-tab";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -405,6 +407,7 @@ export function ClientProfileHub({ clientId, initialTab = "overview" }: { client
 
   const loading = detailQuery.isLoading && !detailQuery.data;
   const client = detailQuery.data?.client;
+  const resolvedAvatarUrl = detailQuery.data?.resolved_avatar_url ?? null;
 
   const clientName = useMemo(() => {
     if (!client) return "Client";
@@ -545,7 +548,8 @@ export function ClientProfileHub({ clientId, initialTab = "overview" }: { client
             className="h-8 rounded-lg border-border/60 px-2 text-xs"
             onClick={() => setSelectedPayment(row.original)}
           >
-            Details
+            <Info className="mr-0 h-3.5 w-3.5 sm:mr-2 sm:h-4 sm:w-4" />
+            <span className="hidden sm:inline">Details</span>
           </Button>
         ),
       },
@@ -865,14 +869,17 @@ export function ClientProfileHub({ clientId, initialTab = "overview" }: { client
         <div className="glass-surface rounded-[10px] border border-border/60 p-4 md:p-5">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="flex min-w-0 items-center gap-3">
-              <div className="grid h-12 w-12 place-items-center rounded-xl bg-chart-1/90 text-base font-semibold text-black">
-                {clientName
-                  .split(" ")
-                  .map((part) => part[0] || "")
-                  .join("")
-                  .slice(0, 2)
-                  .toUpperCase()}
-              </div>
+              <Avatar className="h-12 w-12 rounded-xl">
+                {resolvedAvatarUrl ? <AvatarImage src={resolvedAvatarUrl} alt={clientName} /> : null}
+                <AvatarFallback className="rounded-xl bg-chart-1/90 text-base font-semibold text-black">
+                  {clientName
+                    .split(" ")
+                    .map((part) => part[0] || "")
+                    .join("")
+                    .slice(0, 2)
+                    .toUpperCase()}
+                </AvatarFallback>
+              </Avatar>
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <h1 className="truncate text-2xl font-semibold tracking-tight">{clientName}</h1>
@@ -891,17 +898,23 @@ export function ClientProfileHub({ clientId, initialTab = "overview" }: { client
 
             <div className="flex flex-wrap gap-2">
               <Button asChild variant="outline" className="rounded-xl border-chart-3/40 bg-chart-3/10 text-chart-3 hover:bg-chart-3/20">
-                <Link href={`/clients/${clientId}/training`}>Workout Hub</Link>
+                <Link href={`/clients/${clientId}/training`}>
+                  <Dumbbell className="mr-0 h-4 w-4 sm:mr-2" />
+                  <span className="hidden sm:inline">Workout Hub</span>
+                </Link>
               </Button>
               <Button asChild variant="outline" className="rounded-xl border-chart-2/40 bg-chart-2/10 text-chart-2 hover:bg-chart-2/20">
-                <Link href={`/clients/${clientId}/nutrition`}>Nutrition Hub</Link>
+                <Link href={`/clients/${clientId}/nutrition`}>
+                  <UtensilsCrossed className="mr-0 h-4 w-4 sm:mr-2" />
+                  <span className="hidden sm:inline">Nutrition Hub</span>
+                </Link>
               </Button>
 
               <Dialog open={removeOpen} onOpenChange={setRemoveOpen}>
                 <DialogTrigger asChild>
                   <Button variant="outline" className="rounded-xl border-destructive/40 bg-destructive/10 text-destructive hover:bg-destructive/20">
-                    <Trash2 className="mr-2 h-4 w-4" />
-                    Remove Client
+                    <Trash2 className="mr-0 h-4 w-4 sm:mr-2" />
+                    <span className="hidden sm:inline">Remove Client</span>
                   </Button>
                 </DialogTrigger>
                 <DialogContent className="rounded-[10px] border-border/70 bg-card/95 sm:max-w-md">
@@ -1089,7 +1102,8 @@ export function ClientProfileHub({ clientId, initialTab = "overview" }: { client
                     size="sm"
                     className="h-auto rounded-none px-0 py-0 text-sm font-medium text-chart-1 hover:bg-transparent hover:text-chart-1/90"
                   >
-                    Log Session
+                    <Dumbbell className="mr-0 h-4 w-4 sm:mr-2" />
+                    <span className="hidden sm:inline">Log Session</span>
                   </Button>
                 </DialogTrigger>
                 <DialogContent className="rounded-[10px] border-border/70 bg-card/95 sm:max-w-xl">
@@ -1226,8 +1240,8 @@ export function ClientProfileHub({ clientId, initialTab = "overview" }: { client
             <Dialog open={noteOpen} onOpenChange={setNoteOpen}>
               <DialogTrigger asChild>
                 <Button className="accent-strong rounded-xl text-black" onClick={openNewNoteDialog}>
-                  <Plus className="mr-2 h-4 w-4" />
-                  Add Note
+                  <Plus className="mr-0 h-4 w-4 sm:mr-2" />
+                  <span className="hidden sm:inline">Add Note</span>
                 </Button>
               </DialogTrigger>
               <DialogContent className="rounded-[10px] border-border/70 bg-card/95 sm:max-w-lg">
@@ -1357,8 +1371,8 @@ export function ClientProfileHub({ clientId, initialTab = "overview" }: { client
             <Dialog open={paymentOpen} onOpenChange={setPaymentOpen}>
               <DialogTrigger asChild>
                 <Button className="h-12 rounded-[10px] bg-chart-1 px-5 text-base font-medium text-white hover:bg-chart-1/90">
-                  <Plus className="mr-2 h-4 w-4" />
-                  Record
+                  <Plus className="mr-0 h-4 w-4 sm:mr-2" />
+                  <span className="hidden sm:inline">Record</span>
                 </Button>
               </DialogTrigger>
               <DialogContent className="rounded-[10px] border-border/70 bg-card/95 sm:max-w-2xl">
@@ -1466,8 +1480,8 @@ export function ClientProfileHub({ clientId, initialTab = "overview" }: { client
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" className="rounded-xl border-border/60">
-                    <Settings2 className="mr-2 h-4 w-4" />
-                    Columns
+                    <SlidersHorizontal className="mr-0 h-4 w-4 sm:mr-2" />
+                    <span className="hidden sm:inline">Columns</span>
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-52 rounded-xl border-border/70 bg-card/95">

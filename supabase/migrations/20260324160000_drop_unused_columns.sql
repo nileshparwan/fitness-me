@@ -48,18 +48,6 @@ ALTER TABLE body_measurements
   DROP COLUMN IF EXISTS photo_side_url,
   DROP COLUMN IF EXISTS photo_back_url;
 
--- ── exercise_catalog ───────────────────────────────────────────────────────
--- Rich exercise metadata columns that were seeded but never queried in
--- the application. If needed later, a single JSONB column is preferable.
-ALTER TABLE exercise_catalog
-  DROP COLUMN IF EXISTS difficulty_level,
-  DROP COLUMN IF EXISTS force_type,
-  DROP COLUMN IF EXISTS joint_actions,
-  DROP COLUMN IF EXISTS sport_category,
-  DROP COLUMN IF EXISTS contraindications,
-  DROP COLUMN IF EXISTS is_custom,
-  DROP COLUMN IF EXISTS is_unilateral;
-
 -- ── training_plan_items ────────────────────────────────────────────────────
 -- nutrition_log_id: exists in types but never queried or written.
 ALTER TABLE training_plan_items

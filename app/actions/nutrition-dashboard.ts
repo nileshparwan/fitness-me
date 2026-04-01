@@ -8,6 +8,7 @@ import {
   activityMetadataString,
   classifyNutritionActivityType,
   describeNutritionActivity,
+  NUTRITION_DASHBOARD_ACTIVITY_EVENTS,
   shouldIncludeNutritionActivityForScope,
 } from "@/lib/nutrition/dashboard-activity";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -15,17 +16,6 @@ import { createClient } from "@/lib/supabase/server";
 import { Json, Database } from "@/types/database";
 
 type AnalyticsEventRow = Database["public"]["Tables"]["analytics_events"]["Row"];
-
-const READ_ONLY_ACTIVITY_TOKENS = [
-  ".read",
-  ".list",
-  ".detail",
-  ".recent",
-  ".favorites",
-  ".summary",
-  ".options",
-  ".assignable-subjects",
-] as const;
 
 const subjectSchema = z
   .object({
@@ -72,13 +62,15 @@ export async function listNutritionDashboardActivityAction(input: z.input<typeof
       } = await supabase.auth.getUser();
       if (!user) throw new Error("Unauthorized");
 
+      const fetchLimit = Math.max(payload.limit, 20);
       const { data, error } = await admin
         .from("analytics_events")
         .select("*")
         .eq("user_id", user.id)
-        .ilike("event_name", "nutrition.%")
+        .in("event_name", [...NUTRITION_DASHBOARD_ACTIVITY_EVENTS])
+        .or("metadata.is.null,metadata->status.is.null,metadata->>status.eq.success")
         .order("created_at", { ascending: false })
-        .limit(120);
+        .limit(fetchLimit);
 
       if (error) throw new Error(error.message);
 
@@ -87,11 +79,7 @@ export async function listNutritionDashboardActivityAction(input: z.input<typeof
 
       for (const row of rows) {
         if (!row.created_at) continue;
-        const lowerName = row.event_name.toLowerCase();
-        if (READ_ONLY_ACTIVITY_TOKENS.some((token) => lowerName.includes(token))) continue;
         const metadata = activityMetadataObject(row.metadata);
-        const status = activityMetadataString(metadata, "status");
-        if (status && status !== "success") continue;
 
         const eventSubject = {
           subject_user_id: activityMetadataString(metadata, "subject_user_id"),

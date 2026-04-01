@@ -122,6 +122,13 @@ const upsertClientSchema = z.object({
   date_of_birth: z.string().date().nullable().optional(),
   status: z.enum(CLIENT_STATUS_VALUES).default(CLIENT_STATUS_VALUES[0]),
   linked_user_id: z.string().uuid().nullable().optional(),
+  gender: z.enum(["male", "female", "non_binary", "prefer_not_to_say"]).nullable().optional(),
+  fitness_level: z.enum(["beginner", "intermediate", "advanced", "athlete"]).nullable().optional(),
+  is_pregnant: z.boolean().optional(),
+  due_date: z.string().date().nullable().optional(),
+  is_postpartum: z.boolean().optional(),
+  postpartum_since: z.string().date().nullable().optional(),
+  avatar_url: z.string().nullable().optional(),
   goals: z.string().trim().max(3000).nullable().optional(),
   notes: z.string().trim().max(3000).nullable().optional(),
   medical_flags: z.string().trim().max(3000).nullable().optional(),
@@ -886,7 +893,39 @@ function revalidateCoachPaths(clientId?: string) {
   if (clientId) revalidatePath(`/clients/${clientId}/payments`);
 }
 
-type ClientRosterRow = ClientRow & {
+type ClientListRow = Pick<
+  ClientRow,
+  | "id"
+  | "created_at"
+  | "created_by_user_id"
+  | "date_of_birth"
+  | "display_name"
+  | "email"
+  | "first_name"
+  | "goals"
+  | "height"
+  | "fitness_level"
+  | "gender"
+  | "is_archived"
+  | "is_postpartum"
+  | "is_pregnant"
+  | "due_date"
+  | "postpartum_since"
+  | "last_name"
+  | "linked_user_id"
+  | "medical_flags"
+  | "notes"
+  | "phone"
+  | "primary_coach_id"
+  | "sex"
+  | "status"
+  | "updated_at"
+  | "weight"
+> & {
+  avatar_url?: string | null;
+};
+
+type ClientRosterRow = ClientListRow & {
   active_assignment: AssignmentRow | null;
   active_plans_count: number;
   next_session: AssignmentSessionRow | null;
@@ -1729,7 +1768,10 @@ export async function listCoachClientsAction(input: z.input<typeof listClientsSc
 
       let query = supabase
         .from("clients")
-        .select("*", { count: "exact" })
+        .select(
+          "id, first_name, last_name, display_name, email, phone, date_of_birth, status, is_archived, primary_coach_id, linked_user_id, created_by_user_id, created_at, updated_at, sex, height, weight, gender, fitness_level, is_pregnant, due_date, is_postpartum, postpartum_since, goals, notes, medical_flags",
+          { count: "exact" }
+        )
         .eq("primary_coach_id", user.id)
         .limit(payload.page_size);
 
@@ -1786,7 +1828,7 @@ export async function listCoachClientsAction(input: z.input<typeof listClientsSc
         archived: archivedCountRes.count ?? 0,
       };
 
-      const rows = (data || []) as ClientRow[];
+      const rows = (data || []) as ClientListRow[];
       const clientIds = rows.map((row) => row.id);
       if (clientIds.length === 0) {
         return {
@@ -1848,6 +1890,13 @@ export async function upsertClientAction(input: z.input<typeof upsertClientSchem
         date_of_birth: payload.date_of_birth || null,
         status: payload.status,
         linked_user_id: payload.linked_user_id === undefined ? undefined : payload.linked_user_id,
+        gender: payload.gender ?? null,
+        fitness_level: payload.fitness_level ?? null,
+        is_pregnant: payload.is_pregnant ?? false,
+        due_date: payload.due_date ?? null,
+        is_postpartum: payload.is_postpartum ?? false,
+        postpartum_since: payload.postpartum_since ?? null,
+        avatar_url: payload.avatar_url !== undefined ? payload.avatar_url : undefined,
         goals: payload.goals || null,
         notes: payload.notes || null,
         medical_flags: payload.medical_flags || null,
@@ -1928,6 +1977,13 @@ export async function upsertClientAction(input: z.input<typeof upsertClientSchem
           phone: payload.phone || null,
           date_of_birth: payload.date_of_birth || null,
           status: payload.status,
+          gender: payload.gender ?? null,
+          fitness_level: payload.fitness_level ?? null,
+          is_pregnant: payload.is_pregnant ?? false,
+          due_date: payload.due_date ?? null,
+          is_postpartum: payload.is_postpartum ?? false,
+          postpartum_since: payload.postpartum_since ?? null,
+          avatar_url: payload.avatar_url ?? null,
           // Keep one-to-one mapping: auto-link to creator only when the creator
           // profile is not already linked to another client.
           linked_user_id: resolvedLinkedUserId,
@@ -2003,18 +2059,27 @@ export async function removeClientAction(input: z.input<typeof removeClientSchem
   });
 }
 
-export async function listClientDetailAction(clientId: string) {
+export async function listClientDetailAction(clientId: string): Promise<{ client: ClientRow; resolved_avatar_url: string | null }> {
   return runTrackedAction({
     eventName: "coach.client.detail.read",
     payload: { client_id: clientId },
     action: async () => {
       const { supabase } = await requireActor();
-      const { data: client, error: clientError } = await supabase.from("clients").select("*").eq("id", clientId).single();
+      const { data: client, error: clientError } = await supabase
+        .from("clients")
+        .select("*, linked_profile:profiles!linked_user_id(avatar_url)")
+        .eq("id", clientId)
+        .single();
 
       if (clientError) throw new Error(clientError.message);
 
+      const clientRow = client as ClientRow & { linked_profile?: { avatar_url: string | null } | null };
+      const resolvedAvatarUrl = clientRow.avatar_url ?? clientRow.linked_profile?.avatar_url ?? null;
+      const { linked_profile: _linkedProfile, ...baseClient } = clientRow;
+
       return {
-        client: client as ClientRow,
+        client: baseClient as ClientRow,
+        resolved_avatar_url: resolvedAvatarUrl,
       };
     },
   });

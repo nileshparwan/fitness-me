@@ -105,13 +105,11 @@ export type Database = {
       body_measurements: {
         Row: {
           ankle_cm: number | null
-          arms_cm: number | null
           bicep_left: number | null
           bicep_right: number | null
           bmi: number | null
           body_fat_percent: number | null
           calf: number | null
-          calves_cm: number | null
           chest: number | null
           created_at: string | null
           date: string
@@ -130,22 +128,18 @@ export type Database = {
           subject_user_id: string | null
           thigh_left: number | null
           thigh_right: number | null
-          thighs_cm: number | null
           updated_at: string | null
-          user_id: string | null
           waist: number | null
           weight: number | null
           wrist_cm: number | null
         }
         Insert: {
           ankle_cm?: number | null
-          arms_cm?: number | null
           bicep_left?: number | null
           bicep_right?: number | null
           bmi?: number | null
           body_fat_percent?: number | null
           calf?: number | null
-          calves_cm?: number | null
           chest?: number | null
           created_at?: string | null
           date: string
@@ -164,22 +158,18 @@ export type Database = {
           subject_user_id?: string | null
           thigh_left?: number | null
           thigh_right?: number | null
-          thighs_cm?: number | null
           updated_at?: string | null
-          user_id?: string | null
           waist?: number | null
           weight?: number | null
           wrist_cm?: number | null
         }
         Update: {
           ankle_cm?: number | null
-          arms_cm?: number | null
           bicep_left?: number | null
           bicep_right?: number | null
           bmi?: number | null
           body_fat_percent?: number | null
           calf?: number | null
-          calves_cm?: number | null
           chest?: number | null
           created_at?: string | null
           date?: string
@@ -198,9 +188,7 @@ export type Database = {
           subject_user_id?: string | null
           thigh_left?: number | null
           thigh_right?: number | null
-          thighs_cm?: number | null
           updated_at?: string | null
-          user_id?: string | null
           waist?: number | null
           weight?: number | null
           wrist_cm?: number | null
@@ -219,13 +207,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "coach_client_summary"
             referencedColumns: ["client_id"]
-          },
-          {
-            foreignKeyName: "body_measurements_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
           },
         ]
       }
@@ -652,75 +633,6 @@ export type Database = {
           },
         ]
       }
-      client_meal_item_favorites: {
-        Row: {
-          calories: number | null
-          carbs_g: number | null
-          client_id: string
-          created_at: string
-          fat_g: number | null
-          fiber_g: number | null
-          id: string
-          item_name: string
-          last_used_at: string
-          notes: string | null
-          protein_g: number | null
-          quantity: number | null
-          unit: string | null
-          updated_at: string
-          usage_count: number
-        }
-        Insert: {
-          calories?: number | null
-          carbs_g?: number | null
-          client_id: string
-          created_at?: string
-          fat_g?: number | null
-          fiber_g?: number | null
-          id?: string
-          item_name: string
-          last_used_at?: string
-          notes?: string | null
-          protein_g?: number | null
-          quantity?: number | null
-          unit?: string | null
-          updated_at?: string
-          usage_count?: number
-        }
-        Update: {
-          calories?: number | null
-          carbs_g?: number | null
-          client_id?: string
-          created_at?: string
-          fat_g?: number | null
-          fiber_g?: number | null
-          id?: string
-          item_name?: string
-          last_used_at?: string
-          notes?: string | null
-          protein_g?: number | null
-          quantity?: number | null
-          unit?: string | null
-          updated_at?: string
-          usage_count?: number
-        }
-        Relationships: [
-          {
-            foreignKeyName: "client_meal_item_favorites_client_id_fkey"
-            columns: ["client_id"]
-            isOneToOne: false
-            referencedRelation: "clients"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "client_meal_item_favorites_client_id_fkey"
-            columns: ["client_id"]
-            isOneToOne: false
-            referencedRelation: "coach_client_summary"
-            referencedColumns: ["client_id"]
-          },
-        ]
-      }
       client_payments: {
         Row: {
           amount: number
@@ -1140,21 +1052,28 @@ export type Database = {
       }
       clients: {
         Row: {
+          avatar_url: string | null
           created_at: string
           created_by_user_id: string
           date_of_birth: string | null
           display_name: string | null
+          due_date: string | null
           email: string | null
           first_name: string
+          fitness_level: Database["public"]["Enums"]["fitness_level"] | null
+          gender: Database["public"]["Enums"]["gender_type"] | null
           goals: string | null
           height: number | null
           id: string
           is_archived: boolean
+          is_postpartum: boolean
+          is_pregnant: boolean
           last_name: string | null
           linked_user_id: string | null
           medical_flags: string | null
           notes: string | null
           phone: string | null
+          postpartum_since: string | null
           primary_coach_id: string
           sex: string | null
           status: Database["public"]["Enums"]["client_status"]
@@ -1162,21 +1081,28 @@ export type Database = {
           weight: number | null
         }
         Insert: {
+          avatar_url?: string | null
           created_at?: string
           created_by_user_id: string
           date_of_birth?: string | null
           display_name?: string | null
+          due_date?: string | null
           email?: string | null
           first_name: string
+          fitness_level?: Database["public"]["Enums"]["fitness_level"] | null
+          gender?: Database["public"]["Enums"]["gender_type"] | null
           goals?: string | null
           height?: number | null
           id?: string
           is_archived?: boolean
+          is_postpartum?: boolean
+          is_pregnant?: boolean
           last_name?: string | null
           linked_user_id?: string | null
           medical_flags?: string | null
           notes?: string | null
           phone?: string | null
+          postpartum_since?: string | null
           primary_coach_id: string
           sex?: string | null
           status?: Database["public"]["Enums"]["client_status"]
@@ -1184,21 +1110,28 @@ export type Database = {
           weight?: number | null
         }
         Update: {
+          avatar_url?: string | null
           created_at?: string
           created_by_user_id?: string
           date_of_birth?: string | null
           display_name?: string | null
+          due_date?: string | null
           email?: string | null
           first_name?: string
+          fitness_level?: Database["public"]["Enums"]["fitness_level"] | null
+          gender?: Database["public"]["Enums"]["gender_type"] | null
           goals?: string | null
           height?: number | null
           id?: string
           is_archived?: boolean
+          is_postpartum?: boolean
+          is_pregnant?: boolean
           last_name?: string | null
           linked_user_id?: string | null
           medical_flags?: string | null
           notes?: string | null
           phone?: string | null
+          postpartum_since?: string | null
           primary_coach_id?: string
           sex?: string | null
           status?: Database["public"]["Enums"]["client_status"]
@@ -1403,7 +1336,6 @@ export type Database = {
           subject_user_id: string | null
           total_calories_burned: number | null
           updated_at: string
-          user_id: string | null
           water_intake_ml: number | null
         }
         Insert: {
@@ -1424,7 +1356,6 @@ export type Database = {
           subject_user_id?: string | null
           total_calories_burned?: number | null
           updated_at?: string
-          user_id?: string | null
           water_intake_ml?: number | null
         }
         Update: {
@@ -1445,7 +1376,6 @@ export type Database = {
           subject_user_id?: string | null
           total_calories_burned?: number | null
           updated_at?: string
-          user_id?: string | null
           water_intake_ml?: number | null
         }
         Relationships: [
@@ -1462,13 +1392,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "coach_client_summary"
             referencedColumns: ["client_id"]
-          },
-          {
-            foreignKeyName: "daily_activity_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
           },
         ]
       }
@@ -2542,321 +2465,6 @@ export type Database = {
           },
         ]
       }
-      meal_plan_assignment_meals: {
-        Row: {
-          assignment_id: string
-          calories: number | null
-          carbs_g: number | null
-          created_at: string
-          fat_g: number | null
-          fiber_g: number | null
-          id: string
-          item_name: string
-          meal_type: Database["public"]["Enums"]["meal_log_type"]
-          notes: string | null
-          position: number
-          protein_g: number | null
-          quantity: number | null
-          unit: string | null
-          updated_at: string
-        }
-        Insert: {
-          assignment_id: string
-          calories?: number | null
-          carbs_g?: number | null
-          created_at?: string
-          fat_g?: number | null
-          fiber_g?: number | null
-          id?: string
-          item_name: string
-          meal_type: Database["public"]["Enums"]["meal_log_type"]
-          notes?: string | null
-          position?: number
-          protein_g?: number | null
-          quantity?: number | null
-          unit?: string | null
-          updated_at?: string
-        }
-        Update: {
-          assignment_id?: string
-          calories?: number | null
-          carbs_g?: number | null
-          created_at?: string
-          fat_g?: number | null
-          fiber_g?: number | null
-          id?: string
-          item_name?: string
-          meal_type?: Database["public"]["Enums"]["meal_log_type"]
-          notes?: string | null
-          position?: number
-          protein_g?: number | null
-          quantity?: number | null
-          unit?: string | null
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "meal_plan_assignment_meals_assignment_id_fkey"
-            columns: ["assignment_id"]
-            isOneToOne: false
-            referencedRelation: "meal_plan_assignments"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      meal_plan_assignments: {
-        Row: {
-          archived_at: string | null
-          assigned_by_user_id: string
-          created_at: string
-          daily_calorie_target: number | null
-          daily_carbs_target_g: number | null
-          daily_fat_target_g: number | null
-          daily_protein_target_g: number | null
-          end_date: string
-          id: string
-          meal_targets_json: Json
-          name: string
-          notes: string | null
-          plan_id: string
-          start_date: string
-          status: Database["public"]["Enums"]["meal_assignment_status"]
-          subject_client_id: string | null
-          subject_user_id: string | null
-          updated_at: string
-        }
-        Insert: {
-          archived_at?: string | null
-          assigned_by_user_id: string
-          created_at?: string
-          daily_calorie_target?: number | null
-          daily_carbs_target_g?: number | null
-          daily_fat_target_g?: number | null
-          daily_protein_target_g?: number | null
-          end_date: string
-          id?: string
-          meal_targets_json?: Json
-          name: string
-          notes?: string | null
-          plan_id: string
-          start_date: string
-          status?: Database["public"]["Enums"]["meal_assignment_status"]
-          subject_client_id?: string | null
-          subject_user_id?: string | null
-          updated_at?: string
-        }
-        Update: {
-          archived_at?: string | null
-          assigned_by_user_id?: string
-          created_at?: string
-          daily_calorie_target?: number | null
-          daily_carbs_target_g?: number | null
-          daily_fat_target_g?: number | null
-          daily_protein_target_g?: number | null
-          end_date?: string
-          id?: string
-          meal_targets_json?: Json
-          name?: string
-          notes?: string | null
-          plan_id?: string
-          start_date?: string
-          status?: Database["public"]["Enums"]["meal_assignment_status"]
-          subject_client_id?: string | null
-          subject_user_id?: string | null
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "meal_plan_assignments_assigned_by_user_id_fkey"
-            columns: ["assigned_by_user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "meal_plan_assignments_plan_id_fkey"
-            columns: ["plan_id"]
-            isOneToOne: false
-            referencedRelation: "meal_plans"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "meal_plan_assignments_subject_client_id_fkey"
-            columns: ["subject_client_id"]
-            isOneToOne: false
-            referencedRelation: "clients"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "meal_plan_assignments_subject_client_id_fkey"
-            columns: ["subject_client_id"]
-            isOneToOne: false
-            referencedRelation: "coach_client_summary"
-            referencedColumns: ["client_id"]
-          },
-          {
-            foreignKeyName: "meal_plan_assignments_subject_user_id_fkey"
-            columns: ["subject_user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      meal_plan_meals: {
-        Row: {
-          alternatives: string | null
-          calories: number | null
-          carbs_g: number | null
-          created_at: string | null
-          fats_g: number | null
-          food_name: string
-          id: string
-          instructions: string | null
-          meal_type: string
-          position: number | null
-          program_id: string
-          protein_g: number | null
-          status: string
-          updated_at: string | null
-        }
-        Insert: {
-          alternatives?: string | null
-          calories?: number | null
-          carbs_g?: number | null
-          created_at?: string | null
-          fats_g?: number | null
-          food_name: string
-          id?: string
-          instructions?: string | null
-          meal_type: string
-          position?: number | null
-          program_id: string
-          protein_g?: number | null
-          status?: string
-          updated_at?: string | null
-        }
-        Update: {
-          alternatives?: string | null
-          calories?: number | null
-          carbs_g?: number | null
-          created_at?: string | null
-          fats_g?: number | null
-          food_name?: string
-          id?: string
-          instructions?: string | null
-          meal_type?: string
-          position?: number | null
-          program_id?: string
-          protein_g?: number | null
-          status?: string
-          updated_at?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "meal_plan_meals_program_id_fkey"
-            columns: ["program_id"]
-            isOneToOne: false
-            referencedRelation: "meal_plans"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      meal_plans: {
-        Row: {
-          archived_at: string | null
-          created_at: string | null
-          daily_calorie_target: number | null
-          daily_carbs_target_g: number | null
-          daily_fat_target_g: number | null
-          daily_protein_target_g: number | null
-          description: string | null
-          end_date: string
-          id: string
-          is_public: boolean | null
-          meal_targets_json: Json
-          name: string
-          notes: string | null
-          start_date: string
-          status: string
-          subject_client_id: string | null
-          subject_user_id: string | null
-          updated_at: string | null
-          user_id: string
-        }
-        Insert: {
-          archived_at?: string | null
-          created_at?: string | null
-          daily_calorie_target?: number | null
-          daily_carbs_target_g?: number | null
-          daily_fat_target_g?: number | null
-          daily_protein_target_g?: number | null
-          description?: string | null
-          end_date: string
-          id?: string
-          is_public?: boolean | null
-          meal_targets_json?: Json
-          name: string
-          notes?: string | null
-          start_date: string
-          status?: string
-          subject_client_id?: string | null
-          subject_user_id?: string | null
-          updated_at?: string | null
-          user_id: string
-        }
-        Update: {
-          archived_at?: string | null
-          created_at?: string | null
-          daily_calorie_target?: number | null
-          daily_carbs_target_g?: number | null
-          daily_fat_target_g?: number | null
-          daily_protein_target_g?: number | null
-          description?: string | null
-          end_date?: string
-          id?: string
-          is_public?: boolean | null
-          meal_targets_json?: Json
-          name?: string
-          notes?: string | null
-          start_date?: string
-          status?: string
-          subject_client_id?: string | null
-          subject_user_id?: string | null
-          updated_at?: string | null
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "meal_plans_subject_client_id_fkey"
-            columns: ["subject_client_id"]
-            isOneToOne: false
-            referencedRelation: "clients"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "meal_plans_subject_client_id_fkey"
-            columns: ["subject_client_id"]
-            isOneToOne: false
-            referencedRelation: "coach_client_summary"
-            referencedColumns: ["client_id"]
-          },
-          {
-            foreignKeyName: "meal_plans_subject_user_id_fkey"
-            columns: ["subject_user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "meal_plans_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       menstrual_cycles: {
         Row: {
           bloating: number | null
@@ -2876,7 +2484,6 @@ export type Database = {
           subject_client_id: string | null
           subject_user_id: string | null
           updated_at: string
-          user_id: string
         }
         Insert: {
           bloating?: number | null
@@ -2896,7 +2503,6 @@ export type Database = {
           subject_client_id?: string | null
           subject_user_id?: string | null
           updated_at?: string
-          user_id: string
         }
         Update: {
           bloating?: number | null
@@ -2916,16 +2522,8 @@ export type Database = {
           subject_client_id?: string | null
           subject_user_id?: string | null
           updated_at?: string
-          user_id?: string
         }
         Relationships: [
-          {
-            foreignKeyName: "menstrual_cycles_logged_by_user_id_fkey"
-            columns: ["logged_by_user_id"]
-            isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          },
           {
             foreignKeyName: "menstrual_cycles_subject_client_id_fkey"
             columns: ["subject_client_id"]
@@ -2934,11 +2532,11 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "menstrual_cycles_subject_user_id_fkey"
-            columns: ["subject_user_id"]
+            foreignKeyName: "menstrual_cycles_subject_client_id_fkey"
+            columns: ["subject_client_id"]
             isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
+            referencedRelation: "coach_client_summary"
+            referencedColumns: ["client_id"]
           },
         ]
       }
@@ -3183,7 +2781,7 @@ export type Database = {
           due_date: string | null
           fitness_level: Database["public"]["Enums"]["fitness_level"] | null
           full_name: string | null
-          gender: Database["public"]["Enums"]["gender_type"] | null
+          gender: string | null
           has_password: boolean
           height: number | null
           id: string
@@ -3220,7 +2818,7 @@ export type Database = {
           due_date?: string | null
           fitness_level?: Database["public"]["Enums"]["fitness_level"] | null
           full_name?: string | null
-          gender?: Database["public"]["Enums"]["gender_type"] | null
+          gender?: string | null
           has_password?: boolean
           height?: number | null
           id: string
@@ -3257,7 +2855,7 @@ export type Database = {
           due_date?: string | null
           fitness_level?: Database["public"]["Enums"]["fitness_level"] | null
           full_name?: string | null
-          gender?: Database["public"]["Enums"]["gender_type"] | null
+          gender?: string | null
           has_password?: boolean
           height?: number | null
           id?: string
@@ -3326,7 +2924,6 @@ export type Database = {
           subject_user_id: string | null
           total_duration_minutes: number | null
           updated_at: string
-          user_id: string | null
         }
         Insert: {
           awake_minutes?: number | null
@@ -3345,7 +2942,6 @@ export type Database = {
           subject_user_id?: string | null
           total_duration_minutes?: number | null
           updated_at?: string
-          user_id?: string | null
         }
         Update: {
           awake_minutes?: number | null
@@ -3364,7 +2960,6 @@ export type Database = {
           subject_user_id?: string | null
           total_duration_minutes?: number | null
           updated_at?: string
-          user_id?: string | null
         }
         Relationships: [
           {
@@ -3380,13 +2975,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "coach_client_summary"
             referencedColumns: ["client_id"]
-          },
-          {
-            foreignKeyName: "sleep_log_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
           },
         ]
       }
@@ -3569,36 +3157,27 @@ export type Database = {
       }
       supplement_catalog: {
         Row: {
-          brand: string | null
           categories: string[] | null
-          category: string
           created_at: string
           id: string
           is_global: boolean
           name: string
-          nutrients: Json
           owner_user_id: string | null
         }
         Insert: {
-          brand?: string | null
           categories?: string[] | null
-          category: string
           created_at?: string
           id?: string
           is_global?: boolean
           name: string
-          nutrients?: Json
           owner_user_id?: string | null
         }
         Update: {
-          brand?: string | null
           categories?: string[] | null
-          category?: string
           created_at?: string
           id?: string
           is_global?: boolean
           name?: string
-          nutrients?: Json
           owner_user_id?: string | null
         }
         Relationships: []
@@ -4101,7 +3680,6 @@ export type Database = {
           subject_user_id: string | null
           systolic_bp: number | null
           updated_at: string
-          user_id: string | null
         }
         Insert: {
           body_temperature_c?: number | null
@@ -4119,7 +3697,6 @@ export type Database = {
           subject_user_id?: string | null
           systolic_bp?: number | null
           updated_at?: string
-          user_id?: string | null
         }
         Update: {
           body_temperature_c?: number | null
@@ -4137,7 +3714,6 @@ export type Database = {
           subject_user_id?: string | null
           systolic_bp?: number | null
           updated_at?: string
-          user_id?: string | null
         }
         Relationships: [
           {
@@ -4153,13 +3729,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "coach_client_summary"
             referencedColumns: ["client_id"]
-          },
-          {
-            foreignKeyName: "vitals_log_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
           },
         ]
       }
@@ -4301,7 +3870,6 @@ export type Database = {
         Row: {
           active_goals_count: number | null
           at_risk_goals_count: number | null
-          avatar_url: string | null
           checkins_last_30d: number | null
           client_id: string | null
           client_since: string | null

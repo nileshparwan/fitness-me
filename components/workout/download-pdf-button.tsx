@@ -50,8 +50,8 @@ export default function DownloadPDFButton({ workout, strengthLogs, cardioLogs }:
       disabled={isPreparing}
       onClick={handleDownload}
     >
-      {isPreparing ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin sm:mr-2 sm:h-4 sm:w-4" /> : <Download className="mr-1.5 h-3.5 w-3.5 sm:mr-2 sm:h-4 sm:w-4" />}
-      PDF
+      {isPreparing ? <Loader2 className="mr-0 h-3.5 w-3.5 animate-spin sm:mr-2 sm:h-4 sm:w-4" /> : <Download className="mr-0 h-3.5 w-3.5 sm:mr-2 sm:h-4 sm:w-4" />}
+      <span className="hidden sm:inline">PDF</span>
     </Button>
   );
 }

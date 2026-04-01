@@ -223,9 +223,6 @@ type BodyMeasurementRow = Pick<
   | "thigh_left"
   | "thigh_right"
   | "calf"
-  | "arms_cm"
-  | "thighs_cm"
-  | "calves_cm"
 >;
 
 const progressRangeSchema = z.enum(["7d", "30d", "90d"]);
@@ -607,7 +604,8 @@ export async function getProgressSummaryStats(
           supabase
             .from("body_measurements")
             .select("date, weight")
-            .eq("user_id", userId)
+            .eq("subject_user_id", userId)
+            .is("subject_client_id", null)
             .gte("date", currentWindow.startDate)
             .lte("date", currentWindow.endDate)
             .not("weight", "is", null)
@@ -616,7 +614,8 @@ export async function getProgressSummaryStats(
           supabase
             .from("body_measurements")
             .select("date, weight")
-            .eq("user_id", userId)
+            .eq("subject_user_id", userId)
+            .is("subject_client_id", null)
             .gte("date", priorWindow.startDate)
             .lte("date", priorWindow.endDate)
             .not("weight", "is", null)
@@ -637,7 +636,8 @@ export async function getProgressSummaryStats(
       const stepsResult = await supabaseAny
         .from("daily_activity")
         .select("date, steps")
-        .eq("user_id", userId)
+        .eq("subject_user_id", userId)
+        .is("subject_client_id", null)
         .gte("date", currentWindow.startDate)
         .lte("date", currentWindow.endDate);
 
@@ -1118,13 +1118,15 @@ export async function getProgressInsights(
         supabaseAny
           .from("sleep_log")
           .select("date, total_duration_minutes, sleep_score")
-          .eq("user_id", userId)
+          .eq("subject_user_id", userId)
+          .is("subject_client_id", null)
           .gte("date", currentWindow.startDate)
           .lte("date", currentWindow.endDate),
         supabaseAny
           .from("vitals_log")
           .select("recorded_at, resting_heart_rate")
-          .eq("user_id", userId)
+          .eq("subject_user_id", userId)
+          .is("subject_client_id", null)
           .gte("recorded_at", `${subtractDays(currentWindow.endDate, 89)}T00:00:00.000Z`)
           .lte("recorded_at", `${currentWindow.endDate}T23:59:59.999Z`),
       ]);
@@ -1256,7 +1258,8 @@ export async function getProgressInsights(
       const { data: weightRows, error: weightError } = await supabase
         .from("body_measurements")
         .select("date, weight")
-        .eq("user_id", userId)
+        .eq("subject_user_id", userId)
+        .is("subject_client_id", null)
         .gte("date", subtractDays(currentWindow.endDate, 30))
         .lte("date", currentWindow.endDate)
         .not("weight", "is", null)
@@ -1349,10 +1352,9 @@ export async function getBodyCompositionSeries(
       const supabase = await createClient();
       const { data, error } = await supabase
         .from("body_measurements")
-        .select(
-          "date, weight, body_fat_percent, waist, hips, chest, neck, bicep_left, bicep_right, thigh_left, thigh_right, calf, arms_cm, thighs_cm, calves_cm"
-        )
-        .eq("user_id", userId)
+        .select("date, weight, body_fat_percent, waist, hips, chest, neck, bicep_left, bicep_right, thigh_left, thigh_right, calf")
+        .eq("subject_user_id", userId)
+        .is("subject_client_id", null)
         .gte("date", window.startDate)
         .lte("date", window.endDate)
         .order("date", { ascending: true });
@@ -1367,11 +1369,11 @@ export async function getBodyCompositionSeries(
         hips: row.hips,
         chest: row.chest,
         neck: row.neck,
-        bicep_left: row.bicep_left ?? row.arms_cm,
-        bicep_right: row.bicep_right ?? row.arms_cm,
-        thigh_left: row.thigh_left ?? row.thighs_cm,
-        thigh_right: row.thigh_right ?? row.thighs_cm,
-        calf: row.calf ?? row.calves_cm,
+        bicep_left: row.bicep_left,
+        bicep_right: row.bicep_right,
+        thigh_left: row.thigh_left,
+        thigh_right: row.thigh_right,
+        calf: row.calf,
       }));
     },
   });
@@ -1868,22 +1870,25 @@ export async function getComplianceRecovery(
           .eq("user_id", userId)
           .gte("snapshot_at", `${window.startDate}T00:00:00.000Z`)
           .lte("snapshot_at", `${window.endDate}T23:59:59.999Z`),
-          supabaseAny
+        supabaseAny
           .from("sleep_log")
           .select("date, total_duration_minutes, sleep_score, deep_sleep_minutes, rem_sleep_minutes, light_sleep_minutes, awake_minutes")
-          .eq("user_id", userId)
+          .eq("subject_user_id", userId)
+          .is("subject_client_id", null)
           .gte("date", subtractDays(window.endDate, 13))
           .lte("date", window.endDate),
-          supabaseAny
+        supabaseAny
           .from("vitals_log")
           .select("recorded_at, hrv_ms, resting_heart_rate")
-          .eq("user_id", userId)
+          .eq("subject_user_id", userId)
+          .is("subject_client_id", null)
           .gte("recorded_at", `${subtractDays(window.endDate, 13)}T00:00:00.000Z`)
           .lte("recorded_at", `${window.endDate}T23:59:59.999Z`),
-          supabaseAny
+        supabaseAny
           .from("daily_activity")
           .select("date, sleep_hours")
-          .eq("user_id", userId)
+          .eq("subject_user_id", userId)
+          .is("subject_client_id", null)
           .gte("date", subtractDays(window.endDate, 13))
           .lte("date", window.endDate),
           getDailyBiofeedbackRows(userId, subtractDays(window.endDate, 13), window.endDate),

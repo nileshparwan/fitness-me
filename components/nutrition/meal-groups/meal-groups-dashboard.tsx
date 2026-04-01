@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { CalendarRange, Copy, Edit, Loader2, MoreVertical, Plus, Search, Trash2, UtensilsCrossed } from "lucide-react";
+import { ArrowRight, CalendarRange, ChevronLeft, ChevronRight, Copy, Edit, Loader2, MoreVertical, Plus, Search, Trash2, UserPlus, UtensilsCrossed } from "lucide-react";
 import { toast } from "sonner";
 
 import type { MealGroupListRow, MealGroupStatus } from "@/app/actions/meal-groups";
@@ -15,13 +15,19 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useDebounce } from "@/hooks/use-debounce";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { useNutritionGroupMutations, useNutritionMealGroups } from "@/hooks/use-nutrition-data";
 import { withToastFeedback } from "@/lib/ui/toast-feedback";
-import { useSetNutritionNavigationSource, useSetNutritionViewMode } from "@/stores/use-nutrition-ui-store";
+import {
+  useNutritionSelectedMealGroupId,
+  useSetNutritionNavigationSource,
+  useSetNutritionSelectedMealGroupId,
+  useSetNutritionViewMode,
+} from "@/stores/use-nutrition-ui-store";
 import { cn } from "@/utils";
 
 type StatusFilter = "all" | MealGroupStatus;
@@ -72,6 +78,8 @@ export function MealGroupsDashboard() {
 
   const setViewMode = useSetNutritionViewMode();
   const setNavigationSource = useSetNutritionNavigationSource();
+  const selectedMealGroupId = useNutritionSelectedMealGroupId();
+  const setSelectedMealGroupId = useSetNutritionSelectedMealGroupId();
 
   const debouncedSearch = useDebounce(search, 250);
   const query = useNutritionMealGroups({
@@ -165,6 +173,9 @@ export function MealGroupsDashboard() {
     if (!deleteTarget) return;
     const deleted = await deleteGroup(deleteTarget.id);
     if (!deleted) return;
+    if (selectedMealGroupId === deleteTarget.id) {
+      setSelectedMealGroupId("");
+    }
     setDeleteTarget(null);
   };
 
@@ -289,7 +300,10 @@ export function MealGroupsDashboard() {
 
             <div className="flex items-center gap-2">
               <Button asChild className="flex-1 rounded-xl accent-strong">
-                <Link href={`/nutrition/groups/${row.id}`}>Open</Link>
+                <Link href={`/nutrition/groups/${row.id}`}>
+                  <ArrowRight className="mr-0 h-4 w-4 sm:mr-2" />
+                  <span className="hidden sm:inline">Open</span>
+                </Link>
               </Button>
               <Button
                 variant="outline"
@@ -318,7 +332,8 @@ export function MealGroupsDashboard() {
               disabled={page === 0}
               onClick={() => setPage((previous) => Math.max(0, previous - 1))}
             >
-              Previous
+              <ChevronLeft className="mr-0 h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Previous</span>
             </Button>
             <Button
               variant="outline"
@@ -327,7 +342,8 @@ export function MealGroupsDashboard() {
               disabled={!query.data.has_more}
               onClick={() => setPage((previous) => previous + 1)}
             >
-              Next
+              <ChevronRight className="mr-0 h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Next</span>
             </Button>
           </div>
         </section>
@@ -435,6 +451,19 @@ export function MealGroupsDashboard() {
           </SheetHeader>
 
           <div className="grid gap-2 px-5 py-4">
+            <div className="flex items-center justify-between rounded-xl border border-border/60 bg-muted/20 px-3 py-3">
+              <div className="space-y-0.5">
+                <p className="text-sm font-medium">Default Meal Group</p>
+                <p className="text-xs text-muted-foreground">Use this meal group in the meal planner.</p>
+              </div>
+              <Switch
+                checked={selectedMealGroupId === actionTarget?.id}
+                onCheckedChange={(checked) => {
+                  if (!actionTarget) return;
+                  setSelectedMealGroupId(checked ? actionTarget.id : "");
+                }}
+              />
+            </div>
             <Button
               variant="outline"
               className="justify-start rounded-xl border-border/60"
@@ -444,8 +473,8 @@ export function MealGroupsDashboard() {
                 setActionTarget(null);
               }}
             >
-              <Edit className="mr-2 h-4 w-4" />
-              Edit
+              <Edit className="mr-0 h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Edit</span>
             </Button>
             <Button
               variant="outline"
@@ -456,8 +485,8 @@ export function MealGroupsDashboard() {
                 setActionTarget(null);
               }}
             >
-              <Copy className="mr-2 h-4 w-4" />
-              Duplicate
+              <Copy className="mr-0 h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Duplicate</span>
             </Button>
             <Button
               variant="outline"
@@ -468,7 +497,8 @@ export function MealGroupsDashboard() {
                 setActionTarget(null);
               }}
             >
-              Assign
+              <UserPlus className="mr-0 h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Assign</span>
             </Button>
             <Button
               variant="destructive"
@@ -479,8 +509,8 @@ export function MealGroupsDashboard() {
                 setActionTarget(null);
               }}
             >
-              <Trash2 className="mr-2 h-4 w-4" />
-              Delete
+              <Trash2 className="mr-0 h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Delete</span>
             </Button>
           </div>
         </SheetContent>

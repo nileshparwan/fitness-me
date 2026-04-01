@@ -118,13 +118,14 @@ export function useClientDetail(
   clientId: string,
   options?: {
     initialData?: Awaited<ReturnType<typeof listClientDetailAction>>;
+    enabled?: boolean;
   }
 ) {
   return useQuery({
     queryKey: coachKeys.clientDetail(clientId),
     queryFn: () => listClientDetailAction(clientId),
     initialData: options?.initialData,
-    enabled: Boolean(clientId),
+    enabled: options?.enabled ?? Boolean(clientId),
     staleTime: 60_000,
     gcTime: 10 * 60_000,
     refetchOnWindowFocus: false,

@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { CalendarPlus } from "lucide-react";
 
 import {
   getHealthCheckIns,
@@ -87,7 +88,8 @@ export default function CheckInPage() {
             setLogOpen(true);
           }}
         >
-          + Log Today
+          <CalendarPlus className="mr-0 h-4 w-4 sm:mr-2" />
+          <span className="hidden sm:inline">Log Today</span>
         </Button>
       </div>
 

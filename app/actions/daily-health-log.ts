@@ -189,7 +189,6 @@ export async function logDailyHealthAction(
       const supabaseAny = supabase as any;
       const subjectRef = resolveSubject(subject, user.id);
       const commonRef = {
-        user_id: subjectRef.subject_user_id,
         subject_user_id: subjectRef.subject_user_id,
         subject_client_id: subjectRef.subject_client_id,
       };
@@ -570,7 +569,6 @@ export async function updateDailyActivityAction(
       const supabaseAny = supabase as any;
       const subjectRef = resolveSubject(subject, user.id);
       const commonRef = {
-        user_id: subjectRef.subject_user_id,
         subject_user_id: subjectRef.subject_user_id,
         subject_client_id: subjectRef.subject_client_id,
       };

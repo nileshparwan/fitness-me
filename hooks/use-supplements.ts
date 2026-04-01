@@ -27,7 +27,7 @@ export function useSupplementCatalog(params?: {
     queryFn: () =>
       listSupplementCatalogAction({
         search,
-        category: category as
+        category_filter: category as
           | "vitamin"
           | "mineral"
           | "omega"

@@ -194,8 +194,12 @@ export default function ProgramsPage() {
                 onClick={handleBulkDelete} 
                 disabled={isDeleting || selectedIds.length === 0}
               >
-                {isDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4 mr-2" />}
-                <span className="sr-only md:not-sr-only">Delete</span>
+                {isDeleting ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Trash2 className="mr-0 h-4 w-4 sm:mr-2" />
+                )}
+                <span className="hidden sm:inline">Delete</span>
               </Button>
             </div>
           </div>
@@ -213,16 +217,17 @@ export default function ProgramsPage() {
               <div className="flex items-center gap-2">
                  {/* SELECT MODE */}
                  <Button type="button" variant="outline" className="border-border/60 bg-muted/20 px-4 text-muted-foreground hover:text-foreground" onClick={toggleSelectionMode}>
-                    <CheckSquare className="mr-2 h-4 w-4" /> Select
+                    <CheckSquare className="mr-0 h-4 w-4 sm:mr-2" />
+                    <span className="hidden sm:inline">Select</span>
                  </Button>
 
                  {/* CREATE ACTION */}
                  <Dialog open={isOpen} onOpenChange={setIsOpen}>
                   <DialogTrigger asChild>
-                    <Button className="accent-strong hidden px-5 text-black md:inline-flex"><Plus className="mr-2 h-4 w-4" /> New Program</Button>
-                  </DialogTrigger>
-                  <DialogTrigger asChild>
-                    <Button className="accent-strong px-4 text-black md:hidden"><Plus className="mr-2 h-4 w-4" /> New Program</Button>
+                    <Button className="accent-strong px-4 text-black sm:px-5">
+                      <Plus className="mr-0 h-4 w-4 sm:mr-2" />
+                      <span className="hidden sm:inline">New Program</span>
+                    </Button>
                   </DialogTrigger>
                   <DialogContent size={{ tablet: "md", desktop: "md" }}>
                     <DialogHeader><DialogTitle>Create New Program</DialogTitle></DialogHeader>

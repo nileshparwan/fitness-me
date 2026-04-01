@@ -36,52 +36,12 @@ type MealUnit = (typeof MEAL_UNITS)[number];
 
 const MEAL_UNIT_SET = new Set<string>(MEAL_UNITS);
 
-const MEAL_UNIT_ALIASES: Record<string, MealUnit> = {
-  gram: "g",
-  grams: "g",
-  gm: "g",
-  gms: "g",
-  kilogram: "kg",
-  kilograms: "kg",
-  kgs: "kg",
-  milligram: "mg",
-  milligrams: "mg",
-  pound: "lb",
-  pounds: "lb",
-  lbs: "lb",
-  ounce: "oz",
-  ounces: "oz",
-  milliliter: "ml",
-  milliliters: "ml",
-  millilitre: "ml",
-  millilitres: "ml",
-  liter: "l",
-  liters: "l",
-  litre: "l",
-  litres: "l",
-  teaspoon: "tsp",
-  teaspoons: "tsp",
-  tablespoon: "tbsp",
-  tablespoons: "tbsp",
-  cups: "cup",
-  servings: "serving",
-  pieces: "piece",
-  slices: "slice",
-  bowls: "bowl",
-  plates: "plate",
-  packets: "packet",
-  scoops: "scoop",
-  cans: "can",
-  bottles: "bottle",
-  glasses: "glass",
-};
-
 export function normalizeMealUnit(value: string | null | undefined): MealUnit | null {
   if (typeof value !== "string") return null;
   const normalized = value.trim().toLowerCase();
   if (!normalized) return null;
   if (MEAL_UNIT_SET.has(normalized)) return normalized as MealUnit;
-  return MEAL_UNIT_ALIASES[normalized] ?? null;
+  return null;
 }
 
 export const mealUnitInputSchema = z
@@ -103,10 +63,6 @@ export const mealUnitInputSchema = z
     return normalizeMealUnit(value);
   });
 
-export function getMealUnitOptions(legacyUnit?: string | null) {
-  const options = MEAL_UNITS.map((unit) => ({ value: unit, label: unit }));
-  if (!legacyUnit) return options;
-  const normalizedLegacy = legacyUnit.trim();
-  if (!normalizedLegacy || normalizeMealUnit(normalizedLegacy)) return options;
-  return [{ value: normalizedLegacy, label: normalizedLegacy }, ...options];
+export function getMealUnitOptions() {
+  return MEAL_UNITS.map((unit) => ({ value: unit, label: unit }));
 }

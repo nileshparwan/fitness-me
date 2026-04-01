@@ -1,10 +1,10 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, startTransition, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { Download, Share2 } from "lucide-react";
+import { Apple, Download, Share2 } from "lucide-react";
 
 import {
   getProgressOverviewBundle,
@@ -49,9 +49,11 @@ export default function ProgressPage() {
   const overview = overviewQuery.data;
   const isLoadingOverview = overviewQuery.isLoading;
   const setTab = (nextTab: string) => {
-    const params = new URLSearchParams(searchParams.toString());
-    params.set("tab", nextTab);
-    router.replace(`${pathname}?${params.toString()}`);
+    startTransition(() => {
+      const params = new URLSearchParams(searchParams.toString());
+      params.set("tab", nextTab);
+      router.replace(`${pathname}?${params.toString()}`);
+    });
   };
 
   return (
@@ -63,7 +65,10 @@ export default function ProgressPage() {
         </section>
         <div className="flex flex-wrap items-center gap-2">
           <Button asChild variant="outline" size="sm" className="rounded-[10px]">
-            <Link href="/progress/nutrition">Nutrients</Link>
+            <Link href="/progress/nutrition">
+              <Apple className="mr-0 h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Nutrients</span>
+            </Link>
           </Button>
           <Button variant="ghost" size="icon" disabled className="rounded-[10px]">
             <Share2 className="h-4 w-4" />

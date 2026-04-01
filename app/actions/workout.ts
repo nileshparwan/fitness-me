@@ -242,7 +242,7 @@ async function syncExecutionExercisesFromWorkout(input: {
       exercise_name: row.exercise_name,
       exercise_type: "strength",
       volume_kg: row.volume_kg > 0 ? Number(row.volume_kg.toFixed(2)) : null,
-      distance: null,
+      distance_km: null,
       duration_minutes: null,
     })),
     ...Array.from(cardioAgg.values()).map((row) => ({
@@ -251,7 +251,7 @@ async function syncExecutionExercisesFromWorkout(input: {
       exercise_name: row.exercise_name,
       exercise_type: "cardio",
       volume_kg: null,
-      distance: row.distance > 0 ? Number(row.distance.toFixed(2)) : null,
+      distance_km: row.distance > 0 ? Number(row.distance.toFixed(2)) : null,
       duration_minutes: row.duration_minutes > 0 ? row.duration_minutes : null,
     })),
   ];
@@ -319,7 +319,7 @@ export type WorkoutActionInput = {
   exercises?: {
     type?: 'strength' | 'cardio'; 
     exercise_id?: string;
-    group_id?: string;
+    superset_group_id?: string;
     name: string;
     notes?: string;
     // Strength fields
@@ -450,7 +450,7 @@ function buildWorkoutLogs(
         execution_id: executionId,
         entry_sequence: entryIndex,
         exercise_id: ex.exercise_id || null,
-        group_id: ex.group_id || null,
+        group_id: ex.superset_group_id || null,
         exercise_name: ex.name,
         set_number: set.set_number,
         reps: Number(set.reps || 0),

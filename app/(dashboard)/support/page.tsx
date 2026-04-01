@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2, MessageSquare, Plus, Search } from "lucide-react";
+import { ChevronLeft, ChevronRight, Loader2, MessageSquare, Plus, Search } from "lucide-react";
 import { toast } from "sonner";
 
 import { type TicketCategory, type TicketStatus } from "@/app/actions/tickets";
@@ -134,8 +134,8 @@ export default function SupportDashboardPage() {
         </div>
         <Button asChild size="sm">
           <Link href="/support/new">
-            <Plus className="mr-2 h-4 w-4" />
-            New Ticket
+            <Plus className="mr-0 h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">New Ticket</span>
           </Link>
         </Button>
       </section>
@@ -273,7 +273,8 @@ export default function SupportDashboardPage() {
                 disabled={publicPage === 0 || publicQuery.isFetching}
                 onClick={() => setPublicPage((prev) => Math.max(prev - 1, 0))}
               >
-                Previous
+                <ChevronLeft className="mr-0 h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Previous</span>
               </Button>
               <Button
                 size="sm"
@@ -293,7 +294,8 @@ export default function SupportDashboardPage() {
                 }
                 onClick={() => setPublicPage((prev) => prev + 1)}
               >
-                Next
+                <ChevronRight className="mr-0 h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Next</span>
               </Button>
             </div>
           </section>
@@ -394,7 +396,8 @@ export default function SupportDashboardPage() {
                 disabled={myPage === 0 || myQuery.isFetching}
                 onClick={() => setMyPage((prev) => Math.max(prev - 1, 0))}
               >
-                Previous
+                <ChevronLeft className="mr-0 h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Previous</span>
               </Button>
               <Button
                 size="sm"
@@ -413,7 +416,8 @@ export default function SupportDashboardPage() {
                 }
                 onClick={() => setMyPage((prev) => prev + 1)}
               >
-                Next
+                <ChevronRight className="mr-0 h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Next</span>
               </Button>
             </div>
           </section>

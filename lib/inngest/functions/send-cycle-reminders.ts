@@ -15,7 +15,7 @@ type CyclePreferenceRow = {
 };
 
 type CycleRow = {
-  user_id: string;
+  subject_user_id: string | null;
   period_start_date: string;
   cycle_length_days: number | null;
 };
@@ -67,15 +67,16 @@ export const sendCycleReminders = inngest.createFunction(
     const cyclesByUser = await step.run("load-latest-cycles", async () => {
       const { data, error } = await admin
         .from("menstrual_cycles")
-        .select("user_id, period_start_date, cycle_length_days")
-        .in("user_id", rows.map((row) => row.user_id))
+        .select("subject_user_id, period_start_date, cycle_length_days")
+        .in("subject_user_id", rows.map((row) => row.user_id))
+        .is("subject_client_id", null)
         .order("period_start_date", { ascending: false });
 
       if (error) throw new Error(error.message);
       const latestByUser: Record<string, CycleRow> = {};
       for (const row of (data || []) as CycleRow[]) {
-        if (!latestByUser[row.user_id]) {
-          latestByUser[row.user_id] = row;
+        if (row.subject_user_id && !latestByUser[row.subject_user_id]) {
+          latestByUser[row.subject_user_id] = row;
         }
       }
       return latestByUser;

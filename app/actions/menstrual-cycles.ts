@@ -150,7 +150,6 @@ export async function logCycleAction(
       const parsed = cycleInputSchema.parse(input);
       const resolved = await resolveCycleSubject(actor, subjectInput);
       const payload: Database["public"]["Tables"]["menstrual_cycles"]["Insert"] = {
-        user_id: actor.userId,
         logged_by_user_id: actor.userId,
         subject_user_id: resolved.subjectRef.subject_user_id,
         subject_client_id: resolved.subjectRef.subject_client_id,

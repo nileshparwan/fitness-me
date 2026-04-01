@@ -67,8 +67,8 @@ export default function AdminSettingsPage() {
           </p>
         </div>
         <Button variant="outline" onClick={exportSnapshot} disabled={!data}>
-          <Download className="mr-2 h-4 w-4" />
-          Export Config Snapshot
+          <Download className="mr-0 h-4 w-4 sm:mr-2" />
+          <span className="hidden sm:inline">Export Config Snapshot</span>
         </Button>
       </div>
 
@@ -120,8 +120,8 @@ export default function AdminSettingsPage() {
               />
             </label>
             <Button onClick={saveDummyConfig} className="w-full">
-              <Save className="mr-2 h-4 w-4" />
-              Save Dummy Config
+              <Save className="mr-0 h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Save Dummy Config</span>
             </Button>
           </CardContent>
         </Card>

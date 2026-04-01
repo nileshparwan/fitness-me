@@ -81,6 +81,9 @@ export function useWorkouts() {
       return await createWorkoutAction({
         name: workoutData.name,
         date: workoutData.date,
+        sport_type: workoutData.sport_type,
+        location: workoutData.location,
+        perceived_exertion: workoutData.perceived_exertion,
         notes: workoutData.notes,
         overall_rating: workoutData.overall_rating,
         template_id: workoutData.template_id,
@@ -106,6 +109,9 @@ export function useWorkouts() {
         updateWorkoutAction(id, {
           name: data.name,
           date: data.date,
+          sport_type: data.sport_type,
+          location: data.location,
+          perceived_exertion: data.perceived_exertion,
           notes: data.notes,
           status: data.status,
           overall_rating: data.overall_rating,

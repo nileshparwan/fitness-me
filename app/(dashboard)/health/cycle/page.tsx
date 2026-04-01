@@ -111,8 +111,8 @@ export default function CyclePage() {
             setLogOpen(true);
           }}
         >
-          <Plus className="mr-2 h-4 w-4" />
-          Log Period
+          <Plus className="mr-0 h-4 w-4 sm:mr-2" />
+          <span className="hidden sm:inline">Log Period</span>
         </Button>
       </header>
 

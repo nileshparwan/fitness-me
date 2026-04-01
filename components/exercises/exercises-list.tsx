@@ -85,8 +85,8 @@ export function ExercisesList() {
             <p className="text-sm text-muted-foreground">{totalLibraryCount} exercises in your library</p>
           </div>
           <Button type="button" className="accent-strong px-5 text-black" onClick={handleCreate}>
-            <Plus className="mr-2 h-4 w-4" />
-            Add Exercise
+            <Plus className="mr-0 h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Add Exercise</span>
           </Button>
         </div>
 

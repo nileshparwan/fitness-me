@@ -14,6 +14,43 @@ type NutritionSelectedScope = {
   meal_group_id?: string | null;
 };
 
+export const NUTRITION_DASHBOARD_ACTIVITY_EVENTS = [
+  "nutrition.manual.item.add",
+  "nutrition.manual.item.update",
+  "nutrition.manual.item.remove",
+  "nutrition.manual.section.add",
+  "nutrition.manual.day.copy",
+  "nutrition.manual.favorite.toggle",
+  "nutrition.meal-item.create",
+  "nutrition.meal-item.update",
+  "nutrition.meal-item.delete",
+  "nutrition.meal-item.duplicate",
+  "nutrition.meal-plan.type.create",
+  "nutrition.meal-plan.note.update",
+  "nutrition.meal-groups.create",
+  "nutrition.meal-groups.update",
+  "nutrition.meal-groups.delete",
+  "nutrition.meal-groups.duplicate",
+  "nutrition.meal-groups.assign",
+  "nutrition.meal-groups.assignment.update",
+  "nutrition.meal-groups.assignment.archive",
+  "nutrition.manual.plan.create",
+  "nutrition.manual.plan.update",
+  "nutrition.manual.plan.archive",
+  "nutrition.manual.plan.duplicate",
+  "nutrition.manual.plan.assign",
+  "nutrition.manual.log.notes.update",
+  "nutrition.meal.create",
+  "nutrition.meal.update",
+  "nutrition.meal.delete",
+  "nutrition.meal.copy",
+  "nutrition.meal.move",
+  "nutrition.meal.positions.update",
+  "nutrition.meal.status.update",
+  "nutrition.program.status.update",
+  "nutrition.program.notes.update",
+] as const;
+
 const DAY_LABELS: Record<string, string> = {
   mon: "Monday",
   tue: "Tuesday",

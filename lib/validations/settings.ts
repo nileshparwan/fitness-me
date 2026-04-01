@@ -19,7 +19,7 @@ export const profileSchema = z.object({
   bio: z.string().trim().max(160).nullable().optional(),
   phone: z.string().trim().max(40).nullable().optional(),
   date_of_birth: z.string().date().nullable().optional(),
-  avatar_url: z.url().nullable().optional(),
+  avatar_url: z.string().trim().nullable().optional(),
   gender: genderSchema.nullable().optional(),
   fitness_level: fitnessLevelSchema.nullable().optional(),
   coach_specialty: coachSpecialtySchema.nullable().optional(),

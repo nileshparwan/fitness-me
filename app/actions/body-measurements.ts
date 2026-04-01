@@ -227,7 +227,6 @@ export async function logBodyMeasurementAction(
 
       const row = {
         ...subjectRef,
-        user_id: subjectRef.subject_user_id,
         ...normalized,
         weight: normalized.weight == null ? null : storageWeight(normalized.weight, unitSystem),
         waist: normalized.waist == null ? null : storageCircumference(normalized.waist, unitSystem),

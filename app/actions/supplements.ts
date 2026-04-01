@@ -73,10 +73,8 @@ export type SupplementAssignmentRow = {
   id: string;
   supplement_id: string;
   supplement_name: string;
-  brand: string | null;
   category: SupplementCategory;
   categories: SupplementCategory[];
-  nutrients: Record<string, number>;
   default_servings: number;
   unit: string | null;
   updated_at: string;
@@ -102,7 +100,7 @@ const subjectSchema: z.ZodType<SupplementSubject> = z.discriminatedUnion("type",
 
 const listCatalogSchema = z.object({
   search: z.string().trim().max(120).optional(),
-  category: categorySchema.optional(),
+  category_filter: categorySchema.optional(),
 });
 
 const createCustomSupplementSchema = z.object({
@@ -196,28 +194,13 @@ function profileName(profile: Pick<ProfileRow, "full_name"> | null | undefined) 
   return safeName(profile?.full_name, "You");
 }
 
-function normalizeNutrients(value: unknown): Record<string, number> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
-  const output: Record<string, number> = {};
-  for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
-    const numberValue = Number(raw);
-    if (!Number.isFinite(numberValue)) continue;
-    output[key] = numberValue;
-  }
-  return output;
-}
-
-function readCategories(row: Pick<SupplementCatalogRow, "category"> & { categories?: unknown }): SupplementCategory[] {
+function readCategories(row: { categories?: unknown }): SupplementCategory[] {
   const fromArray = row.categories;
   if (Array.isArray(fromArray) && fromArray.length > 0) {
     const values = fromArray
       .map((item) => String(item))
       .filter((item): item is SupplementCategory => categorySchema.safeParse(item).success);
     if (values.length > 0) return Array.from(new Set(values));
-  }
-
-  if (categorySchema.safeParse(row.category).success) {
-    return [row.category as SupplementCategory];
   }
 
   return ["other"];
@@ -399,7 +382,7 @@ function revalidateSupplementPaths(subject: SubjectRef) {
   }
 }
 
-type CatalogRef = Pick<SupplementCatalogRow, "id" | "name" | "brand" | "category" | "categories" | "nutrients">;
+type CatalogRef = Pick<SupplementCatalogRow, "id" | "name" | "categories">;
 
 type AssignmentWithCatalog = Pick<
   SupplementAssignmentRowDb,
@@ -411,19 +394,14 @@ type AssignmentWithCatalog = Pick<
 function assignmentToUiRow(row: AssignmentWithCatalog): SupplementAssignmentRow | null {
   const supplement = row.supplement;
   if (!supplement) return null;
-  const categories = readCategories({
-    category: supplement.category,
-    categories: supplement.categories,
-  });
+  const categories = readCategories({ categories: supplement.categories });
 
   return {
     id: row.id,
     supplement_id: row.supplement_id,
     supplement_name: supplement.name,
-    brand: supplement.brand,
     category: categories[0] || "other",
     categories,
-    nutrients: normalizeNutrients(supplement.nutrients),
     default_servings: Number(row.default_servings || 1),
     unit: row.unit || null,
     updated_at: row.updated_at,
@@ -438,7 +416,7 @@ export async function listSupplementCatalogAction(
     eventName: "supplements.catalog.list",
     payload: {
       search: payload.search ?? null,
-      category: payload.category ?? null,
+      category_filter: payload.category_filter ?? null,
     },
     action: async () => {
       const { supabase, user } = await requireActor();
@@ -455,15 +433,15 @@ export async function listSupplementCatalogAction(
         query = query.ilike("name", `%${safe}%`);
       }
 
+      if (payload.category_filter) {
+        query = query.contains("categories", [payload.category_filter]);
+      }
+
       const { data, error } = await query;
       if (error) throw new Error(error.message);
 
       const rows = (data || []) as SupplementCatalogRow[];
-      const categoryFiltered = payload.category
-        ? rows.filter((row) => readCategories({ category: row.category, categories: row.categories }).includes(payload.category!))
-        : rows;
-
-      return categoryFiltered.sort((a, b) => a.name.localeCompare(b.name));
+      return rows.sort((a, b) => a.name.localeCompare(b.name));
     },
   });
 }
@@ -484,10 +462,7 @@ export async function createCustomSupplementAction(
       const categories = Array.from(new Set(payload.categories));
       const row: SupplementCatalogInsert = {
         name: normalizedName,
-        brand: null,
-        category: categories[0] || "other",
         categories,
-        nutrients: {},
         is_global: false,
         owner_user_id: user.id,
       };
@@ -522,10 +497,7 @@ export async function updateCustomSupplementAction(
       const categories = Array.from(new Set(payload.categories));
       const updates: SupplementCatalogUpdate = {
         name: normalizedName,
-        category: categories[0] || "other",
         categories,
-        brand: null,
-        nutrients: {},
         is_global: false,
         owner_user_id: user.id,
       };
@@ -775,9 +747,7 @@ export async function listAssignmentsAction(
 
       let query = supabase
         .from("supplement_assignments")
-        .select(
-          "id, supplement_id, default_servings, unit, updated_at, supplement:supplement_catalog(id, name, brand, category, categories, nutrients)"
-        )
+        .select("id, supplement_id, default_servings, unit, updated_at, supplement:supplement_catalog(id, name, categories)")
         .eq("is_active", true)
         .order("updated_at", { ascending: false })
         .order("created_at", { ascending: false });

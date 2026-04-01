@@ -14,6 +14,7 @@ import { SubjectSelector } from "@/components/shared/subject-selector";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Plus } from "lucide-react";
 
 type MeasurementRange = "30d" | "90d" | "180d" | "1y" | "all";
 
@@ -88,7 +89,8 @@ export default function MeasurementsPage() {
             setLogOpen(true);
           }}
         >
-          + Log Measurement
+          <Plus className="mr-0 h-4 w-4 sm:mr-2" />
+          <span className="hidden sm:inline">Log Measurement</span>
         </Button>
       </div>
 

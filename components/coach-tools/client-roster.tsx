@@ -7,8 +7,10 @@ import {
   ArrowDown,
   ArrowUp,
   ArrowUpDown,
+  Archive,
   ChevronLeft,
   ChevronRight,
+  FileDown,
   Loader2,
   MoreHorizontal,
   Pencil,
@@ -16,6 +18,8 @@ import {
   Search,
   Settings2,
   Trash2,
+  User,
+  X,
 } from "lucide-react";
 import {
   flexRender,
@@ -32,9 +36,9 @@ import {
   type SortingState,
   type VisibilityState,
 } from "@tanstack/react-table";
-import { toast } from "sonner";
 
 import type { ClientStatus } from "@/app/actions/coach-tools";
+import { ClientUpsertSheet } from "@/components/clients/client-upsert-sheet";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -55,7 +59,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -74,16 +77,6 @@ const DEFAULT_VISIBILITY: VisibilityState = {
   updated_at: true,
   active_plans_count: true,
   status: true,
-};
-
-type ClientFormState = {
-  id?: string;
-  first_name: string;
-  last_name: string;
-  email: string;
-  phone: string;
-  date_of_birth: string;
-  status: ClientStatus;
 };
 
 type ClientRowItem = {
@@ -139,34 +132,6 @@ function displayClientName(row: ClientRowItem) {
   return `${row.first_name} ${row.last_name || ""}`.trim() || row.first_name;
 }
 
-function emptyFormState(): ClientFormState {
-  return {
-    first_name: "",
-    last_name: "",
-    email: "",
-    phone: "",
-    date_of_birth: "",
-    status: "active",
-  };
-}
-
-function formStateFromRow(row: ClientRowItem): ClientFormState {
-  return {
-    id: row.id,
-    first_name: row.first_name,
-    last_name: row.last_name || "",
-    email: row.email || "",
-    phone: row.phone || "",
-    date_of_birth: row.date_of_birth || "",
-    status: row.status,
-  };
-}
-
-function normalizeOptional(value: string) {
-  const trimmed = value.trim();
-  return trimmed ? trimmed : null;
-}
-
 function sortIndicator(sorted: false | "asc" | "desc") {
   if (sorted === "asc") return <ArrowUp className="h-3.5 w-3.5" />;
   if (sorted === "desc") return <ArrowDown className="h-3.5 w-3.5" />;
@@ -180,9 +145,8 @@ export function ClientRoster() {
   const [pagination, setPagination] = useState<PaginationState>(TABLE_DEFAULT_PAGINATION_PAGE_0_SIZE_10);
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(DEFAULT_VISIBILITY);
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
-  const [createForm, setCreateForm] = useState<ClientFormState>(() => emptyFormState());
-  const [editingForm, setEditingForm] = useState<ClientFormState | null>(null);
+  const [isUpsertOpen, setIsUpsertOpen] = useState(false);
+  const [editingClient, setEditingClient] = useState<ClientRowItem | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [deletingClient, setDeletingClient] = useState<ClientRowItem | null>(null);
 
@@ -218,59 +182,20 @@ export function ClientRoster() {
     setRowSelection({});
   }, []);
 
-  const openCreateDialog = useCallback(() => {
-    setCreateForm(emptyFormState());
-    setIsCreateDialogOpen(true);
+  const openCreateSheet = useCallback(() => {
+    setEditingClient(null);
+    setIsUpsertOpen(true);
   }, []);
 
-  const openEditDialog = useCallback((row: ClientRowItem) => {
-    setEditingForm(formStateFromRow(row));
+  const openEditSheet = useCallback((row: ClientRowItem) => {
+    setEditingClient(row);
+    setIsUpsertOpen(true);
   }, []);
 
   const openDeleteDialog = useCallback((row: ClientRowItem) => {
     setDeletingClient(row);
     setIsDeleteDialogOpen(true);
   }, []);
-
-  const persistClient = useCallback(async (form: ClientFormState) => {
-    if (!form.first_name.trim()) {
-      toast.error("First name is required.");
-      return false;
-    }
-
-    const result = await withToastFeedback(
-      mutations.upsertClient.mutateAsync({
-        id: form.id,
-        first_name: form.first_name.trim(),
-        last_name: normalizeOptional(form.last_name),
-        display_name: null,
-        email: normalizeOptional(form.email),
-        phone: normalizeOptional(form.phone),
-        date_of_birth: normalizeOptional(form.date_of_birth),
-        status: form.status,
-      }),
-      {
-        loading: form.id ? "Updating client..." : "Creating client...",
-        success: form.id ? "Client updated" : "Client created",
-        error: "Unable to save client",
-      }
-    ).catch(() => null);
-    return Boolean(result);
-  }, [mutations.upsertClient]);
-
-  const onCreateClient = useCallback(async () => {
-    const ok = await persistClient(createForm);
-    if (!ok) return;
-    setCreateForm(emptyFormState());
-    setIsCreateDialogOpen(false);
-  }, [createForm, persistClient]);
-
-  const onUpdateClient = useCallback(async () => {
-    if (!editingForm) return;
-    const ok = await persistClient(editingForm);
-    if (!ok) return;
-    setEditingForm(null);
-  }, [editingForm, persistClient]);
 
   const onDeleteClient = useCallback(async () => {
     if (!deletingClient) return;
@@ -413,7 +338,7 @@ export function ClientRoster() {
                   <Link href={`/clients/${client.id}/access`}>Access</Link>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onSelect={() => openEditDialog(client)}>
+                <DropdownMenuItem onSelect={() => openEditSheet(client)}>
                   <Pencil className="h-4 w-4" />
                   Edit Client
                 </DropdownMenuItem>
@@ -427,7 +352,7 @@ export function ClientRoster() {
         },
       },
     ],
-    [openDeleteDialog, openEditDialog]
+    [openDeleteDialog, openEditSheet]
   );
 
   const table = useReactTable({
@@ -525,13 +450,14 @@ export function ClientRoster() {
 
           <div className="flex items-center gap-2">
             <Button variant="outline" className="rounded-xl border-border/60" onClick={exportClientsCsv}>
-              Export CSV
+              <FileDown className="mr-0 h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Export CSV</span>
             </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" className="rounded-xl border-border/60">
-                  <Settings2 className="mr-2 h-4 w-4" />
-                  Columns
+                  <Settings2 className="mr-0 h-4 w-4 sm:mr-2" />
+                  <span className="hidden sm:inline">Columns</span>
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-52 rounded-xl border-border/70 bg-card/95">
@@ -556,9 +482,9 @@ export function ClientRoster() {
               </DropdownMenuContent>
             </DropdownMenu>
 
-            <Button className="accent-strong rounded-xl text-black" onClick={openCreateDialog}>
-              <Plus className="mr-2 h-4 w-4" />
-              Add Client
+            <Button className="accent-strong rounded-xl text-black" onClick={openCreateSheet}>
+              <Plus className="mr-0 h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Add Client</span>
             </Button>
           </div>
         </div>
@@ -568,7 +494,8 @@ export function ClientRoster() {
             <p className="text-chart-1">{selectedClientRows.length} selected</p>
             <div className="flex items-center gap-2">
               <Button type="button" variant="outline" size="sm" className="rounded-xl border-border/60" onClick={() => setRowSelection({})}>
-                Clear
+                <X className="mr-0 h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Clear</span>
               </Button>
               <Button
                 type="button"
@@ -577,8 +504,8 @@ export function ClientRoster() {
                 onClick={() => void archiveSelectedClients()}
                 disabled={mutations.removeClient.isPending}
               >
-                {mutations.removeClient.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                Archive Selected
+                {mutations.removeClient.isPending ? <Loader2 className="mr-0 h-4 w-4 animate-spin sm:mr-2" /> : <Archive className="mr-0 h-4 w-4 sm:mr-2" />}
+                <span className="hidden sm:inline">Archive Selected</span>
               </Button>
             </div>
           </div>
@@ -710,13 +637,18 @@ export function ClientRoster() {
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2">
                     <Button asChild size="sm" variant="outline" className="rounded-xl border-border/60">
-                      <Link href={`/clients/${client.id}`}>Profile</Link>
+                      <Link href={`/clients/${client.id}`}>
+                        <User className="mr-0 h-4 w-4 sm:mr-2" />
+                        <span className="hidden sm:inline">Profile</span>
+                      </Link>
                     </Button>
-                    <Button size="sm" variant="outline" className="rounded-xl border-border/60" onClick={() => openEditDialog(client)}>
-                      Edit
+                    <Button size="sm" variant="outline" className="rounded-xl border-border/60" onClick={() => openEditSheet(client)}>
+                      <Pencil className="mr-0 h-4 w-4 sm:mr-2" />
+                      <span className="hidden sm:inline">Edit</span>
                     </Button>
                     <Button size="sm" variant="outline" className="rounded-xl border-border/60" onClick={() => openDeleteDialog(client)}>
-                      Delete
+                      <Trash2 className="mr-0 h-4 w-4 sm:mr-2" />
+                      <span className="hidden sm:inline">Delete</span>
                     </Button>
                   </div>
                 </article>
@@ -773,207 +705,30 @@ export function ClientRoster() {
         </div>
       </section>
 
-      <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-        <DialogContent className="rounded-[10px] border-border/70 bg-card/95 sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Add Client</DialogTitle>
-            <DialogDescription>Create a client profile. Account linking is optional.</DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-3 py-1">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label>First Name</Label>
-                <Input
-                  value={createForm.first_name}
-                  onChange={(event) => setCreateForm((current) => ({ ...current, first_name: event.target.value }))}
-                  className="rounded-xl border-border/60 bg-muted/20"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Last Name</Label>
-                <Input
-                  value={createForm.last_name}
-                  onChange={(event) => setCreateForm((current) => ({ ...current, last_name: event.target.value }))}
-                  className="rounded-xl border-border/60 bg-muted/20"
-                />
-              </div>
-            </div>
-
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label>Email (optional)</Label>
-                <Input
-                  value={createForm.email}
-                  onChange={(event) => setCreateForm((current) => ({ ...current, email: event.target.value }))}
-                  className="rounded-xl border-border/60 bg-muted/20"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Phone (optional)</Label>
-                <Input
-                  value={createForm.phone}
-                  onChange={(event) => setCreateForm((current) => ({ ...current, phone: event.target.value }))}
-                  className="rounded-xl border-border/60 bg-muted/20"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Date of Birth (optional)</Label>
-              <Input
-                type="date"
-                value={createForm.date_of_birth}
-                onChange={(event) => setCreateForm((current) => ({ ...current, date_of_birth: event.target.value }))}
-                className="rounded-xl border-border/60 bg-muted/20"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label>Status</Label>
-              <Select
-                value={createForm.status}
-                onValueChange={(value) => setCreateForm((current) => ({ ...current, status: value as ClientStatus }))}
-              >
-                <SelectTrigger className="h-10 w-full rounded-xl border-border/60 bg-muted/20">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {CLIENT_STATUS_FILTER_OPTIONS.filter((entry): entry is ClientStatus => entry !== "all").map((entry) => (
-                    <SelectItem key={entry} value={entry}>
-                      {entry}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" className="rounded-xl border-border/60" onClick={() => setIsCreateDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              className="accent-strong rounded-xl text-black"
-              onClick={() => void onCreateClient()}
-              disabled={mutations.upsertClient.isPending}
-            >
-              {mutations.upsertClient.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              Save
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {editingForm ? (
-        <section className="fixed inset-0 z-50 flex">
-          <button
-            type="button"
-            className="flex-1 bg-black/70"
-            aria-label="Close"
-            onClick={() => setEditingForm(null)}
-          />
-          <div className="w-full max-w-md overflow-y-auto border-l border-border/70 bg-card/98 p-4">
-            <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-lg font-semibold">Update Client</h2>
-              <button
-                type="button"
-                className="text-sm text-muted-foreground hover:text-foreground"
-                onClick={() => setEditingForm(null)}
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="space-y-3 py-1">
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label>First Name</Label>
-                  <Input
-                    value={editingForm.first_name}
-                    onChange={(event) => setEditingForm((current) => (current ? { ...current, first_name: event.target.value } : current))}
-                    className="rounded-xl border-border/60 bg-muted/20"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Last Name</Label>
-                  <Input
-                    value={editingForm.last_name}
-                    onChange={(event) => setEditingForm((current) => (current ? { ...current, last_name: event.target.value } : current))}
-                    className="rounded-xl border-border/60 bg-muted/20"
-                  />
-                </div>
-              </div>
-
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label>Email (optional)</Label>
-                  <Input
-                    value={editingForm.email}
-                    onChange={(event) => setEditingForm((current) => (current ? { ...current, email: event.target.value } : current))}
-                    className="rounded-xl border-border/60 bg-muted/20"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Phone (optional)</Label>
-                  <Input
-                    value={editingForm.phone}
-                    onChange={(event) => setEditingForm((current) => (current ? { ...current, phone: event.target.value } : current))}
-                    className="rounded-xl border-border/60 bg-muted/20"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Date of Birth (optional)</Label>
-                <Input
-                  type="date"
-                  value={editingForm.date_of_birth}
-                  onChange={(event) =>
-                    setEditingForm((current) => (current ? { ...current, date_of_birth: event.target.value } : current))
-                  }
-                  className="rounded-xl border-border/60 bg-muted/20"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label>Status</Label>
-                <Select
-                  value={editingForm.status}
-                  onValueChange={(value) =>
-                    setEditingForm((current) => (current ? { ...current, status: value as ClientStatus } : current))
-                  }
-                >
-                  <SelectTrigger className="h-10 w-full rounded-xl border-border/60 bg-muted/20">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {CLIENT_STATUS_FILTER_OPTIONS.filter((entry): entry is ClientStatus => entry !== "all").map((entry) => (
-                      <SelectItem key={entry} value={entry}>
-                        {entry}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div className="mt-4 flex flex-col gap-2">
-              <Button
-                variant="outline"
-                className="w-full rounded-xl border-border/60"
-                onClick={() => setEditingForm(null)}
-              >
-                Cancel
-              </Button>
-              <Button className="w-full rounded-xl" onClick={() => void onUpdateClient()} disabled={mutations.upsertClient.isPending}>
-                {mutations.upsertClient.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                Save Changes
-              </Button>
-            </div>
-          </div>
-        </section>
-      ) : null}
+      <ClientUpsertSheet
+        open={isUpsertOpen}
+        prefill={
+          editingClient
+            ? {
+                id: editingClient.id,
+                first_name: editingClient.first_name,
+                last_name: editingClient.last_name,
+                email: editingClient.email,
+                phone: editingClient.phone,
+                date_of_birth: editingClient.date_of_birth,
+                status: editingClient.status,
+              }
+            : null
+        }
+        onClose={() => {
+          setIsUpsertOpen(false);
+          setEditingClient(null);
+        }}
+        onSaved={() => {
+          setIsUpsertOpen(false);
+          setEditingClient(null);
+        }}
+      />
 
       <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
         <DialogContent className="rounded-[10px] border-border/70 bg-card/95 sm:max-w-md">

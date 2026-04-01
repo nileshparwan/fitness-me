@@ -232,12 +232,19 @@ export const useNutritionUiStore = create<NutritionUiStore>()(
     {
       name: "nutrition-ui-store",
       storage: createJSONStorage(() => (typeof window === "undefined" ? noopStorage : localStorage)),
+      merge: (persistedState, currentState) => {
+        const persisted = (persistedState || {}) as Partial<NutritionUiState>;
+        return {
+          ...currentState,
+          ...persisted,
+          selectedDate: currentState.selectedDate,
+          selectedPlannerDay: currentState.selectedPlannerDay,
+        };
+      },
       partialize: (state) => ({
         activeSubjectType: state.activeSubjectType,
         activeSubjectId: state.activeSubjectId,
         selectedMealGroupId: state.selectedMealGroupId,
-        selectedDate: state.selectedDate,
-        selectedPlannerDay: state.selectedPlannerDay,
         diaryMealTypeOrder: state.diaryMealTypeOrder,
         plannerMealTypeOrderByDay: state.plannerMealTypeOrderByDay,
         mealGroupMealTypeOrderByGroup: state.mealGroupMealTypeOrderByGroup,

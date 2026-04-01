@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { updateWorkoutAction } from "@/app/actions/workout";
@@ -43,10 +44,16 @@ export function WorkoutStatusSelect({
   onStatusChange 
 }: WorkoutStatusSelectProps) {
   const queryClient = useQueryClient();
-  const normalizedCurrent = normalizeStatus(status);
+  const normalizedIncoming = normalizeStatus(status);
+  const [optimisticStatus, setOptimisticStatus] = useState<WorkoutStatus>(normalizedIncoming);
+
+  useEffect(() => {
+    setOptimisticStatus(normalizedIncoming);
+  }, [normalizedIncoming]);
 
   const handleStatusChange = async (newStatus: string) => {
     const normalizedNext = normalizeStatus(newStatus);
+    setOptimisticStatus(normalizedNext);
     onStatusChange?.(normalizedNext);
 
     try {
@@ -64,16 +71,17 @@ export function WorkoutStatusSelect({
       ]);
     } catch {
       // Revert optimistic UI state on failed write.
-      onStatusChange?.(normalizedCurrent);
+      setOptimisticStatus(normalizedIncoming);
+      onStatusChange?.(normalizedIncoming);
     }
   };
 
   return (
-    <Select value={normalizedCurrent} onValueChange={handleStatusChange}>
+    <Select value={optimisticStatus} onValueChange={handleStatusChange}>
       <SelectTrigger className={cn("h-8 min-w-[112px] rounded-full text-xs font-semibold", className)}>
         <span className="inline-flex items-center gap-1.5">
-          <span className={cn("h-1.5 w-1.5 rounded-full", statusDotClass(normalizedCurrent))} />
-          <SelectValue>{statusLabel(normalizedCurrent)}</SelectValue>
+          <span className={cn("h-1.5 w-1.5 rounded-full", statusDotClass(optimisticStatus))} />
+          <SelectValue>{statusLabel(optimisticStatus)}</SelectValue>
         </span>
       </SelectTrigger>
       <SelectContent className="rounded-xl border-border/60 bg-popover/95 backdrop-blur">

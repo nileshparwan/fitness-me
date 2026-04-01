@@ -144,7 +144,7 @@ export function MealItemEditorSheet({
   const [notes, setNotes] = useState("");
   const [saveToFavorites, setSaveToFavorites] = useState(false);
 
-  const unitOptions = useMemo(() => getMealUnitOptions(unit), [unit]);
+  const unitOptions = useMemo(() => getMealUnitOptions(), []);
   const titleText = title || (mode === "create" ? "Add Meal Item" : "Edit Meal Item");
   const descriptionText =
     description || (mode === "create" ? "Set item details for this entry." : "Update values and notes for this entry.");

@@ -6,7 +6,7 @@ import { useParams } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
-import { ArrowLeft, ArrowUp, Loader2, MessageSquare, MoreVertical, Pencil, Trash2 } from "lucide-react";
+import { ArrowLeft, ArrowUp, Bell, Loader2, MessageSquare, MoreVertical, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { updateTicketContentAction, type TicketCategory, type TicketCommentDetail, type TicketStatus } from "@/app/actions/tickets";
@@ -247,8 +247,8 @@ export default function SupportTicketDetailPage() {
     <div className="mx-auto w-full max-w-7xl space-y-6 px-4 py-6 md:px-8 md:py-10">
       <Button asChild variant="ghost" size="sm" className="w-fit">
         <Link href="/support">
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Back to Support
+          <ArrowLeft className="mr-0 h-4 w-4 sm:mr-2" />
+          <span className="hidden sm:inline">Back to Support</span>
         </Link>
       </Button>
 
@@ -278,8 +278,8 @@ export default function SupportTicketDetailPage() {
                     <h1 className="page-title-gradient text-xl font-semibold">{ticket.title}</h1>
                     {canEditTicket ? (
                       <Button variant="outline" size="sm" onClick={onStartEdit}>
-                        <Pencil className="icon-accent mr-2 h-4 w-4" />
-                        Edit Ticket
+                        <Pencil className="icon-accent mr-0 h-4 w-4 sm:mr-2" />
+                        <span className="hidden sm:inline">Edit Ticket</span>
                       </Button>
                     ) : null}
                   </div>
@@ -288,7 +288,7 @@ export default function SupportTicketDetailPage() {
 
                 <div className="flex items-center gap-3 text-xs text-muted-foreground">
                   <Avatar size="sm">
-                    <AvatarImage src={ticket.author.avatar_url || undefined} alt={ticket.author.name} />
+                    <AvatarImage src={ticket.author.avatar_url || undefined} alt={ticket.author.name} loading="lazy" />
                     <AvatarFallback>{initialsFromName(ticket.author.name)}</AvatarFallback>
                   </Avatar>
                   <span>{ticket.author.name}</span>
@@ -329,7 +329,7 @@ export default function SupportTicketDetailPage() {
                           <div className="mb-2 flex items-center justify-between gap-2 text-xs text-muted-foreground">
                             <div className="flex items-center gap-2">
                               <Avatar size="sm">
-                                <AvatarImage src={comment.author.avatar_url || undefined} alt={comment.author.name} />
+                                <AvatarImage src={comment.author.avatar_url || undefined} alt={comment.author.name} loading="lazy" />
                                 <AvatarFallback>{initialsFromName(comment.author.name)}</AvatarFallback>
                               </Avatar>
                               <span>{comment.author.name}</span>
@@ -403,7 +403,8 @@ export default function SupportTicketDetailPage() {
                     {!showComposer ? (
                       <div className="flex justify-end">
                         <Button size="sm" variant="outline" onClick={() => setShowComposer(true)}>
-                          Write Comment
+                          <MessageSquare className="mr-0 h-4 w-4 sm:mr-2" />
+                          <span className="hidden sm:inline">Write Comment</span>
                         </Button>
                       </div>
                     ) : (
@@ -439,8 +440,12 @@ export default function SupportTicketDetailPage() {
                   disabled={subscriptionBusy || (isSubscribed && isReporter)}
                   title={isSubscribed && !isReporter ? "Unsubscribe" : undefined}
                 >
-                  {subscriptionBusy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                  {isSubscribed ? "Subscribed" : "Subscribe"}
+                  {subscriptionBusy ? (
+                    <Loader2 className="mr-0 h-4 w-4 animate-spin sm:mr-2" />
+                  ) : (
+                    <Bell className="mr-0 h-4 w-4 sm:mr-2" />
+                  )}
+                  <span className="hidden sm:inline">{isSubscribed ? "Subscribed" : "Subscribe"}</span>
                 </Button>
               ) : null}
               {ticket.is_public && !isClosed ? (
@@ -452,11 +457,11 @@ export default function SupportTicketDetailPage() {
                   disabled={toggleUpvote.isPending}
                 >
                   {toggleUpvote.isPending ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    <Loader2 className="mr-0 h-4 w-4 animate-spin sm:mr-2" />
                   ) : (
-                    <ArrowUp className="mr-2 h-4 w-4" />
+                    <ArrowUp className="mr-0 h-4 w-4 sm:mr-2" />
                   )}
-                  {ticket.viewer_has_upvoted ? "Remove upvote" : "Upvote"}
+                  <span className="hidden sm:inline">{ticket.viewer_has_upvoted ? "Remove upvote" : "Upvote"}</span>
                 </Button>
               ) : null}
             </aside>

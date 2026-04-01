@@ -15,7 +15,7 @@ import {
   type VisibilityState,
   useReactTable,
 } from "@tanstack/react-table";
-import { Search, Settings2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, FileDown, Pencil, Search, Settings2, UserPlus, X } from "lucide-react";
 
 import type { Database } from "@/types/database";
 import { Button } from "@/components/ui/button";
@@ -93,28 +93,14 @@ function readCategories(row: SupplementCatalogRow): SupplementCategory[] {
     const values = raw.filter((item): item is SupplementCategory => typeof item === "string") as SupplementCategory[];
     if (values.length > 0) return Array.from(new Set(values));
   }
-  return [row.category as SupplementCategory];
-}
-
-function sourceLabel(row: SupplementCatalogRow) {
-  return row.is_global ? "Global" : "Custom";
-}
-
-function sourceTone(row: SupplementCatalogRow) {
-  return row.is_global ? "border-chart-3/40 bg-chart-3/10 text-chart-3" : "border-chart-1/40 bg-chart-1/10 text-chart-1";
+  return ["other"];
 }
 
 export function SupplementCatalogTable({ rows, isLoading, onEditSupplement, onBulkAssign }: Props) {
   const [sorting, setSorting] = useState<SortingState>([{ id: "name", desc: false }]);
   const [globalFilter, setGlobalFilter] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<"all" | SupplementCategory>("all");
-  const [sourceFilter, setSourceFilter] = useState<"all" | "global" | "custom">("all");
-  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({
-    category: true,
-    brand: false,
-    source: true,
-    nutrients: true,
-  });
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
 
   const filteredRows = useMemo(() => {
@@ -122,12 +108,9 @@ export function SupplementCatalogTable({ rows, isLoading, onEditSupplement, onBu
     return rows.filter((row) => {
       const categories = readCategories(row);
       if (categoryFilter !== "all" && !categories.includes(categoryFilter)) return false;
-      if (sourceFilter === "global" && !row.is_global) return false;
-      if (sourceFilter === "custom" && row.is_global) return false;
       if (!search) return true;
       return (
         row.name.toLowerCase().includes(search) ||
-        (row.brand || "").toLowerCase().includes(search) ||
         categories
           .map((value) => SUPPLEMENT_CATEGORY_LABELS[value] || value)
           .join(" ")
@@ -135,7 +118,7 @@ export function SupplementCatalogTable({ rows, isLoading, onEditSupplement, onBu
           .includes(search)
       );
     });
-  }, [categoryFilter, globalFilter, rows, sourceFilter]);
+  }, [categoryFilter, globalFilter, rows]);
 
   const columns = useMemo<ColumnDef<SupplementCatalogRow>[]>(
     () => [
@@ -173,56 +156,6 @@ export function SupplementCatalogTable({ rows, isLoading, onEditSupplement, onBu
         ),
       },
       {
-        id: "category",
-        accessorFn: (row) => readCategories(row)[0] || "other",
-        header: ({ column }) => (
-          <SortHeader
-            label="Category"
-            sorted={column.getIsSorted()}
-            onClick={(event) => column.toggleSorting(column.getIsSorted() === "asc", event.shiftKey)}
-          />
-        ),
-        cell: ({ row }) => {
-          const categories = readCategories(row.original);
-          const category = categories[0] || "other";
-          return (
-            <span className="rounded-full border border-border/60 bg-muted/20 px-2 py-0.5 text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
-              {SUPPLEMENT_CATEGORY_LABELS[category] || category}
-            </span>
-          );
-        },
-      },
-      {
-        id: "brand",
-        accessorKey: "brand",
-        header: "Brand",
-        cell: ({ row }) => <span className="text-sm text-muted-foreground">{row.original.brand || "—"}</span>,
-      },
-      {
-        id: "source",
-        accessorFn: (row) => (row.is_global ? "global" : "custom"),
-        header: ({ column }) => (
-          <SortHeader
-            label="Source"
-            sorted={column.getIsSorted()}
-            onClick={(event) => column.toggleSorting(column.getIsSorted() === "asc", event.shiftKey)}
-          />
-        ),
-        cell: ({ row }) => (
-          <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-[0.08em] ${sourceTone(row.original)}`}>
-            {sourceLabel(row.original)}
-          </span>
-        ),
-      },
-      {
-        id: "nutrients",
-        accessorFn: (row) => Object.keys(row.nutrients || {}).length,
-        header: "Nutrients",
-        cell: ({ row }) => (
-          <span className="text-sm text-muted-foreground">{Object.keys(row.original.nutrients || {}).length || "—"}</span>
-        ),
-      },
-      {
         id: "actions",
         enableSorting: false,
         header: () => <span className="sr-only">Actions</span>,
@@ -238,7 +171,8 @@ export function SupplementCatalogTable({ rows, isLoading, onEditSupplement, onBu
               className="h-8 rounded-lg border-border/60"
               onClick={() => onEditSupplement?.(row.original)}
             >
-              Edit
+              <Pencil className="mr-0 h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Edit</span>
             </Button>
           );
         },
@@ -304,36 +238,6 @@ export function SupplementCatalogTable({ rows, isLoading, onEditSupplement, onBu
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center gap-2">
-            <Button
-              type="button"
-              size="sm"
-              variant={sourceFilter === "all" ? "default" : "outline"}
-              onClick={() => setSourceFilter("all")}
-              className="rounded-full"
-            >
-              All Sources
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant={sourceFilter === "global" ? "default" : "outline"}
-              onClick={() => setSourceFilter("global")}
-              className="rounded-full"
-            >
-              Global
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant={sourceFilter === "custom" ? "default" : "outline"}
-              onClick={() => setSourceFilter("custom")}
-              className="rounded-full"
-            >
-              Custom
-            </Button>
-          </div>
-
           <Button
             type="button"
             variant="outline"
@@ -342,21 +246,20 @@ export function SupplementCatalogTable({ rows, isLoading, onEditSupplement, onBu
             onClick={() => {
               const csv = buildCsv(table.getFilteredRowModel().rows.map((row) => row.original), [
                 { header: "Name", value: (row) => normalizeSupplementDisplayName(row.name) },
-                { header: "Category", value: (row) => SUPPLEMENT_CATEGORY_LABELS[readCategories(row)[0] || "other"] || row.category },
-                { header: "Brand", value: (row) => row.brand || "" },
-                { header: "Source", value: (row) => sourceLabel(row) },
+                { header: "Category", value: (row) => SUPPLEMENT_CATEGORY_LABELS[readCategories(row)[0] || "other"] || "Other" },
               ]);
               downloadCsv(`supplement-catalog-${new Date().toISOString().slice(0, 10)}.csv`, csv);
             }}
           >
-            Export CSV
+            <FileDown className="mr-0 h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Export CSV</span>
           </Button>
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button type="button" variant="outline" size="sm" className="rounded-xl border-border/60">
-                <Settings2 className="mr-2 h-4 w-4" />
-                Columns
+                <Settings2 className="mr-0 h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Columns</span>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56 rounded-xl border-border/70 bg-card/95">
@@ -388,7 +291,8 @@ export function SupplementCatalogTable({ rows, isLoading, onEditSupplement, onBu
           <p className="text-chart-1">{table.getSelectedRowModel().rows.length} selected</p>
           <div className="flex items-center gap-2">
             <Button type="button" variant="outline" size="sm" className="rounded-xl border-border/60" onClick={() => setRowSelection({})}>
-              Clear
+              <X className="mr-0 h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Clear</span>
             </Button>
             <Button
               type="button"
@@ -396,7 +300,8 @@ export function SupplementCatalogTable({ rows, isLoading, onEditSupplement, onBu
               onClick={() => onBulkAssign?.(table.getSelectedRowModel().rows.map((row) => row.original))}
               disabled={table.getSelectedRowModel().rows.length === 0}
             >
-              Assign Selected
+              <UserPlus className="mr-0 h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Assign Selected</span>
             </Button>
           </div>
         </div>
@@ -456,7 +361,8 @@ export function SupplementCatalogTable({ rows, isLoading, onEditSupplement, onBu
             onClick={() => table.previousPage()}
             disabled={!table.getCanPreviousPage()}
           >
-            Previous
+            <ChevronLeft className="mr-0 h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Previous</span>
           </Button>
           <span className="text-xs text-muted-foreground">
             Page {table.getState().pagination.pageIndex + 1} of {Math.max(table.getPageCount(), 1)}
@@ -469,7 +375,8 @@ export function SupplementCatalogTable({ rows, isLoading, onEditSupplement, onBu
             onClick={() => table.nextPage()}
             disabled={!table.getCanNextPage()}
           >
-            Next
+            <ChevronRight className="mr-0 h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Next</span>
           </Button>
         </div>
       </div>

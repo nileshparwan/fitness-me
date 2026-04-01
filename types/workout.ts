@@ -25,6 +25,7 @@ const strengthExerciseSchema = z.object({
   exercise_id: z.string().optional(),
   name: z.string().min(1, "Exercise name is required"),
   notes: z.string().optional(),
+  superset_group_id: z.string().optional(),
   sets: z.array(setSchema),
 });
 

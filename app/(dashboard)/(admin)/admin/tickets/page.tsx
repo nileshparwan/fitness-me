@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { formatDistanceToNow } from "date-fns";
-import { Loader2, MoreHorizontal, Search, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Loader2, MoreHorizontal, Search, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { deleteTicketAction, type AdminTicketRow, type TicketCategory, type TicketStatus } from "@/app/actions/admin-tickets";
@@ -337,7 +337,8 @@ export default function AdminTicketsPage() {
             disabled={page === 0 || query.isFetching}
             onClick={() => setPage((prev) => Math.max(prev - 1, 0))}
           >
-            Previous
+            <ChevronLeft className="mr-0 h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Previous</span>
           </Button>
           <Button
             variant="outline"
@@ -345,7 +346,8 @@ export default function AdminTicketsPage() {
             disabled={!query.data?.has_more || query.isFetching}
             onClick={() => setPage((prev) => prev + 1)}
           >
-            Next
+            <ChevronRight className="mr-0 h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Next</span>
           </Button>
         </div>
       </section>

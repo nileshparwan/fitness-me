@@ -7,7 +7,9 @@ import {
   ChevronLeft,
   ChevronRight,
   CirclePlus,
+  ClipboardCopy,
   Copy,
+  History,
   Loader2,
   Pencil,
   Star,
@@ -34,9 +36,11 @@ import {
   useNutritionDiary,
   useNutritionMutations,
 } from "@/hooks/use-nutrition-manual";
-import { resolveNutritionSubject, useNutritionAutoMealGroupSelection } from "@/hooks/use-nutrition-data";
 import {
-  useNutritionActiveSubject,
+  useNutritionAutoMealGroupSelection,
+  useNutritionMealGroupOptions,
+} from "@/hooks/use-nutrition-data";
+import {
   useNutritionDiaryMealTypeOrder,
   useClearNutritionDiaryMealTypeOrder,
   useNutritionRecentDiaryItems,
@@ -48,6 +52,7 @@ import {
   useSetNutritionDiaryMealTypeOrder,
   useSetNutritionNavigationSource,
   useSetNutritionSelectedDate,
+  useSetNutritionSelectedMealGroupId,
   useSetNutritionViewMode,
 } from "@/stores/use-nutrition-ui-store";
 import { useUnitLabels } from "@/stores/use-settings-store";
@@ -215,7 +220,7 @@ export function ManualNutritionDiary({
   const performedOn = useNutritionSelectedDate();
   const setPerformedOn = useSetNutritionSelectedDate();
   const selectedMealGroupId = useNutritionSelectedMealGroupId();
-  const { activeSubjectType, activeSubjectId } = useNutritionActiveSubject();
+  const setSelectedMealGroupId = useSetNutritionSelectedMealGroupId();
   const setViewMode = useSetNutritionViewMode();
   const setNavigationSource = useSetNutritionNavigationSource();
   const setDiaryFilters = useSetNutritionDiaryFilters();
@@ -242,15 +247,18 @@ export function ManualNutritionDiary({
   const [mealNotesDraft, setMealNotesDraft] = useState<Record<string, string>>({});
   const [mealTemplateId, setMealTemplateId] = useState("");
   const lastDateNavAtRef = useRef(0);
+  const autoFillFiredRef = useRef<string | null>(null);
 
   const resolvedSubject = useMemo(() => {
     if (subject?.subject_client_id || subject?.subject_user_id) return subject;
-    return resolveNutritionSubject(activeSubjectType, activeSubjectId);
-  }, [activeSubjectId, activeSubjectType, subject]);
+    return undefined;
+  }, [subject]);
   useNutritionAutoMealGroupSelection({
     subject: resolvedSubject,
     enabled: Boolean(subject?.subject_client_id || subject?.subject_user_id),
   });
+  const groupsQuery = useNutritionMealGroupOptions();
+  const groups = useMemo(() => groupsQuery.data?.rows || [], [groupsQuery.data?.rows]);
 
   const mealGroupSelected = isMealGroupSelected(selectedMealGroupId);
   const storedCustomSectionOrder = useNutritionDiaryMealTypeOrder();
@@ -279,7 +287,13 @@ export function ManualNutritionDiary({
   }, [setNavigationSource, setViewMode]);
 
   useEffect(() => {
-    if (!subject?.subject_client_id && !subject?.subject_user_id) return;
+    if (!selectedMealGroupId) return;
+    if (groups.some((row) => row.id === selectedMealGroupId)) return;
+    if (groupsQuery.data?.has_more) return;
+    setSelectedMealGroupId("");
+  }, [selectedMealGroupId, groups, groupsQuery.data?.has_more, setSelectedMealGroupId]);
+
+  useEffect(() => {
     if (subject?.subject_client_id) {
       setActiveSubject("client", subject.subject_client_id);
       return;
@@ -288,6 +302,7 @@ export function ManualNutritionDiary({
       setActiveSubject("user", subject.subject_user_id);
       return;
     }
+    setActiveSubject("self", null);
   }, [setActiveSubject, subject?.subject_client_id, subject?.subject_user_id]);
 
   useEffect(() => {
@@ -305,6 +320,32 @@ export function ManualNutritionDiary({
     if (!allFavoritesQuery.data) return;
     setFavoriteOverrides((previous) => (Object.keys(previous).length > 0 ? {} : previous));
   }, [allFavoritesQuery.data]);
+
+  useEffect(() => {
+    if (!diaryQuery.isSuccess || diaryQuery.isFetching) return;
+    if (logFromPlan.isPending) return;
+    if ((diaryQuery.data?.logs.length || 0) > 0) return;
+    if (!diaryQuery.data?.active_plan) return;
+    if (autoFillFiredRef.current === performedOn) return;
+
+    autoFillFiredRef.current = performedOn;
+    const mealGroupId = selectedMealGroupId || diaryQuery.data.active_plan.meal_group_id;
+    if (!mealGroupId) return;
+
+    void logFromPlan.mutateAsync({
+      performed_on: performedOn,
+      meal_group_id: mealGroupId,
+      subject: resolvedSubject,
+    }).catch(() => null);
+  }, [
+    diaryQuery.data,
+    diaryQuery.isFetching,
+    diaryQuery.isSuccess,
+    logFromPlan,
+    performedOn,
+    resolvedSubject,
+    selectedMealGroupId,
+  ]);
 
   const favoriteMap = useMemo(() => {
     const map = new Map<string, boolean>();
@@ -602,6 +643,7 @@ export function ManualNutritionDiary({
             meal_type: toActionMealType(section),
             subject: resolvedSubject,
             meal_group_id: selectedMealGroupId || undefined,
+            sync_to_plan: Boolean(selectedMealGroupId),
             item: {
               ...recentItem,
               consumed_time: value.planned_time,
@@ -728,6 +770,7 @@ export function ManualNutritionDiary({
         meal_type: toActionMealType(section),
         subject: resolvedSubject,
         meal_group_id: selectedMealGroupId || undefined,
+        sync_to_plan: Boolean(selectedMealGroupId),
         item: {
           ...recentItem,
           consumed_time: item.consumed_time || null,
@@ -765,6 +808,7 @@ export function ManualNutritionDiary({
         meal_type: toActionMealType(section),
         subject: resolvedSubject,
         meal_group_id: selectedMealGroupId || undefined,
+        sync_to_plan: Boolean(selectedMealGroupId),
         item: {
           ...recentItem,
           is_quick_add: false,
@@ -808,6 +852,10 @@ export function ManualNutritionDiary({
         subject: resolvedSubject,
       });
       if (result.skipped) {
+        if (result.reason === "already_logged") {
+          toast.message("Meals from this plan are already in your diary.");
+          return;
+        }
         toast.message("No meals planned for today.");
         return;
       }
@@ -916,8 +964,8 @@ export function ManualNutritionDiary({
             className="shrink-0 rounded-xl border-border/60"
             onClick={() => setCopyDialogOpen(true)}
           >
-            <Copy className="mr-2 h-4 w-4" />
-            Copy
+            <Copy className="mr-0 h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Copy</span>
           </Button>
           <Button
             variant="outline"
@@ -925,7 +973,8 @@ export function ManualNutritionDiary({
             className="shrink-0 rounded-xl border-border/60"
             onClick={() => setRecentDialogOpen(true)}
           >
-            Recent
+            <History className="mr-0 h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Recent</span>
           </Button>
           {canLogFromPlan && hasDiaryEntries ? (
             <Button
@@ -935,8 +984,14 @@ export function ManualNutritionDiary({
               disabled={logFromPlan.isPending}
               onClick={() => void onLogFromPlan()}
             >
-              {logFromPlan.isPending ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : null}
-              Add from template
+              {logFromPlan.isPending ? (
+                <Loader2 className="mr-0 h-3 w-3 animate-spin sm:mr-1.5" />
+              ) : (
+                <ClipboardCopy className="mr-0 h-3.5 w-3.5 sm:mr-1.5" />
+              )}
+              <span className="hidden sm:inline">
+                {logFromPlan.isPending ? "Importing..." : "Add from template"}
+              </span>
             </Button>
           ) : null}
         </div>

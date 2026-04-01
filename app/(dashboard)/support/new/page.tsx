@@ -6,7 +6,7 @@ import { useTransition } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ArrowLeft, Loader2, Sparkles } from "lucide-react";
+import { ArrowLeft, Loader2, Send, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 
 import { type TicketCategory } from "@/app/actions/tickets";
@@ -66,8 +66,8 @@ export default function SupportNewTicketPage() {
       <div className="flex items-center justify-between gap-3">
         <Button asChild variant="ghost" size="sm">
           <Link href="/support">
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to Support
+            <ArrowLeft className="mr-0 h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Back to Support</span>
           </Link>
         </Button>
       </div>
@@ -149,8 +149,12 @@ export default function SupportNewTicketPage() {
 
             <div className="flex justify-end">
               <Button type="submit" disabled={isPending || createTicket.isPending}>
-                {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                Submit Ticket
+                {isPending ? (
+                  <Loader2 className="mr-0 h-4 w-4 animate-spin sm:mr-2" />
+                ) : (
+                  <Send className="mr-0 h-4 w-4 sm:mr-2" />
+                )}
+                <span className="hidden sm:inline">Submit Ticket</span>
               </Button>
             </div>
           </form>

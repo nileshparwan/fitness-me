@@ -5,16 +5,17 @@ import Link from "next/link";
 import { ChevronRight, ClipboardList, Clock3, Dumbbell, LayoutGrid, List, Loader2, Plus, Search } from "lucide-react";
 import { format } from "date-fns";
 
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Input } from "@/components/ui/input";
-import { useWorkouts } from "@/hooks/use-workout";
 import { WorkoutStatusSelect } from "@/components/workout/workout-status-select";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useDebounce } from "@/hooks/use-debounce";
+import { useWorkouts } from "@/hooks/use-workout";
 import { cn } from "@/utils";
 
 const statusFilters = ["all", "draft", "active", "archived"] as const;
 const PAGE_SIZE = 12;
+
 type WorkoutStatusFilter = (typeof statusFilters)[number];
 type WorkoutStatus = Exclude<WorkoutStatusFilter, "all">;
 
@@ -52,86 +53,69 @@ function statusPillClass(status: WorkoutStatus) {
   return "border-chart-4/40 bg-chart-4/15 text-chart-4";
 }
 
-function WorkoutSessionRow({ workout }: { workout: WorkoutRow }) {
-  const [status, setStatus] = useState<WorkoutStatus>(normalizeWorkoutStatus(workout.status));
-
-  useEffect(() => {
-    setStatus(normalizeWorkoutStatus(workout.status));
-  }, [workout.status]);
-
-  const setCount = workout.strength_sets?.length || 0;
+function WorkoutCard({ workout, variant }: { workout: WorkoutRow; variant: "list" | "grid" }) {
+  const setCount = workout.strength_sets?.length ?? 0;
   const duration = workout.duration_minutes && workout.duration_minutes > 0 ? `${workout.duration_minutes} min` : null;
+  const normalizedStatus = normalizeWorkoutStatus(workout.status);
 
-  return (
-    <article className="glass-surface !rounded-[10px] border-border/50 px-3 py-3 md:px-4">
-      <div className="flex items-center gap-3">
-        <Link href={`/workouts/${workout.id}`} className="flex min-w-0 flex-1 items-center gap-3">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-chart-1/20 text-chart-1">
-            <ClipboardList className="h-4 w-4" />
-          </div>
-
-          <div className="min-w-0">
-            <p className="truncate text-sm font-semibold md:text-base">{workout.name || "Untitled workout"}</p>
-            <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-              <span>{formatWorkoutDate(workout.date)}</span>
-              <span className="inline-flex items-center gap-1">
-                <Dumbbell className="h-3 w-3" />
-                {setCount}
-              </span>
-              {duration ? (
-                <span className="inline-flex items-center gap-1">
-                  <Clock3 className="h-3 w-3" />
-                  {duration}
-                </span>
-              ) : null}
+  if (variant === "list") {
+    return (
+      <article className="glass-surface !rounded-[12px] border-border/50 px-4 py-3">
+        <div className="flex items-center gap-3">
+          <Link href={`/workouts/${workout.id}`} className="flex min-w-0 flex-1 items-center gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-chart-1/15 text-chart-1">
+              <ClipboardList className="h-4 w-4" />
             </div>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold">{workout.name || "Untitled workout"}</p>
+              <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                <span>{formatWorkoutDate(workout.date)}</span>
+                <span className="inline-flex items-center gap-1">
+                  <Dumbbell className="h-3 w-3" />
+                  {setCount}
+                </span>
+                {duration ? (
+                  <span className="inline-flex items-center gap-1">
+                    <Clock3 className="h-3 w-3" />
+                    {duration}
+                  </span>
+                ) : null}
+              </div>
+            </div>
+          </Link>
+          <span className={cn("hidden rounded-full border px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-wide sm:inline-flex", statusPillClass(normalizedStatus))}>
+            {normalizedStatus}
+          </span>
+          <div onClick={(event) => event.stopPropagation()}>
+            <WorkoutStatusSelect
+              workoutId={workout.id}
+              status={normalizedStatus}
+              className="h-8 rounded-full border border-border/50 px-2"
+            />
           </div>
-        </Link>
-
-        <span className="hidden text-xs uppercase tracking-[0.12em] text-muted-foreground md:inline-flex">
-          {status}
-        </span>
-
-        <div className="shrink-0" onClick={(event) => event.stopPropagation()}>
-          <WorkoutStatusSelect
-            workoutId={workout.id}
-            status={status}
-            onStatusChange={(value) => setStatus(normalizeWorkoutStatus(value))}
-            className={cn("min-w-[116px] rounded-full border px-3", statusPillClass(status))}
-          />
+          <Link href={`/workouts/${workout.id}`} className="text-muted-foreground hover:text-foreground">
+            <ChevronRight className="h-4 w-4" />
+          </Link>
         </div>
-
-        <Link href={`/workouts/${workout.id}`} className="hidden text-muted-foreground transition-colors hover:text-foreground sm:inline-flex">
-          <ChevronRight className="h-4 w-4" />
-        </Link>
-      </div>
-    </article>
-  );
-}
-
-function WorkoutGridCard({ workout }: { workout: WorkoutRow }) {
-  const [status, setStatus] = useState<WorkoutStatus>(normalizeWorkoutStatus(workout.status));
-
-  useEffect(() => {
-    setStatus(normalizeWorkoutStatus(workout.status));
-  }, [workout.status]);
-
-  const setCount = workout.strength_sets?.length || 0;
-  const duration = workout.duration_minutes && workout.duration_minutes > 0 ? `${workout.duration_minutes} min` : null;
+      </article>
+    );
+  }
 
   return (
-    <article className="glass-surface !rounded-[10px] border-border/50 p-4">
+    <article className="glass-surface !rounded-[12px] border-border/50 p-4">
       <Link href={`/workouts/${workout.id}`} className="block space-y-3">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-chart-1/20 text-chart-1">
+        <div className="flex items-center justify-between">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-chart-1/15 text-chart-1">
             <ClipboardList className="h-4 w-4" />
           </div>
-          <span className="text-xs uppercase tracking-[0.12em] text-muted-foreground">{status}</span>
+          <span className={cn("rounded-full border px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-wide", statusPillClass(normalizedStatus))}>
+            {normalizedStatus}
+          </span>
         </div>
         <div>
-          <p className="truncate text-base font-semibold">{workout.name || "Untitled workout"}</p>
-          <p className="mt-1 text-xs text-muted-foreground">{formatWorkoutDate(workout.date)}</p>
-          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+          <p className="truncate font-semibold">{workout.name || "Untitled workout"}</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">{formatWorkoutDate(workout.date)}</p>
+          <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
             <span className="inline-flex items-center gap-1">
               <Dumbbell className="h-3 w-3" />
               {setCount}
@@ -145,12 +129,11 @@ function WorkoutGridCard({ workout }: { workout: WorkoutRow }) {
           </div>
         </div>
       </Link>
-      <div className="mt-3" onClick={(event) => event.stopPropagation()}>
+      <div className="mt-3 border-t border-border/40 pt-3" onClick={(event) => event.stopPropagation()}>
         <WorkoutStatusSelect
           workoutId={workout.id}
-          status={status}
-          onStatusChange={(value) => setStatus(normalizeWorkoutStatus(value))}
-          className={cn("w-full rounded-full border px-3", statusPillClass(status))}
+          status={normalizedStatus}
+          className={cn("w-full rounded-full border px-3", statusPillClass(normalizedStatus))}
         />
       </div>
     </article>
@@ -160,7 +143,6 @@ function WorkoutGridCard({ workout }: { workout: WorkoutRow }) {
 export default function WorkoutsPage() {
   const { history } = useWorkouts();
   const { data: workouts, isLoading, isFetching } = history;
-
   const [view, setView] = useState<"grid" | "list">("list");
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<WorkoutStatusFilter>("all");
@@ -168,8 +150,18 @@ export default function WorkoutsPage() {
   const debouncedSearch = useDebounce(search, 300);
 
   useEffect(() => {
-    setVisibleCount(PAGE_SIZE); // Reset pagination on filter changes.
+    setVisibleCount(PAGE_SIZE);
   }, [debouncedSearch, status]);
+
+  const countByStatus = useMemo(() => {
+    const source = (workouts || []) as WorkoutRow[];
+    return {
+      all: source.length,
+      draft: source.filter((workout) => normalizeWorkoutStatus(workout.status) === "draft").length,
+      active: source.filter((workout) => normalizeWorkoutStatus(workout.status) === "active").length,
+      archived: source.filter((workout) => normalizeWorkoutStatus(workout.status) === "archived").length,
+    };
+  }, [workouts]);
 
   const filteredWorkouts = useMemo(() => {
     const source = (workouts || []) as WorkoutRow[];
@@ -177,23 +169,15 @@ export default function WorkoutsPage() {
 
     return source.filter((workout) => {
       const normalizedStatus = normalizeWorkoutStatus(workout.status);
-      const matchesStatus = status === "all" ? true : normalizedStatus === status;
-      if (!matchesStatus) return false;
+      if (status !== "all" && normalizedStatus !== status) return false;
       if (!query) return true;
 
       const name = (workout.name || "").trim().toLowerCase();
-      return (
-        name.includes(query) ||
-        workout.id.toLowerCase().includes(query) ||
-        normalizedStatus.includes(query)
-      );
+      return name.includes(query) || workout.id.toLowerCase().includes(query) || normalizedStatus.includes(query);
     });
   }, [workouts, debouncedSearch, status]);
 
-  const visibleWorkouts = useMemo(
-    () => filteredWorkouts.slice(0, visibleCount),
-    [filteredWorkouts, visibleCount]
-  );
+  const visibleWorkouts = useMemo(() => filteredWorkouts.slice(0, visibleCount), [filteredWorkouts, visibleCount]);
   const hasMore = filteredWorkouts.length > visibleCount;
   const remainingCount = Math.max(filteredWorkouts.length - visibleCount, 0);
 
@@ -205,11 +189,10 @@ export default function WorkoutsPage() {
             <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">Workout Sessions</h1>
             <p className="text-sm text-muted-foreground">{filteredWorkouts.length} workouts total</p>
           </div>
-
           <Button asChild className="accent-strong rounded-[12px] text-black">
             <Link href="/workouts/new">
-              <Plus className="mr-2 h-4 w-4" />
-              New Workout
+              <Plus className="mr-0 h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">New Workout</span>
             </Link>
           </Button>
         </div>
@@ -224,7 +207,6 @@ export default function WorkoutsPage() {
               placeholder="Search workouts..."
             />
           </div>
-
           <div className="inline-flex rounded-[12px] border border-border/60 bg-muted/20 p-1">
             <Button
               type="button"
@@ -262,7 +244,7 @@ export default function WorkoutsPage() {
               )}
               onClick={() => setStatus(item)}
             >
-              {statusLabel(item)}
+              {statusLabel(item)} {countByStatus[item] > 0 ? `(${countByStatus[item]})` : ""}
             </button>
           ))}
         </div>
@@ -270,8 +252,8 @@ export default function WorkoutsPage() {
 
       {isLoading ? (
         <div className="space-y-4">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <Skeleton key={i} className="h-[78px] w-full rounded-[10px]" />
+          {Array.from({ length: 6 }).map((_, index) => (
+            <Skeleton key={index} className="h-[78px] w-full rounded-[10px]" />
           ))}
         </div>
       ) : filteredWorkouts.length === 0 ? (
@@ -279,9 +261,7 @@ export default function WorkoutsPage() {
           <Dumbbell className="mx-auto mb-4 h-10 w-10 text-muted-foreground" />
           <h3 className="text-lg font-semibold">{workouts?.length ? "No matching workouts" : "No workouts yet"}</h3>
           <p className="mb-4 text-sm text-muted-foreground">
-            {workouts?.length
-              ? "Adjust your filters to see more sessions."
-              : "Start your journey by logging your first session."}
+            {workouts?.length ? "Adjust your filters to see more sessions." : "Start your journey by logging your first session."}
           </p>
           <Button asChild className="accent-strong text-black">
             <Link href="/workouts/new">Start now</Link>
@@ -301,29 +281,31 @@ export default function WorkoutsPage() {
             ) : null}
           </div>
 
-          <div className={view === "grid" ? "grid gap-3 sm:grid-cols-2 xl:grid-cols-3" : "hidden"}>
-            {visibleWorkouts.map((workout) => (
-              <WorkoutGridCard key={workout.id} workout={workout} />
-            ))}
-          </div>
+          {view === "grid" ? (
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {visibleWorkouts.map((workout) => (
+                <WorkoutCard key={workout.id} workout={workout} variant="grid" />
+              ))}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {visibleWorkouts.map((workout) => (
+                <WorkoutCard key={workout.id} workout={workout} variant="list" />
+              ))}
+            </div>
+          )}
 
-          <div className={view === "list" ? "space-y-3" : "hidden"}>
-            {visibleWorkouts.map((workout) => (
-              <WorkoutSessionRow key={workout.id} workout={workout} />
-            ))}
-          </div>
-
-          {hasMore && (
+          {hasMore ? (
             <div className="flex justify-center pt-2">
               <Button
                 variant="outline"
                 className="rounded-[12px] border-border/60 bg-muted/20"
-                onClick={() => setVisibleCount((prev) => prev + PAGE_SIZE)}
+                onClick={() => setVisibleCount((previous) => previous + PAGE_SIZE)}
               >
                 Load more ({remainingCount} remaining)
               </Button>
             </div>
-          )}
+          ) : null}
         </>
       )}
     </div>

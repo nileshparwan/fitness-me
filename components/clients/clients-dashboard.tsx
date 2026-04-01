@@ -24,20 +24,14 @@ import {
   UtensilsCrossed,
   Wallet,
 } from "lucide-react";
-import { toast } from "sonner";
 
-import type { ClientStatus } from "@/app/actions/coach-tools";
+import { ClientUpsertSheet } from "@/components/clients/client-upsert-sheet";
 import { ClientsDashboardSkeleton } from "@/components/clients/clients-dashboard-skeleton";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/app-sheet";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useClientsDashboard, useClientsDashboardRealtime } from "@/hooks/use-clients-dashboard";
-import { useCoachToolMutations } from "@/hooks/use-coach-tools";
 import {
   formatCurrencyAmount,
   type ClientsDashboardActivityItem,
@@ -46,7 +40,6 @@ import {
 } from "@/lib/clients/dashboard";
 import { cn } from "@/utils";
 
-const STATUS_OPTIONS: ClientStatus[] = ["active", "paused", "blocked", "archived"];
 const GOAL_BAR_COLORS = ["bg-chart-1", "bg-chart-3", "bg-chart-2", "bg-chart-5"];
 
 function formatHeaderDate(todayIso: string) {
@@ -173,44 +166,13 @@ function KpiCard({ title, value, badge, Icon, iconClassName }: KpiCardProps) {
 
 export function ClientsDashboard() {
   const query = useClientsDashboard();
-  const mutations = useCoachToolMutations();
   useClientsDashboardRealtime(true);
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
-  const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
-  const [email, setEmail] = useState("");
-  const [status, setStatus] = useState<ClientStatus>("active");
 
   const headerDate = query.data?.today_iso
     ? formatHeaderDate(query.data.today_iso)
     : formatHeaderDate(new Date().toISOString().slice(0, 10));
-
-  const onCreateClient = async () => {
-    if (!firstName.trim()) {
-      toast.error("First name is required.");
-      return;
-    }
-
-    try {
-      await mutations.upsertClient.mutateAsync({
-        first_name: firstName.trim(),
-        last_name: lastName.trim() || null,
-        email: email.trim() || null,
-        status,
-      });
-
-      setFirstName("");
-      setLastName("");
-      setEmail("");
-      setStatus("active");
-      setIsCreateOpen(false);
-      toast.success("Client created");
-      await query.refetch();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to create client");
-    }
-  };
 
   if (query.isLoading && !query.data) {
     return <ClientsDashboardSkeleton />;
@@ -241,76 +203,10 @@ export function ClientsDashboard() {
           <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">Dashboard</h1>
           <p className="mt-1 text-sm text-muted-foreground">Coaching command center · {headerDate}</p>
         </div>
-        <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-          <DialogTrigger asChild>
-            <Button className="accent-strong rounded-xl px-4 text-black">
-              <Plus className="mr-2 h-4 w-4" />
-              New Client
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="rounded-[10px] border-border/70 bg-card/95 sm:max-w-lg">
-            <DialogHeader>
-              <DialogTitle>New Client</DialogTitle>
-              <DialogDescription>Create a client profile.</DialogDescription>
-            </DialogHeader>
-            <div className="space-y-3">
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label>First Name</Label>
-                  <Input
-                    value={firstName}
-                    onChange={(event) => setFirstName(event.target.value)}
-                    className="rounded-xl border-border/60 bg-muted/20"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Last Name</Label>
-                  <Input
-                    value={lastName}
-                    onChange={(event) => setLastName(event.target.value)}
-                    className="rounded-xl border-border/60 bg-muted/20"
-                  />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label>Email (optional)</Label>
-                <Input
-                  value={email}
-                  onChange={(event) => setEmail(event.target.value)}
-                  className="rounded-xl border-border/60 bg-muted/20"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Status</Label>
-                <Select value={status} onValueChange={(next) => setStatus(next as ClientStatus)}>
-                  <SelectTrigger className="h-10 w-full rounded-xl border-border/60 bg-muted/20">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {STATUS_OPTIONS.map((option) => (
-                      <SelectItem key={option} value={option}>
-                        {option}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" className="rounded-xl border-border/60" onClick={() => setIsCreateOpen(false)}>
-                Cancel
-              </Button>
-              <Button
-                className="accent-strong rounded-xl text-black"
-                onClick={() => void onCreateClient()}
-                disabled={mutations.upsertClient.isPending}
-              >
-                {mutations.upsertClient.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                Save
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        <Button className="accent-strong rounded-xl px-4 text-black" onClick={() => setIsCreateOpen(true)}>
+          <Plus className="mr-2 h-4 w-4" />
+          New Client
+        </Button>
       </section>
 
       <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -639,6 +535,15 @@ export function ClientsDashboard() {
           Syncing latest changes...
         </div>
       ) : null}
+
+      <ClientUpsertSheet
+        open={isCreateOpen}
+        onClose={() => setIsCreateOpen(false)}
+        onSaved={() => {
+          setIsCreateOpen(false);
+          void query.refetch();
+        }}
+      />
     </div>
   );
 }

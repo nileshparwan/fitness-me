@@ -46,7 +46,6 @@ function readCategories(row: SupplementCatalogRow | null): SupplementCategory[] 
   if (Array.isArray(fromArray) && fromArray.length > 0) {
     return Array.from(new Set(fromArray.filter((item): item is SupplementCategory => typeof item === "string"))) as SupplementCategory[];
   }
-  if (typeof row.category === "string") return [row.category as SupplementCategory];
   return ["other"];
 }
 

@@ -12,7 +12,7 @@ import {
   type VisibilityState,
   useReactTable,
 } from "@tanstack/react-table";
-import { MoreHorizontal } from "lucide-react";
+import { MoreHorizontal, SlidersHorizontal } from "lucide-react";
 
 import type { SupplementAssignmentRow } from "@/app/actions/supplements";
 import { Badge } from "@/components/ui/badge";
@@ -88,7 +88,6 @@ export function SupplementDetailTable({ rows, isLoading, onEdit, onRemove }: Pro
       return (
         [
           normalizeSupplementDisplayName(row.supplement_name),
-          row.brand || "",
           row.categories.join(" "),
         ]
           .join(" ")
@@ -111,10 +110,7 @@ export function SupplementDetailTable({ rows, isLoading, onEdit, onRemove }: Pro
           />
         ),
         cell: ({ row }) => (
-          <div>
-            <p className="font-medium">{normalizeSupplementDisplayName(row.original.supplement_name)}</p>
-            <p className="text-xs text-muted-foreground">{row.original.brand || "No brand"}</p>
-          </div>
+          <p className="font-medium">{normalizeSupplementDisplayName(row.original.supplement_name)}</p>
         ),
       },
       {
@@ -227,7 +223,8 @@ export function SupplementDetailTable({ rows, isLoading, onEdit, onRemove }: Pro
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button type="button" variant="outline" size="sm" className="rounded-xl border-border/60">
-                Columns
+                <SlidersHorizontal className="mr-0 h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Columns</span>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">

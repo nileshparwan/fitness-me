@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { ChevronRight, CirclePlus, Copy, Loader2, Pencil, Star, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ChevronRight, CirclePlus, Copy, ListOrdered, Loader2, Pencil, RotateCcw, Star, Trash2, Zap } from "lucide-react";
 import { toast } from "sonner";
 
 import type { MealDayOfWeek, MealGroupDetail, MealItemType } from "@/app/actions/meal-groups";
@@ -104,6 +104,46 @@ function ProgressBar({
   );
 }
 
+function readQueryErrorMessage(error: unknown) {
+  return error instanceof Error && error.message.trim().length > 0
+    ? error.message
+    : "The meal planner could not be loaded. Please try again.";
+}
+
+function isMissingMealPlanError(error: unknown) {
+  if (!(error instanceof Error)) return false;
+  const message = error.message.trim().toLowerCase();
+  return (
+    message.includes("meal plan not found or you do not have access") ||
+    message.includes("meal group not found or unauthorized")
+  );
+}
+
+function MealPlannerErrorState({
+  message,
+  onRetry,
+  isRetrying,
+}: {
+  message: string;
+  onRetry: () => void;
+  isRetrying: boolean;
+}) {
+  return (
+    <section className="glass-surface surface-pad">
+      <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
+        <div className="space-y-1">
+          <h1 className="text-xl font-semibold tracking-tight">Could not load meal plan</h1>
+          <p className="text-sm text-muted-foreground">{message}</p>
+        </div>
+        <Button type="button" onClick={onRetry} className="rounded-xl" disabled={isRetrying}>
+          {isRetrying ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+          Retry
+        </Button>
+      </div>
+    </section>
+  );
+}
+
 function findDayPlan(detail: MealGroupDetail | undefined, day: MealDayOfWeek) {
   return detail?.plans.find((plan) => plan.day_of_week === day) ?? detail?.plans[0] ?? null;
 }
@@ -129,6 +169,7 @@ export function MealPlannerPage() {
   const units = useUnitLabels();
   const groupsQuery = useNutritionMealGroupOptions();
   const mutations = useNutritionGroupMutations();
+  const upsertGroupMutateAsync = mutations.upsertGroup.mutateAsync;
   const selectedMealGroupId = useNutritionSelectedMealGroupId();
   const setSelectedMealGroupId = useSetNutritionSelectedMealGroupId();
   const selectedDay = useNutritionSelectedPlannerDay();
@@ -147,7 +188,14 @@ export function MealPlannerPage() {
   const activePlanQuery = useNutritionActivePlanForDate(activePlanDate, resolvedSubject);
 
   const groups = useMemo(() => groupsQuery.data?.rows ?? [], [groupsQuery.data?.rows]);
-  const groupId = selectedMealGroupId || null;
+  const resolvedSelectedMealGroupId = useMemo(() => {
+    if (!selectedMealGroupId) return null;
+    return groups.some((row) => row.id === selectedMealGroupId) ? selectedMealGroupId : null;
+  }, [groups, selectedMealGroupId]);
+  const groupId =
+    groupsQuery.isLoading || groups.length === 0
+      ? null
+      : resolvedSelectedMealGroupId;
   const nutritionMutations = useNutritionMutations(activePlanDate, resolvedSubject, groupId);
   const [notesDraft, setNotesDraft] = useState("");
 
@@ -164,6 +212,49 @@ export function MealPlannerPage() {
   const [isClientReady, setIsClientReady] = useState(false);
   const [copyFromDay, setCopyFromDay] = useState<MealDayOfWeek>(() => defaultCopySourceDay(currentMealDay()));
   const [favoriteType, setFavoriteType] = useState<MealItemType>("breakfast");
+  const autoInitFiredRef = useRef(false);
+  const noPlansFiredRef = useRef(false);
+
+  const createDefaultGroup = useCallback(
+    async ({ silent = false }: { silent?: boolean } = {}) => {
+      try {
+        const result = await upsertGroupMutateAsync({
+          name: "My Meal Planner",
+          description: "Weekly meal planner",
+          status: "draft",
+        });
+        if (result?.id) {
+          setSelectedMealGroupId(result.id);
+        }
+        if (!silent) {
+          toast.success("Meal planner created");
+        }
+        return result;
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Unable to create planner");
+        return null;
+      }
+    },
+    [setSelectedMealGroupId, upsertGroupMutateAsync]
+  );
+
+  const resetPlanner = useCallback(async () => {
+    if (!groupId) return;
+    try {
+      const deleted = await withToastFeedback(mutations.deleteGroup.mutateAsync({ meal_group_id: groupId }), {
+        loading: "Resetting planner...",
+        success: "Planner reset",
+        error: "Unable to reset planner",
+      }).catch(() => null);
+      if (!deleted) return;
+      setSelectedMealGroupId("");
+      autoInitFiredRef.current = false;
+      noPlansFiredRef.current = false;
+      await createDefaultGroup({ silent: true });
+    } catch {
+      return;
+    }
+  }, [createDefaultGroup, groupId, mutations.deleteGroup, setSelectedMealGroupId]);
 
   useEffect(() => {
     setIsClientReady(true);
@@ -175,24 +266,68 @@ export function MealPlannerPage() {
   }, [setNavigationSource, setViewMode]);
 
   useEffect(() => {
-    if (!groupId) return;
-    if (groups.some((row) => row.id === groupId)) return;
+    if (!selectedMealGroupId) return;
+    if (groups.some((row) => row.id === selectedMealGroupId)) return;
     if (groupsQuery.data?.has_more) return;
     setSelectedMealGroupId("");
-  }, [groupId, groups, groupsQuery.data?.has_more, setSelectedMealGroupId]);
+  }, [selectedMealGroupId, groups, groupsQuery.data?.has_more, setSelectedMealGroupId]);
 
   useEffect(() => {
     if (groupId) return;
     if (groupsQuery.isLoading) return;
+    if (groupsQuery.isFetching) return;
     const fallbackGroupId = groups[0]?.id;
     if (!fallbackGroupId) return;
     setSelectedMealGroupId(fallbackGroupId);
-  }, [groupId, groups, groupsQuery.isLoading, setSelectedMealGroupId]);
+  }, [groupId, groups, groupsQuery.isFetching, groupsQuery.isLoading, setSelectedMealGroupId]);
 
   const detailQuery = useNutritionMealGroup(groupId ?? "");
   const detail = detailQuery.data;
 
+  useEffect(() => {
+    if (groupsQuery.isLoading) return;
+    if (groups.length > 0) return;
+    if (autoInitFiredRef.current) return;
+    autoInitFiredRef.current = true;
+    void createDefaultGroup({ silent: true });
+  }, [createDefaultGroup, groups.length, groupsQuery.isLoading]);
+
+  useEffect(() => {
+    if (!groupId) return;
+    if (detailQuery.isLoading || detailQuery.isFetching) return;
+    if (detailQuery.isError && isMissingMealPlanError(detailQuery.error)) {
+      setSelectedMealGroupId("");
+      return;
+    }
+    if (!detailQuery.isError && !detailQuery.data) {
+      setSelectedMealGroupId("");
+    }
+  }, [
+    groupId,
+    detailQuery.isLoading,
+    detailQuery.isFetching,
+    detailQuery.isError,
+    detailQuery.error,
+    detailQuery.data,
+    setSelectedMealGroupId,
+  ]);
+
   const selectedPlan = useMemo(() => findDayPlan(detail, selectedDay), [detail, selectedDay]);
+
+  useEffect(() => {
+    noPlansFiredRef.current = false;
+  }, [groupId]);
+
+  useEffect(() => {
+    if (!groupId) return;
+    if (!detail) return;
+    if (detail.plans.length > 0) return;
+    if (detailQuery.isLoading || detailQuery.isFetching) return;
+    if (noPlansFiredRef.current) return;
+    noPlansFiredRef.current = true;
+    void resetPlanner();
+  }, [detail, detailQuery.isFetching, detailQuery.isLoading, groupId, resetPlanner]);
+
   const activePlan = activePlanQuery.data?.active_plan ?? null;
   const allFavoritesQuery = useFavoriteMealItems(100, null, { enabled: favoritesLookupEnabled || favoritesOpen });
   const favoritesQuery = useFavoriteMealItems(40, favoriteType, { enabled: favoritesOpen });
@@ -333,7 +468,7 @@ export function MealPlannerPage() {
 
     const dayPlan = findDayPlan(detail, selectedDay);
     if (!dayPlan) {
-      toast.error("No day plan available. Create a meal group first.");
+      toast.error("No planner day is available for the selected meal plan.");
       return;
     }
 
@@ -518,24 +653,6 @@ export function MealPlannerPage() {
     setDeleteTarget(null);
   };
 
-  const createDefaultGroup = async () => {
-    try {
-      const result = await mutations.upsertGroup.mutateAsync({
-        name: "Lean Bulk — Week 1",
-        description: "Weekly meal planner template",
-        status: "draft",
-      });
-      if (result?.id) {
-        setSelectedMealGroupId(result.id);
-        toast.success("Meal planner created");
-      } else {
-        toast.success("Meal planner created");
-      }
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to create planner");
-    }
-  };
-
   const toggleCustomOrderType = (type: MealItemType) => {
     setCustomSectionOrderByDay(selectedDay, (previous) => {
       const normalizedPrevious = previous.filter(isMealItemType);
@@ -550,32 +667,41 @@ export function MealPlannerPage() {
     clearCustomSectionOrderByDay(selectedDay);
   };
 
-  if (!isClientReady || groupsQuery.isLoading || (groupId && detailQuery.isLoading)) {
+  if (!isClientReady || groupsQuery.isLoading) {
     return <MealPlannerSkeleton />;
   }
 
-  if (!groupId) {
-    if (groups.length > 0) return <MealPlannerSkeleton />;
+  if (groups.length === 0 && mutations.upsertGroup.isPending) {
+    return <MealPlannerSkeleton />;
+  }
+
+  if (groupId && detailQuery.isLoading && !detailQuery.isError) {
+    return <MealPlannerSkeleton />;
+  }
+
+  if (groupId && detailQuery.isError && isMissingMealPlanError(detailQuery.error)) {
+    return <MealPlannerSkeleton />;
+  }
+
+  if (groupId && detailQuery.isError) {
     return (
-      <section className="glass-surface surface-pad">
-        <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
-          <div>
-            <h1 className="text-xl font-semibold tracking-tight">Meal Planner</h1>
-            <p className="mt-1 text-sm text-muted-foreground">No meal planner yet. Create one to get started.</p>
-          </div>
-          <Button
-            onClick={() => void createDefaultGroup()}
-            className="h-11 rounded-full bg-chart-2 px-6 text-black hover:bg-chart-2/90"
-            disabled={mutations.upsertGroup.isPending}
-          >
-            Create Planner
-          </Button>
-        </div>
-      </section>
+      <MealPlannerErrorState
+        message={readQueryErrorMessage(detailQuery.error)}
+        onRetry={() => void detailQuery.refetch()}
+        isRetrying={detailQuery.isFetching}
+      />
     );
   }
 
-  if (!detail || !selectedPlan) {
+  if (!groupId) {
+    return <MealPlannerSkeleton />;
+  }
+
+  if (!detail) {
+    return <MealPlannerSkeleton />;
+  }
+
+  if (detail.plans.length === 0 || !selectedPlan) {
     return <MealPlannerSkeleton />;
   }
 
@@ -583,6 +709,11 @@ export function MealPlannerPage() {
 
   return (
     <div className="section-gap">
+      <section className="glass-surface surface-pad space-y-1">
+        <p className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Meal Group</p>
+        <h1 className="text-lg font-semibold tracking-tight">{detail.group.name}</h1>
+      </section>
+
       <section className="space-y-3">
         <div className="flex flex-wrap items-center gap-2">
           {DAY_ORDER.map((day) => (
@@ -606,8 +737,8 @@ export function MealPlannerPage() {
             onClick={() => setIsCopyDialogOpen(true)}
             disabled={mutations.copyDay.isPending}
           >
-            <Copy className="mr-2 h-4 w-4" />
-            Copy From Day
+            <Copy className="mr-0 h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Copy From Day</span>
           </Button>
         </div>
       </section>
@@ -655,7 +786,8 @@ export function MealPlannerPage() {
               onClick={() => setIsCustomOrderModalOpen(true)}
               disabled={!groupId}
             >
-              Custom Order
+              <ListOrdered className="mr-0 h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Custom Order</span>
             </Button>
             <Button
               type="button"
@@ -665,7 +797,8 @@ export function MealPlannerPage() {
               onClick={clearCustomOrder}
               disabled={customSectionOrder.length === 0}
             >
-              Clear Order
+              <RotateCcw className="mr-0 h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Clear Order</span>
             </Button>
           </div>
         </div>
@@ -710,7 +843,8 @@ export function MealPlannerPage() {
                     onClick={() => openCreateItem(type, true)}
                     disabled={!groupId}
                   >
-                    Quick Add
+                    <Zap className="mr-0 h-4 w-4 sm:mr-2" />
+                    <span className="hidden sm:inline">Quick Add</span>
                   </Button>
                   <Button
                     size="icon"

@@ -37,6 +37,7 @@ type ActionExercise =
       exercise_id?: string;
       name: string;
       notes?: string;
+      superset_group_id?: string;
       sets: {
         set_number: number;
         reps: number;
@@ -47,8 +48,6 @@ type ActionExercise =
         tempo?: string;
         is_warmup?: boolean;
         is_dropset?: boolean;
-        paused?: boolean;
-        touch_and_go?: boolean;
         equipment_type?: string;
         side?: "bilateral" | "left" | "right";
       }[];
@@ -104,6 +103,7 @@ export function mapEntriesToActionExercises(
           exercise_id: entry.exercise_id,
           name: entry.name,
           notes: entry.notes,
+          superset_group_id: entry.superset_group_id,
           sets: entry.sets.map((set) => ({
             set_number: set.set_number,
             reps: set.reps,
@@ -114,8 +114,6 @@ export function mapEntriesToActionExercises(
             tempo: set.tempo,
             is_warmup: set.is_warmup,
             is_dropset: set.is_dropset,
-            paused: set.paused,
-            touch_and_go: set.touch_and_go,
             equipment_type: set.equipment_type,
             side: set.side,
           })),

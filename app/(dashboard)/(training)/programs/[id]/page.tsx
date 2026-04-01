@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { WorkoutPicker } from "@/components/workout/workout-picker";
@@ -123,7 +123,8 @@ export default async function ProgramPage({ params }: ProgramPageProps) {
           <p className="text-sm text-muted-foreground">Need a new workout specifically for this program?</p>
           <Button variant="outline" asChild>
             <Link href={`/workouts/new?programId=${programId}`}>
-              Create & Link New Workout
+              <Plus className="mr-0 h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Create & Link New Workout</span>
             </Link>
           </Button>
         </div>

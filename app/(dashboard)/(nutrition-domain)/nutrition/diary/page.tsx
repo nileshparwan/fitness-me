@@ -1,9 +1,9 @@
-import { ManualNutritionDiary } from "@/components/nutrition/manual-nutrition-diary";
+import { ManualNutritionDiaryClient } from "@/components/nutrition/manual-nutrition-diary-client";
 
 export default function NutritionDiaryAliasPage() {
   return (
     <div className="page-shell">
-      <ManualNutritionDiary />
+      <ManualNutritionDiaryClient />
     </div>
   );
 }

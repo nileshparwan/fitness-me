@@ -1,3 +1,5 @@
+begin;
+
 create or replace function public._normalize_exercise_muscle_groups(
   input_muscles text[],
   input_category text
@@ -46,9 +48,9 @@ begin
         when tag in ('back', 'upper_back', 'lower_back', 'lats', 'traps', 'rhomboids', 'erectors') then array['back']
         when tag in ('shoulders', 'front_delts', 'side_delts', 'rear_delts', 'delts', 'rotator_cuff') then array['shoulders']
         when tag in ('arms', 'biceps', 'triceps', 'forearms', 'brachialis') then array['arms']
-        when tag in ('legs', 'quads', 'hamstrings', 'calves', 'adductors', 'abductors', 'hip_flexors') then array['legs']
+        when tag in ('legs', 'quads', 'hamstrings', 'calves', 'adductors', 'abductors', 'hip_abductors', 'hip_flexors') then array['legs']
         when tag in ('glutes') then array['glutes', 'legs']
-        when tag in ('core', 'abs', 'obliques', 'lower_abs', 'transverse_abdominis') then array['core']
+        when tag in ('core', 'abs', 'obliques', 'lower_abs', 'transverse_abdominis', 'pelvic_floor') then array['core']
         when tag in ('cardio', 'cardiovascular', 'conditioning', 'endurance', 'coordination') then array['cardio']
         else array[]::text[]
       end
@@ -101,6 +103,40 @@ end;
 $$;
 
 update public.exercise_catalog
-set muscle_groups = public._normalize_exercise_muscle_groups(muscle_groups, category);
+set muscle_groups = public._normalize_exercise_muscle_groups(
+  muscle_groups,
+  case when category is null then null else category::text end
+);
 
-drop function if exists public._normalize_exercise_muscle_groups(text[], text);
+alter table if exists public.exercise_catalog
+  drop column if exists difficulty_level,
+  drop column if exists force_type,
+  drop column if exists joint_actions,
+  drop column if exists sport_category,
+  drop column if exists contraindications,
+  drop column if exists is_custom,
+  drop column if exists is_unilateral,
+  drop column if exists is_approved,
+  drop column if exists created_by;
+
+drop policy if exists exercise_catalog_insert_owner_or_admin on public.exercise_catalog;
+drop policy if exists exercise_catalog_update_owner_or_admin on public.exercise_catalog;
+drop policy if exists exercise_catalog_delete_owner_or_admin on public.exercise_catalog;
+drop policy if exists exercise_catalog_insert_authenticated on public.exercise_catalog;
+drop policy if exists exercise_catalog_update_authenticated on public.exercise_catalog;
+drop policy if exists exercise_catalog_delete_authenticated on public.exercise_catalog;
+
+create policy exercise_catalog_insert_authenticated on public.exercise_catalog
+for insert to authenticated
+with check (true);
+
+create policy exercise_catalog_update_authenticated on public.exercise_catalog
+for update to authenticated
+using (true)
+with check (true);
+
+create policy exercise_catalog_delete_authenticated on public.exercise_catalog
+for delete to authenticated
+using (true);
+
+commit;

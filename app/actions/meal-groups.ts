@@ -403,31 +403,30 @@ function isMissingRelationError(error: { code?: string; message?: string } | nul
   );
 }
 
-async function listPlansAndItemsForGroup(supabase: Awaited<ReturnType<typeof createClient>>, mealGroupId: string) {
-  const [{ data: plans, error: plansError }, { data: items, error: itemsError }] = await Promise.all([
-    supabase.from("meal_group_plans").select("*").eq("meal_group_id", mealGroupId),
-    supabase
-      .from("meal_group_items")
-      .select("*, meal_group_plans!inner(id, meal_group_id)")
-      .eq("meal_group_plans.meal_group_id", mealGroupId)
-      .order("position", { ascending: true }),
-  ]);
-  if (plansError) throw new Error(plansError.message);
-  if (itemsError) throw new Error(itemsError.message);
+async function fetchPlanItemsAndTypesByPlanIds(
+  supabase: SupabaseServerClient,
+  planIds: string[]
+) {
+  if (planIds.length === 0) {
+    return {
+      items: [] as MealItemRow[],
+      planTypes: [] as MealPlanTypeRow[],
+    };
+  }
 
-  const { data: planTypesData, error: planTypesError } = await supabase
-    .from("meal_group_plan_types")
-    .select("*, meal_group_plans!inner(id, meal_group_id)")
-    .eq("meal_group_plans.meal_group_id", mealGroupId)
-    .order("position", { ascending: true });
+  const [{ data: itemsData, error: itemsError }, { data: planTypesData, error: planTypesError }] = await Promise.all([
+    supabase.from("meal_group_items").select("*").in("meal_plan_id", planIds).order("position", { ascending: true }),
+    supabase.from("meal_group_plan_types").select("*").in("meal_plan_id", planIds).order("position", { ascending: true }),
+  ]);
+
+  if (itemsError) throw new Error(itemsError.message);
   if (planTypesError && !isMissingRelationError(planTypesError)) {
     throw new Error(planTypesError.message);
   }
 
   return {
-    plans: (plans || []) as MealPlanRow[],
-    items: (items || []) as (MealItemRow & { meal_group_plans: { id: string; meal_group_id: string } })[],
-    plan_types: (planTypesData || []) as (MealPlanTypeRow & { meal_group_plans: { id: string; meal_group_id: string } })[],
+    items: (itemsData || []) as MealItemRow[],
+    planTypes: (planTypesData || []) as MealPlanTypeRow[],
   };
 }
 
@@ -447,10 +446,16 @@ async function cloneMealGroup(
   }
 ) {
   const admin = createAdminClient();
-  const { data: sourceGroup, error: sourceError } = await supabase.from("meal_groups").select("*").eq("id", sourceGroupId).single();
+  const [{ data: sourceGroup, error: sourceError }, { data: sourcePlansData, error: sourcePlansError }] = await Promise.all([
+    supabase.from("meal_groups").select("*").eq("id", sourceGroupId).single(),
+    supabase.from("meal_group_plans").select("*").eq("meal_group_id", sourceGroupId),
+  ]);
   if (sourceError) throw new Error(sourceError.message);
+  if (sourcePlansError) throw new Error(sourcePlansError.message);
 
-  const { plans: sourcePlans, items: sourceItems, plan_types: sourcePlanTypes } = await listPlansAndItemsForGroup(supabase, sourceGroupId);
+  const sourcePlans = (sourcePlansData || []) as MealPlanRow[];
+  const sourcePlanIds = sourcePlans.map((plan) => plan.id);
+  const { items: sourceItems, planTypes: sourcePlanTypes } = await fetchPlanItemsAndTypesByPlanIds(supabase, sourcePlanIds);
 
   const newGroupInsert: MealGroupInsert = {
     name: options.name,
@@ -778,10 +783,24 @@ export async function getMealGroupDetailAction(mealGroupId: string) {
     payload,
     action: async () => {
       const { supabase } = await requireActor();
-      const { data: group, error: groupError } = await supabase.from("meal_groups").select("*").eq("id", payload.meal_group_id).single();
+      const [{ data: group, error: groupError }, { data: plansData, error: plansError }, { data: assignments, error: assignmentsError }] =
+        await Promise.all([
+          supabase.from("meal_groups").select("*").eq("id", payload.meal_group_id).maybeSingle(),
+          supabase.from("meal_group_plans").select("*").eq("meal_group_id", payload.meal_group_id),
+          supabase
+            .from("meal_group_assignments")
+            .select("*")
+            .or(`meal_group_id.eq.${payload.meal_group_id},template_group_id.eq.${payload.meal_group_id}`)
+            .order("created_at", { ascending: false }),
+        ]);
       if (groupError) throw new Error(groupError.message);
+      if (plansError) throw new Error(plansError.message);
+      if (assignmentsError) throw new Error(assignmentsError.message);
+      if (!group) throw new Error("Meal plan not found or you do not have access.");
 
-      const { plans, items, plan_types: planTypes } = await listPlansAndItemsForGroup(supabase, payload.meal_group_id);
+      const plans = (plansData || []) as MealPlanRow[];
+      const planIds = plans.map((plan) => plan.id);
+      const { items, planTypes } = await fetchPlanItemsAndTypesByPlanIds(supabase, planIds);
 
       const itemByPlan = new Map<string, MealItemRow[]>();
       for (const row of items) {
@@ -831,13 +850,6 @@ export async function getMealGroupDetailAction(mealGroupId: string) {
           totals,
         };
       });
-
-      const { data: assignments, error: assignmentsError } = await supabase
-        .from("meal_group_assignments")
-        .select("*")
-        .or(`meal_group_id.eq.${payload.meal_group_id},template_group_id.eq.${payload.meal_group_id}`)
-        .order("created_at", { ascending: false });
-      if (assignmentsError) throw new Error(assignmentsError.message);
 
       return {
         group,

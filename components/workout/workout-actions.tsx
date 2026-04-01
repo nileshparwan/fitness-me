@@ -65,7 +65,8 @@ export function WorkoutActions({ workout, strengthLogs, cardioLogs, isPublicPage
             {/* ACTION 2: Reader Mode */}
             {!isPublicPage && (
                 <Button variant="outline" size="sm" className="h-8 px-2 text-xs sm:h-9 sm:px-3 sm:text-sm" onClick={handleReaderMode}>
-                    <Eye className="mr-1.5 h-3.5 w-3.5 sm:mr-2 sm:h-4 sm:w-4" /> View
+                    <Eye className="mr-0 h-3.5 w-3.5 sm:mr-2 sm:h-4 sm:w-4" />
+                    <span className="hidden sm:inline">View</span>
                 </Button>
             )}
 
@@ -73,7 +74,8 @@ export function WorkoutActions({ workout, strengthLogs, cardioLogs, isPublicPage
             <Dialog open={showShareDialog} onOpenChange={setShowShareDialog}>
                 <DialogTrigger asChild>
                     <Button size="sm" className="h-8 px-2 text-xs sm:h-9 sm:px-3 sm:text-sm">
-                        <Share2 className="mr-1.5 h-3.5 w-3.5 sm:mr-2 sm:h-4 sm:w-4" /> Share
+                        <Share2 className="mr-0 h-3.5 w-3.5 sm:mr-2 sm:h-4 sm:w-4" />
+                        <span className="hidden sm:inline">Share</span>
                     </Button>
                 </DialogTrigger>
 
