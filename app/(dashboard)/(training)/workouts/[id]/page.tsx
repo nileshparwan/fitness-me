@@ -49,8 +49,8 @@ import { groupLogsByExercise } from "@/utils/log";
 import { displayWeight } from "@/utils/unit-conversion";
 import { cn } from "@/utils";
 
-type StrengthSetRow = Database["public"]["Tables"]["strength_sets"]["Row"];
-type CardioLogRow = Database["public"]["Tables"]["cardio_sessions"]["Row"];
+type StrengthSetRow = Database["public"]["Tables"]["workout_sets"]["Row"];
+type CardioLogRow = Database["public"]["Tables"]["workout_cardio"]["Row"];
 type MetricIcon = ComponentType<{ className?: string }>;
 type StrengthSessionItem = {
   id: string;
@@ -150,8 +150,8 @@ export default function WorkoutDetailPage() {
   }
 
   const resolvedWorkout = workout;
-  const strengthLogs = (resolvedWorkout.strength_sets || []) as StrengthSetRow[];
-  const cardioLogs = (resolvedWorkout.cardio_sessions || []) as CardioLogRow[];
+  const strengthLogs = (resolvedWorkout.workout_sets || []) as StrengthSetRow[];
+  const cardioLogs = (resolvedWorkout.workout_cardio || []) as CardioLogRow[];
   const groupedStrength = groupLogsByExercise(strengthLogs);
   const totalVolume = strengthLogs.reduce((sum, row) => sum + (row.weight || 0) * (row.reps || 0), 0);
   const totalStrengthSets = strengthLogs.length;

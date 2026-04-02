@@ -8,8 +8,8 @@ import { createClient } from "@/lib/supabase/client";
 import { commentKeys, ticketKeys, ticketSubscriptionKeys } from "@/lib/query-keys";
 import type { Database } from "@/types/database";
 
-type TicketRow = Database["public"]["Tables"]["tickets"]["Row"];
-type TicketCommentRow = Database["public"]["Tables"]["ticket_comments"]["Row"];
+type TicketRow = Database["public"]["Tables"]["support_tickets"]["Row"];
+type TicketCommentRow = Database["public"]["Tables"]["support_replies"]["Row"];
 
 type UseSupportTicketsRealtimeSyncOptions = {
   ticketId?: string;
@@ -165,8 +165,8 @@ export function useSupportTicketsRealtimeSync(
     let channel: RealtimeChannel = supabase.channel(channelName);
 
     const ticketChangeFilter = ticketId
-      ? { event: "*" as const, schema: "public" as const, table: "tickets" as const, filter: `id=eq.${ticketId}` }
-      : { event: "*" as const, schema: "public" as const, table: "tickets" as const };
+      ? { event: "*" as const, schema: "public" as const, table: "support_tickets" as const, filter: `id=eq.${ticketId}` }
+      : { event: "*" as const, schema: "public" as const, table: "support_tickets" as const };
 
     channel = channel.on(
       "postgres_changes",
@@ -190,7 +190,7 @@ export function useSupportTicketsRealtimeSync(
     if (ticketId) {
       channel = channel.on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "ticket_comments", filter: `ticket_id=eq.${ticketId}` },
+        { event: "*", schema: "public", table: "support_replies", filter: `ticket_id=eq.${ticketId}` },
         async (payload: RealtimePostgresChangesPayload<TicketCommentRow>) => {
           const changedTicketId = getCommentTicketId(payload) || ticketId;
           queueCommentInvalidation(changedTicketId);

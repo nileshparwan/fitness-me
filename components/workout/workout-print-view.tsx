@@ -13,9 +13,9 @@ import { parseCardioNotes } from "@/utils/cardio-notes";
 import { useUnitLabels, useUnitSystem } from "@/stores/use-settings-store";
 import { displayDistance, displayWeight } from "@/utils/unit-conversion";
 
-type WorkoutLog = Database["public"]["Tables"]["strength_sets"]["Row"];
-type CardioLog = Database["public"]["Tables"]["cardio_sessions"]["Row"];
-type Workout = Database["public"]["Tables"]["training_sessions"]["Row"];
+type WorkoutLog = Database["public"]["Tables"]["workout_sets"]["Row"];
+type CardioLog = Database["public"]["Tables"]["workout_cardio"]["Row"];
+type Workout = Database["public"]["Tables"]["workouts"]["Row"];
 
 interface PrintViewProps {
   workout: Workout & { user?: { email: string } | null };

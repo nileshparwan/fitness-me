@@ -17,6 +17,7 @@ import {
   listMealGroupAssignmentsAction,
   listMealGroupsAction,
   toggleMealGroupPublicShareAction,
+  updateDefaultMealGroupAction,
   updateMealGroupAssignmentAction,
   updateMealItemAction,
   updateMealPlanNoteAction,
@@ -25,6 +26,7 @@ import {
   type MealGroupDetail,
 } from "@/app/actions/meal-groups";
 import { useDebounce } from "@/hooks/use-debounce";
+import { useUser } from "@/hooks/use-user";
 import { mealGroupKeys, type MealGroupAssignmentListParams, type MealGroupListParams } from "@/lib/query-keys-meal-groups";
 import { nutritionKeys } from "@/lib/query-keys-nutrition";
 
@@ -93,7 +95,7 @@ export function useMealGroupAssignees(mealGroupId: string, rawSearch: string, en
     initialPageParam: 0,
     queryFn: async ({ pageParam = 0 }) =>
       listMealGroupAssigneesAction({
-        meal_group_id: mealGroupId,
+        nutrition_plan_id: mealGroupId,
         search: debouncedSearch || undefined,
         page: pageParam,
         page_size: MEAL_GROUP_ASSIGNEES_PAGE_SIZE,
@@ -150,7 +152,8 @@ export function useMealGroupMutations() {
     onSuccess: async (_result, variables) => {
       await Promise.all([
         invalidateMealGroupList(),
-        invalidateMealGroupDetailById(variables.meal_group_id),
+        invalidateMealGroupDetailById(variables.nutrition_plan_id),
+        queryClient.invalidateQueries({ queryKey: ["user"] }),
       ]);
     },
   });
@@ -231,7 +234,7 @@ export function useMealGroupMutations() {
     mutationFn: copyMealPlanDayAction,
     onSuccess: async (_result, variables) => {
       await Promise.all([
-        invalidateMealGroupDetailById(variables.meal_group_id),
+        invalidateMealGroupDetailById(variables.nutrition_plan_id),
         invalidateMealGroupDetails(),
       ]);
     },
@@ -243,8 +246,8 @@ export function useMealGroupMutations() {
       await Promise.all([
         invalidateMealGroupList(),
         invalidateMealGroupAssignments(),
-        invalidateMealGroupAssignees(variables.meal_group_id),
-        invalidateMealGroupDetailById(variables.meal_group_id),
+        invalidateMealGroupAssignees(variables.nutrition_plan_id),
+        invalidateMealGroupDetailById(variables.nutrition_plan_id),
         invalidateMealGroupDetailById(result?.snapshot_group_id || null),
         invalidateNutritionForAssignment(),
       ]);
@@ -257,8 +260,8 @@ export function useMealGroupMutations() {
       await Promise.all([
         invalidateMealGroupList(),
         invalidateMealGroupAssignments(),
-        invalidateMealGroupDetailById(result.template_group_id),
-        invalidateMealGroupDetailById(result.meal_group_id),
+        invalidateMealGroupDetailById(result.template_plan_id),
+        invalidateMealGroupDetailById(result.nutrition_plan_id),
         invalidateNutritionForAssignment(),
       ]);
     },
@@ -281,7 +284,7 @@ export function useMealGroupMutations() {
     onSuccess: async (result, variables) => {
       await Promise.all([
         invalidateMealGroupList(),
-        invalidateMealGroupDetailById(result?.id || variables.meal_group_id),
+        invalidateMealGroupDetailById(result?.id || variables.nutrition_plan_id),
       ]);
     },
   });
@@ -300,5 +303,26 @@ export function useMealGroupMutations() {
     updateAssignment,
     archiveAssignment,
     togglePublicShare,
+  };
+}
+
+export function useDefaultMealGroupPreference() {
+  const queryClient = useQueryClient();
+  const userQuery = useUser();
+  const defaultMealGroupId = userQuery.data?.profile?.default_nutrition_plan_id?.trim() || "";
+
+  const mutation = useMutation({
+    mutationFn: updateDefaultMealGroupAction,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["user"] });
+    },
+  });
+
+  return {
+    defaultMealGroupId,
+    isLoadingDefaultMealGroup: userQuery.isLoading,
+    isSavingDefaultMealGroup: mutation.isPending,
+    setDefaultMealGroupId: async (value: string | null | undefined) =>
+      mutation.mutateAsync({ nutrition_plan_id: value?.trim() || null }),
   };
 }

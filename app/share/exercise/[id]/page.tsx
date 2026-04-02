@@ -15,7 +15,7 @@ export default async function PublicExercisePage({ params }: { params: Promise<{
     // Notice we are NOT calling 'getExerciseHistory' here.
     // There is no way for this page to display records because it never asks for them.
     const { data: exercise, error } = await supabase
-        .from("exercise_catalog")
+        .from("exercises")
         .select("*")
         .eq("id", id)
         .single();

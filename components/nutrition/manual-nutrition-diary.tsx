@@ -39,6 +39,7 @@ import {
 } from "@/hooks/use-nutrition-manual";
 import {
   useNutritionAutoMealGroupSelection,
+  useNutritionDefaultMealGroupPreference,
   useNutritionMealGroupOptions,
 } from "@/hooks/use-nutrition-data";
 import {
@@ -227,6 +228,7 @@ export function ManualNutritionDiary({
   const setPerformedOn = useSetNutritionSelectedDate();
   const selectedMealGroupId = useNutritionSelectedMealGroupId();
   const setSelectedMealGroupId = useSetNutritionSelectedMealGroupId();
+  const { defaultMealGroupId, clearDefaultMealGroupId } = useNutritionDefaultMealGroupPreference();
   const setDiaryFilters = useSetNutritionDiaryFilters();
   const setActiveSubject = useSetNutritionActiveSubject();
 
@@ -293,6 +295,13 @@ export function ManualNutritionDiary({
   }, [selectedMealGroupId, groups, groupsQuery.data?.has_more, setSelectedMealGroupId]);
 
   useEffect(() => {
+    if (!defaultMealGroupId) return;
+    if (groups.some((row) => row.id === defaultMealGroupId)) return;
+    if (groupsQuery.data?.has_more) return;
+    void clearDefaultMealGroupId().catch(() => null);
+  }, [clearDefaultMealGroupId, defaultMealGroupId, groups, groupsQuery.data?.has_more]);
+
+  useEffect(() => {
     if (subject?.subject_client_id) {
       setActiveSubject("client", subject.subject_client_id);
       return;
@@ -328,12 +337,12 @@ export function ManualNutritionDiary({
     if (autoFillFiredRef.current === performedOn) return;
 
     autoFillFiredRef.current = performedOn;
-    const mealGroupId = selectedMealGroupId || diaryQuery.data.active_plan.meal_group_id;
+    const mealGroupId = selectedMealGroupId || diaryQuery.data.active_plan.nutrition_plan_id;
     if (!mealGroupId) return;
 
     void logFromPlan.mutateAsync({
       performed_on: performedOn,
-      meal_group_id: mealGroupId,
+      nutrition_plan_id: mealGroupId,
       subject: resolvedSubject,
     }).catch(() => null);
   }, [
@@ -641,7 +650,7 @@ export function ManualNutritionDiary({
             performed_on: performedOn,
             meal_type: toActionMealType(section),
             subject: resolvedSubject,
-            meal_group_id: selectedMealGroupId || undefined,
+            nutrition_plan_id: selectedMealGroupId || undefined,
             sync_to_plan: Boolean(selectedMealGroupId),
             item: {
               ...recentItem,
@@ -768,7 +777,7 @@ export function ManualNutritionDiary({
         performed_on: performedOn,
         meal_type: toActionMealType(section),
         subject: resolvedSubject,
-        meal_group_id: selectedMealGroupId || undefined,
+        nutrition_plan_id: selectedMealGroupId || undefined,
         sync_to_plan: Boolean(selectedMealGroupId),
         item: {
           ...recentItem,
@@ -806,7 +815,7 @@ export function ManualNutritionDiary({
         performed_on: performedOn,
         meal_type: toActionMealType(section),
         subject: resolvedSubject,
-        meal_group_id: selectedMealGroupId || undefined,
+        nutrition_plan_id: selectedMealGroupId || undefined,
         sync_to_plan: Boolean(selectedMealGroupId),
         item: {
           ...recentItem,
@@ -831,7 +840,7 @@ export function ManualNutritionDiary({
         target_date: performedOn,
         meal_types: (copySections.length > 0 ? copySections : defaultSections).map((section) => toActionMealType(section)),
         subject: resolvedSubject,
-        meal_group_id: selectedMealGroupId || undefined,
+        nutrition_plan_id: selectedMealGroupId || undefined,
       });
       toast.success("Meals copied successfully");
       setCopyDialogOpen(false);
@@ -841,13 +850,13 @@ export function ManualNutritionDiary({
   };
 
   const onLogFromPlan = async () => {
-    const mealGroupId = selectedMealGroupId || diaryQuery.data?.active_plan?.meal_group_id;
+    const mealGroupId = selectedMealGroupId || diaryQuery.data?.active_plan?.nutrition_plan_id;
     if (!mealGroupId) return;
 
     try {
       const result = await logFromPlan.mutateAsync({
         performed_on: performedOn,
-        meal_group_id: mealGroupId,
+        nutrition_plan_id: mealGroupId,
         subject: resolvedSubject,
       });
       if (result.skipped) {
@@ -873,7 +882,7 @@ export function ManualNutritionDiary({
 
     try {
       await mutations.assignPlan.mutateAsync({
-        meal_group_id: mealTemplateId,
+        nutrition_plan_id: mealTemplateId,
         start_date: performedOn,
         end_date: performedOn,
         subject: { subject_client_id: subject.subject_client_id },
@@ -900,7 +909,7 @@ export function ManualNutritionDiary({
   };
 
   const currentDate = new Date(`${performedOn}T00:00:00`);
-  const canLogFromPlan = Boolean(selectedMealGroupId || diaryQuery.data?.active_plan?.meal_group_id);
+  const canLogFromPlan = Boolean(selectedMealGroupId || diaryQuery.data?.active_plan?.nutrition_plan_id);
   const hasDiaryEntries = (diaryQuery.data?.logs.length || 0) > 0;
 
   const navigateDateBy = (offsetDays: number) => {

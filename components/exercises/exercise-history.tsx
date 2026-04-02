@@ -1,9 +1,22 @@
+"use client";
+
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { format } from "date-fns";
-import { Dumbbell, Timer, Activity, Calendar } from "lucide-react";
+import { Activity } from "lucide-react";
 import { HistoryEntry } from "@/app/actions/exercises";
 import { useUnitLabels, useUnitSystem } from "@/stores/use-settings-store";
 import { displayDistance, displayWeight } from "@/utils/unit-conversion";
+
+function formatWeightValue(value: number | null | undefined, unit: string, system: ReturnType<typeof useUnitSystem>) {
+  const converted = displayWeight(value, system);
+  return converted === null ? "-" : `${converted} ${unit}`;
+}
+
+function formatDistanceValue(value: number | null | undefined, unit: string, system: ReturnType<typeof useUnitSystem>) {
+  const converted = displayDistance(value, system);
+  return converted === null ? "-" : `${converted} ${unit}`;
+}
 
 export function ExerciseHistory({ history }: { history: HistoryEntry[] }) {
   const system = useUnitSystem();
@@ -20,55 +33,43 @@ export function ExerciseHistory({ history }: { history: HistoryEntry[] }) {
   }
 
   return (
-    <ScrollArea className="h-[400px] w-full rounded-md border p-4">
-      <div className="space-y-4">
-        {history.map((log, index) => (
-          <div 
-            key={index} 
-            className="flex items-center justify-between p-3 border rounded-lg bg-card hover:bg-accent/50 transition-colors"
-          >
-            {/* Left: Date */}
-            <div className="space-y-1">
-              <div className="flex items-center gap-2 text-sm font-medium">
-                <Calendar className="h-3 w-3 text-muted-foreground" />
-                {format(new Date(log.date), "MMM d, yyyy")}
-              </div>
-            </div>
-
-            {/* Right: The Numbers */}
-            <div className="text-right">
-              {log.type === 'strength' ? (
-                // STRENGTH DISPLAY
-                <div className="flex flex-col items-end">
-                  <span className="text-lg font-bold tabular-nums">
-                    {displayWeight(log.weight, system)}{" "}
-                    <span className="text-xs text-muted-foreground font-normal">{labels.weight}</span>
-                  </span>
-                  <span className="text-xs text-muted-foreground flex items-center gap-1">
-                    <Dumbbell className="h-3 w-3" /> {log.reps} reps
-                  </span>
-                  {log.estimated_1rm && (
-                     <span className="text-[10px] text-primary/80 mt-1">
-                        1RM: {displayWeight(log.estimated_1rm, system)} {labels.weight}
-                     </span>
-                  )}
-                </div>
-              ) : (
-                // CARDIO DISPLAY
-                <div className="flex flex-col items-end">
-                   <span className="text-lg font-bold tabular-nums">
-                    {displayDistance(log.distance, system)}{" "}
-                    <span className="text-xs text-muted-foreground font-normal">{labels.distance}</span>
-                  </span>
-                  <span className="text-xs text-muted-foreground flex items-center gap-1">
-                    <Timer className="h-3 w-3" /> {log.duration_minutes} mins
-                  </span>
-                </div>
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
+    <ScrollArea className="h-[400px] w-full rounded-md border">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Date</TableHead>
+            <TableHead>Type</TableHead>
+            <TableHead className="text-right">Weight</TableHead>
+            <TableHead className="text-right">Reps</TableHead>
+            <TableHead className="text-right">Est. 1RM</TableHead>
+            <TableHead className="text-right">Distance</TableHead>
+            <TableHead className="text-right">Duration</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {history.map((log, index) => (
+            <TableRow key={`${log.date}-${log.type}-${index}`}>
+              <TableCell>{format(new Date(log.date), "MMM d, yyyy")}</TableCell>
+              <TableCell className="capitalize">{log.type}</TableCell>
+              <TableCell className="text-right tabular-nums">
+                {log.type === "strength" ? formatWeightValue(log.weight, labels.weight, system) : "-"}
+              </TableCell>
+              <TableCell className="text-right tabular-nums">{log.type === "strength" ? (log.reps ?? "-") : "-"}</TableCell>
+              <TableCell className="text-right tabular-nums">
+                {log.type === "strength" && log.estimated_1rm !== null
+                  ? formatWeightValue(log.estimated_1rm, labels.weight, system)
+                  : "-"}
+              </TableCell>
+              <TableCell className="text-right tabular-nums">
+                {log.type === "cardio" ? formatDistanceValue(log.distance, labels.distance, system) : "-"}
+              </TableCell>
+              <TableCell className="text-right tabular-nums">
+                {log.type === "cardio" && log.duration_minutes !== null ? `${log.duration_minutes} min` : "-"}
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
     </ScrollArea>
   );
 }

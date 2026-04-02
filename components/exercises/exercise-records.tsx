@@ -1,9 +1,20 @@
-import { Card, CardContent } from "@/components/ui/card";
-import { Trophy, TrendingUp, Timer, Scale } from "lucide-react";
+"use client";
+
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { format } from "date-fns";
 import { HistoryEntry } from "@/app/actions/exercises";
 import { useUnitLabels, useUnitSystem } from "@/stores/use-settings-store";
 import { displayDistance, displayWeight } from "@/utils/unit-conversion";
+
+function formatWeightValue(value: number | null | undefined, unit: string, system: ReturnType<typeof useUnitSystem>) {
+  const converted = displayWeight(value, system);
+  return converted === null ? "-" : `${converted} ${unit}`;
+}
+
+function formatDistanceValue(value: number | null | undefined, unit: string, system: ReturnType<typeof useUnitSystem>) {
+  const converted = displayDistance(value, system);
+  return converted === null ? "-" : `${converted} ${unit}`;
+}
 
 export function ExerciseRecords({ history, type }: { history: HistoryEntry[], type: string }) {
   const system = useUnitSystem();
@@ -11,61 +22,56 @@ export function ExerciseRecords({ history, type }: { history: HistoryEntry[], ty
 
   if (history.length === 0) return null;
 
-  // --- Logic to find Records ---
-  let recordCards = [];
+  let recordRows: Array<{ label: string; value: string; date: string }> = [];
 
   if (type.toLowerCase() === 'cardio') {
-    // 1. Max Distance
     const maxDist = history.reduce((prev, current) => 
       (current.distance || 0) > (prev.distance || 0) ? current : prev
     , history[0]);
 
-    // 2. Longest Duration
     const maxDur = history.reduce((prev, current) => 
       (current.duration_minutes || 0) > (prev.duration_minutes || 0) ? current : prev
     , history[0]);
 
-    recordCards = [
-      { label: `Farthest Distance (${labels.distance})`, value: `${displayDistance(maxDist.distance, system)} ${labels.distance}`, icon: TrendingUp, date: maxDist.date },
-      { label: "Longest Session", value: `${maxDur.duration_minutes} min`, icon: Timer, date: maxDur.date },
+    recordRows = [
+      { label: `Farthest Distance (${labels.distance})`, value: formatDistanceValue(maxDist.distance, labels.distance, system), date: maxDist.date },
+      { label: "Longest Session", value: `${maxDur.duration_minutes ?? 0} min`, date: maxDur.date },
     ];
   } else {
-    // 1. Max Weight Lifted
     const maxWeight = history.reduce((prev, current) => 
       (current.weight || 0) > (prev.weight || 0) ? current : prev
     , history[0]);
 
-    // 2. Best Estimated 1RM
     const max1RM = history.reduce((prev, current) => 
       (current.estimated_1rm || 0) > (prev.estimated_1rm || 0) ? current : prev
     , history[0]);
 
-    recordCards = [
-      { label: `Heaviest Lift (${labels.weight})`, value: `${displayWeight(maxWeight.weight, system)} ${labels.weight}`, icon: Scale, date: maxWeight.date },
-      { label: `Best Est. 1RM (${labels.weight})`, value: `${displayWeight(max1RM.estimated_1rm, system)} ${labels.weight}`, icon: Trophy, date: max1RM.date },
+    recordRows = [
+      { label: `Heaviest Lift (${labels.weight})`, value: formatWeightValue(maxWeight.weight, labels.weight, system), date: maxWeight.date },
+      { label: `Best Est. 1RM (${labels.weight})`, value: formatWeightValue(max1RM.estimated_1rm, labels.weight, system), date: max1RM.date },
     ];
   }
 
   return (
-    <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
-      {recordCards.map((record, i) => (
-        <Card key={i} className="bg-gradient-to-br from-card to-muted/20 border-l-4 border-l-primary shadow-sm">
-          <CardContent className="p-4 flex items-center justify-between">
-            <div>
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
-                {record.label}
-              </p>
-              <h4 className="text-2xl font-bold tracking-tight">{record.value}</h4>
-              <p className="text-[10px] text-muted-foreground mt-1">
-                Achieved on {format(new Date(record.date), "MMM d, yyyy")}
-              </p>
-            </div>
-            <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-primary">
-              <record.icon className="h-5 w-5" />
-            </div>
-          </CardContent>
-        </Card>
-      ))}
+    <div className="rounded-md border">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Record</TableHead>
+            <TableHead className="text-right">Value</TableHead>
+            <TableHead className="text-right">Achieved On</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {recordRows.map((record) => (
+            <TableRow key={record.label}>
+              <TableCell>{record.label}</TableCell>
+              <TableCell className="text-right tabular-nums font-semibold">{record.value}</TableCell>
+              <TableCell className="text-right">{format(new Date(record.date), "MMM d, yyyy")}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
     </div>
   );
 }

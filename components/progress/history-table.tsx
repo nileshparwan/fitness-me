@@ -16,8 +16,8 @@ import { Database } from "@/types/database";
 import { useUnitLabels, useUnitSystem } from "@/stores/use-settings-store";
 import { displayDistance, displayWeight } from "@/utils/unit-conversion";
 
-type WorkoutLog = Database["public"]["Tables"]["strength_sets"]["Row"];
-type CardioLog = Database["public"]["Tables"]["cardio_sessions"]["Row"];
+type WorkoutLog = Database["public"]["Tables"]["workout_sets"]["Row"];
+type CardioLog = Database["public"]["Tables"]["workout_cardio"]["Row"];
 type HistoryLog = WorkoutLog | CardioLog;
 
 interface Props {

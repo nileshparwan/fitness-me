@@ -8,7 +8,7 @@ import { toDateInput } from "@/lib/utils/date";
 import type { Database } from "@/types/database";
 import { storageCircumference, storageWeight, type UnitSystem } from "@/utils/unit-conversion";
 
-type BodyMeasurementTableRow = Database["public"]["Tables"]["body_measurements"]["Row"];
+type BodyMeasurementTableRow = Database["public"]["Tables"]["measurements"]["Row"];
 
 export type MeasurementSubject = { type: "me" } | { type: "client"; id: string };
 
@@ -214,7 +214,7 @@ export async function logBodyMeasurementAction(
   }
 
   return runTrackedAction({
-    eventName: "body_measurements.log",
+    eventName: "measurements.log",
     payload: { subject_type: subject.type },
     action: async () => {
       const { supabase, user } = await requireActor();
@@ -244,7 +244,7 @@ export async function logBodyMeasurementAction(
         subject.type === "me" ? "subject_user_id,date" : "subject_client_id,date";
 
       const result = await supabaseAny
-        .from("body_measurements")
+        .from("measurements")
         .upsert(row, {
           onConflict,
           ignoreDuplicates: false,
@@ -263,7 +263,7 @@ export async function getBodyMeasurements(
   const range = rangeSchema.parse(rangeInput);
 
   return runTrackedAction({
-    eventName: "body_measurements.list",
+    eventName: "measurements.list",
     payload: { subject_type: subject.type, range },
     action: async () => {
       const { supabase, user } = await requireActor();
@@ -272,7 +272,7 @@ export async function getBodyMeasurements(
       const startDate = rangeToStartDate(range);
 
       let query = supabaseAny
-        .from("body_measurements")
+        .from("measurements")
         .select(
           "id, date, weight, body_fat_percent, waist, hips, chest, neck, bicep_left, bicep_right, thigh_left, thigh_right, calf, notes"
         )
@@ -300,7 +300,7 @@ export async function getBodyMeasurementForDate(
   const { date } = getSingleDateSchema.parse({ date: dateInput });
 
   return runTrackedAction({
-    eventName: "body_measurements.detail",
+    eventName: "measurements.detail",
     payload: { subject_type: subject.type, date },
     action: async () => {
       const { supabase, user } = await requireActor();
@@ -308,7 +308,7 @@ export async function getBodyMeasurementForDate(
       const subjectRef = resolveSubject(subject, user.id);
 
       let query = supabaseAny
-        .from("body_measurements")
+        .from("measurements")
         .select(
           "id, date, weight, body_fat_percent, waist, hips, chest, neck, bicep_left, bicep_right, thigh_left, thigh_right, calf, notes"
         )
@@ -332,7 +332,7 @@ export async function getLatestBodyMeasurementAction(
   const subject = subjectSchema.parse(subjectInput);
 
   return runTrackedAction({
-    eventName: "body_measurements.latest",
+    eventName: "measurements.latest",
     payload: { subject_type: subject.type },
     action: async () => {
       const { supabase, user } = await requireActor();
@@ -340,7 +340,7 @@ export async function getLatestBodyMeasurementAction(
       const subjectRef = resolveSubject(subject, user.id);
 
       let query = supabaseAny
-        .from("body_measurements")
+        .from("measurements")
         .select(
           "id, date, weight, body_fat_percent, waist, hips, chest, neck, bicep_left, bicep_right, thigh_left, thigh_right, calf, notes"
         )

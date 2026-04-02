@@ -20,7 +20,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useDebounce } from "@/hooks/use-debounce";
 import { useMediaQuery } from "@/hooks/use-media-query";
-import { useNutritionGroupMutations, useNutritionMealGroups } from "@/hooks/use-nutrition-data";
+import {
+  useNutritionDefaultMealGroupPreference,
+  useNutritionGroupMutations,
+  useNutritionMealGroups,
+} from "@/hooks/use-nutrition-data";
 import { withToastFeedback } from "@/lib/ui/toast-feedback";
 import {
   useNutritionSelectedMealGroupId,
@@ -76,6 +80,8 @@ export function MealGroupsDashboard() {
 
   const selectedMealGroupId = useNutritionSelectedMealGroupId();
   const setSelectedMealGroupId = useSetNutritionSelectedMealGroupId();
+  const { defaultMealGroupId, persistDefaultMealGroupId, isSavingDefaultMealGroup } =
+    useNutritionDefaultMealGroupPreference();
 
   const debouncedSearch = useDebounce(search, 250);
   const query = useNutritionMealGroups({
@@ -134,7 +140,7 @@ export function MealGroupsDashboard() {
 
   const deleteGroup = async (groupId: string) => {
     try {
-      await withToastFeedback(mutations.deleteGroup.mutateAsync({ meal_group_id: groupId }), {
+      await withToastFeedback(mutations.deleteGroup.mutateAsync({ nutrition_plan_id: groupId }), {
         loading: "Deleting meal group...",
         success: "Meal group removed",
         error: "Unable to delete meal group",
@@ -147,7 +153,7 @@ export function MealGroupsDashboard() {
 
   const duplicateGroup = async (groupId: string) => {
     try {
-      await mutations.duplicateGroup.mutateAsync({ meal_group_id: groupId });
+      await mutations.duplicateGroup.mutateAsync({ nutrition_plan_id: groupId });
       toast.success("Meal group duplicated");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to duplicate meal group");
@@ -448,10 +454,18 @@ export function MealGroupsDashboard() {
                 <p className="text-xs text-muted-foreground">Use this meal group in the meal planner.</p>
               </div>
               <Switch
-                checked={selectedMealGroupId === actionTarget?.id}
+                checked={defaultMealGroupId === actionTarget?.id}
+                disabled={isSavingDefaultMealGroup}
                 onCheckedChange={(checked) => {
                   if (!actionTarget) return;
-                  setSelectedMealGroupId(checked ? actionTarget.id : "");
+                  const nextId = checked ? actionTarget.id : "";
+                  void persistDefaultMealGroupId(nextId)
+                    .then(() => {
+                      setSelectedMealGroupId(nextId);
+                    })
+                    .catch((error) => {
+                      toast.error(error instanceof Error ? error.message : "Unable to update default meal group");
+                    });
                 }}
               />
             </div>

@@ -17,14 +17,14 @@ import { Database } from "@/types/database";
 import { withToastFeedback } from "@/lib/ui/toast-feedback";
 import { useDebounce } from "@/hooks/use-debounce";
 
-type TrainingSessionRow = Database["public"]["Tables"]["training_sessions"]["Row"];
-type StrengthSetId = Pick<Database["public"]["Tables"]["strength_sets"]["Row"], "id">;
+type TrainingSessionRow = Database["public"]["Tables"]["workouts"]["Row"];
+type StrengthSetId = Pick<Database["public"]["Tables"]["workout_sets"]["Row"], "id">;
 
 type WorkoutSummary = Pick<
   TrainingSessionRow,
   "id" | "name" | "status" | "date" | "duration_minutes" | "created_at"
 > & {
-  strength_sets: StrengthSetId[];
+  workout_sets: StrengthSetId[];
 };
 
 const WORKOUT_EXECUTION_SUBJECTS_PAGE_SIZE = 15;
@@ -42,8 +42,8 @@ export function useWorkout(id: string) {
     queryKey: trainingKeys.session(id),
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("training_sessions")
-        .select(`*, strength_sets (*), cardio_sessions (*)`)
+        .from("workouts")
+        .select(`*, workout_sets (*), workout_cardio (*)`)
         .eq("id", id)
         .single();
       if (error) throw error;
@@ -62,8 +62,8 @@ export function useWorkouts() {
     queryKey: trainingKeys.sessions(),
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("training_sessions")
-        .select("id, name, status, date, duration_minutes, created_at, strength_sets(id)")
+        .from("workouts")
+        .select("id, name, status, date, duration_minutes, created_at, workout_sets(id)")
         .order("date", { ascending: false })
         .limit(200);
       if (error) throw error;

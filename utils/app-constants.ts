@@ -65,7 +65,7 @@ export const PAYMENT_STATUS_VALUES = ["pending", "paid"] as const;
 export const PAYMENT_LOG_STATUS_FILTER_OPTIONS = ["all", "logged", "confirmed"] as const;
 export const COACH_PAYMENT_STATUS_FILTER_OPTIONS = ["all", "paid", "pending", "overdue"] as const;
 export const BILLING_HISTORY_STATUS_FILTER_OPTIONS = ["all", "active", "inactive"] as const;
-export const CHECKIN_STATUS_VALUES = ["pending", "reviewed", "actioned"] as const;
+export const CHECKIN_STATUS_VALUES = ["pending_review", "reviewed", "actioned"] as const;
 export const SESSION_SLOT_VALUES = ["morning", "afternoon", "evening", "other"] as const;
 export const SESSION_LOCATION_TYPE_VALUES = ["gym", "home", "outdoor", "travel", "other"] as const;
 export const GOAL_DIRECTION_VALUES = ["increase", "decrease"] as const;
@@ -95,9 +95,9 @@ export const PAYMENT_NOTES_WORD_LIMIT = 60;
 export const PAYMENT_TABLE_TEXT_WORD_LIMIT = 24;
 export const CLIENT_MODULE_LABELS = {
   workouts: "Workouts",
-  training_plan: "Training Plan",
-  meal_plan: "Meal Plan",
-  meal_logging: "Meal Logging",
+  program: "Program",
+  nutrition_plan: "Nutrition Plan",
+  diary: "Diary",
   steps_tracking: "Steps Tracking",
   goals: "Goals",
   check_ins: "Check-ins",

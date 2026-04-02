@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Database } from "@/types/database";
 import { Dumbbell, Activity, Layers } from "lucide-react";
 
-type ExerciseDetails = Database['public']['Tables']['exercise_catalog']['Row'];
+type ExerciseDetails = Database['public']['Tables']['exercises']['Row'];
 
 export function ExerciseProfile({ details }: { details: ExerciseDetails | null }) {
   if (!details) return null;

@@ -17,31 +17,31 @@ import { requireCoachAccess } from "@/app/actions/client-portal-auth";
 import { Database } from "@/types/database";
 
 type ClientRow = Database["public"]["Tables"]["clients"]["Row"];
-type ClientTaskRow = Database["public"]["Tables"]["client_tasks"]["Row"];
-type ClientTaskInsert = Database["public"]["Tables"]["client_tasks"]["Insert"];
-type ClientTaskUpdate = Database["public"]["Tables"]["client_tasks"]["Update"];
-type CoachNoteInsert = Database["public"]["Tables"]["coach_notes"]["Insert"];
-type CoachNoteRow = Database["public"]["Tables"]["coach_notes"]["Row"];
-type SessionInsert = Database["public"]["Tables"]["training_sessions"]["Insert"];
-type SessionRow = Database["public"]["Tables"]["training_sessions"]["Row"];
-type StrengthSetInsert = Database["public"]["Tables"]["strength_sets"]["Insert"];
-type CardioSetInsert = Database["public"]["Tables"]["cardio_sessions"]["Insert"];
-type MealLogRow = Database["public"]["Tables"]["meal_logs"]["Row"];
-type MealLogInsert = Database["public"]["Tables"]["meal_logs"]["Insert"];
-type MealLogItemRow = Database["public"]["Tables"]["meal_log_items"]["Row"];
-type MealLogItemInsert = Database["public"]["Tables"]["meal_log_items"]["Insert"];
-type FavoriteRow = Database["public"]["Tables"]["meal_item_favorites"]["Row"];
-type CheckinRow = Database["public"]["Tables"]["client_checkins"]["Row"];
-type CheckinInsert = Database["public"]["Tables"]["client_checkins"]["Insert"];
-type ClientStepsRow = Database["public"]["Tables"]["client_steps_logs"]["Row"];
-type ClientStepsInsert = Database["public"]["Tables"]["client_steps_logs"]["Insert"];
+type ClientTaskRow = Database["public"]["Tables"]["tasks"]["Row"];
+type ClientTaskInsert = Database["public"]["Tables"]["tasks"]["Insert"];
+type ClientTaskUpdate = Database["public"]["Tables"]["tasks"]["Update"];
+type CoachNoteInsert = Database["public"]["Tables"]["client_notes"]["Insert"];
+type CoachNoteRow = Database["public"]["Tables"]["client_notes"]["Row"];
+type SessionInsert = Database["public"]["Tables"]["workouts"]["Insert"];
+type SessionRow = Database["public"]["Tables"]["workouts"]["Row"];
+type StrengthSetInsert = Database["public"]["Tables"]["workout_sets"]["Insert"];
+type CardioSetInsert = Database["public"]["Tables"]["workout_cardio"]["Insert"];
+type MealLogRow = Database["public"]["Tables"]["diary_entries"]["Row"];
+type MealLogInsert = Database["public"]["Tables"]["diary_entries"]["Insert"];
+type MealLogItemRow = Database["public"]["Tables"]["diary_items"]["Row"];
+type MealLogItemInsert = Database["public"]["Tables"]["diary_items"]["Insert"];
+type FavoriteRow = Database["public"]["Tables"]["diary_favorites"]["Row"];
+type CheckinRow = Database["public"]["Tables"]["client_reviews"]["Row"];
+type CheckinInsert = Database["public"]["Tables"]["client_reviews"]["Insert"];
+type ClientStepsRow = Database["public"]["Tables"]["client_activity"]["Row"];
+type ClientStepsInsert = Database["public"]["Tables"]["client_activity"]["Insert"];
 
 type ClientTaskStatus = Database["public"]["Enums"]["client_task_status"];
-type SessionSlot = Database["public"]["Enums"]["session_slot"];
-type SessionLocationType = Database["public"]["Enums"]["session_location_type"];
+type SessionSlot = Database["public"]["Enums"]["workout_slot"];
+type SessionLocationType = Database["public"]["Enums"]["workout_location"];
 type CoachNoteTag = Database["public"]["Enums"]["coach_note_tag"];
 type ClientNoteVisibility = Database["public"]["Enums"]["client_note_visibility"];
-type MealType = Database["public"]["Enums"]["meal_log_type"];
+type MealType = Database["public"]["Enums"]["diary_entry_type"];
 
 const COACH_NOTE_TAG_INPUTS = [
   "general",
@@ -116,7 +116,7 @@ const workoutSchema = z.object({
   performed_on: isoDateSchema.optional(),
   started_at: z.string().datetime().nullable().optional(),
   completed_at: z.string().datetime().nullable().optional(),
-  session_slot: z.enum(["morning", "afternoon", "evening", "other"]).default("other"),
+  workout_slot: z.enum(["morning", "afternoon", "evening", "other"]).default("other"),
   session_label: z.string().trim().max(120).nullable().optional(),
   location_type: z.enum(["gym", "home", "outdoor", "travel", "other"]).nullable().optional(),
   location_label: z.string().trim().max(180).nullable().optional(),
@@ -126,7 +126,7 @@ const workoutSchema = z.object({
   plan_assignment_id: z.string().uuid().nullable().optional(),
   plan_session_id: z.string().uuid().nullable().optional(),
   mark_plan_session_resolved: z.boolean().default(false),
-  strength_sets: z
+  workout_sets: z
     .array(
       z.object({
         exercise_name: z.string().trim().min(1).max(180),
@@ -139,7 +139,7 @@ const workoutSchema = z.object({
       })
     )
     .optional(),
-  cardio_sessions: z
+  workout_cardio: z
     .array(
       z.object({
         activity_type: z.string().trim().min(1).max(120),
@@ -243,7 +243,7 @@ async function getOrCreateMealLog(args: {
   const { client, meal_type, performed_on } = args;
 
   const { data: existing, error: existingError } = await admin
-    .from("meal_logs")
+    .from("diary_entries")
     .select("*")
     .eq("subject_client_id", client.id)
     .is("subject_user_id", null)
@@ -262,7 +262,7 @@ async function getOrCreateMealLog(args: {
     meal_type,
   };
   const { data: inserted, error: insertError } = await admin
-    .from("meal_logs")
+    .from("diary_entries")
     .insert(insertPayload)
     .select("*")
     .single();
@@ -312,12 +312,12 @@ export async function getClientPortalDashboardAction(): Promise<ClientPortalDash
       const [{ count: todaySessionsCount, error: sessionsError }, { count: pendingTasksCount, error: tasksError }] =
         await Promise.all([
           admin
-            .from("training_sessions")
+            .from("workouts")
             .select("id", { count: "exact", head: true })
             .eq("subject_client_id", context.client.id)
             .eq("performed_on", today),
           admin
-            .from("client_tasks")
+            .from("tasks")
             .select("id", { count: "exact", head: true })
             .eq("client_id", context.client.id)
             .eq("status", "pending")
@@ -327,7 +327,7 @@ export async function getClientPortalDashboardAction(): Promise<ClientPortalDash
       if (tasksError) throw new Error(tasksError.message);
 
       const { data: activeAssignment, error: assignmentError } = await admin
-        .from("client_plan_assignments")
+        .from("program_assignments")
         .select("id")
         .eq("client_id", context.client.id)
         .eq("status", "active")
@@ -339,7 +339,7 @@ export async function getClientPortalDashboardAction(): Promise<ClientPortalDash
       let nextSession: ClientPortalDashboard["next_session"] = null;
       if (activeAssignment) {
         const { data: sessions, error: nextSessionError } = await admin
-          .from("client_plan_assignment_sessions")
+          .from("program_assignment_workouts")
           .select("id, sequence_no, title, session_type, completed_at, is_skipped")
           .eq("assignment_id", activeAssignment.id)
           .order("sequence_no", { ascending: true });
@@ -381,7 +381,7 @@ export async function listClientPortalTasksAction(): Promise<ClientTaskRow[]> {
       const { context } = await requirePortalAccess("tasks");
       const admin = createAdminClient();
       const { data, error } = await admin
-        .from("client_tasks")
+        .from("tasks")
         .select("*")
         .eq("client_id", context.client.id)
         .is("archived_at", null)
@@ -403,7 +403,7 @@ export async function listCoachClientTasksAction(clientId: string): Promise<Clie
       await requireCoachAccess(safeClientId);
       const admin = createAdminClient();
       const { data, error } = await admin
-        .from("client_tasks")
+        .from("tasks")
         .select("*")
         .eq("client_id", safeClientId)
         .is("archived_at", null)
@@ -432,7 +432,7 @@ export async function markClientTaskCompleteAction(
         : { status: "pending", completed_at: null };
 
       const { error } = await admin
-        .from("client_tasks")
+        .from("tasks")
         .update(updates)
         .eq("id", payload.task_id)
         .eq("client_id", context.client.id);
@@ -462,7 +462,7 @@ export async function createClientTaskAction(input: z.input<typeof clientTaskSch
         created_by_client_id: null,
       };
       const { data, error } = await admin
-        .from("client_tasks")
+        .from("tasks")
         .insert(insertPayload)
         .select("*")
         .single();
@@ -494,7 +494,7 @@ export async function updateClientTaskAction(input: z.input<typeof updateTaskSch
       }
 
       const { data, error } = await admin
-        .from("client_tasks")
+        .from("tasks")
         .update(updates)
         .eq("id", payload.id)
         .eq("client_id", payload.client_id)
@@ -515,7 +515,7 @@ export async function listClientPortalNotesAction(): Promise<CoachNoteRow[]> {
       const { context } = await requirePortalAccess("coach_notes");
       const admin = createAdminClient();
       const { data, error } = await admin
-        .from("coach_notes")
+        .from("client_notes")
         .select("*")
         .eq("client_id", context.client.id)
         .eq("visibility", "visible_to_client")
@@ -547,7 +547,7 @@ export async function createCoachNoteForClientAction(
         is_shared_with_linked_user: payload.visibility === "visible_to_client",
       };
       const { data, error } = await admin
-        .from("coach_notes")
+        .from("client_notes")
         .insert(insertPayload)
         .select("*")
         .single();
@@ -570,7 +570,7 @@ export async function updateCoachNoteVisibilityAction(
       await requireCoachAccess(payload.client_id);
       const admin = createAdminClient();
       const { error } = await admin
-        .from("coach_notes")
+        .from("client_notes")
         .update({
           visibility: payload.visibility,
           is_shared_with_linked_user: payload.visibility === "visible_to_client",
@@ -597,7 +597,7 @@ export async function listClientPortalWorkoutsAction(
       const performedOn = safeDate || todayIso();
 
       const { data, error } = await admin
-        .from("training_sessions")
+        .from("workouts")
         .select("*")
         .eq("subject_client_id", context.client.id)
         .is("subject_user_id", null)
@@ -615,12 +615,12 @@ export async function createClientWorkoutLogAction(
   const payload = workoutSchema.parse(input);
   return runTrackedAction({
     eventName: "client.portal.workouts.create",
-    payload: { has_strength_sets: Boolean(payload.strength_sets?.length), has_cardio_sessions: Boolean(payload.cardio_sessions?.length) },
+    payload: { has_strength_sets: Boolean(payload.workout_sets?.length), has_cardio_sessions: Boolean(payload.workout_cardio?.length) },
     action: async () => {
       const context = await getClientPortalContext();
       if (!context) throw new Error("Unauthorized");
       const workoutsAccess = getModuleAccessLevel(context.features, "workouts");
-      const trainingAccess = getModuleAccessLevel(context.features, "training_plan");
+      const trainingAccess = getModuleAccessLevel(context.features, "program");
       const canRead = canReadModule(workoutsAccess) || canReadModule(trainingAccess);
       const canWrite = canWriteModule(workoutsAccess) || canWriteModule(trainingAccess);
       if (!canRead) throw new Error("Access denied for workouts.");
@@ -629,7 +629,6 @@ export async function createClientWorkoutLogAction(
       const performedOn = payload.performed_on || todayIso();
 
       const insertSession: SessionInsert = {
-        user_id: context.client.primary_coach_id,
         created_by_user_id: null,
         created_by_client_id: context.client.id,
         subject_client_id: context.client.id,
@@ -639,7 +638,7 @@ export async function createClientWorkoutLogAction(
         date: payload.started_at || `${performedOn}T00:00:00.000Z`,
         started_at: payload.started_at || null,
         completed_at: payload.completed_at || null,
-        session_slot: payload.session_slot as SessionSlot,
+        session_slot: payload.workout_slot as SessionSlot,
         session_label: payload.session_label || null,
         location_type: (payload.location_type || null) as SessionLocationType | null,
         location_label: payload.location_label || null,
@@ -652,13 +651,13 @@ export async function createClientWorkoutLogAction(
       };
 
       const { data: session, error: sessionError } = await admin
-        .from("training_sessions")
+        .from("workouts")
         .insert(insertSession)
         .select("*")
         .single();
       if (sessionError) throw new Error(sessionError.message);
 
-      const strengthRows: StrengthSetInsert[] = (payload.strength_sets || []).map((set, index) => ({
+      const strengthRows: StrengthSetInsert[] = (payload.workout_sets || []).map((set, index) => ({
         workout_id: session.id,
         exercise_name: set.exercise_name,
         set_number: set.set_number,
@@ -669,13 +668,12 @@ export async function createClientWorkoutLogAction(
         entry_sequence: set.entry_sequence ?? index,
       }));
       if (strengthRows.length > 0) {
-        const { error: strengthError } = await admin.from("strength_sets").insert(strengthRows);
+        const { error: strengthError } = await admin.from("workout_sets").insert(strengthRows);
         if (strengthError) throw new Error(strengthError.message);
       }
 
-      const cardioRows: CardioSetInsert[] = (payload.cardio_sessions || []).map((cardio, index) => ({
+      const cardioRows: CardioSetInsert[] = (payload.workout_cardio || []).map((cardio, index) => ({
         workout_id: session.id,
-        user_id: context.client.primary_coach_id,
         date: performedOn,
         activity_type: cardio.activity_type,
         duration_minutes: cardio.duration_minutes,
@@ -687,13 +685,13 @@ export async function createClientWorkoutLogAction(
         entry_sequence: cardio.entry_sequence ?? index,
       }));
       if (cardioRows.length > 0) {
-        const { error: cardioError } = await admin.from("cardio_sessions").insert(cardioRows);
+        const { error: cardioError } = await admin.from("workout_cardio").insert(cardioRows);
         if (cardioError) throw new Error(cardioError.message);
       }
 
       if (payload.mark_plan_session_resolved && payload.plan_session_id) {
         await admin
-          .from("client_plan_assignment_sessions")
+          .from("program_assignment_workouts")
           .update({ completed_at: payload.completed_at || new Date().toISOString() })
           .eq("id", payload.plan_session_id);
       }
@@ -706,13 +704,13 @@ export async function createClientWorkoutLogAction(
 
 export async function getClientPortalTrainingPlanAction() {
   return runTrackedAction({
-    eventName: "client.portal.training_plan.read",
+    eventName: "client.portal.program.read",
     action: async () => {
-      const { context } = await requirePortalAccess("training_plan");
+      const { context } = await requirePortalAccess("program");
       const admin = createAdminClient();
 
       const { data: assignment, error: assignmentError } = await admin
-        .from("client_plan_assignments")
+        .from("program_assignments")
         .select("*")
         .eq("client_id", context.client.id)
         .eq("status", "active")
@@ -723,7 +721,7 @@ export async function getClientPortalTrainingPlanAction() {
       if (!assignment) return { assignment: null, sessions: [], next_session: null as null | { id: string; sequence_no: number; title: string } };
 
       const { data: sessions, error: sessionsError } = await admin
-        .from("client_plan_assignment_sessions")
+        .from("program_assignment_workouts")
         .select("*")
         .eq("assignment_id", assignment.id)
         .order("sequence_no", { ascending: true });
@@ -745,15 +743,15 @@ export async function getClientPortalTrainingPlanAction() {
 export async function getClientPortalMealPlanAction(performedOn?: string) {
   const safeDate = performedOn ? isoDateSchema.parse(performedOn) : null;
   return runTrackedAction({
-    eventName: "client.portal.meal_plan.read",
+    eventName: "client.portal.nutrition_plan.read",
     payload: { date: safeDate },
     action: async () => {
-      const { context } = await requirePortalAccess("meal_plan");
+      const { context } = await requirePortalAccess("nutrition_plan");
       const admin = createAdminClient();
       const date = safeDate || todayIso();
 
       const { data: assignment, error: assignmentError } = await admin
-        .from("meal_group_assignments")
+        .from("nutrition_plan_assignments")
         .select("*")
         .eq("subject_client_id", context.client.id)
         .eq("status", "active")
@@ -765,17 +763,17 @@ export async function getClientPortalMealPlanAction(performedOn?: string) {
       if (assignmentError) throw new Error(assignmentError.message);
       if (!assignment) return { source: "assignment" as const, plan: null };
 
-      const groupIds = Array.from(new Set([assignment.template_group_id, assignment.meal_group_id].filter(Boolean)));
+      const groupIds = Array.from(new Set([assignment.template_plan_id, assignment.nutrition_plan_id].filter(Boolean)));
       const { data: groups, error: groupsError } = await admin
-        .from("meal_groups")
+        .from("nutrition_plans")
         .select("id, name")
         .in("id", groupIds);
       if (groupsError) throw new Error(groupsError.message);
 
       const groupsById = new Map((groups || []).map((row) => [row.id, row]));
       const name =
-        groupsById.get(assignment.template_group_id)?.name ||
-        groupsById.get(assignment.meal_group_id)?.name ||
+        groupsById.get(assignment.template_plan_id)?.name ||
+        groupsById.get(assignment.nutrition_plan_id)?.name ||
         "Assigned meal template";
 
       return {
@@ -798,15 +796,15 @@ export async function getClientPortalMealPlanAction(performedOn?: string) {
 export async function getClientPortalMealDiaryAction(performedOn?: string) {
   const safeDate = performedOn ? isoDateSchema.parse(performedOn) : null;
   return runTrackedAction({
-    eventName: "client.portal.meal_logging.read",
+    eventName: "client.portal.diary.read",
     payload: { date: safeDate },
     action: async () => {
-      const { context } = await requirePortalAccess("meal_logging");
+      const { context } = await requirePortalAccess("diary");
       const admin = createAdminClient();
       const date = safeDate || todayIso();
 
       const { data: logs, error: logsError } = await admin
-        .from("meal_logs")
+        .from("diary_entries")
         .select("*")
         .eq("subject_client_id", context.client.id)
         .is("subject_user_id", null)
@@ -819,7 +817,7 @@ export async function getClientPortalMealDiaryAction(performedOn?: string) {
       const itemsByLog = new Map<string, MealLogItemRow[]>();
       if (logIds.length > 0) {
         const { data: items, error: itemsError } = await admin
-          .from("meal_log_items")
+          .from("diary_items")
           .select("*")
           .in("meal_log_id", logIds)
           .order("position", { ascending: true })
@@ -861,10 +859,10 @@ export async function getClientPortalMealDiaryAction(performedOn?: string) {
 export async function addClientMealItemAction(input: z.input<typeof addMealItemSchema>) {
   const payload = addMealItemSchema.parse(input);
   return runTrackedAction({
-    eventName: "client.portal.meal_logging.item.add",
+    eventName: "client.portal.diary.item.add",
     payload: { meal_type: payload.meal_type, performed_on: payload.performed_on },
     action: async () => {
-      const { context } = await requirePortalAccess("meal_logging", true);
+      const { context } = await requirePortalAccess("diary", true);
       const admin = createAdminClient();
       const mealLog = await getOrCreateMealLog({
         client: context.client,
@@ -873,7 +871,7 @@ export async function addClientMealItemAction(input: z.input<typeof addMealItemS
       });
 
       const { data: lastRow, error: lastRowError } = await admin
-        .from("meal_log_items")
+        .from("diary_items")
         .select("position")
         .eq("meal_log_id", mealLog.id)
         .order("position", { ascending: false })
@@ -884,8 +882,6 @@ export async function addClientMealItemAction(input: z.input<typeof addMealItemS
 
       const insertPayload: MealLogItemInsert = {
         meal_log_id: mealLog.id,
-        created_by_user_id: null,
-        created_by_client_id: context.client.id,
         item_name: payload.item.item_name,
         quantity: payload.item.quantity ?? null,
         unit: payload.item.unit || null,
@@ -900,7 +896,7 @@ export async function addClientMealItemAction(input: z.input<typeof addMealItemS
       };
 
       const { data, error } = await admin
-        .from("meal_log_items")
+        .from("diary_items")
         .insert(insertPayload)
         .select("*")
         .single();
@@ -917,14 +913,14 @@ export async function removeClientMealItemAction(
 ) {
   const payload = removeMealItemSchema.parse(input);
   return runTrackedAction({
-    eventName: "client.portal.meal_logging.item.remove",
+    eventName: "client.portal.diary.item.remove",
     payload,
     action: async () => {
-      const { context } = await requirePortalAccess("meal_logging", true);
+      const { context } = await requirePortalAccess("diary", true);
       const admin = createAdminClient();
 
       const { data: item, error: itemError } = await admin
-        .from("meal_log_items")
+        .from("diary_items")
         .select("id, meal_log_id")
         .eq("id", payload.item_id)
         .maybeSingle();
@@ -932,7 +928,7 @@ export async function removeClientMealItemAction(
       if (!item) throw new Error("Meal item not found.");
 
       const { data: mealLog, error: logError } = await admin
-        .from("meal_logs")
+        .from("diary_entries")
         .select("id, subject_client_id")
         .eq("id", item.meal_log_id)
         .maybeSingle();
@@ -941,7 +937,7 @@ export async function removeClientMealItemAction(
         throw new Error("Forbidden");
       }
 
-      const { error } = await admin.from("meal_log_items").delete().eq("id", payload.item_id);
+      const { error } = await admin.from("diary_items").delete().eq("id", payload.item_id);
       if (error) throw new Error(error.message);
 
       revalidateClientPortalPaths(context.client.id);
@@ -953,14 +949,14 @@ export async function removeClientMealItemAction(
 export async function listClientRecentMealItemsAction(input: z.input<typeof recentSchema>) {
   const payload = recentSchema.parse(input);
   return runTrackedAction({
-    eventName: "client.portal.meal_logging.recent",
+    eventName: "client.portal.diary.recent",
     payload,
     action: async () => {
-      const { context } = await requirePortalAccess("meal_logging");
+      const { context } = await requirePortalAccess("diary");
       const admin = createAdminClient();
 
       const { data: mealLogs, error: mealLogsError } = await admin
-        .from("meal_logs")
+        .from("diary_entries")
         .select("id, performed_on")
         .eq("subject_client_id", context.client.id)
         .is("subject_user_id", null)
@@ -972,7 +968,7 @@ export async function listClientRecentMealItemsAction(input: z.input<typeof rece
       if (logIds.length === 0) return [];
 
       const { data: items, error: itemsError } = await admin
-        .from("meal_log_items")
+        .from("diary_items")
         .select("item_name, quantity, unit, calories, protein_g, carbs_g, fat_g, fiber_g, notes, created_at")
         .in("meal_log_id", logIds)
         .order("created_at", { ascending: false });
@@ -998,16 +994,16 @@ export async function listClientRecentMealItemsAction(input: z.input<typeof rece
 export async function listClientFavoriteMealItemsAction(input: z.input<typeof recentSchema>): Promise<FavoriteRow[]> {
   const payload = recentSchema.parse(input);
   return runTrackedAction({
-    eventName: "client.portal.meal_logging.favorites",
+    eventName: "client.portal.diary.favorites",
     payload,
     action: async () => {
-      const { context } = await requirePortalAccess("meal_logging");
+      const { context } = await requirePortalAccess("diary");
       if (!context.client.linked_user_id) {
         throw new Error("Client portal account is not linked to a user profile.");
       }
       const admin = createAdminClient();
       const { data, error } = await admin
-        .from("meal_item_favorites")
+        .from("diary_favorites")
         .select("*")
         .eq("subject_user_id", context.client.linked_user_id)
         .order("last_used_at", { ascending: false })
@@ -1023,17 +1019,17 @@ export async function toggleClientFavoriteMealItemAction(
 ) {
   const payload = favoriteToggleSchema.parse(input);
   return runTrackedAction({
-    eventName: "client.portal.meal_logging.favorite.toggle",
+    eventName: "client.portal.diary.favorite.toggle",
     payload: { item_name: payload.item.item_name },
     action: async () => {
-      const { context } = await requirePortalAccess("meal_logging", true);
+      const { context } = await requirePortalAccess("diary", true);
       if (!context.client.linked_user_id) {
         throw new Error("Client portal account is not linked to a user profile.");
       }
       const admin = createAdminClient();
 
       let query = admin
-        .from("meal_item_favorites")
+        .from("diary_favorites")
         .select("*")
         .eq("subject_user_id", context.client.linked_user_id)
         .ilike("item_name", payload.item.item_name.trim());
@@ -1045,7 +1041,7 @@ export async function toggleClientFavoriteMealItemAction(
 
       if (existing) {
         const { error: deleteError } = await admin
-          .from("meal_item_favorites")
+          .from("diary_favorites")
           .delete()
           .eq("id", existing.id);
         if (deleteError) throw new Error(deleteError.message);
@@ -1054,7 +1050,7 @@ export async function toggleClientFavoriteMealItemAction(
       }
 
       const { error: insertError } = await admin
-        .from("meal_item_favorites")
+        .from("diary_favorites")
         .insert({
           subject_user_id: context.client.linked_user_id,
           item_name: payload.item.item_name,
@@ -1080,14 +1076,14 @@ export async function toggleClientFavoriteMealItemAction(
 export async function copyClientMealsFromDateAction(input: z.input<typeof copyMealsSchema>) {
   const payload = copyMealsSchema.parse(input);
   return runTrackedAction({
-    eventName: "client.portal.meal_logging.copy_day",
+    eventName: "client.portal.diary.copy_day",
     payload,
     action: async () => {
-      const { context } = await requirePortalAccess("meal_logging", true);
+      const { context } = await requirePortalAccess("diary", true);
       const admin = createAdminClient();
 
       const { data: sourceLogs, error: sourceLogsError } = await admin
-        .from("meal_logs")
+        .from("diary_entries")
         .select("*")
         .eq("subject_client_id", context.client.id)
         .is("subject_user_id", null)
@@ -1104,7 +1100,7 @@ export async function copyClientMealsFromDateAction(input: z.input<typeof copyMe
       const itemsByMealType = new Map<MealType, MealLogItemRow[]>();
       if (sourceLogIds.length > 0) {
         const { data: sourceItems, error: sourceItemsError } = await admin
-          .from("meal_log_items")
+          .from("diary_items")
           .select("*")
           .in("meal_log_id", sourceLogIds)
           .order("position", { ascending: true });
@@ -1131,7 +1127,7 @@ export async function copyClientMealsFromDateAction(input: z.input<typeof copyMe
         });
 
         const { error: clearError } = await admin
-          .from("meal_log_items")
+          .from("diary_items")
           .delete()
           .eq("meal_log_id", targetLog.id);
         if (clearError) throw new Error(clearError.message);
@@ -1139,8 +1135,6 @@ export async function copyClientMealsFromDateAction(input: z.input<typeof copyMe
         if (items.length === 0) continue;
         const clonedRows: MealLogItemInsert[] = items.map((item, index) => ({
           meal_log_id: targetLog.id,
-          created_by_user_id: null,
-          created_by_client_id: context.client.id,
           item_name: item.item_name,
           quantity: item.quantity,
           unit: item.unit,
@@ -1154,7 +1148,7 @@ export async function copyClientMealsFromDateAction(input: z.input<typeof copyMe
           position: index + 1,
         }));
         const { error: cloneError } = await admin
-          .from("meal_log_items")
+          .from("diary_items")
           .insert(clonedRows);
         if (cloneError) throw new Error(cloneError.message);
       }
@@ -1175,7 +1169,7 @@ export async function getClientStepsLogAction(performedOn?: string): Promise<Cli
       const admin = createAdminClient();
       const date = safeDate || todayIso();
       const { data, error } = await admin
-        .from("client_steps_logs")
+        .from("client_activity")
         .select("*")
         .eq("client_id", context.client.id)
         .eq("performed_on", date)
@@ -1203,7 +1197,7 @@ export async function upsertClientStepsLogAction(input: z.input<typeof stepsSche
         created_by_client_id: context.client.id,
       };
       const { error } = await admin
-        .from("client_steps_logs")
+        .from("client_activity")
         .upsert(insertPayload, { onConflict: "client_id,performed_on" });
       if (error) throw new Error(error.message);
       revalidateClientPortalPaths(context.client.id);
@@ -1219,7 +1213,7 @@ export async function listClientPortalCheckinsAction(): Promise<CheckinRow[]> {
       const { context } = await requirePortalAccess("check_ins");
       const admin = createAdminClient();
       const { data, error } = await admin
-        .from("client_checkins")
+        .from("client_reviews")
         .select("*")
         .eq("subject_client_id", context.client.id)
         .order("submitted_at", { ascending: false });
@@ -1246,10 +1240,10 @@ export async function createClientPortalCheckinAction(
         created_by_client_id: context.client.id,
         urgent: payload.urgent,
         notes: payload.notes || null,
-        checkin_data: payload.checkin_data as Database["public"]["Tables"]["client_checkins"]["Insert"]["checkin_data"],
+        checkin_data: payload.checkin_data as Database["public"]["Tables"]["client_reviews"]["Insert"]["checkin_data"],
       };
       const { data, error } = await admin
-        .from("client_checkins")
+        .from("client_reviews")
         .insert(insertPayload)
         .select("*")
         .single();

@@ -29,7 +29,7 @@ import { Database } from "@/types/database";
 import { cn } from "@/utils";
 
 type DayOfWeek = (typeof MEAL_DAY_ORDER)[number];
-type MealRow = Database["public"]["Tables"]["meal_group_items"]["Row"];
+type MealRow = Database["public"]["Tables"]["nutrition_plan_items"]["Row"];
 
 function accessBannerTone(accessLevel: "disabled" | "read_only" | "enabled") {
   if (accessLevel === "disabled") return "border-chart-4/40 bg-chart-4/10 text-chart-4";
@@ -89,7 +89,7 @@ export function ClientNutritionWorkspace({ clientId }: { clientId: string }) {
     [assignmentsQuery.data, selectedAssignmentId]
   );
 
-  const assignedGroupId = selectedAssignment?.meal_group_id || "";
+  const assignedGroupId = selectedAssignment?.nutrition_plan_id || "";
   const groupDetailQuery = useNutritionMealGroup(assignedGroupId);
 
   const dayPlansByKey = useMemo(
@@ -100,7 +100,7 @@ export function ClientNutritionWorkspace({ clientId }: { clientId: string }) {
 
   const moduleAccess = useMemo(() => {
     const rows = settingsQuery.data?.module_access || [];
-    return rows.find((row) => row.module_key === "meal_logging")?.access_level || "enabled";
+    return rows.find((row) => row.module_key === "diary")?.access_level || "enabled";
   }, [settingsQuery.data?.module_access]);
 
   const nutritionNotes = useMemo(() => {

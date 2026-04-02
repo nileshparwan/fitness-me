@@ -28,14 +28,14 @@ import { WorkoutPicker } from "../workout/workout-picker";
 import { withToastFeedback } from "@/lib/ui/toast-feedback";
 import { Database } from "@/types/database";
 
-type Workout = Database['public']['Tables']['training_sessions']['Row'];
-type Program = Database['public']['Tables']['training_plans']['Row'];
-type ProgramItem = Database['public']['Tables']['training_plan_items']['Row'] & {
+type Workout = Database['public']['Tables']['workouts']['Row'];
+type Program = Database['public']['Tables']['programs']['Row'];
+type ProgramItem = Database['public']['Tables']['program_workouts']['Row'] & {
   workouts: Workout | null;
 };
 
 type ProgramWithDetails = Program & {
-  training_plan_items: ProgramItem[];
+  program_workouts: ProgramItem[];
 };
 
 interface ProgramBuilderProps {
@@ -52,9 +52,9 @@ export function ProgramBuilder({ program, allWorkouts }: ProgramBuilderProps) {
   const isDesktop = useMediaQuery("(min-width: 1024px)");
 
   useEffect(() => {
-    const sorted = program.training_plan_items?.sort((a, b) => (a.order_index ?? 0) - (b.order_index ?? 0)) || [];
+    const sorted = program.program_workouts?.sort((a, b) => (a.order_index ?? 0) - (b.order_index ?? 0)) || [];
     setItems(sorted as any); 
-  }, [program.training_plan_items, setItems]);
+  }, [program.program_workouts, setItems]);
 
   const availableWorkouts = allWorkouts.filter(
     (w) => !items.some((item) => item.workout_id === w.id)

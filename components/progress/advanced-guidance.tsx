@@ -8,7 +8,7 @@ import { Database } from "@/types/database";
 import { useUnitLabels, useUnitSystem } from "@/stores/use-settings-store";
 import { displayWeight } from "@/utils/unit-conversion";
 
-type WorkoutLogRow = Database['public']['Tables']['strength_sets']['Row'];
+type WorkoutLogRow = Database['public']['Tables']['workout_sets']['Row'];
 
 interface Props {
   logs: WorkoutLogRow[];

@@ -14,9 +14,9 @@ import {
 import type { Database } from "@/types/database";
 
 type ClientRow = Database["public"]["Tables"]["clients"]["Row"];
-type ClientAuthRow = Database["public"]["Tables"]["client_auth"]["Row"];
-type ClientSessionRow = Database["public"]["Tables"]["client_sessions"]["Row"];
-type ClientFeatureAccessRow = Database["public"]["Tables"]["client_feature_access"]["Row"];
+type ClientAuthRow = Database["public"]["Tables"]["client_credentials"]["Row"];
+type ClientSessionRow = Database["public"]["Tables"]["client_auth_sessions"]["Row"];
+type ClientFeatureAccessRow = Database["public"]["Tables"]["feature_access"]["Row"];
 type ClientPortalAuthStatus = Database["public"]["Enums"]["client_portal_auth_status"];
 
 export type ClientPortalFeatureMap = Record<ClientModuleKey, ClientModuleAccessLevel>;
@@ -104,7 +104,7 @@ export async function createClientPortalSession(params: {
   const tokenHash = hashClientSessionToken(token);
   const expiresAt = new Date(Date.now() + CLIENT_SESSION_TTL_HOURS * 60 * 60 * 1000).toISOString();
 
-  const { error } = await admin.from("client_sessions").insert({
+  const { error } = await admin.from("client_auth_sessions").insert({
     client_id: params.clientId,
     token_hash: tokenHash,
     expires_at: expiresAt,
@@ -121,7 +121,7 @@ export async function revokeClientPortalSessionByToken(token: string) {
   const tokenHash = hashClientSessionToken(token);
 
   const { error } = await admin
-    .from("client_sessions")
+    .from("client_auth_sessions")
     .update({ revoked_at: new Date().toISOString() })
     .eq("token_hash", tokenHash)
     .is("revoked_at", null);
@@ -131,7 +131,7 @@ export async function revokeClientPortalSessionByToken(token: string) {
 export async function revokeAllClientPortalSessions(clientId: string) {
   const admin = createAdminClient();
   const { error } = await admin
-    .from("client_sessions")
+    .from("client_auth_sessions")
     .update({ revoked_at: new Date().toISOString() })
     .eq("client_id", clientId)
     .is("revoked_at", null);
@@ -145,7 +145,7 @@ export async function setClientPortalAuthState(params: {
   updatedByUserId?: string | null;
 }) {
   const admin = createAdminClient();
-  const payload: Database["public"]["Tables"]["client_auth"]["Update"] = {
+  const payload: Database["public"]["Tables"]["client_credentials"]["Update"] = {
     status: params.status,
     updated_by_user_id: params.updatedByUserId ?? null,
   };
@@ -153,7 +153,7 @@ export async function setClientPortalAuthState(params: {
     payload.is_portal_enabled = params.isPortalEnabled;
   }
   const { error } = await admin
-    .from("client_auth")
+    .from("client_credentials")
     .update(payload)
     .eq("client_id", params.clientId);
   if (error) throw new Error(error.message);
@@ -169,7 +169,7 @@ export const getClientPortalContext = cache(async (): Promise<ClientPortalContex
   const nowIso = new Date().toISOString();
 
   const { data: session, error: sessionError } = await admin
-    .from("client_sessions")
+    .from("client_auth_sessions")
     .select("*")
     .eq("token_hash", tokenHash)
     .is("revoked_at", null)
@@ -179,7 +179,7 @@ export const getClientPortalContext = cache(async (): Promise<ClientPortalContex
   if (!session) return null;
 
   const { data: auth, error: authError } = await admin
-    .from("client_auth")
+    .from("client_credentials")
     .select("*")
     .eq("client_id", session.client_id)
     .maybeSingle();
@@ -190,7 +190,7 @@ export const getClientPortalContext = cache(async (): Promise<ClientPortalContex
   const [{ data: client, error: clientError }, { data: featureRows, error: featureError }] =
     await Promise.all([
       admin.from("clients").select("*").eq("id", session.client_id).maybeSingle(),
-      admin.from("client_feature_access").select("*").eq("client_id", session.client_id),
+      admin.from("feature_access").select("*").eq("client_id", session.client_id),
     ]);
 
   if (clientError) throw new Error(clientError.message);
@@ -198,7 +198,7 @@ export const getClientPortalContext = cache(async (): Promise<ClientPortalContex
   if (!client) return null;
 
   await admin
-    .from("client_sessions")
+    .from("client_auth_sessions")
     .update({ last_seen_at: nowIso })
     .eq("id", session.id)
     .is("revoked_at", null);

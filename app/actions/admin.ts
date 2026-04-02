@@ -36,10 +36,10 @@ type ListUsersResponse = Awaited<
   ReturnType<ReturnType<typeof createAdminClient>["auth"]["admin"]["listUsers"]>
 >;
 type AuthAdminUser = NonNullable<ListUsersResponse["data"]>["users"][number];
-type TrainingSessionRow = Database["public"]["Tables"]["training_sessions"]["Row"];
-type StrengthSetRow = Database["public"]["Tables"]["strength_sets"]["Row"];
-type MealGroupRow = Database["public"]["Tables"]["meal_groups"]["Row"];
-type TicketRow = Database["public"]["Tables"]["tickets"]["Row"];
+type TrainingSessionRow = Database["public"]["Tables"]["workouts"]["Row"];
+type StrengthSetRow = Database["public"]["Tables"]["workout_sets"]["Row"];
+type MealGroupRow = Database["public"]["Tables"]["nutrition_plans"]["Row"];
+type TicketRow = Database["public"]["Tables"]["support_tickets"]["Row"];
 type AppRole = Database["public"]["Enums"]["user_role"];
 
 async function requireAdminUser() {
@@ -165,17 +165,17 @@ export async function getAdminDashboardStats() {
       const [users, sessionsRes, setsRes, mealGroupsRes, ticketsRes, recentEvents, totalSessions, totalMealGroups] = await Promise.all([
         listAllAuthUsers(),
         admin
-          .from("training_sessions")
+          .from("workouts")
           .select("created_at", { count: "exact" })
           .gte("created_at", throughputStart),
-        admin.from("strength_sets").select("id", { count: "exact", head: true }),
-        admin.from("meal_groups").select("created_at", { count: "exact" }).eq("is_snapshot", false).gte("created_at", throughputStart),
-        admin.from("tickets").select("created_at", { count: "exact" }).gte("created_at", throughputStart),
+        admin.from("workout_sets").select("id", { count: "exact", head: true }),
+        admin.from("nutrition_plans").select("created_at", { count: "exact" }).eq("is_snapshot", false).gte("created_at", throughputStart),
+        admin.from("support_tickets").select("created_at", { count: "exact" }).gte("created_at", throughputStart),
         safeCount("analytics_events", (q) =>
           q.gte("created_at", new Date(Date.now() - 7 * 86400000).toISOString())
         ),
-        safeCount("training_sessions"),
-        safeCount("meal_groups", (q) => q.eq("is_snapshot", false)),
+        safeCount("workouts"),
+        safeCount("nutrition_plans", (q) => q.eq("is_snapshot", false)),
       ]);
 
       if (sessionsRes.error) throw new Error(sessionsRes.error.message);
@@ -371,19 +371,20 @@ export async function getAdminUserDetail(userId: string) {
 
       const [sessionsRes, mealGroupsRes, userWorkoutIdsRes] = await Promise.all([
         admin
-          .from("training_sessions")
+          .from("workouts")
           .select("id, name, date, status, duration_minutes, created_at")
-          .eq("user_id", userId)
+          .eq("subject_user_id", userId)
+          .is("subject_client_id", null)
           .order("created_at", { ascending: false })
           .limit(50),
         admin
-          .from("meal_groups")
+          .from("nutrition_plans")
           .select("*")
-          .eq("owner_user_id", userId)
+          .eq("created_by_user_id", userId)
           .eq("is_snapshot", false)
           .order("created_at", { ascending: false })
           .limit(50),
-        admin.from("training_sessions").select("id").eq("user_id", userId),
+        admin.from("workouts").select("id").eq("subject_user_id", userId).is("subject_client_id", null),
       ]);
 
       if (sessionsRes.error) throw new Error(sessionsRes.error.message);
@@ -394,7 +395,7 @@ export async function getAdminUserDetail(userId: string) {
       let strengthSetsCount = 0;
       if (workoutIds.length > 0) {
         const setsRes = await admin
-          .from("strength_sets")
+          .from("workout_sets")
           .select("id", { count: "exact", head: true })
           .in("workout_id", workoutIds);
         if (setsRes.error) throw new Error(setsRes.error.message);
@@ -422,7 +423,7 @@ export async function getAdminUserDetail(userId: string) {
 
       return {
         sessions,
-        meal_groups: mealGroups,
+        nutrition_plans: mealGroups,
         strength_sets_count: strengthSetsCount,
       };
     },
@@ -443,14 +444,14 @@ export async function getAdminTrainingStats(_days = 30) {
 
       const [sessionsRes, setsRes, cardioRes] = await Promise.all([
         admin
-          .from("training_sessions")
-          .select("id, user_id, date, status, duration_minutes, created_at")
+          .from("workouts")
+          .select("id, subject_user_id, date, status, duration_minutes, created_at")
           .gte("created_at", startDate),
         admin
-          .from("strength_sets")
+          .from("workout_sets")
           .select("exercise_name, reps, weight, workout_id, created_at")
           .gte("created_at", startDate),
-        admin.from("cardio_sessions").select("id", { count: "exact", head: true }).gte("created_at", startDate),
+        admin.from("workout_cardio").select("id", { count: "exact", head: true }).gte("created_at", startDate),
       ]);
 
       if (sessionsRes.error) throw new Error(sessionsRes.error.message);
@@ -459,7 +460,7 @@ export async function getAdminTrainingStats(_days = 30) {
 
       const sessions = (sessionsRes.data || []) as Pick<
         TrainingSessionRow,
-        "id" | "user_id" | "date" | "status" | "duration_minutes" | "created_at"
+        "id" | "subject_user_id" | "date" | "status" | "duration_minutes" | "created_at"
       >[];
       const sets = (setsRes.data || []) as Pick<
         StrengthSetRow,
@@ -493,7 +494,7 @@ export async function getAdminTrainingStats(_days = 30) {
         if (typeof session.duration_minutes === "number") {
           durationValues.push(session.duration_minutes);
         }
-        athleteIds.add(session.user_id);
+        if (session.subject_user_id) athleteIds.add(session.subject_user_id);
       }
 
       for (const set of sets) {
@@ -573,11 +574,11 @@ export async function getAdminNutritionStats(_days = 30) {
 
       const [plansRes, mealsRes] = await Promise.all([
         admin
-          .from("meal_groups")
-          .select("id, owner_user_id, status, created_at")
+          .from("nutrition_plans")
+          .select("id, created_by_user_id, status, created_at")
           .eq("is_snapshot", false)
           .gte("created_at", startDate),
-        admin.from("meal_group_items").select("type, calories, protein_g"),
+        admin.from("nutrition_plan_items").select("type, calories, protein_g"),
       ]);
 
       if (plansRes.error) throw new Error(plansRes.error.message);
@@ -585,7 +586,7 @@ export async function getAdminNutritionStats(_days = 30) {
 
       const plans = (plansRes.data || []) as Array<{
         id: string;
-        owner_user_id: string;
+        created_by_user_id: string;
         status: string | null;
         created_at: string;
       }>;
@@ -603,7 +604,7 @@ export async function getAdminNutritionStats(_days = 30) {
         if (!isoDate || !isoRangeSet.has(isoDate)) continue;
         incrementMapValue(planMap, isoDate);
         incrementMapValue(statusMap, (plan.status || "unknown").toLowerCase());
-        uniqueAthletes.add(plan.owner_user_id);
+        uniqueAthletes.add(plan.created_by_user_id);
       }
 
       const mealTypeMap = new Map<string, number>();
@@ -683,7 +684,7 @@ export async function getAdminSettingsSnapshot() {
     },
     health: {
       total_users: users.length,
-      total_sessions: await safeCount("training_sessions"),
+      total_sessions: await safeCount("workouts"),
       total_events: await safeCount("analytics_events"),
       last_training_entry_at: null as string | null,
       last_nutrition_entry_at: null as string | null,

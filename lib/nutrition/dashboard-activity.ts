@@ -5,13 +5,13 @@ type NutritionActivityType = "meal" | "assignment" | "group" | "progress" | "cli
 type NutritionActivityScope = {
   subject_user_id: string | null;
   subject_client_id: string | null;
-  meal_group_id: string | null;
+  nutrition_plan_id: string | null;
 };
 
 type NutritionSelectedScope = {
   subject_user_id?: string | null;
   subject_client_id?: string | null;
-  meal_group_id?: string | null;
+  nutrition_plan_id?: string | null;
 };
 
 export const NUTRITION_DASHBOARD_ACTIVITY_EVENTS = [
@@ -263,13 +263,13 @@ export function describeNutritionActivity(eventName: string, metadata: Record<st
 }
 
 export function shouldIncludeNutritionActivityForScope(eventScope: NutritionActivityScope, selectedScope: NutritionSelectedScope) {
-  const hasExplicitEventScope = Boolean(eventScope.subject_user_id || eventScope.subject_client_id || eventScope.meal_group_id);
+  const hasExplicitEventScope = Boolean(eventScope.subject_user_id || eventScope.subject_client_id || eventScope.nutrition_plan_id);
 
   if (!hasExplicitEventScope) {
     return true;
   }
 
-  if (selectedScope.meal_group_id && eventScope.meal_group_id === selectedScope.meal_group_id) {
+  if (selectedScope.nutrition_plan_id && eventScope.nutrition_plan_id === selectedScope.nutrition_plan_id) {
     return true;
   }
 

@@ -5,9 +5,9 @@ export const CLIENT_LOGIN_LOCK_MINUTES = 15;
 
 export const CLIENT_MODULE_KEYS = [
   "workouts",
-  "training_plan",
-  "meal_plan",
-  "meal_logging",
+  "program",
+  "nutrition_plan",
+  "diary",
   "steps_tracking",
   "goals",
   "check_ins",

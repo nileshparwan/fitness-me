@@ -6,9 +6,9 @@ import { format } from "date-fns";
 import { Database } from "@/types/database";
 import { displayDistance, displayWeight, distanceUnit, weightUnit, type UnitSystem } from "@/utils/unit-conversion";
 
-type Workout = Database['public']['Tables']['training_sessions']['Row'];
-type WorkoutLog = Database['public']['Tables']['strength_sets']['Row'];
-type CardioLog = Database['public']['Tables']['cardio_sessions']['Row'];
+type Workout = Database['public']['Tables']['workouts']['Row'];
+type WorkoutLog = Database['public']['Tables']['workout_sets']['Row'];
+type CardioLog = Database['public']['Tables']['workout_cardio']['Row'];
 
 // 1. Define Styles (CSS-like but for PDF)
 const styles = StyleSheet.create({

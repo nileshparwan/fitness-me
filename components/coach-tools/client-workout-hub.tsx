@@ -159,7 +159,7 @@ export function ClientWorkoutHub({ clientId }: { clientId: string }) {
         client_id: clientId,
         name: logName.trim(),
         performed_on: selectedDayIso,
-        session_slot: logSlot,
+        workout_slot: logSlot,
         location_type: logLocationType,
         location_label: logLocationLabel.trim() || null,
         started_at: new Date().toISOString(),

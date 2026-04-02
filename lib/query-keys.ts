@@ -26,7 +26,7 @@ export type AdminTicketListKeyParams = {
 };
 
 export const ticketKeys = {
-  all: ["tickets"] as const,
+  all: ["support_tickets"] as const,
   lists: () => [...ticketKeys.all, "list"] as const,
   list: (params: TicketListKeyParams) => [...ticketKeys.lists(), params] as const,
   adminLists: () => [...ticketKeys.all, "admin-list"] as const,

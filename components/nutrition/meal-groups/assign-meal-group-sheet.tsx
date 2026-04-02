@@ -107,7 +107,7 @@ export function AssignMealGroupSheet({
     }
     const result = await withToastFeedback(
       mutations.assignGroup.mutateAsync({
-        meal_group_id: mealGroupId,
+        nutrition_plan_id: mealGroupId,
         subject: {
           subject_user_id: selectedSubject.subject_user_id,
           subject_client_id: selectedSubject.subject_client_id,

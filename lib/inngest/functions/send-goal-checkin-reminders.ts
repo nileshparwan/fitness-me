@@ -28,7 +28,7 @@ export const sendGoalCheckinReminders = inngest.createFunction(
 
     const matchingUsers = await step.run("find-users-due-now", async () => {
       const { data, error } = await admin
-        .from("notification_preferences")
+        .from("notification_settings")
         .select("user_id, timezone, goal_bell_enabled, goal_push_enabled, goal_reminder_time")
         .or("goal_bell_enabled.eq.true,goal_push_enabled.eq.true");
 
@@ -79,7 +79,7 @@ export const handleSendGoalCheckinReminder = inngest.createFunction(
 
     const prefs = await step.run("load-user-preferences", async () => {
       const { data, error } = await admin
-        .from("notification_preferences")
+        .from("notification_settings")
         .select("goal_bell_enabled, goal_push_enabled")
         .eq("user_id", user_id)
         .maybeSingle();
@@ -110,7 +110,7 @@ export const handleSendGoalCheckinReminder = inngest.createFunction(
     if (pushEnabled && isPushConfigured()) {
       const subscriptions = await step.run("load-push-subscriptions", async () => {
         const { data, error } = await admin
-          .from("push_subscriptions")
+          .from("device_tokens")
           .select("id, endpoint, public_key, auth_secret")
           .eq("user_id", user_id);
         if (error) throw new Error(error.message);
@@ -126,7 +126,7 @@ export const handleSendGoalCheckinReminder = inngest.createFunction(
               url: GOAL_CHECKIN_URL,
             });
             if (isActive) continue;
-            await admin.from("push_subscriptions").delete().eq("id", subscription.id).eq("user_id", user_id);
+            await admin.from("device_tokens").delete().eq("id", subscription.id).eq("user_id", user_id);
           }
         });
       }

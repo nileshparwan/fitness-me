@@ -72,7 +72,7 @@ import {
 } from "@/lib/query-keys-coach";
 import { Database } from "@/types/database";
 
-type ClientPaymentRow = Database["public"]["Tables"]["client_payments"]["Row"];
+type ClientPaymentRow = Database["public"]["Tables"]["payments"]["Row"];
 type GoalStatusFilter = "all" | "active" | "on_track" | "at_risk" | "completed" | "paused" | "archived";
 const GOAL_STATUS_FILTER_VALUES: GoalStatusFilter[] = [
   "all",

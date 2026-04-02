@@ -51,7 +51,7 @@ export const sendCycleReminders = inngest.createFunction(
       if (userIds.length === 0) return [] as CyclePreferenceRow[];
 
       const { data, error } = await admin
-        .from("notification_preferences")
+        .from("notification_settings")
         .select("user_id, cycle_bell_enabled, cycle_push_enabled, cycle_reminder_days")
         .in("user_id", userIds)
         .or("cycle_bell_enabled.eq.true,cycle_push_enabled.eq.true");
@@ -66,7 +66,7 @@ export const sendCycleReminders = inngest.createFunction(
 
     const cyclesByUser = await step.run("load-latest-cycles", async () => {
       const { data, error } = await admin
-        .from("menstrual_cycles")
+        .from("cycle_entries")
         .select("subject_user_id, period_start_date, cycle_length_days")
         .in("subject_user_id", rows.map((row) => row.user_id))
         .is("subject_client_id", null)
@@ -123,7 +123,7 @@ export const handleSendCycleReminder = inngest.createFunction(
 
     const prefs = await step.run("load-user-cycle-preferences", async () => {
       const { data, error } = await admin
-        .from("notification_preferences")
+        .from("notification_settings")
         .select("cycle_bell_enabled, cycle_push_enabled")
         .eq("user_id", event.data.user_id)
         .maybeSingle();
@@ -151,7 +151,7 @@ export const handleSendCycleReminder = inngest.createFunction(
     if (pushEnabled && isPushConfigured()) {
       const subscriptions = await step.run("load-push-subscriptions", async () => {
         const { data, error } = await admin
-          .from("push_subscriptions")
+          .from("device_tokens")
           .select("id, endpoint, public_key, auth_secret")
           .eq("user_id", event.data.user_id);
 
@@ -170,7 +170,7 @@ export const handleSendCycleReminder = inngest.createFunction(
             if (isActive) continue;
 
             const { error } = await admin
-              .from("push_subscriptions")
+              .from("device_tokens")
               .delete()
               .eq("id", subscription.id)
               .eq("user_id", event.data.user_id);

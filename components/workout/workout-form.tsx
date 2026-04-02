@@ -38,7 +38,7 @@ import { mapEntriesToActionExercises, useWorkoutDraftStore } from "@/stores/use-
 import type { Database } from "@/types/database";
 import { workoutFormSchema, type WorkoutFormValues } from "@/types/workout";
 
-type Program = Database["public"]["Tables"]["training_plans"]["Row"];
+type Program = Database["public"]["Tables"]["programs"]["Row"];
 type StrengthEntry = Extract<WorkoutFormValues["exercises"][number], { type: "strength" }>;
 type ExerciseField = FieldArrayWithId<WorkoutFormValues, "exercises", "id">;
 type LastSessionLookup = Map<string, WorkoutExerciseLastSession>;

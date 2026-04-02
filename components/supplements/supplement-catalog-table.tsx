@@ -40,7 +40,7 @@ import {
 } from "@/components/ui/table";
 import { buildCsv, downloadCsv } from "@/utils/csv-export";
 
-type SupplementCatalogRow = Database["public"]["Tables"]["supplement_catalog"]["Row"];
+type SupplementCatalogRow = Database["public"]["Tables"]["supplements"]["Row"];
 type SupplementCategory =
   | "vitamin"
   | "mineral"

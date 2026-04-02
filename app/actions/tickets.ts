@@ -10,10 +10,10 @@ import { createClient } from "@/lib/supabase/server";
 import { Database, Json } from "@/types/database";
 import { AppEventName } from "@/types/events";
 
-export type TicketRow = Database["public"]["Tables"]["tickets"]["Row"];
-type TicketInsert = Database["public"]["Tables"]["tickets"]["Insert"];
-export type TicketCommentRow = Database["public"]["Tables"]["ticket_comments"]["Row"];
-type TicketUpvoteRow = Database["public"]["Tables"]["ticket_upvotes"]["Row"];
+export type TicketRow = Database["public"]["Tables"]["support_tickets"]["Row"];
+type TicketInsert = Database["public"]["Tables"]["support_tickets"]["Insert"];
+export type TicketCommentRow = Database["public"]["Tables"]["support_replies"]["Row"];
+type TicketUpvoteRow = Database["public"]["Tables"]["support_votes"]["Row"];
 export type TicketStatus = Database["public"]["Enums"]["ticket_status"];
 export type TicketCategory = Database["public"]["Enums"]["ticket_category"];
 export type TicketListRow = TicketRow & { viewer_has_upvoted: boolean };
@@ -81,7 +81,7 @@ function isMissingTicketUpvotesTableError(error: { code?: string; message?: stri
   return (
     error.code === "42P01" ||
     error.code === "PGRST205" ||
-    message.includes("ticket_upvotes") && message.includes("schema cache")
+    message.includes("support_votes") && message.includes("schema cache")
   );
 }
 
@@ -158,7 +158,7 @@ async function getVisibleTicketForViewer<T extends { is_public: boolean; user_id
 ): Promise<T> {
   const admin = createAdminClient();
   const { data, error } = await admin
-    .from("tickets")
+    .from("support_tickets")
     .select(select)
     .eq("id", ticketId)
     .maybeSingle();
@@ -198,7 +198,7 @@ async function getViewerUpvotedIds(userId: string, ticketIds: string[]): Promise
   if (ticketIds.length === 0) return new Set<string>();
   const admin = createAdminClient();
   const { data, error } = await admin
-    .from("ticket_upvotes")
+    .from("support_votes")
     .select("ticket_id")
     .eq("user_id", userId)
     .in("ticket_id", ticketIds);
@@ -233,7 +233,7 @@ export async function createTicketAction(input: z.input<typeof createTicketSchem
     // This avoids RLS/session edge cases inside server actions while keeping ownership explicit.
     const admin = createAdminClient();
     const { data, error } = await admin
-      .from("tickets")
+      .from("support_tickets")
       .insert(insert)
       .select("*")
       .single();
@@ -251,14 +251,14 @@ export async function createTicketAction(input: z.input<typeof createTicketSchem
     const createdTicket = data as TicketRow;
 
     // Seed creator upvote so every new ticket starts with one supporter.
-    const { error: upvoteInsertError } = await admin.from("ticket_upvotes").insert({
+    const { error: upvoteInsertError } = await admin.from("support_votes").insert({
       ticket_id: createdTicket.id,
       user_id: user.id,
     });
     if (upvoteInsertError && upvoteInsertError.code !== "23505") {
       if (isMissingTicketUpvotesTableError(upvoteInsertError)) {
         const { error: legacyUpdateError } = await admin
-          .from("tickets")
+          .from("support_tickets")
           .update({ upvotes: 1 })
           .eq("id", createdTicket.id);
         if (legacyUpdateError) throw new Error(legacyUpdateError.message);
@@ -268,7 +268,7 @@ export async function createTicketAction(input: z.input<typeof createTicketSchem
     }
 
     const { error: subscriptionInsertError } = await admin
-      .from("ticket_subscriptions")
+      .from("support_subscriptions")
       .insert({
         ticket_id: createdTicket.id,
         user_id: user.id,
@@ -288,7 +288,7 @@ export async function createTicketAction(input: z.input<typeof createTicketSchem
     });
 
     revalidateSupportPaths(createdTicket.id);
-    revalidatePath("/admin/tickets");
+    revalidatePath("/admin/support_tickets");
 
     trackEvent(
       AppEventName.SUPPORT_TICKET_CREATED,
@@ -320,17 +320,17 @@ export async function createTicketAction(input: z.input<typeof createTicketSchem
 async function listPublicTicketsAction(input: z.input<typeof listSchema>): Promise<TicketListResult> {
   const params = listSchema.parse(input);
   return runTrackedAction({
-    eventName: "support.tickets.list.public",
+    eventName: "support.support_tickets.list.public",
     payload: { page: params.page, page_size: params.page_size },
     action: async () => {
   const { user } = await requireViewer();
 
   // Use admin client for community board reads after authenticating caller.
-  // This guarantees new authenticated users can always see public tickets,
+  // This guarantees new authenticated users can always see public support_tickets,
   // independent of RLS drift while still enforcing `is_public = true`.
   const admin = createAdminClient();
   const query = admin
-    .from("tickets")
+    .from("support_tickets")
     .select("*", { count: "exact" })
     .eq("is_public", true);
   const filteredQuery = applyListFilters(query, params);
@@ -364,14 +364,14 @@ async function listPublicTicketsAction(input: z.input<typeof listSchema>): Promi
 async function listMyTicketsAction(input: z.input<typeof listSchema>): Promise<TicketListResult> {
   const params = listSchema.parse(input);
   return runTrackedAction({
-    eventName: "support.tickets.list.mine",
+    eventName: "support.support_tickets.list.mine",
     payload: { page: params.page, page_size: params.page_size },
     action: async () => {
   const { user } = await requireViewer();
 
   const admin = createAdminClient();
   const query = admin
-    .from("tickets")
+    .from("support_tickets")
     .select("*", { count: "exact" })
     .eq("user_id", user.id);
   const filteredQuery = applyListFilters(query, params);
@@ -412,17 +412,17 @@ export async function toggleUpvoteTicketAction(ticketId: string) {
 
   const admin = createAdminClient();
   const { data: current, error: fetchError } = await admin
-    .from("tickets")
+    .from("support_tickets")
     .select("id, upvotes, is_public, status")
     .eq("id", safeTicketId)
     .single();
 
   if (fetchError || !current) throw new Error(fetchError?.message || "Ticket not found");
-  if (!current.is_public) throw new Error("Only public tickets can be upvoted");
+  if (!current.is_public) throw new Error("Only public support_tickets can be upvoted");
   if (current.status === "closed") throw new Error("This ticket is closed");
 
   const { data: existingVote, error: existingVoteError } = await admin
-    .from("ticket_upvotes")
+    .from("support_votes")
     .select("ticket_id, user_id")
     .eq("ticket_id", safeTicketId)
     .eq("user_id", user.id)
@@ -439,14 +439,14 @@ export async function toggleUpvoteTicketAction(ticketId: string) {
   let upvoted = false;
   if (existingVote) {
     const { error: deleteError } = await admin
-      .from("ticket_upvotes")
+      .from("support_votes")
       .delete()
       .eq("ticket_id", safeTicketId)
       .eq("user_id", user.id);
     if (deleteError) throw new Error(deleteError.message);
     upvoted = false;
   } else {
-    const { error: insertError } = await admin.from("ticket_upvotes").insert({
+    const { error: insertError } = await admin.from("support_votes").insert({
       ticket_id: safeTicketId,
       user_id: user.id,
     });
@@ -455,14 +455,14 @@ export async function toggleUpvoteTicketAction(ticketId: string) {
   }
 
   const { data: refreshed, error: refreshedError } = await admin
-    .from("tickets")
+    .from("support_tickets")
     .select("upvotes")
     .eq("id", safeTicketId)
     .single();
   if (refreshedError || !refreshed) throw new Error(refreshedError?.message || "Failed to refresh upvotes");
 
   revalidateSupportPaths(safeTicketId);
-  revalidatePath("/admin/tickets");
+  revalidatePath("/admin/support_tickets");
   return { success: true, upvoted, upvotes: refreshed.upvotes ?? 0 };
     },
   });
@@ -503,13 +503,13 @@ export async function updateTicketContentAction(input: z.input<typeof updateTick
   if (!user) throw new Error("Unauthorized");
 
   const { data: ticket, error: ticketError } = await supabase
-    .from("tickets")
+    .from("support_tickets")
     .select("*")
     .eq("id", payload.ticket_id)
     .single();
   if (ticketError || !ticket) throw new Error(ticketError?.message || "Ticket not found");
   if (ticket.user_id !== user.id) throw new Error("Unauthorized");
-  if (ticket.status === "closed") throw new Error("Closed tickets are read-only");
+  if (ticket.status === "closed") throw new Error("Closed support_tickets are read-only");
 
   const nextTitle = payload.title.trim();
   const nextDescription = payload.description.trim();
@@ -520,7 +520,7 @@ export async function updateTicketContentAction(input: z.input<typeof updateTick
   }
 
   const { data, error } = await supabase
-    .from("tickets")
+    .from("support_tickets")
     .update({
       title: nextTitle,
       description: nextDescription,
@@ -542,7 +542,7 @@ export async function updateTicketContentAction(input: z.input<typeof updateTick
   });
 
   revalidateSupportPaths(payload.ticket_id);
-  revalidatePath("/admin/tickets");
+  revalidatePath("/admin/support_tickets");
   return data as TicketRow;
     },
   });
@@ -564,7 +564,7 @@ export async function listTicketCommentsAction(ticketId: string): Promise<Ticket
 
   const admin = createAdminClient();
   const { data, error } = await admin
-    .from("ticket_comments")
+    .from("support_replies")
     .select("*")
     .eq("ticket_id", safeTicketId)
     .order("created_at", { ascending: true });
@@ -599,7 +599,7 @@ export async function createTicketCommentAction(input: z.input<typeof createComm
   if (ticketData.status === "closed") throw new Error("This ticket is closed");
 
   const admin = createAdminClient();
-  const { error } = await admin.from("ticket_comments").insert({
+  const { error } = await admin.from("support_replies").insert({
     ticket_id: payload.ticket_id,
     user_id: user.id,
     content: payload.content.trim(),
@@ -630,7 +630,7 @@ const getTicketsSchema = listSchema.extend({
 export async function getTicketsAction(input: z.input<typeof getTicketsSchema>) {
   const payload = getTicketsSchema.parse(input);
   return runTrackedAction({
-    eventName: "support.tickets.read",
+    eventName: "support.support_tickets.read",
     payload: { scope: payload.scope, page: payload.page, page_size: payload.page_size },
     action: async () => {
       if (payload.scope === "mine") {

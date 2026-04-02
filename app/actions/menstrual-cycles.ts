@@ -7,7 +7,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/types/database";
 
-export type MenstrualCycleRow = Database["public"]["Tables"]["menstrual_cycles"]["Row"];
+export type MenstrualCycleRow = Database["public"]["Tables"]["cycle_entries"]["Row"];
 type ActorSupabase = Awaited<ReturnType<typeof createClient>>;
 type AdminSupabase = ReturnType<typeof createAdminClient>;
 
@@ -149,7 +149,7 @@ export async function logCycleAction(
       const actor = await requireCycleActor();
       const parsed = cycleInputSchema.parse(input);
       const resolved = await resolveCycleSubject(actor, subjectInput);
-      const payload: Database["public"]["Tables"]["menstrual_cycles"]["Insert"] = {
+      const payload: Database["public"]["Tables"]["cycle_entries"]["Insert"] = {
         logged_by_user_id: actor.userId,
         subject_user_id: resolved.subjectRef.subject_user_id,
         subject_client_id: resolved.subjectRef.subject_client_id,
@@ -170,7 +170,7 @@ export async function logCycleAction(
         : "subject_user_id,subject_client_id,period_start_date";
 
       const { data, error } = await resolved.client
-        .from("menstrual_cycles")
+        .from("cycle_entries")
         .upsert(payload, { onConflict, ignoreDuplicates: false })
         .select("*")
         .maybeSingle();
@@ -188,7 +188,7 @@ export async function getCyclesAction(input: { subject?: CycleSubject; limit?: n
   const resolved = await resolveCycleSubject(actor, parsed.subject);
 
   let query = resolved.client
-    .from("menstrual_cycles")
+    .from("cycle_entries")
     .select("*")
     .order("period_start_date", { ascending: false });
 
@@ -209,7 +209,7 @@ export async function getLatestCycleAction(subjectInput?: CycleSubject) {
   const resolved = await resolveCycleSubject(actor, subjectInput);
 
   let query = resolved.client
-    .from("menstrual_cycles")
+    .from("cycle_entries")
     .select("*")
     .order("period_start_date", { ascending: false })
     .limit(1);
@@ -229,7 +229,7 @@ export async function deleteCycleAction({ id }: { id: string }) {
       const actor = await requireCycleActor();
 
       const { data: cycle, error: cycleError } = await actor.admin
-        .from("menstrual_cycles")
+        .from("cycle_entries")
         .select("id, subject_user_id, subject_client_id")
         .eq("id", id)
         .maybeSingle();
@@ -256,7 +256,7 @@ export async function deleteCycleAction({ id }: { id: string }) {
         throw new Error("Unauthorized");
       }
 
-      const { error } = await actor.admin.from("menstrual_cycles").delete().eq("id", id);
+      const { error } = await actor.admin.from("cycle_entries").delete().eq("id", id);
       if (error) throw new Error(error.message);
 
       return { success: true };

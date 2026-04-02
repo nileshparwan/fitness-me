@@ -4,8 +4,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { inngest } from "@/lib/inngest/client";
 import { Database } from "@/types/database";
 
-type StrengthSetInsert = Database["public"]["Tables"]["strength_sets"]["Insert"];
-type CardioSessionInsert = Database["public"]["Tables"]["cardio_sessions"]["Insert"];
+type StrengthSetInsert = Database["public"]["Tables"]["workout_sets"]["Insert"];
+type CardioSessionInsert = Database["public"]["Tables"]["workout_cardio"]["Insert"];
 type DbClient = SupabaseClient<Database>;
 
 export async function insertWorkoutExerciseRows(input: {
@@ -14,11 +14,11 @@ export async function insertWorkoutExerciseRows(input: {
   cardioRows: CardioSessionInsert[];
 }) {
   if (input.strengthRows.length > 0) {
-    const { error } = await input.supabase.from("strength_sets").insert(input.strengthRows);
+    const { error } = await input.supabase.from("workout_sets").insert(input.strengthRows);
     if (error) throw new Error(error.message);
   }
   if (input.cardioRows.length > 0) {
-    const { error } = await input.supabase.from("cardio_sessions").insert(input.cardioRows);
+    const { error } = await input.supabase.from("workout_cardio").insert(input.cardioRows);
     if (error) throw new Error(error.message);
   }
 }
@@ -29,10 +29,10 @@ export async function replaceWorkoutExerciseRows(input: {
   strengthRows: StrengthSetInsert[];
   cardioRows: CardioSessionInsert[];
 }) {
-  const { error: deleteStrengthError } = await input.supabase.from("strength_sets").delete().eq("workout_id", input.workoutId);
+  const { error: deleteStrengthError } = await input.supabase.from("workout_sets").delete().eq("workout_id", input.workoutId);
   if (deleteStrengthError) throw new Error(deleteStrengthError.message);
 
-  const { error: deleteCardioError } = await input.supabase.from("cardio_sessions").delete().eq("workout_id", input.workoutId);
+  const { error: deleteCardioError } = await input.supabase.from("workout_cardio").delete().eq("workout_id", input.workoutId);
   if (deleteCardioError) throw new Error(deleteCardioError.message);
 
   await insertWorkoutExerciseRows({

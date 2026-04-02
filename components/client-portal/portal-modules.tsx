@@ -229,7 +229,7 @@ export function ClientPortalWorkoutsView({ readOnly }: { readOnly: boolean }) {
                 .mutateAsync({
                   name: name.trim() || "Training Session",
                   performed_on: performedOn,
-                  session_slot: slot,
+                  workout_slot: slot,
                   location_type: locationType,
                   location_label: locationLabel.trim() || null,
                   notes: notes.trim() || null,
@@ -333,7 +333,7 @@ export function ClientPortalTrainingView({ readOnly }: { readOnly: boolean }) {
                                 .mutateAsync({
                                   name: session.title,
                                   performed_on: todayIso(),
-                                  session_slot: session.default_slot,
+                                  workout_slot: session.default_slot,
                                   notes: session.notes || null,
                                   plan_assignment_id: query.data.assignment?.id || null,
                                   plan_session_id: session.id,

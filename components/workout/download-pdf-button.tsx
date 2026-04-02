@@ -5,9 +5,9 @@ import { Download, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Database } from "@/types/database";
 
-type Workout = Database['public']['Tables']['training_sessions']['Row'];
-type WorkoutLog = Database['public']['Tables']['strength_sets']['Row'];
-type CardioLog = Database['public']['Tables']['cardio_sessions']['Row'];
+type Workout = Database['public']['Tables']['workouts']['Row'];
+type WorkoutLog = Database['public']['Tables']['workout_sets']['Row'];
+type CardioLog = Database['public']['Tables']['workout_cardio']['Row'];
 
 interface Props {
   workout: Workout & { user?: { email: string } | null };

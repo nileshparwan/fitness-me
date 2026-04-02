@@ -5,4 +5,3 @@ export default async function ClientPortalNotesPage() {
   await requireClientModuleAccess("coach_notes");
   return <ClientPortalNotesView />;
 }
-

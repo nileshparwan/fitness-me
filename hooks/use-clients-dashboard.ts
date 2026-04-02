@@ -71,12 +71,12 @@ export function useClientsDashboardRealtime(enabled = true) {
 
     const watchedTables = [
       "clients",
-      "training_sessions",
-      "client_checkins",
-      "coach_notes",
-      "client_payments",
-      "fitness_goals",
-      "goal_progress_history",
+      "workouts",
+      "client_reviews",
+      "client_notes",
+      "payments",
+      "goals",
+      "goal_history",
       "analytics_events",
     ] as const;
 

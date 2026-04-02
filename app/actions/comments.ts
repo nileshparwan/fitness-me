@@ -41,7 +41,7 @@ export async function updateCommentAction(input: z.input<typeof updateCommentSch
       if (!user) throw new Error("Unauthorized");
 
       const { data: comment, error: commentError } = await supabase
-        .from("ticket_comments")
+        .from("support_replies")
         .select("id, user_id, ticket_id, content")
         .eq("id", payload.comment_id)
         .maybeSingle();
@@ -64,7 +64,7 @@ export async function updateCommentAction(input: z.input<typeof updateCommentSch
         isAdminRoleValue(String(user.app_metadata?.role || ""));
 
       const { data, error } = await supabase
-        .from("ticket_comments")
+        .from("support_replies")
         .update({ content: nextContent })
         .eq("id", payload.comment_id)
         .select("*")
@@ -111,7 +111,7 @@ export async function deleteCommentAction(input: z.input<typeof deleteCommentSch
         isAdminRoleValue(String(user.app_metadata?.role || ""));
 
       const { data: existingComment, error: existingCommentError } = await admin
-        .from("ticket_comments")
+        .from("support_replies")
         .select("id, user_id, ticket_id")
         .eq("id", payload.comment_id)
         .maybeSingle();
@@ -127,7 +127,7 @@ export async function deleteCommentAction(input: z.input<typeof deleteCommentSch
       }
 
       const { data: deletedComment, error: deleteError } = await admin
-        .from("ticket_comments")
+        .from("support_replies")
         .delete()
         .eq("id", payload.comment_id)
         .select("id, ticket_id")

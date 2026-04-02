@@ -3,7 +3,11 @@
 import { useEffect, useMemo } from "react";
 
 import { useAssignableSubjects } from "@/hooks/use-meal-groups";
-import { useNutritionAutoMealGroupSelection, useNutritionMealGroupOptions } from "@/hooks/use-nutrition-data";
+import {
+  useNutritionAutoMealGroupSelection,
+  useNutritionDefaultMealGroupPreference,
+  useNutritionMealGroupOptions,
+} from "@/hooks/use-nutrition-data";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { isMealGroupSelected } from "@/lib/nutrition/meal-ui";
@@ -52,6 +56,7 @@ export function NutritionScopeControls({
   const selectedMealGroupId = useNutritionSelectedMealGroupId();
   const setActiveSubject = useSetNutritionActiveSubject();
   const setSelectedMealGroupId = useSetNutritionSelectedMealGroupId();
+  const { defaultMealGroupId, clearDefaultMealGroupId } = useNutritionDefaultMealGroupPreference();
 
   const subjectOptions = useMemo(() => {
     const options: SubjectOption[] = [{ key: "self", label: "Me", type: "self", id: null }];
@@ -109,7 +114,7 @@ export function NutritionScopeControls({
   const assignedGroupOptions = useMemo(() => {
     const map = new Map<string, GroupOption>();
     for (const assignment of assignmentsQuery.data || []) {
-      const groupId = assignment.meal_group_id;
+      const groupId = assignment.nutrition_plan_id;
       if (!groupId) continue;
       const label = assignment.template_group?.name || assignment.meal_group?.name || "Assigned meal group";
       map.set(groupId, { id: groupId, label });
@@ -134,6 +139,13 @@ export function NutritionScopeControls({
     if (assignedGroupOptions.length === 0 && groupsQuery.data?.has_more) return;
     setSelectedMealGroupId("");
   }, [assignedGroupOptions.length, groupOptions, groupsQuery.data?.has_more, selectedMealGroupId, setSelectedMealGroupId]);
+
+  useEffect(() => {
+    if (!defaultMealGroupId) return;
+    if (groupOptions.some((option) => option.id === defaultMealGroupId)) return;
+    if (assignedGroupOptions.length === 0 && groupsQuery.data?.has_more) return;
+    void clearDefaultMealGroupId().catch(() => null);
+  }, [assignedGroupOptions.length, clearDefaultMealGroupId, defaultMealGroupId, groupOptions, groupsQuery.data?.has_more]);
 
   const onSubjectChange = (nextKey: string) => {
     const next = subjectOptions.find((option) => option.key === nextKey);

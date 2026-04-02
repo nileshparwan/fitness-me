@@ -15,10 +15,10 @@ import { Database } from "@/types/database";
 const PROGRAM_PAGE_SIZE = 24;
 const PROGRAM_ASSIGNEES_PAGE_SIZE = 15;
 
-type ProgramRow = Database["public"]["Tables"]["training_plans"]["Row"];
+type ProgramRow = Database["public"]["Tables"]["programs"]["Row"];
 
 type ProgramListItem = Pick<ProgramRow, "id" | "name" | "description" | "created_at"> & {
-  training_plan_items: Array<{ count: number }>;
+  program_workouts: Array<{ count: number }>;
 };
 
 export function usePrograms() {
@@ -28,7 +28,7 @@ export function usePrograms() {
     queryKey: trainingKeys.plansList(),
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("training_plans")
+        .from("programs")
         .select("id, name")
         .order("created_at", { ascending: false });
       if (error) throw error;
@@ -49,8 +49,8 @@ export function useInfinitePrograms() {
       const to = from + PROGRAM_PAGE_SIZE - 1;
 
       const { data, error, count } = await supabase
-        .from("training_plans")
-        .select("id, name, description, created_at, training_plan_items(count)", { count: "exact" })
+        .from("programs")
+        .select("id, name, description, created_at, program_workouts(count)", { count: "exact" })
         .order("created_at", { ascending: false })
         .range(from, to);
 

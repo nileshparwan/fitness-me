@@ -31,7 +31,7 @@ export function useFitnessGoalsRealtimeSync(userId: string | null) {
         {
           event: "*",
           schema: "public",
-          table: "fitness_goals",
+          table: "goals",
           filter: `user_id=eq.${userId}`,
         },
         () => {
@@ -77,7 +77,7 @@ export function useClientFitnessGoalsRealtimeSync(
         {
           event: "*",
           schema: "public",
-          table: "fitness_goals",
+          table: "goals",
           filter: `user_id=eq.${clientLinkedUserId}`,
         },
         () => {

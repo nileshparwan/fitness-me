@@ -26,9 +26,9 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { Database } from "@/types/database";
 
-type ClientAuthInsert = Database["public"]["Tables"]["client_auth"]["Insert"];
-type ClientAuthUpdate = Database["public"]["Tables"]["client_auth"]["Update"];
-type ClientFeatureAccessInsert = Database["public"]["Tables"]["client_feature_access"]["Insert"];
+type ClientAuthInsert = Database["public"]["Tables"]["client_credentials"]["Insert"];
+type ClientAuthUpdate = Database["public"]["Tables"]["client_credentials"]["Update"];
+type ClientFeatureAccessInsert = Database["public"]["Tables"]["feature_access"]["Insert"];
 
 const usernameSchema = z
   .string()
@@ -76,9 +76,9 @@ const moduleAccessSchema = z.object({
 
 const moduleDefaultAccess: Record<ClientModuleKey, ClientModuleAccessLevel> = {
   workouts: "enabled",
-  training_plan: "enabled",
-  meal_plan: "read_only",
-  meal_logging: "enabled",
+  program: "enabled",
+  nutrition_plan: "read_only",
+  diary: "enabled",
   steps_tracking: "enabled",
   goals: "enabled",
   check_ins: "enabled",
@@ -134,7 +134,7 @@ async function seedDefaultFeatureAccess(clientId: string, actorId: string) {
     configured_by_user_id: actorId,
   }));
   const { error } = await admin
-    .from("client_feature_access")
+    .from("feature_access")
     .upsert(rows, { onConflict: "client_id,module_key", ignoreDuplicates: true });
   if (error) throw new Error(error.message);
 }
@@ -167,13 +167,13 @@ export async function listClientPortalSettingsAction(clientId: string): Promise<
       const [{ data: authRow, error: authError }, { data: featureRows, error: featureError }] =
         await Promise.all([
           admin
-            .from("client_auth")
+            .from("client_credentials")
             .select(
               "client_id, username, status, is_portal_enabled, failed_attempts, locked_until, last_login_at, password_updated_at, username_updated_at"
             )
             .eq("client_id", safeClientId)
             .maybeSingle(),
-          admin.from("client_feature_access").select("module_key, access_level").eq("client_id", safeClientId),
+          admin.from("feature_access").select("module_key, access_level").eq("client_id", safeClientId),
         ]);
 
       if (authError) throw new Error(authError.message);
@@ -238,7 +238,7 @@ export async function coachSetClientCredentialsAction(
       };
 
       const { error } = await admin
-        .from("client_auth")
+        .from("client_credentials")
         .upsert(insertRow, { onConflict: "client_id" });
       if (error) throw new Error(error.message);
 
@@ -274,7 +274,7 @@ export async function coachResetClientPasswordAction(
         updated_by_user_id: scope.actorId,
       };
       const { error } = await admin
-        .from("client_auth")
+        .from("client_credentials")
         .update(updateRow)
         .eq("client_id", payload.client_id);
       if (error) throw new Error(error.message);
@@ -298,7 +298,7 @@ export async function coachChangeClientUsernameAction(
       const scope = await requireCoachAccess(payload.client_id);
       const admin = createAdminClient();
       const { error } = await admin
-        .from("client_auth")
+        .from("client_credentials")
         .update({
           username: normalizedUsername(payload.username),
           username_updated_at: new Date().toISOString(),
@@ -367,7 +367,7 @@ export async function coachUpdateClientModuleAccessAction(
       const admin = createAdminClient();
 
       const { error } = await admin
-        .from("client_feature_access")
+        .from("feature_access")
         .upsert(
           {
             client_id: payload.client_id,
@@ -397,7 +397,7 @@ export async function clientLoginAction(input: z.input<typeof loginSchema>) {
       const nowIso = now.toISOString();
 
       const { data: authRow, error: authError } = await admin
-        .from("client_auth")
+        .from("client_credentials")
         .select("*")
         .eq("username", username)
         .maybeSingle();
@@ -424,7 +424,7 @@ export async function clientLoginAction(input: z.input<typeof loginSchema>) {
             ? new Date(now.getTime() + CLIENT_LOGIN_LOCK_MINUTES * 60 * 1000).toISOString()
             : null,
         };
-        await admin.from("client_auth").update(updates).eq("client_id", authRow.client_id);
+        await admin.from("client_credentials").update(updates).eq("client_id", authRow.client_id);
 
         if (shouldLock) {
           throw new Error("Too many failed attempts. Try again later.");
@@ -445,7 +445,7 @@ export async function clientLoginAction(input: z.input<typeof loginSchema>) {
       });
 
       await admin
-        .from("client_auth")
+        .from("client_credentials")
         .update({
           failed_attempts: 0,
           locked_until: null,

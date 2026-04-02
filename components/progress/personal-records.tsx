@@ -6,7 +6,7 @@ import { Trophy, Scale, Repeat } from "lucide-react";
 import { useUnitLabels, useUnitSystem } from "@/stores/use-settings-store";
 import { displayWeight } from "@/utils/unit-conversion";
 
-type WorkoutLog = Database['public']['Tables']['strength_sets']['Row'];
+type WorkoutLog = Database['public']['Tables']['workout_sets']['Row'];
 
 export function PersonalRecords({ logs }: { logs: WorkoutLog[] }) {
   const system = useUnitSystem();

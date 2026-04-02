@@ -26,7 +26,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { error } = await supabase.from("push_subscriptions").upsert(
+    const { error } = await supabase.from("device_tokens").upsert(
       {
         endpoint: body.endpoint,
         public_key: body.keys.p256dh,

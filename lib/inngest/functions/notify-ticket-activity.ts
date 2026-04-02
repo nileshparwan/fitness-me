@@ -154,7 +154,7 @@ export const notifyTicketActivity = inngest.createFunction(
 
     const ticket = await step.run("fetch-ticket-context", async (): Promise<TicketContext | null> => {
       const { data, error } = await admin
-        .from("tickets")
+        .from("support_tickets")
         .select("id, user_id, title, is_public")
         .eq("id", event.data.ticket_id)
         .maybeSingle();
@@ -174,7 +174,7 @@ export const notifyTicketActivity = inngest.createFunction(
       const [{ data: adminRows, error: adminError }, { data: subscriberRows, error: subscriberError }] = await Promise.all([
         admin.from("profiles").select("id").eq("role", "sysadmin"),
         admin
-          .from("ticket_subscriptions")
+          .from("support_subscriptions")
           .select("user_id")
           .eq("ticket_id", event.data.ticket_id),
       ]);

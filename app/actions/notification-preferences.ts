@@ -47,11 +47,11 @@ function toDbTime(value: string) {
 
 export async function getNotificationPreferencesAction(): Promise<NotificationPreferencesInput | null> {
   return runTrackedAction({
-    eventName: "notification_preferences.read",
+    eventName: "notification_settings.read",
     action: async () => {
       const { supabase, user } = await requireActor();
       const { data, error } = await supabase
-        .from("notification_preferences")
+        .from("notification_settings")
         .select(
           "timezone, meal_bell_enabled, meal_push_enabled, meal_reminder_time, checkin_bell_enabled, checkin_push_enabled, checkin_reminder_time, goal_bell_enabled, goal_push_enabled, goal_reminder_time, cycle_bell_enabled, cycle_push_enabled, cycle_reminder_days"
         )
@@ -86,12 +86,12 @@ export async function upsertNotificationPreferencesAction(
   const payload = preferencesSchema.parse(input);
 
   return runTrackedAction({
-    eventName: "notification_preferences.upsert",
+    eventName: "notification_settings.upsert",
     payload,
     action: async () => {
       const { supabase, user } = await requireActor();
 
-      const { error } = await supabase.from("notification_preferences").upsert(
+      const { error } = await supabase.from("notification_settings").upsert(
         {
           user_id: user.id,
           timezone: payload.timezone,

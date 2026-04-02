@@ -9,7 +9,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { Database } from "@/types/database";
 
-type TicketRow = Database["public"]["Tables"]["tickets"]["Row"];
+type TicketRow = Database["public"]["Tables"]["support_tickets"]["Row"];
 export type TicketStatus = Database["public"]["Enums"]["ticket_status"];
 export type TicketCategory = Database["public"]["Enums"]["ticket_category"];
 
@@ -108,13 +108,13 @@ export async function listAdminTicketsAction(
 ): Promise<AdminTicketListResult> {
   const params = adminListSchema.parse(input);
   return runTrackedAction({
-    eventName: "admin.tickets.list",
+    eventName: "admin.support_tickets.list",
     payload: { page: params.page, page_size: params.page_size },
     action: async () => {
   await requireAdminUser();
   const admin = createAdminClient();
 
-  let query = admin.from("tickets").select("*", { count: "exact" });
+  let query = admin.from("support_tickets").select("*", { count: "exact" });
 
   if (params.search) {
     query = query.or(`title.ilike.%${params.search}%,description.ilike.%${params.search}%`);
@@ -154,7 +154,7 @@ export async function listAdminTicketsAction(
   await Promise.all(
     rows.map(async (row) => {
       const { count } = await admin
-        .from("ticket_comments")
+        .from("support_replies")
         .select("id", { count: "exact", head: true })
         .eq("ticket_id", row.id);
       row.comments_count = count ?? 0;
@@ -178,14 +178,14 @@ export async function updateTicketStatusAction(
 ) {
   const payload = updateStatusSchema.parse(input);
   return runTrackedAction({
-    eventName: "admin.tickets.status.update",
+    eventName: "admin.support_tickets.status.update",
     payload: { ticket_id: payload.id, status: payload.status },
     action: async () => {
   const actorUser = await requireAdminUser();
   const admin = createAdminClient();
 
   const { data: current, error: currentError } = await admin
-    .from("tickets")
+    .from("support_tickets")
     .select("id, status")
     .eq("id", payload.id)
     .maybeSingle();
@@ -199,7 +199,7 @@ export async function updateTicketStatusAction(
   }
 
   const { error } = await admin
-    .from("tickets")
+    .from("support_tickets")
     .update({ status: toStatus })
     .eq("id", payload.id);
 
@@ -224,7 +224,7 @@ export async function updateTicketStatusAction(
     },
   });
 
-  revalidatePath("/admin/tickets");
+  revalidatePath("/admin/support_tickets");
   revalidatePath("/support");
   revalidatePath(`/support/${payload.id}`);
   return { success: true };
@@ -235,16 +235,16 @@ export async function updateTicketStatusAction(
 export async function deleteTicketAction(input: z.input<typeof deleteSchema>) {
   const payload = deleteSchema.parse(input);
   return runTrackedAction({
-    eventName: "admin.tickets.delete",
+    eventName: "admin.support_tickets.delete",
     payload: { ticket_id: payload.id },
     action: async () => {
   await requireAdminUser();
   const admin = createAdminClient();
 
-  const { error } = await admin.from("tickets").delete().eq("id", payload.id);
+  const { error } = await admin.from("support_tickets").delete().eq("id", payload.id);
   if (error) throw new Error(error.message);
 
-  revalidatePath("/admin/tickets");
+  revalidatePath("/admin/support_tickets");
   revalidatePath("/support");
   revalidatePath(`/support/${payload.id}`);
   return { success: true };

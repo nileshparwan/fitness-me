@@ -114,7 +114,7 @@ export default function AdminTicketsPage() {
                 setSearch(event.target.value);
                 setPage(0);
               }}
-              placeholder="Search tickets..."
+              placeholder="Search support_tickets..."
               className="h-9 pl-8"
             />
           </div>
@@ -179,12 +179,12 @@ export default function AdminTicketsPage() {
         {query.isLoading && !query.data ? (
           <div className="native-surface surface-pad flex items-center gap-2 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" />
-            Loading tickets...
+            Loading support_tickets...
           </div>
         ) : null}
         {query.isError ? (
           <div className="native-surface surface-pad text-sm text-destructive">
-            {query.error instanceof Error ? query.error.message : "Failed to load tickets"}
+            {query.error instanceof Error ? query.error.message : "Failed to load support_tickets"}
           </div>
         ) : null}
         {query.isPlaceholderData ? (
@@ -322,7 +322,7 @@ export default function AdminTicketsPage() {
               {!query.isLoading && rows.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={7} className="py-8 text-center text-sm text-muted-foreground">
-                    No tickets found.
+                    No support_tickets found.
                   </TableCell>
                 </TableRow>
               ) : null}

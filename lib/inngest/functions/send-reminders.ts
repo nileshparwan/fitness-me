@@ -29,7 +29,7 @@ export const sendReminders = inngest.createFunction(
       cutoffDate.setDate(cutoffDate.getDate() - 3);
 
       const { data: executionRows, error: executionError } = await supabaseAdmin
-        .from("workout_executions")
+        .from("workout_logs")
         .select("subject_user_id")
         .gte("performed_on", cutoffDate.toISOString().slice(0, 10));
       if (executionError) throw executionError;

@@ -29728,3 +29728,536 @@ Validation:
 
 - `npm run typecheck` ✓
 - `npm run lint` ✓
+
+---
+
+### [A-063] Database schema revamp — complete rename + structural cleanup (2026-04-01)
+
+Full schema overhaul. No behaviour changes — every rename is mechanical. Reference document: `docs/DATABASE_TABLE_REFERENCE.md` for the complete old → new mapping.
+
+This task is split into phases. Each phase must pass `npm run typecheck` and `npm run lint` before the next begins.
+
+---
+
+## Phase 1 — Nutrition table renames (highest impact, most used)
+
+### Migrations to create
+
+Create one migration per logical group. Each migration must:
+1. Rename the table (`ALTER TABLE old_name RENAME TO new_name`)
+2. Rename all foreign key constraints that reference the table by name
+3. Rename all indexes
+4. Drop and recreate all RLS policies under the new table name
+5. Update any SQL functions that reference the table name in their body
+
+#### Migration A — Diary tables
+
+```sql
+ALTER TABLE meal_logs RENAME TO diary_entries;
+ALTER TABLE meal_log_items RENAME TO diary_items;
+ALTER TABLE meal_log_sections RENAME TO diary_sections;
+ALTER TABLE meal_item_favorites RENAME TO diary_favorites;
+ALTER TABLE daily_macro_compliance RENAME TO diary_compliance;
+```
+
+FK columns to rename on `diary_entries`:
+- `meal_group_id` → `nutrition_plan_id`
+
+FK columns to rename on `diary_sections`:
+- `meal_group_id` → `nutrition_plan_id`
+
+RLS policies to drop and recreate with new table name:
+- `meal_logs_insert_subject_access` → `diary_entries_insert_subject_access`
+- `meal_logs_select_subject_access` → `diary_entries_select_subject_access`
+- `meal_logs_update_subject_access` → `diary_entries_update_subject_access`
+- `meal_logs_delete_subject_access` → `diary_entries_delete_subject_access`
+- `meal_log_items_insert_subject_access` → `diary_items_insert_subject_access`
+- `meal_log_items_select_subject_access` → `diary_items_select_subject_access`
+- `meal_log_items_update_subject_access` → `diary_items_update_subject_access`
+- `meal_log_items_delete_subject_access` → `diary_items_delete_subject_access`
+- `meal_log_sections_insert_access` → `diary_sections_insert_access`
+- `meal_log_sections_select_access` → `diary_sections_select_access`
+- `meal_log_sections_delete_access` → `diary_sections_delete_access`
+- `client_meal_item_favorites_insert_access` → `diary_favorites_insert_access`
+- `client_meal_item_favorites_select_access` → `diary_favorites_select_access`
+- `client_meal_item_favorites_update_access` → `diary_favorites_update_access`
+- `client_meal_item_favorites_delete_access` → `diary_favorites_delete_access`
+- `daily_macro_compliance_select_subject_access` → `diary_compliance_select_subject_access`
+
+SQL functions to update (rename table reference in body):
+- `sync_meal_log_totals` → rename to `sync_diary_entry_totals`; update body to reference `diary_items`
+- `can_access_meal_group` → rename to `can_access_nutrition_plan`; update body to reference `nutrition_plans`
+
+#### Migration B — Meal planner tables
+
+```sql
+ALTER TABLE meal_groups RENAME TO nutrition_plans;
+ALTER TABLE meal_group_plans RENAME TO nutrition_plan_days;
+ALTER TABLE meal_group_items RENAME TO nutrition_plan_items;
+ALTER TABLE meal_group_assignments RENAME TO nutrition_plan_assignments;
+ALTER TABLE meal_group_plan_types RENAME TO nutrition_plan_types;
+ALTER TABLE nutrition_target_history RENAME TO nutrition_targets;
+```
+
+Column renames:
+- `nutrition_plans.owner_user_id` → `created_by_user_id`
+- `nutrition_plans.source_group_id` → `source_plan_id`
+- `nutrition_plan_items.meal_plan_id` (FK to `nutrition_plan_days`) → `plan_day_id`
+- `nutrition_plan_assignments.meal_group_id` → `nutrition_plan_id`
+- `nutrition_plan_assignments.template_group_id` → `template_plan_id`
+- All other `meal_group_id` FK columns in child tables → `nutrition_plan_id`
+
+RLS policies to drop and recreate:
+- `meal_groups_insert_owner` → `nutrition_plans_insert_owner`
+- `meal_groups_select_access` → `nutrition_plans_select_access`
+- `meal_groups_update_owner` → `nutrition_plans_update_owner`
+- `meal_groups_delete_owner` → `nutrition_plans_delete_owner`
+- `meal_group_plans_insert_manage` → `nutrition_plan_days_insert_manage`
+- `meal_group_plans_select_access` → `nutrition_plan_days_select_access`
+- `meal_group_plans_update_manage` → `nutrition_plan_days_update_manage`
+- `meal_group_plans_delete_manage` → `nutrition_plan_days_delete_manage`
+- `meal_group_items_insert_manage` → `nutrition_plan_items_insert_manage`
+- `meal_group_items_select_access` → `nutrition_plan_items_select_access`
+- `meal_group_items_update_manage` → `nutrition_plan_items_update_manage`
+- `meal_group_items_delete_manage` → `nutrition_plan_items_delete_manage`
+- `meal_group_assignments_insert_access` → `nutrition_plan_assignments_insert_access`
+- `meal_group_assignments_select_access` → `nutrition_plan_assignments_select_access`
+- `meal_group_assignments_update_access` → `nutrition_plan_assignments_update_access`
+- `meal_group_assignments_delete_access` → `nutrition_plan_assignments_delete_access`
+- `meal_group_plan_types_insert_manage` → `nutrition_plan_types_insert_manage`
+- `meal_group_plan_types_select_access` → `nutrition_plan_types_select_access`
+- `meal_group_plan_types_update_manage` → `nutrition_plan_types_update_manage`
+- `meal_group_plan_types_delete_manage` → `nutrition_plan_types_delete_manage`
+
+SQL functions to update:
+- `can_access_meal_group` → `can_access_nutrition_plan` (references `meal_groups`)
+- `can_manage_meal_group` → `can_manage_nutrition_plan` (references `meal_groups`)
+- `has_nutrition_subject_access` — update body if it references `meal_groups` directly
+- `enforce_active_meal_plan_overlap` → `enforce_active_nutrition_plan_overlap`
+- `prevent_used_meal_plan_delete` → `prevent_used_nutrition_plan_delete`
+
+---
+
+## Phase 2 — Training table renames
+
+#### Migration C — Workouts
+
+```sql
+ALTER TABLE training_sessions RENAME TO workouts;
+ALTER TABLE strength_sets RENAME TO workout_sets;
+ALTER TABLE cardio_sessions RENAME TO workout_cardio;
+ALTER TABLE workout_executions RENAME TO workout_logs;
+ALTER TABLE workout_execution_exercises RENAME TO workout_log_exercises;
+```
+
+Column rename on `workouts`:
+- `workouts.user_id` → `created_by_user_id` (consolidate legacy column)
+
+RLS policies to drop and recreate:
+- `training_sessions_insert_subject_or_coach` → `workouts_insert_subject_or_coach`
+- `training_sessions_select_subject_or_coach` → `workouts_select_subject_or_coach`
+- `training_sessions_update_subject_or_coach` → `workouts_update_subject_or_coach`
+- `training_sessions_delete_subject_or_coach` → `workouts_delete_subject_or_coach`
+- `training_sessions_select_owner_or_admin` → `workouts_select_owner_or_admin`
+- `training_sessions_write_owner_or_admin` → `workouts_write_owner_or_admin`
+- `cardio_sessions_select_subject_or_coach` → `workout_cardio_select_subject_or_coach`
+- `cardio_sessions_write_subject_or_coach` → `workout_cardio_write_subject_or_coach`
+- `cardio_sessions_select_owner_or_admin` → `workout_cardio_select_owner_or_admin`
+- `cardio_sessions_write_owner_or_admin` → `workout_cardio_write_owner_or_admin`
+- `strength_sets_select_subject_or_coach` → `workout_sets_select_subject_or_coach`
+- `strength_sets_write_subject_or_coach` → `workout_sets_write_subject_or_coach`
+- `strength_sets_select_owner_or_admin` → `workout_sets_select_owner_or_admin`
+- `strength_sets_write_owner_or_admin` → `workout_sets_write_owner_or_admin`
+- `workout_executions_insert_access` → `workout_logs_insert_access`
+- `workout_executions_select_access` → `workout_logs_select_access`
+- `workout_executions_delete_access` → `workout_logs_delete_access`
+- `workout_execution_exercises_write_access` → `workout_log_exercises_write_access`
+- `workout_execution_exercises_select_access` → `workout_log_exercises_select_access`
+
+SQL functions to update:
+- `sync_exercise_pr_from_strength_set` — update body to reference `workout_sets`
+
+#### Migration D — Programs and exercises
+
+```sql
+ALTER TABLE training_plans RENAME TO programs;
+ALTER TABLE training_plan_items RENAME TO program_workouts;
+ALTER TABLE coach_plan_templates RENAME TO program_templates;
+ALTER TABLE coach_plan_template_sessions RENAME TO program_template_workouts;
+ALTER TABLE client_plan_assignments RENAME TO program_assignments;
+ALTER TABLE client_plan_assignment_sessions RENAME TO program_assignment_workouts;
+ALTER TABLE exercise_catalog RENAME TO exercises;
+ALTER TABLE exercise_prs RENAME TO personal_records;
+```
+
+RLS policies to drop and recreate:
+- `training_plans_select_owner_or_admin` → `programs_select_owner_or_admin`
+- `training_plans_write_owner_or_admin` → `programs_write_owner_or_admin`
+- `training_plan_items_select_owner_or_admin` → `program_workouts_select_owner_or_admin`
+- `training_plan_items_write_owner_or_admin` → `program_workouts_write_owner_or_admin`
+- `coach_plan_templates_insert_owner_or_admin` → `program_templates_insert_owner_or_admin`
+- `coach_plan_templates_select_owner_or_admin` → `program_templates_select_owner_or_admin`
+- `coach_plan_templates_update_owner_or_admin` → `program_templates_update_owner_or_admin`
+- `coach_plan_templates_delete_owner_or_admin` → `program_templates_delete_owner_or_admin`
+- `coach_plan_template_sessions_select_owner_or_admin` → `program_template_workouts_select_owner_or_admin`
+- `coach_plan_template_sessions_write_owner_or_admin` → `program_template_workouts_write_owner_or_admin`
+- `assigned_programs_select_owner_or_admin` → `program_assignments_select_owner_or_admin`
+- `assigned_programs_write_admin_only` → `program_assignments_write_admin_only`
+- `client_plan_assignment_sessions_select_access` → `program_assignment_workouts_select_access`
+- `client_plan_assignment_sessions_write_access` → `program_assignment_workouts_write_access`
+- `exercise_catalog_insert_authenticated` → `exercises_insert_authenticated`
+- `exercise_catalog_select_all` → `exercises_select_all`
+- `exercise_catalog_update_authenticated` → `exercises_update_authenticated`
+- `exercise_catalog_delete_authenticated` → `exercises_delete_authenticated`
+- `exercise_catalog_insert_owner_or_admin` → `exercises_insert_owner_or_admin`
+- `exercise_catalog_update_owner_or_admin` → `exercises_update_owner_or_admin`
+- `exercise_catalog_delete_owner_or_admin` → `exercises_delete_owner_or_admin`
+- `exercise_prs_select_access` → `personal_records_select_access`
+- `exercise_prs_write_access` → `personal_records_write_access`
+
+SQL functions to update:
+- `sync_exercise_pr_from_strength_set` — update body to reference `exercises` and `personal_records`
+- `_normalize_exercise_muscle_groups` — update body to reference `exercises`
+
+---
+
+## Phase 3 — Health table renames
+
+#### Migration E — Check-in and measurements
+
+```sql
+ALTER TABLE daily_activity RENAME TO checkins;
+ALTER TABLE sleep_log RENAME TO checkin_sleep;
+ALTER TABLE vitals_log RENAME TO checkin_vitals;
+ALTER TABLE body_measurements RENAME TO measurements;
+ALTER TABLE menstrual_cycles RENAME TO cycle_entries;
+```
+
+RLS policies to drop and recreate:
+- `daily_activity_subject_access` → `checkins_subject_access`
+- `sleep_log_subject_access` → `checkin_sleep_subject_access`
+- `vitals_log_subject_access` → `checkin_vitals_subject_access`
+- `body_measurements_subject_access` → `measurements_subject_access`
+
+---
+
+## Phase 4 — Goals, supplements, support, system renames
+
+#### Migration F — Goals
+
+```sql
+ALTER TABLE fitness_goals RENAME TO goals;
+ALTER TABLE goal_progress_history RENAME TO goal_history;
+ALTER TABLE goal_exercise_program_links RENAME TO goal_program_links;
+```
+
+Column rename on `goals`:
+- `goals.user_id` → `created_by_user_id`
+
+RLS policies to drop and recreate:
+- `goal_progress_history_insert_access` → `goal_history_insert_access`
+- `goal_progress_history_select_access` → `goal_history_select_access`
+
+SQL functions to update:
+- `get_coach_goal_history` — update body to reference `goals` and `goal_history`
+
+#### Migration G — Supplements
+
+```sql
+ALTER TABLE supplement_catalog RENAME TO supplements;
+ALTER TABLE supplement_assignments RENAME TO supplement_prescriptions;
+ALTER TABLE supplement_subject_profiles RENAME TO supplement_profiles;
+```
+
+Column rename on `supplements`:
+- `supplements.owner_user_id` → `created_by_user_id`
+
+RLS policies to drop and recreate:
+- `supplement_catalog_insert_owner` → `supplements_insert_owner`
+- `supplement_catalog_select_global_or_owner` → `supplements_select_global_or_owner`
+- `supplement_catalog_update_visible` → `supplements_update_visible`
+- `supplement_catalog_delete_owner` → `supplements_delete_owner`
+- `supplement_assignments_insert_subject_access` → `supplement_prescriptions_insert_subject_access`
+- `supplement_assignments_select_subject_access` → `supplement_prescriptions_select_subject_access`
+- `supplement_assignments_update_subject_access` → `supplement_prescriptions_update_subject_access`
+- `supplement_assignments_delete_subject_access` → `supplement_prescriptions_delete_subject_access`
+- `supplement_subject_profiles_insert_subject_access` → `supplement_profiles_insert_subject_access`
+- `supplement_subject_profiles_select_subject_access` → `supplement_profiles_select_subject_access`
+- `supplement_subject_profiles_update_subject_access` → `supplement_profiles_update_subject_access`
+- `supplement_subject_profiles_delete_subject_access` → `supplement_profiles_delete_subject_access`
+
+#### Migration H — Coaching tables
+
+```sql
+ALTER TABLE coach_notes RENAME TO client_notes;
+ALTER TABLE client_checkins RENAME TO client_reviews;
+ALTER TABLE coach_client_assignments RENAME TO coaching_assignments;
+ALTER TABLE client_billing_plans RENAME TO billing_plans;
+ALTER TABLE client_payments RENAME TO payments;
+ALTER TABLE client_tasks RENAME TO tasks;
+ALTER TABLE client_steps_logs RENAME TO client_activity;
+ALTER TABLE client_feature_access RENAME TO feature_access;
+ALTER TABLE client_auth RENAME TO client_credentials;
+ALTER TABLE client_sessions RENAME TO client_auth_sessions;
+```
+
+RLS policies to drop and recreate:
+- `coach_notes_insert_access` → `client_notes_insert_access`
+- `coach_notes_select_access` → `client_notes_select_access`
+- `coach_notes_update_access` → `client_notes_update_access`
+- `client_checkins_insert_access` → `client_reviews_insert_access`
+- `client_checkins_select_access` → `client_reviews_select_access`
+- `client_checkins_update_access` → `client_reviews_update_access`
+- `coach_client_assignments_insert_primary_or_admin` → `coaching_assignments_insert_primary_or_admin`
+- `coach_client_assignments_select_access` → `coaching_assignments_select_access`
+- `coach_client_assignments_update_primary_or_admin` → `coaching_assignments_update_primary_or_admin`
+- `coach_client_assignments_delete_primary_or_admin` → `coaching_assignments_delete_primary_or_admin`
+- `client_billing_plans_insert_access` → `billing_plans_insert_access`
+- `client_billing_plans_select_access` → `billing_plans_select_access`
+- `client_billing_plans_update_access` → `billing_plans_update_access`
+- `client_billing_plans_delete_access` → `billing_plans_delete_access`
+- `client_payments_insert_access` → `payments_insert_access`
+- `client_payments_select_access` → `payments_select_access`
+- `client_payments_update_access` → `payments_update_access`
+- `client_payments_delete_access` → `payments_delete_access`
+- `client_feature_access_select_access` → `feature_access_select_access`
+- `client_feature_access_write_coach` → `feature_access_write_coach`
+- `client_auth_select_sysadmin` → `client_credentials_select_sysadmin`
+- `client_auth_write_sysadmin` → `client_credentials_write_sysadmin`
+- `client_sessions_select_sysadmin` → `client_auth_sessions_select_sysadmin`
+- `payment_logs_insert_access` → `payment_events_insert_access`
+- `payment_logs_select_access` → `payment_events_select_access`
+- `payment_logs_update_access` → `payment_events_update_access`
+- `payment_logs_delete_access` → `payment_events_delete_access`
+
+SQL functions to update:
+- `prevent_client_payment_delete` — update body to reference `payments`
+- `is_active_or_historical_coach_for_student` — update body to reference `coaching_assignments`
+- `has_client_coach_access` — update body to reference `coaching_assignments`
+- `is_client_primary_coach` — update body to reference `coaching_assignments`
+
+#### Migration I — Support and system
+
+```sql
+ALTER TABLE tickets RENAME TO support_tickets;
+ALTER TABLE ticket_comments RENAME TO support_replies;
+ALTER TABLE ticket_upvotes RENAME TO support_votes;
+ALTER TABLE ticket_subscriptions RENAME TO support_subscriptions;
+ALTER TABLE push_subscriptions RENAME TO device_tokens;
+ALTER TABLE notification_preferences RENAME TO notification_settings;
+ALTER TABLE account_deletion_requests RENAME TO deletion_requests;
+ALTER TABLE payment_logs RENAME TO payment_events;
+```
+
+RLS policies to drop and recreate:
+- All `tickets_*` → `support_tickets_*`
+- All `ticket_comments_*` → `support_replies_*`
+- All `ticket_upvotes_*` → `support_votes_*`
+- All `ticket_subscriptions_*` → `support_subscriptions_*`
+- All `push_subscriptions_*` → `device_tokens_*`
+- All `notification_preferences_*` → `notification_settings_*`
+
+SQL functions to update:
+- `set_tickets_updated_at` → `set_support_tickets_updated_at`
+- `sync_ticket_upvotes_count` → `sync_support_votes_count`
+
+---
+
+## Phase 5 — Enum renames
+
+Create one migration for all enum changes:
+
+```sql
+-- Rename enums
+ALTER TYPE meal_log_type RENAME TO diary_entry_type;
+ALTER TYPE meal_item_type RENAME TO nutrition_plan_item_type;
+ALTER TYPE meal_group_status RENAME TO nutrition_plan_status;
+ALTER TYPE meal_group_assignment_status RENAME TO nutrition_plan_assignment_status;
+ALTER TYPE meal_day_of_week RENAME TO day_of_week;
+ALTER TYPE session_location_type RENAME TO workout_location;
+ALTER TYPE session_slot RENAME TO workout_slot;
+ALTER TYPE client_checkin_status RENAME TO client_review_status;
+
+-- Fix snack/snacks duplicate in diary_entry_type
+-- Step 1: backfill
+UPDATE diary_entries SET meal_type = 'snack' WHERE meal_type = 'snacks';
+-- Step 2: remove value (requires recreating enum in Postgres)
+-- Create new enum without 'snacks', alter column, drop old
+
+-- Consolidate meal_assignment_status into nutrition_plan_assignment_status
+-- (migrate any meal_assignment_status columns to nutrition_plan_assignment_status)
+DROP TYPE meal_assignment_status;
+
+-- Consolidate checkin_status into client_review_status
+-- (migrate any checkin_status columns to client_review_status)
+DROP TYPE checkin_status;
+```
+
+Also update `client_module_key` enum values that reference old table names:
+- `"meal_plan"` → `"nutrition_plan"`
+- `"meal_logging"` → `"diary"`
+- `"training_plan"` → `"program"`
+
+---
+
+## Phase 6 — Column renames (global pass)
+
+One migration for all remaining column renames not covered in earlier phases:
+
+```sql
+-- profiles
+ALTER TABLE profiles RENAME COLUMN onboarding_completed TO is_onboarding_completed;
+
+-- Remove created_by_user_id from diary_items (inherit from parent diary_entries)
+ALTER TABLE diary_items DROP COLUMN created_by_user_id;
+ALTER TABLE diary_items DROP COLUMN created_by_client_id;
+
+-- Remove legacy user_id from workouts (already have subject_user_id + created_by_user_id)
+ALTER TABLE workouts DROP COLUMN user_id;
+
+-- Remove legacy user_id from workout_cardio (already have execution_id → workout_logs)
+ALTER TABLE workout_cardio DROP COLUMN user_id;
+```
+
+---
+
+## Phase 7 — Application code updates
+
+After all migrations are applied, update every reference in the codebase. This is the largest code change.
+
+### Strategy
+Use a global find-and-replace pass per table, then run `npm run typecheck` to catch misses.
+
+### Key files that will need heavy updates:
+- `app/actions/nutrition-manual.ts` — all `meal_logs`, `meal_log_items`, `meal_log_sections`, `meal_item_favorites`, `meal_groups`, `meal_group_plans`, `meal_group_items`, `meal_group_assignments` references
+- `app/actions/meal-groups.ts` — entire file
+- `app/actions/nutrition-dashboard.ts` — all nutrition table refs
+- `app/actions/workout.ts` — `training_sessions`, `strength_sets`, `cardio_sessions`
+- `app/actions/admin.ts` — all table references + variable renames
+- `app/actions/supplements.ts` — `supplement_catalog`, `supplement_assignments`
+- `app/actions/coach-tools.ts` — coaching table refs
+- `hooks/use-nutrition-manual.ts` — query key strings
+- `hooks/use-nutrition-data.ts` — query key strings
+- `hooks/use-meal-groups.ts` — entire file
+- `lib/nutrition/` — all files
+- `lib/query-keys-nutrition.ts` — all key strings
+- `types/database.ts` — regenerate from Supabase after migrations, OR manually rename all table keys
+
+### Specific string replacements in TypeScript code (not exhaustive — run typecheck after):
+
+| Old string | New string | Context |
+|---|---|---|
+| `.from("meal_logs")` | `.from("diary_entries")` | All action files |
+| `.from("meal_log_items")` | `.from("diary_items")` | All action files |
+| `.from("meal_log_sections")` | `.from("diary_sections")` | All action files |
+| `.from("meal_item_favorites")` | `.from("diary_favorites")` | All action files |
+| `.from("daily_macro_compliance")` | `.from("diary_compliance")` | All action files |
+| `.from("meal_groups")` | `.from("nutrition_plans")` | All action files |
+| `.from("meal_group_plans")` | `.from("nutrition_plan_days")` | All action files |
+| `.from("meal_group_items")` | `.from("nutrition_plan_items")` | All action files |
+| `.from("meal_group_assignments")` | `.from("nutrition_plan_assignments")` | All action files |
+| `.from("training_sessions")` | `.from("workouts")` | All action files |
+| `.from("strength_sets")` | `.from("workout_sets")` | All action files |
+| `.from("cardio_sessions")` | `.from("workout_cardio")` | All action files |
+| `.from("workout_executions")` | `.from("workout_logs")` | All action files |
+| `.from("exercise_catalog")` | `.from("exercises")` | All action files |
+| `.from("exercise_prs")` | `.from("personal_records")` | All action files |
+| `.from("training_plans")` | `.from("programs")` | All action files |
+| `.from("fitness_goals")` | `.from("goals")` | All action files |
+| `.from("goal_progress_history")` | `.from("goal_history")` | All action files |
+| `.from("supplement_catalog")` | `.from("supplements")` | All action files |
+| `.from("supplement_assignments")` | `.from("supplement_prescriptions")` | All action files |
+| `.from("body_measurements")` | `.from("measurements")` | All action files |
+| `.from("daily_activity")` | `.from("checkins")` | All action files |
+| `.from("sleep_log")` | `.from("checkin_sleep")` | All action files |
+| `.from("vitals_log")` | `.from("checkin_vitals")` | All action files |
+| `.from("tickets")` | `.from("support_tickets")` | All action files |
+| `.from("ticket_comments")` | `.from("support_replies")` | All action files |
+| `.from("push_subscriptions")` | `.from("device_tokens")` | All action files |
+| `.from("notification_preferences")` | `.from("notification_settings")` | All action files |
+| `.from("client_checkins")` | `.from("client_reviews")` | All action files |
+| `.from("coach_notes")` | `.from("client_notes")` | All action files |
+| `.from("coach_client_assignments")` | `.from("coaching_assignments")` | All action files |
+| `.from("client_plan_assignments")` | `.from("program_assignments")` | All action files |
+| `owner_user_id` | `created_by_user_id` | `nutrition_plans`, `supplements` queries |
+| `meal_group_id` (FK reference) | `nutrition_plan_id` | All diary + plan queries |
+| `can_access_meal_group` | `can_access_nutrition_plan` | RLS function calls |
+| `can_manage_meal_group` | `can_manage_nutrition_plan` | RLS function calls |
+| `sync_meal_log_totals` | `sync_diary_entry_totals` | Internal function calls |
+
+### TypeScript type renames in `types/database.ts`:
+Regenerate the file from Supabase CLI after all migrations:
+```bash
+supabase gen types typescript --linked > types/database.ts
+```
+
+If regeneration is not possible, manually rename every table key in the `Tables` object to match the new names.
+
+### Query key strings
+Update all query key definitions in `lib/query-keys-nutrition.ts`, `lib/query-keys.ts`, and any other query key files to use the new names.
+
+---
+
+## Phase 8 — Verification
+
+Run all of these. All must pass before closing this task.
+
+```bash
+# Type safety
+npm run typecheck   # zero errors
+
+# Lint
+npm run lint        # zero errors
+
+# Confirm no old table names remain in TS code
+grep -rn '"meal_logs"\|"meal_log_items"\|"meal_log_sections"\|"meal_item_favorites"' app/ hooks/ lib/ components/ --include="*.ts" --include="*.tsx"
+grep -rn '"meal_groups"\|"meal_group_plans"\|"meal_group_items"\|"meal_group_assignments"' app/ hooks/ lib/ components/ --include="*.ts" --include="*.tsx"
+grep -rn '"training_sessions"\|"strength_sets"\|"cardio_sessions"' app/ hooks/ lib/ components/ --include="*.ts" --include="*.tsx"
+grep -rn '"exercise_catalog"\|"exercise_prs"\|"training_plans"\|"fitness_goals"' app/ hooks/ lib/ components/ --include="*.ts" --include="*.tsx"
+grep -rn '"supplement_catalog"\|"supplement_assignments"\|"body_measurements"\|"daily_activity"' app/ hooks/ lib/ components/ --include="*.ts" --include="*.tsx"
+grep -rn '"sleep_log"\|"vitals_log"\|"coach_notes"\|"client_checkins"\|"coach_client_assignments"' app/ hooks/ lib/ components/ --include="*.ts" --include="*.tsx"
+grep -rn '"tickets"\b\|"ticket_comments"\|"push_subscriptions"\|"notification_preferences"' app/ hooks/ lib/ components/ --include="*.ts" --include="*.tsx"
+grep -rn 'owner_user_id' app/ hooks/ lib/ components/ --include="*.ts" --include="*.tsx"
+grep -rn 'onboarding_completed' app/ hooks/ lib/ components/ --include="*.ts" --include="*.tsx"
+# All of the above must return empty
+```
+
+Smoke-test the following pages in the browser after deployment:
+- `/nutrition/diary` — log a meal
+- `/nutrition/meal-planner` — view and edit a plan
+- `/workouts` — log and view a workout
+- `/exercises` — browse exercises
+- `/supplements` — view assigned supplements
+- `/measurements` — log a measurement
+- `/check-in` — complete a check-in
+- `/goals` — view goals
+- `/support` — open a ticket
+- `/clients/[id]` — view a client profile
+
+### [E-066] Engineer Update — A-063 implemented + architect cross-check completed (2026-04-01)
+
+- Scope completed:
+  - Phase 1 nutrition rename pass completed in code/types plus migration [20260401100000_a063_nutrition_schema_revamp.sql](supabase/migrations/20260401100000_a063_nutrition_schema_revamp.sql)
+  - Phase 2 training rename pass completed in code/types plus migration [20260401110000_a063_training_schema_revamp.sql](supabase/migrations/20260401110000_a063_training_schema_revamp.sql)
+  - Phase 3 health rename pass completed in code/types plus migration [20260401120000_a063_health_schema_revamp.sql](supabase/migrations/20260401120000_a063_health_schema_revamp.sql)
+  - Phase 4 goals / supplements / coaching / support / system rename pass completed in code/types plus migration [20260401130000_a063_platform_schema_revamp.sql](supabase/migrations/20260401130000_a063_platform_schema_revamp.sql)
+  - Phase 5 enum rename / consolidation migration added at [20260401140000_a063_enum_revamp.sql](supabase/migrations/20260401140000_a063_enum_revamp.sql)
+  - Phase 6 column cleanup migration added at [20260401150000_a063_column_cleanup.sql](supabase/migrations/20260401150000_a063_column_cleanup.sql)
+  - Phase 7 application code updated across actions, hooks, client portal constants, query keys, pages, and `types/database.ts`
+
+- Notable implementation details:
+  - repaired the broken support import paths created by the bulk rename pass
+  - finished the leftover program/nutrition-plan FK renames (`plan_day_id`, `template_plan_id`, `source_plan_id`)
+  - renamed client portal module keys from `training_plan` / `meal_plan` / `meal_logging` to `program` / `nutrition_plan` / `diary`
+  - renamed the remaining workout execution exercise references to `workout_log_exercises`
+  - cleaned stale old schema metadata strings from `types/database.ts`
+
+- Validation completed:
+  - `npm run typecheck` → pass
+  - `npm run lint` → pass
+  - architect Phase 8 grep suite re-run locally with `rg` equivalents against `app/`, `hooks/`, `lib/`, and `components/` → all returned empty
+  - additional broad old-name sweeps across `app components hooks lib scripts tests types utils` for the A-063 table list → empty
+
+- Remaining non-sandbox verification:
+  - migrations were authored but not pushed/applied in this environment
+  - architect-requested browser smoke checks were not run in this turn

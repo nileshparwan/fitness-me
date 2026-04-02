@@ -8,7 +8,7 @@ import { LucideIcon } from "lucide-react";
 import { useUnitLabels, useUnitSystem } from "@/stores/use-settings-store";
 import { displayWeight } from "@/utils/unit-conversion";
 
-type WorkoutLog = Database['public']['Tables']['strength_sets']['Row'];
+type WorkoutLog = Database['public']['Tables']['workout_sets']['Row'];
 type StatTileProps = {
   label: string;
   value: string | number;

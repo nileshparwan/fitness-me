@@ -25,7 +25,7 @@ type WorkoutRow = {
   status: string | null;
   date: string | Date;
   duration_minutes: number | null;
-  strength_sets: Array<{ id: string }>;
+  workout_sets: Array<{ id: string }>;
 };
 
 function normalizeWorkoutStatus(status: string | null | undefined): WorkoutStatus {
@@ -54,7 +54,7 @@ function statusPillClass(status: WorkoutStatus) {
 }
 
 function WorkoutCard({ workout, variant }: { workout: WorkoutRow; variant: "list" | "grid" }) {
-  const setCount = workout.strength_sets?.length ?? 0;
+  const setCount = workout.workout_sets?.length ?? 0;
   const duration = workout.duration_minutes && workout.duration_minutes > 0 ? `${workout.duration_minutes} min` : null;
   const normalizedStatus = normalizeWorkoutStatus(workout.status);
 

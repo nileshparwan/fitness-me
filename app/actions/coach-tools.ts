@@ -48,37 +48,37 @@ import {
 import { isWeightUnit, weightUnit, type UnitSystem } from "@/utils/unit-conversion";
 
 type ClientRow = Database["public"]["Tables"]["clients"]["Row"];
-type AssignmentRow = Database["public"]["Tables"]["client_plan_assignments"]["Row"];
-type AssignmentSessionRow = Database["public"]["Tables"]["client_plan_assignment_sessions"]["Row"];
-type TemplateRow = Database["public"]["Tables"]["coach_plan_templates"]["Row"];
-type TemplateSessionRow = Database["public"]["Tables"]["coach_plan_template_sessions"]["Row"];
-type WorkoutInsert = Database["public"]["Tables"]["training_sessions"]["Insert"];
-type WorkoutSessionRow = Database["public"]["Tables"]["training_sessions"]["Row"];
-type StrengthSetInsert = Database["public"]["Tables"]["strength_sets"]["Insert"];
-type CardioSessionInsert = Database["public"]["Tables"]["cardio_sessions"]["Insert"];
-type CheckinInsert = Database["public"]["Tables"]["client_checkins"]["Insert"];
-type CheckinRow = Database["public"]["Tables"]["client_checkins"]["Row"];
-type CheckinUpdate = Database["public"]["Tables"]["client_checkins"]["Update"];
-type CoachNoteInsert = Database["public"]["Tables"]["coach_notes"]["Insert"];
-type CoachNoteRow = Database["public"]["Tables"]["coach_notes"]["Row"];
-type CoachNoteUpdate = Database["public"]["Tables"]["coach_notes"]["Update"];
-type PaymentInsert = Database["public"]["Tables"]["client_payments"]["Insert"];
-type PaymentRow = Database["public"]["Tables"]["client_payments"]["Row"];
-type PaymentUpdate = Database["public"]["Tables"]["client_payments"]["Update"];
-type BillingPlanInsert = Database["public"]["Tables"]["client_billing_plans"]["Insert"];
-type BillingPlanUpdate = Database["public"]["Tables"]["client_billing_plans"]["Update"];
-type PaymentLogInsert = Database["public"]["Tables"]["payment_logs"]["Insert"];
-type GoalInsert = Database["public"]["Tables"]["fitness_goals"]["Insert"];
-type GoalUpdate = Database["public"]["Tables"]["fitness_goals"]["Update"];
-type GoalProgressHistoryInsert = Database["public"]["Tables"]["goal_progress_history"]["Insert"];
+type AssignmentRow = Database["public"]["Tables"]["program_assignments"]["Row"];
+type AssignmentSessionRow = Database["public"]["Tables"]["program_assignment_workouts"]["Row"];
+type TemplateRow = Database["public"]["Tables"]["program_templates"]["Row"];
+type TemplateSessionRow = Database["public"]["Tables"]["program_template_workouts"]["Row"];
+type WorkoutInsert = Database["public"]["Tables"]["workouts"]["Insert"];
+type WorkoutSessionRow = Database["public"]["Tables"]["workouts"]["Row"];
+type StrengthSetInsert = Database["public"]["Tables"]["workout_sets"]["Insert"];
+type CardioSessionInsert = Database["public"]["Tables"]["workout_cardio"]["Insert"];
+type CheckinInsert = Database["public"]["Tables"]["client_reviews"]["Insert"];
+type CheckinRow = Database["public"]["Tables"]["client_reviews"]["Row"];
+type CheckinUpdate = Database["public"]["Tables"]["client_reviews"]["Update"];
+type CoachNoteInsert = Database["public"]["Tables"]["client_notes"]["Insert"];
+type CoachNoteRow = Database["public"]["Tables"]["client_notes"]["Row"];
+type CoachNoteUpdate = Database["public"]["Tables"]["client_notes"]["Update"];
+type PaymentInsert = Database["public"]["Tables"]["payments"]["Insert"];
+type PaymentRow = Database["public"]["Tables"]["payments"]["Row"];
+type PaymentUpdate = Database["public"]["Tables"]["payments"]["Update"];
+type BillingPlanInsert = Database["public"]["Tables"]["billing_plans"]["Insert"];
+type BillingPlanUpdate = Database["public"]["Tables"]["billing_plans"]["Update"];
+type PaymentLogInsert = Database["public"]["Tables"]["payment_events"]["Insert"];
+type GoalInsert = Database["public"]["Tables"]["goals"]["Insert"];
+type GoalUpdate = Database["public"]["Tables"]["goals"]["Update"];
+type GoalProgressHistoryInsert = Database["public"]["Tables"]["goal_history"]["Insert"];
 type ClientInsert = Database["public"]["Tables"]["clients"]["Insert"];
 type ClientUpdate = Database["public"]["Tables"]["clients"]["Update"];
 type PreferredUnitsRow = Pick<Database["public"]["Tables"]["profiles"]["Row"], "preferred_units">;
 
 export type ClientStatus = Database["public"]["Enums"]["client_status"];
-export type SessionSlot = Database["public"]["Enums"]["session_slot"];
-export type SessionLocationType = Database["public"]["Enums"]["session_location_type"];
-export type ClientCheckinStatus = Database["public"]["Enums"]["client_checkin_status"];
+export type SessionSlot = Database["public"]["Enums"]["workout_slot"];
+export type SessionLocationType = Database["public"]["Enums"]["workout_location"];
+export type ClientCheckinStatus = Database["public"]["Enums"]["client_review_status"];
 export type CoachNoteTag = Database["public"]["Enums"]["coach_note_tag"];
 export type PaymentMethod = Database["public"]["Enums"]["payment_method"];
 type DbPaymentStatus = Database["public"]["Enums"]["payment_status"];
@@ -167,7 +167,7 @@ const logWorkoutSchema = z.object({
   performed_on: z.string().date(),
   started_at: z.string().datetime().nullable().optional(),
   completed_at: z.string().datetime().nullable().optional(),
-  session_slot: z.enum(SESSION_SLOT_VALUES).default("other"),
+  workout_slot: z.enum(SESSION_SLOT_VALUES).default("other"),
   session_label: z.string().trim().max(120).nullable().optional(),
   location_type: z.enum(SESSION_LOCATION_TYPE_VALUES).nullable().optional(),
   location_label: z.string().trim().max(180).nullable().optional(),
@@ -178,7 +178,7 @@ const logWorkoutSchema = z.object({
   plan_assignment_id: z.string().uuid().nullable().optional(),
   plan_session_id: z.string().uuid().nullable().optional(),
   mark_plan_session_resolved: z.boolean().default(false),
-  strength_sets: z
+  workout_sets: z
     .array(
       z.object({
         exercise_name: z.string().trim().min(1).max(180),
@@ -191,7 +191,7 @@ const logWorkoutSchema = z.object({
       })
     )
     .optional(),
-  cardio_sessions: z
+  workout_cardio: z
     .array(
       z.object({
         activity_type: z.string().trim().min(1).max(120),
@@ -296,7 +296,7 @@ async function insertClientCheckinRow(input: {
   supabase: DbClient;
   payload: CheckinInsert;
 }): Promise<CheckinRow> {
-  const { data, error } = await input.supabase.from("client_checkins").insert(input.payload).select("*").single();
+  const { data, error } = await input.supabase.from("client_reviews").insert(input.payload).select("*").single();
   if (error) throw new Error(error.message);
   return data as CheckinRow;
 }
@@ -307,7 +307,7 @@ async function updateClientCheckinRow(input: {
   updates: CheckinUpdate;
 }): Promise<CheckinRow> {
   const { data, error } = await input.supabase
-    .from("client_checkins")
+    .from("client_reviews")
     .update(input.updates)
     .eq("id", input.checkinId)
     .select("*")
@@ -368,7 +368,7 @@ async function insertCoachNoteRow(input: {
   supabase: DbClient;
   payload: CoachNoteInsert;
 }): Promise<CoachNoteRow> {
-  const { data, error } = await input.supabase.from("coach_notes").insert(input.payload).select("*").single();
+  const { data, error } = await input.supabase.from("client_notes").insert(input.payload).select("*").single();
   if (error) throw new Error(error.message);
   return data as CoachNoteRow;
 }
@@ -380,7 +380,7 @@ async function updateCoachNoteRow(input: {
   updates: CoachNoteUpdate;
 }): Promise<CoachNoteRow> {
   const { data, error } = await input.supabase
-    .from("coach_notes")
+    .from("client_notes")
     .update(input.updates)
     .eq("id", input.noteId)
     .eq("client_id", input.clientId)
@@ -437,7 +437,7 @@ async function insertClientPaymentRow(input: {
   supabase: DbClient;
   payload: PaymentInsert;
 }): Promise<PaymentRow> {
-  const { data, error } = await input.supabase.from("client_payments").insert(input.payload).select("*").single();
+  const { data, error } = await input.supabase.from("payments").insert(input.payload).select("*").single();
   if (error) throw new Error(error.message);
   return data as PaymentRow;
 }
@@ -447,7 +447,7 @@ async function deleteClientPaymentRow(input: {
   paymentId: string;
 }): Promise<Pick<PaymentRow, "id" | "client_id">> {
   const { data, error } = await input.supabase
-    .from("client_payments")
+    .from("payments")
     .delete()
     .eq("id", input.paymentId)
     .select("id, client_id")
@@ -462,7 +462,7 @@ async function updateClientPaymentRow(input: {
   changes: PaymentUpdate;
 }): Promise<Pick<PaymentRow, "id" | "client_id">> {
   const { data, error } = await input.supabase
-    .from("client_payments")
+    .from("payments")
     .update(input.changes)
     .eq("id", input.paymentId)
     .select("id, client_id")
@@ -785,7 +785,7 @@ async function listActiveAssignmentsByClientIds(
   const assignmentRows: Array<Pick<AssignmentRow, "id" | "client_id">> = [];
   for (const clientIdChunk of chunkArray(clientIds, 20)) {
     const { data, error } = await supabase
-      .from("client_plan_assignments")
+      .from("program_assignments")
       .select("id, client_id")
       .in("client_id", clientIdChunk)
       .eq("coach_id", coachId)
@@ -806,7 +806,7 @@ async function listAssignmentSessionsByAssignmentIds(
 
   for (const assignmentIdChunk of chunkArray(assignmentIds, 20)) {
     const { data: sessionsChunk, error: sessionsError } = await supabase
-      .from("client_plan_assignment_sessions")
+      .from("program_assignment_workouts")
       .select("*")
       .in("assignment_id", assignmentIdChunk)
       .order("sequence_no", { ascending: true });
@@ -842,7 +842,7 @@ async function fetchClientSessionsByPerformedRange(input: {
   includePerformedOnSort?: boolean;
 }): Promise<WorkoutSessionRow[]> {
   let query = input.supabase
-    .from("training_sessions")
+    .from("workouts")
     .select("*")
     .eq("subject_client_id", input.clientId)
     .gte("performed_on", input.startDate)
@@ -863,7 +863,7 @@ async function fetchClientCheckinsByClientId(input: {
   clientId: string;
 }): Promise<CheckinRow[]> {
   const { data, error } = await input.supabase
-    .from("client_checkins")
+    .from("client_reviews")
     .select("*")
     .eq("subject_client_id", input.clientId)
     .order("submitted_at", { ascending: false });
@@ -876,7 +876,7 @@ async function fetchCoachNotesByClientId(input: {
   clientId: string;
 }): Promise<CoachNoteRow[]> {
   const { data, error } = await input.supabase
-    .from("coach_notes")
+    .from("client_notes")
     .select("*")
     .eq("client_id", input.clientId)
     .is("archived_at", null)
@@ -956,8 +956,8 @@ export type CoachPaymentTransactionRow = {
   updated_at: string;
 };
 
-export type BillingPlanRow = Database["public"]["Tables"]["client_billing_plans"]["Row"];
-export type PaymentLogRow = Database["public"]["Tables"]["payment_logs"]["Row"];
+export type BillingPlanRow = Database["public"]["Tables"]["billing_plans"]["Row"];
+export type PaymentLogRow = Database["public"]["Tables"]["payment_events"]["Row"];
 
 export type ClientBillingPlanWithRemaining = BillingPlanRow & {
   sessions_remaining: number;
@@ -1046,8 +1046,8 @@ export type ClientPaymentLogStats = {
   total_sessions: number;
 };
 
-type GoalRow = Database["public"]["Tables"]["fitness_goals"]["Row"];
-type GoalProgressHistoryRow = Database["public"]["Tables"]["goal_progress_history"]["Row"];
+type GoalRow = Database["public"]["Tables"]["goals"]["Row"];
+type GoalProgressHistoryRow = Database["public"]["Tables"]["goal_history"]["Row"];
 type GoalProgressHistorySlice = Pick<
   GoalProgressHistoryRow,
   | "goal_id"
@@ -1064,7 +1064,7 @@ type GoalListFallbackMode = "none" | "assigned_by_self";
 
 const GOAL_SELECTED_COLUMNS = [
   "id",
-  "user_id",
+  "created_by_user_id",
   "goal_type",
   "custom_description",
   "start_value",
@@ -1136,15 +1136,15 @@ function normalizeGoalCategory(value: string) {
 }
 
 function isGoalHistoryTableMissing(message: string) {
-  return /(goal_progress_history|relation .* does not exist|schema cache)/i.test(message);
+  return /(goal_history|relation .* does not exist|schema cache)/i.test(message);
 }
 
 function isPaymentLogsTableMissing(message: string) {
-  return /payment_logs|relation .*payment_logs.*does not exist|schema cache/i.test(message);
+  return /payment_events|relation .*payment_events.*does not exist|schema cache/i.test(message);
 }
 
 function isClientBillingPlansTableMissing(message: string) {
-  return /client_billing_plans|relation .*client_billing_plans.*does not exist|schema cache/i.test(message);
+  return /billing_plans|relation .*billing_plans.*does not exist|schema cache/i.test(message);
 }
 
 const BILLING_TABLES_MIGRATION_MESSAGE =
@@ -1170,17 +1170,17 @@ type FallbackColumn =
 
 function missingFitnessGoalsColumn(message: string): FallbackColumn | null {
   const checks: Array<[FallbackColumn, RegExp[]]> = [
-    ["notes", [/['"]notes['"] column of ['"]fitness_goals['"] in the schema cache/i, /column\s+fitness_goals\.notes\s+does not exist/i]],
-    ["start_date", [/['"]start_date['"] column of ['"]fitness_goals['"] in the schema cache/i, /column\s+fitness_goals\.start_date\s+does not exist/i]],
-    ["start_value", [/['"]start_value['"] column of ['"]fitness_goals['"] in the schema cache/i, /column\s+fitness_goals\.start_value\s+does not exist/i]],
-    ["start_weight", [/['"]start_weight['"] column of ['"]fitness_goals['"] in the schema cache/i, /column\s+fitness_goals\.start_weight\s+does not exist/i]],
-    ["goal_direction", [/['"]goal_direction['"] column of ['"]fitness_goals['"] in the schema cache/i, /column\s+fitness_goals\.goal_direction\s+does not exist/i]],
-    ["check_in_interval_days", [/['"]check_in_interval_days['"] column of ['"]fitness_goals['"] in the schema cache/i, /column\s+fitness_goals\.check_in_interval_days\s+does not exist/i]],
-    ["linked_exercise_id", [/['"]linked_exercise_id['"] column of ['"]fitness_goals['"] in the schema cache/i, /column\s+fitness_goals\.linked_exercise_id\s+does not exist/i]],
-    ["linked_program_id", [/['"]linked_program_id['"] column of ['"]fitness_goals['"] in the schema cache/i, /column\s+fitness_goals\.linked_program_id\s+does not exist/i]],
+    ["notes", [/['"]notes['"] column of ['"]goals['"] in the schema cache/i, /column\s+goals\.notes\s+does not exist/i]],
+    ["start_date", [/['"]start_date['"] column of ['"]goals['"] in the schema cache/i, /column\s+goals\.start_date\s+does not exist/i]],
+    ["start_value", [/['"]start_value['"] column of ['"]goals['"] in the schema cache/i, /column\s+goals\.start_value\s+does not exist/i]],
+    ["start_weight", [/['"]start_weight['"] column of ['"]goals['"] in the schema cache/i, /column\s+goals\.start_weight\s+does not exist/i]],
+    ["goal_direction", [/['"]goal_direction['"] column of ['"]goals['"] in the schema cache/i, /column\s+goals\.goal_direction\s+does not exist/i]],
+    ["check_in_interval_days", [/['"]check_in_interval_days['"] column of ['"]goals['"] in the schema cache/i, /column\s+goals\.check_in_interval_days\s+does not exist/i]],
+    ["linked_exercise_id", [/['"]linked_exercise_id['"] column of ['"]goals['"] in the schema cache/i, /column\s+goals\.linked_exercise_id\s+does not exist/i]],
+    ["linked_program_id", [/['"]linked_program_id['"] column of ['"]goals['"] in the schema cache/i, /column\s+goals\.linked_program_id\s+does not exist/i]],
     [
       "is_personal_goal",
-      [/['"]is_personal_goal['"] column of ['"]fitness_goals['"] in the schema cache/i, /column\s+fitness_goals\.is_personal_goal\s+does not exist/i],
+      [/['"]is_personal_goal['"] column of ['"]goals['"] in the schema cache/i, /column\s+goals\.is_personal_goal\s+does not exist/i],
     ],
   ];
   for (const [col, patterns] of checks) {
@@ -1191,7 +1191,7 @@ function missingFitnessGoalsColumn(message: string): FallbackColumn | null {
 
 function isFitnessGoalStatusConstraintError(message: string) {
   const lower = message.toLowerCase();
-  return lower.includes("fitness_goals") && lower.includes("status") && lower.includes("check constraint");
+  return lower.includes("goals") && lower.includes("status") && lower.includes("check constraint");
 }
 
 function isRlsViolationError(error: { code?: string | null; message: string } | null | undefined) {
@@ -1329,7 +1329,7 @@ async function listGoalLinkNamesById(supabase: DbClient, rows: GoalRow[]): Promi
 
   for (const chunk of chunkArray(exerciseIds, 20)) {
     const { data, error } = await supabase
-      .from("exercise_catalog")
+      .from("exercises")
       .select("id, name")
       .in("id", chunk);
     if (error) throw new Error(error.message);
@@ -1340,7 +1340,7 @@ async function listGoalLinkNamesById(supabase: DbClient, rows: GoalRow[]): Promi
 
   for (const chunk of chunkArray(programIds, 20)) {
     const { data, error } = await supabase
-      .from("training_plans")
+      .from("programs")
       .select("id, name")
       .in("id", chunk);
     if (error) throw new Error(error.message);
@@ -1384,7 +1384,7 @@ function mapGoalRowToClientItem(input: {
   return {
     id: input.row.id,
     client_id: input.clientId,
-    user_id: input.row.user_id,
+    user_id: input.row.created_by_user_id,
     goal: titleFromGoalRow(input.row),
     category: normalizeGoalCategory(input.row.goal_type || "custom"),
     start_value: metrics.start,
@@ -1435,9 +1435,9 @@ async function queryGoalsWithFallback(input: {
     columns: string[],
     withPersonalFlagFilter: boolean
   ): Promise<{ data: GoalRow[] | null; error: { message: string } | null }> => {
-    let query = (input.supabase.from("fitness_goals") as any)
+    let query = (input.supabase.from("goals") as any)
       .select(columns.join(", "))
-      .eq("user_id", input.userId)
+      .eq("created_by_user_id", input.userId)
       .order("updated_at", { ascending: false })
       .order("priority", { ascending: true })
       .limit(input.limit);
@@ -1517,7 +1517,7 @@ async function insertGoalWithFallback(input: {
   retryOnRls?: boolean;
 }): Promise<GoalRow> {
   let attemptedInsert: GoalInsert = { ...input.row };
-  let insertResult = await input.supabase.from("fitness_goals").insert(attemptedInsert).select("*").single();
+  let insertResult = await input.supabase.from("goals").insert(attemptedInsert).select("*").single();
 
   for (let attempt = 0; attempt < 6 && insertResult.error; attempt += 1) {
     const missingColumn = missingFitnessGoalsColumn(insertResult.error.message);
@@ -1525,7 +1525,7 @@ async function insertGoalWithFallback(input: {
     const fallbackPayload = { ...attemptedInsert } as Record<string, unknown>;
     delete fallbackPayload[missingColumn];
     attemptedInsert = fallbackPayload as GoalInsert;
-    insertResult = await input.supabase.from("fitness_goals").insert(attemptedInsert).select("*").single();
+    insertResult = await input.supabase.from("goals").insert(attemptedInsert).select("*").single();
   }
 
   if (insertResult.error && isFitnessGoalStatusConstraintError(insertResult.error.message)) {
@@ -1535,7 +1535,7 @@ async function insertGoalWithFallback(input: {
   }
 
   if (insertResult.error && input.retryOnRls && isRlsViolationError(insertResult.error)) {
-    insertResult = await input.supabase.from("fitness_goals").insert(attemptedInsert).select("*").single();
+    insertResult = await input.supabase.from("goals").insert(attemptedInsert).select("*").single();
   }
 
   if (insertResult.error) throw new Error(insertResult.error.message);
@@ -1554,10 +1554,10 @@ async function updateGoalWithFallback(input: {
     Object.keys(attemptedUpdates).length === 0
       ? { data: input.existing as GoalRow, error: null as null | { message: string } }
       : await input.supabase
-          .from("fitness_goals")
+          .from("goals")
           .update(attemptedUpdates)
           .eq("id", input.goalId)
-          .eq("user_id", input.userId)
+          .eq("created_by_user_id", input.userId)
           .select("*")
           .single();
 
@@ -1572,10 +1572,10 @@ async function updateGoalWithFallback(input: {
       break;
     }
     updateResult = await input.supabase
-      .from("fitness_goals")
+      .from("goals")
       .update(attemptedUpdates)
       .eq("id", input.goalId)
-      .eq("user_id", input.userId)
+      .eq("created_by_user_id", input.userId)
       .select("*")
       .single();
   }
@@ -1665,7 +1665,7 @@ async function listGoalHistoryByGoalIds(
   for (const chunk of chunkArray(goalIds, 20)) {
     const orFilter = chunk.map((goalId) => `goal_id.eq.${goalId}`).join(",");
     let query = supabase
-      .from("goal_progress_history")
+      .from("goal_history")
       .select(selectFields)
       .or(orFilter)
       .order("snapshot_at", { ascending: false });
@@ -1711,7 +1711,7 @@ async function writeGoalProgressSnapshot(input: {
   const status = normalizeClientGoalStatus(input.goal.status);
 
   const { data: latestRows, error: latestError } = await input.supabase
-    .from("goal_progress_history")
+    .from("goal_history")
     .select(
       "id, progress_percent, current_value, target_value, current_weight, target_weight, status"
     )
@@ -1737,7 +1737,7 @@ async function writeGoalProgressSnapshot(input: {
 
   const historyPayload: GoalProgressHistoryInsert = {
     goal_id: input.goal.id,
-    user_id: input.goal.user_id,
+    user_id: input.goal.created_by_user_id,
     progress_percent: progressPercent,
     current_value: input.goal.current_value,
     target_value: input.goal.target_value,
@@ -1746,7 +1746,7 @@ async function writeGoalProgressSnapshot(input: {
     status,
     recorded_by_user_id: input.actorId,
   };
-  const { error: insertError } = await input.supabase.from("goal_progress_history").insert(historyPayload);
+  const { error: insertError } = await input.supabase.from("goal_history").insert(historyPayload);
   if (insertError) {
     if (isGoalHistoryTableMissing(insertError.message)) return;
     throw new Error(insertError.message);
@@ -2150,7 +2150,7 @@ export async function createClientGoalAction(input: z.input<typeof createGoalSch
       const resolvedTargetWeight = isWeightCategory ? resolvedTargetValue : payload.target_weight ?? null;
 
       const insertPayload: GoalInsert = {
-        user_id: client.linked_user_id,
+        created_by_user_id: client.linked_user_id,
         assigned_by_id: user.id,
         goal_type: normalizedCategory,
         custom_description: payload.goal,
@@ -2216,10 +2216,10 @@ export async function updateClientGoalAction(input: z.input<typeof updateGoalSch
       const unitSystem = await getPreferredUnitsForUser(supabase, client.linked_user_id);
 
       const { data: existing, error: existingError } = await supabase
-        .from("fitness_goals")
+        .from("goals")
         .select("*")
         .eq("id", payload.goal_id)
-        .eq("user_id", client.linked_user_id)
+        .eq("created_by_user_id", client.linked_user_id)
         .maybeSingle();
       if (existingError) throw new Error(existingError.message);
       if (!existing) throw new Error("Goal not found.");
@@ -2312,19 +2312,19 @@ export async function deleteClientGoalAction(input: z.input<typeof deleteGoalSch
       }
 
       const { data: existingGoal, error: existingGoalError } = await supabase
-        .from("fitness_goals")
+        .from("goals")
         .select("id")
         .eq("id", payload.goal_id)
-        .eq("user_id", client.linked_user_id)
+        .eq("created_by_user_id", client.linked_user_id)
         .maybeSingle();
       if (existingGoalError) throw new Error(existingGoalError.message);
       if (!existingGoal) throw new Error("Goal not found.");
 
       const { error: deleteError } = await supabase
-        .from("fitness_goals")
+        .from("goals")
         .delete()
         .eq("id", payload.goal_id)
-        .eq("user_id", client.linked_user_id);
+        .eq("created_by_user_id", client.linked_user_id);
       if (deleteError) throw new Error(deleteError.message);
 
       revalidateCoachPaths(payload.client_id);
@@ -2389,7 +2389,7 @@ export async function createMyGoalAction(input: z.input<typeof createMyGoalSchem
       const resolvedTargetWeight = isWeightCategory ? resolvedTargetValue : payload.target_weight ?? null;
 
       const insertPayload: GoalInsert = {
-        user_id: user.id,
+        created_by_user_id: user.id,
         assigned_by_id: user.id,
         is_personal_goal: true,
         goal_type: normalizedCategory,
@@ -2451,10 +2451,10 @@ export async function updateMyGoalAction(input: z.input<typeof updateMyGoalSchem
       const unitSystem = await getPreferredUnitsForUser(supabase, user.id);
 
       const { data: existing, error: existingError } = await supabase
-        .from("fitness_goals")
+        .from("goals")
         .select("*")
         .eq("id", payload.goal_id)
-        .eq("user_id", user.id)
+        .eq("created_by_user_id", user.id)
         .maybeSingle();
       if (existingError) throw new Error(existingError.message);
       if (!existing) throw new Error("Goal not found.");
@@ -2544,19 +2544,19 @@ export async function deleteMyGoalAction(input: z.input<typeof deleteMyGoalSchem
       const { supabase, user } = await requireActor();
 
       const { data: existingGoal, error: existingGoalError } = await supabase
-        .from("fitness_goals")
+        .from("goals")
         .select("id")
         .eq("id", payload.goal_id)
-        .eq("user_id", user.id)
+        .eq("created_by_user_id", user.id)
         .maybeSingle();
       if (existingGoalError) throw new Error(existingGoalError.message);
       if (!existingGoal) throw new Error("Goal not found.");
 
       const { error: deleteError } = await supabase
-        .from("fitness_goals")
+        .from("goals")
         .delete()
         .eq("id", payload.goal_id)
-        .eq("user_id", user.id);
+        .eq("created_by_user_id", user.id);
       if (deleteError) throw new Error(deleteError.message);
 
       revalidatePersonalGoalPaths();
@@ -2574,7 +2574,7 @@ export async function listCoachPlanTemplatesAction() {
     action: async () => {
       const { supabase } = await requireActor();
       const { data: templates, error: templatesError } = await supabase
-        .from("coach_plan_templates")
+        .from("program_templates")
         .select("*")
         .order("updated_at", { ascending: false });
       if (templatesError) throw new Error(templatesError.message);
@@ -2587,7 +2587,7 @@ export async function listCoachPlanTemplatesAction() {
       const sessions: TemplateSessionRow[] = [];
       for (const templateIdChunk of chunkArray(templateIds, 20)) {
         const { data: sessionsChunk, error: sessionsError } = await supabase
-          .from("coach_plan_template_sessions")
+          .from("program_template_workouts")
           .select("*")
           .in("template_id", templateIdChunk)
           .order("sequence_no", { ascending: true });
@@ -2618,7 +2618,7 @@ export async function createCoachPlanTemplateAction(input: z.input<typeof create
     action: async () => {
       const { supabase, user } = await requireActor();
       const { data: template, error: templateError } = await supabase
-        .from("coach_plan_templates")
+        .from("program_templates")
         .insert({
           coach_id: user.id,
           name: payload.name,
@@ -2629,7 +2629,7 @@ export async function createCoachPlanTemplateAction(input: z.input<typeof create
         .single();
       if (templateError) throw new Error(templateError.message);
 
-      const sessionRows: Database["public"]["Tables"]["coach_plan_template_sessions"]["Insert"][] = payload.sessions.map(
+      const sessionRows: Database["public"]["Tables"]["program_template_workouts"]["Insert"][] = payload.sessions.map(
         (session, index) => ({
           template_id: template.id,
           sequence_no: index + 1,
@@ -2641,7 +2641,7 @@ export async function createCoachPlanTemplateAction(input: z.input<typeof create
           metadata: (session.metadata || {}) as Json,
         })
       );
-      const { error: sessionError } = await supabase.from("coach_plan_template_sessions").insert(sessionRows);
+      const { error: sessionError } = await supabase.from("program_template_workouts").insert(sessionRows);
       if (sessionError) throw new Error(sessionError.message);
 
       revalidateCoachPaths();
@@ -2660,8 +2660,8 @@ export async function assignTemplateToClientAction(input: z.input<typeof assignT
 
       const [{ data: template, error: templateError }, { data: existingActiveAssignment, error: existingActiveAssignmentError }] =
         await Promise.all([
-          supabase.from("coach_plan_templates").select("*").eq("id", payload.template_id).single(),
-          supabase.from("client_plan_assignments").select("id, client_id").eq("template_id", payload.template_id).eq("status", "active").limit(1).maybeSingle(),
+          supabase.from("program_templates").select("*").eq("id", payload.template_id).single(),
+          supabase.from("program_assignments").select("id, client_id").eq("template_id", payload.template_id).eq("status", "active").limit(1).maybeSingle(),
         ]);
       if (templateError) throw new Error(templateError.message);
       if (existingActiveAssignmentError) throw new Error(existingActiveAssignmentError.message);
@@ -2673,14 +2673,14 @@ export async function assignTemplateToClientAction(input: z.input<typeof assignT
       }
 
       const { data: templateSessions, error: templateSessionsError } = await supabase
-        .from("coach_plan_template_sessions")
+        .from("program_template_workouts")
         .select("*")
         .eq("template_id", payload.template_id)
         .order("sequence_no", { ascending: true });
       if (templateSessionsError) throw new Error(templateSessionsError.message);
 
       const { data: assignment, error: assignmentError } = await supabase
-        .from("client_plan_assignments")
+        .from("program_assignments")
         .insert({
           client_id: payload.client_id,
           template_id: payload.template_id,
@@ -2699,7 +2699,7 @@ export async function assignTemplateToClientAction(input: z.input<typeof assignT
         throw new Error(assignmentError.message);
       }
 
-      const snapshotRows: Database["public"]["Tables"]["client_plan_assignment_sessions"]["Insert"][] =
+      const snapshotRows: Database["public"]["Tables"]["program_assignment_workouts"]["Insert"][] =
         ((templateSessions || []) as TemplateSessionRow[]).map((session) => ({
           assignment_id: assignment.id,
           template_session_id: session.id,
@@ -2713,7 +2713,7 @@ export async function assignTemplateToClientAction(input: z.input<typeof assignT
         }));
       if (snapshotRows.length > 0) {
         const { error: snapshotError } = await supabase
-          .from("client_plan_assignment_sessions")
+          .from("program_assignment_workouts")
           .insert(snapshotRows);
         if (snapshotError) throw new Error(snapshotError.message);
       }
@@ -2732,7 +2732,7 @@ export async function listClientAssignmentsAction(clientId: string) {
       const { supabase } = await requireActor();
 
       const { data: assignments, error: assignmentsError } = await supabase
-        .from("client_plan_assignments")
+        .from("program_assignments")
         .select("*")
         .eq("client_id", clientId)
         .order("assigned_at", { ascending: false });
@@ -2756,7 +2756,7 @@ export async function getClientNextSessionAction(clientId: string) {
     action: async () => {
       const { supabase } = await requireActor();
       const { data: assignment, error: assignmentError } = await supabase
-        .from("client_plan_assignments")
+        .from("program_assignments")
         .select("*")
         .eq("client_id", clientId)
         .eq("status", "active")
@@ -2787,8 +2787,8 @@ export async function logClientWorkoutAction(input: z.input<typeof logWorkoutSch
     payload: {
       client_id: payload.client_id,
       session_name: payload.name,
-      has_strength_sets: Boolean(payload.strength_sets?.length),
-      has_cardio_sessions: Boolean(payload.cardio_sessions?.length),
+      has_strength_sets: Boolean(payload.workout_sets?.length),
+      has_cardio_sessions: Boolean(payload.workout_cardio?.length),
     },
     action: async () => {
       const { supabase, user } = await requireActor();
@@ -2801,7 +2801,6 @@ export async function logClientWorkoutAction(input: z.input<typeof logWorkoutSch
       if (!client) throw new Error("Client not found.");
 
       const workoutPayload: WorkoutInsert = {
-        user_id: user.id,
         created_by_user_id: user.id,
         subject_client_id: payload.client_id,
         subject_user_id: client.linked_user_id ?? null,
@@ -2810,7 +2809,7 @@ export async function logClientWorkoutAction(input: z.input<typeof logWorkoutSch
         date: payload.started_at || `${payload.performed_on}T00:00:00.000Z`,
         started_at: payload.started_at || null,
         completed_at: payload.completed_at || null,
-        session_slot: payload.session_slot,
+        session_slot: payload.workout_slot,
         session_label: payload.session_label || null,
         location_type: payload.location_type || null,
         location_label: payload.location_label || null,
@@ -2823,13 +2822,13 @@ export async function logClientWorkoutAction(input: z.input<typeof logWorkoutSch
       };
 
       const { data: workout, error: workoutError } = await supabase
-        .from("training_sessions")
+        .from("workouts")
         .insert(workoutPayload)
         .select("*")
         .single();
       if (workoutError) throw new Error(workoutError.message);
 
-      const strengthRows: StrengthSetInsert[] = (payload.strength_sets || []).map((set, index) => ({
+      const strengthRows: StrengthSetInsert[] = (payload.workout_sets || []).map((set, index) => ({
         workout_id: workout.id,
         exercise_name: set.exercise_name,
         set_number: set.set_number,
@@ -2839,9 +2838,8 @@ export async function logClientWorkoutAction(input: z.input<typeof logWorkoutSch
         notes: set.notes || null,
         entry_sequence: set.entry_sequence ?? index,
       }));
-      const cardioRows: CardioSessionInsert[] = (payload.cardio_sessions || []).map((cardio, index) => ({
+      const cardioRows: CardioSessionInsert[] = (payload.workout_cardio || []).map((cardio, index) => ({
         workout_id: workout.id,
-        user_id: user.id,
         date: payload.performed_on,
         activity_type: cardio.activity_type,
         duration_minutes: cardio.duration_minutes,
@@ -2860,7 +2858,7 @@ export async function logClientWorkoutAction(input: z.input<typeof logWorkoutSch
 
       if (payload.mark_plan_session_resolved && payload.plan_session_id) {
         const { error: resolveError } = await supabase
-          .from("client_plan_assignment_sessions")
+          .from("program_assignment_workouts")
           .update({ completed_at: payload.completed_at || new Date().toISOString() })
           .eq("id", payload.plan_session_id);
         if (resolveError) throw new Error(resolveError.message);
@@ -3194,7 +3192,7 @@ async function getBillingPlanByIdForCoach(
   billingPlanId: string
 ): Promise<BillingPlanRow> {
   const { data, error } = await supabase
-    .from("client_billing_plans")
+    .from("billing_plans")
     .select("*")
     .eq("id", billingPlanId)
     .eq("coach_id", coachId)
@@ -3210,7 +3208,7 @@ async function getActiveBillingPlanForClient(input: {
   allowMissingTableFallback?: boolean;
 }): Promise<BillingPlanRow | null> {
   const { data, error } = await input.supabase
-    .from("client_billing_plans")
+    .from("billing_plans")
     .select("*")
     .eq("client_id", input.clientId)
     .eq("coach_id", input.coachId)
@@ -3235,7 +3233,7 @@ async function listBillingPlansForClient(input: {
   allowMissingTableFallback?: boolean;
 }): Promise<BillingPlanRow[]> {
   const { data, error } = await input.supabase
-    .from("client_billing_plans")
+    .from("billing_plans")
     .select("*")
     .eq("client_id", input.clientId)
     .eq("coach_id", input.coachId)
@@ -3257,7 +3255,7 @@ async function listCoachBillingPlans(input: {
   allowMissingTableFallback?: boolean;
 }): Promise<{ rows: BillingPlanRow[]; missing: boolean }> {
   const { data, error } = await input.supabase
-    .from("client_billing_plans")
+    .from("billing_plans")
     .select("*")
     .eq("coach_id", input.coachId)
     .order("created_at", { ascending: false });
@@ -3279,7 +3277,7 @@ async function listCoachPaymentLogsForDate(input: {
   allowMissingTableFallback?: boolean;
 }): Promise<{ rows: PaymentLogRow[]; missing: boolean }> {
   const { data, error } = await input.supabase
-    .from("payment_logs")
+    .from("payment_events")
     .select("*")
     .eq("coach_id", input.coachId)
     .eq("session_date", input.sessionDate)
@@ -3303,7 +3301,7 @@ async function countCoachPaymentLogsSince(input: {
   allowMissingTableFallback?: boolean;
 }): Promise<{ count: number; missing: boolean }> {
   let query = input.supabase
-    .from("payment_logs")
+    .from("payment_events")
     .select("id", { count: "exact", head: true })
     .eq("coach_id", input.coachId)
     .neq("status", "voided");
@@ -3329,7 +3327,7 @@ async function listClientPaymentLogAmountsSince(input: {
   allowMissingTableFallback?: boolean;
 }): Promise<{ rows: Array<{ amount: number | null; status: string }>; missing: boolean }> {
   const { data, error } = await input.supabase
-    .from("payment_logs")
+    .from("payment_events")
     .select("amount, status, session_date")
     .eq("coach_id", input.coachId)
     .eq("client_id", input.clientId)
@@ -3361,7 +3359,7 @@ async function listClientPaymentLogsPage(input: {
   allowMissingTableFallback?: boolean;
 }): Promise<{ rows: PaymentLogRow[]; total: number; missing: boolean }> {
   let query = input.supabase
-    .from("payment_logs")
+    .from("payment_events")
     .select("*", { count: "exact" })
     .eq("client_id", input.clientId)
     .eq("coach_id", input.coachId)
@@ -3412,7 +3410,7 @@ export async function createBillingPlanAction(input: z.input<typeof createBillin
       const { supabase, user } = await requireActor();
 
       const { error: deactivateError } = await supabase
-        .from("client_billing_plans")
+        .from("billing_plans")
         .update({ is_active: false })
         .eq("client_id", payload.client_id)
         .eq("coach_id", user.id)
@@ -3437,7 +3435,7 @@ export async function createBillingPlanAction(input: z.input<typeof createBillin
       };
 
       const { data, error } = await supabase
-        .from("client_billing_plans")
+        .from("billing_plans")
         .insert(insertPayload)
         .select("*")
         .single();
@@ -3475,7 +3473,7 @@ export async function updateBillingPlanAction(input: z.input<typeof updateBillin
       if (payload.is_active !== undefined) changes.is_active = payload.is_active;
 
       const { data, error } = await supabase
-        .from("client_billing_plans")
+        .from("billing_plans")
         .update(changes)
         .eq("id", payload.id)
         .eq("coach_id", user.id)
@@ -3542,7 +3540,7 @@ export async function renewPackageAction(input: z.input<typeof renewPackageSchem
 
       const nextPurchased = Number(plan.sessions_purchased || 0) + payload.sessions_to_add;
       const { data: updatedPlan, error: updateError } = await supabase
-        .from("client_billing_plans")
+        .from("billing_plans")
         .update({ sessions_purchased: nextPurchased })
         .eq("id", plan.id)
         .eq("coach_id", user.id)
@@ -3563,7 +3561,7 @@ export async function renewPackageAction(input: z.input<typeof renewPackageSchem
           `Package renewal: +${payload.sessions_to_add} sessions`,
       };
       const { data: paymentRow, error: paymentError } = await supabase
-        .from("client_payments")
+        .from("payments")
         .insert(paymentInsert)
         .select("*")
         .single();
@@ -3572,7 +3570,7 @@ export async function renewPackageAction(input: z.input<typeof renewPackageSchem
       revalidateCoachPaths(plan.client_id);
       return {
         plan: billingPlanWithRemaining(updatedPlan as BillingPlanRow),
-        payment: paymentRow as Database["public"]["Tables"]["client_payments"]["Row"],
+        payment: paymentRow as Database["public"]["Tables"]["payments"]["Row"],
       };
     },
   });
@@ -3627,7 +3625,7 @@ export async function logSessionAction(input: z.input<typeof logSessionSchema>) 
       const plan = activePlan;
 
       const { data: existingLog, error: existingLogError } = await supabase
-        .from("payment_logs")
+        .from("payment_events")
         .select("id, status")
         .eq("coach_id", user.id)
         .eq("client_id", payload.client_id)
@@ -3637,7 +3635,7 @@ export async function logSessionAction(input: z.input<typeof logSessionSchema>) 
       if (existingLog?.id) {
         if (existingLog.status === "voided") {
           const { error: cleanupError } = await supabase
-            .from("payment_logs")
+            .from("payment_events")
             .delete()
             .eq("id", existingLog.id)
             .eq("coach_id", user.id);
@@ -3659,7 +3657,7 @@ export async function logSessionAction(input: z.input<typeof logSessionSchema>) 
         }
         const nextUsed = Number(plan.sessions_used || 0) + 1;
         const { data: updatedPlan, error: updatePlanError } = await supabase
-          .from("client_billing_plans")
+          .from("billing_plans")
           .update({ sessions_used: nextUsed })
           .eq("id", plan.id)
           .eq("coach_id", user.id)
@@ -3682,7 +3680,7 @@ export async function logSessionAction(input: z.input<typeof logSessionSchema>) 
         notes: payload.notes || null,
       };
       const { data: createdLog, error: createLogError } = await supabase
-        .from("payment_logs")
+        .from("payment_events")
         .insert(logInsert)
         .select("*")
         .single();
@@ -3705,7 +3703,7 @@ export async function deleteSessionLogAction(input: z.input<typeof deleteSession
     action: async () => {
       const { supabase, user } = await requireActor();
       const { data: logRow, error: logError } = await supabase
-        .from("payment_logs")
+        .from("payment_events")
         .select("*")
         .eq("id", payload.log_id)
         .eq("coach_id", user.id)
@@ -3714,7 +3712,7 @@ export async function deleteSessionLogAction(input: z.input<typeof deleteSession
       const log = logRow as PaymentLogRow;
 
       const { error: deleteError } = await supabase
-        .from("payment_logs")
+        .from("payment_events")
         .delete()
         .eq("id", payload.log_id)
         .eq("coach_id", user.id);
@@ -3726,7 +3724,7 @@ export async function deleteSessionLogAction(input: z.input<typeof deleteSession
         (log.billing_type_snapshot === "session_package" || log.billing_type_snapshot === "program")
       ) {
         const { data: plan, error: planError } = await supabase
-          .from("client_billing_plans")
+          .from("billing_plans")
           .select("id, sessions_used")
           .eq("id", log.billing_plan_id)
           .eq("coach_id", user.id)
@@ -3735,7 +3733,7 @@ export async function deleteSessionLogAction(input: z.input<typeof deleteSession
         if (plan) {
           const nextUsed = Math.max(0, Number(plan.sessions_used || 0) - 1);
           const { error: updatePlanError } = await supabase
-            .from("client_billing_plans")
+            .from("billing_plans")
             .update({ sessions_used: nextUsed })
             .eq("id", log.billing_plan_id)
             .eq("coach_id", user.id);
@@ -3754,7 +3752,7 @@ export async function listClientPaymentLogsAction(
 ): Promise<ClientPaymentLogsPayload> {
   const payload = listClientPaymentLogsSchema.parse(input);
   return runTrackedAction({
-    eventName: "coach.client.payment_logs.list",
+    eventName: "coach.client.payment_events.list",
     payload,
     action: async () => {
       const { supabase, user } = await requireActor();
@@ -3798,7 +3796,7 @@ export async function listClientPaymentLogsAction(
 
 export async function getClientPaymentLogStatsAction(clientId: string): Promise<ClientPaymentLogStats> {
   return runTrackedAction({
-    eventName: "coach.client.payment_logs.stats",
+    eventName: "coach.client.payment_events.stats",
     payload: { client_id: clientId },
     action: async () => {
       const { supabase, user } = await requireActor();
@@ -3860,14 +3858,14 @@ export async function listClientPaymentsAction(clientId: string) {
     action: async () => {
       const { supabase } = await requireActor();
       const { data, error } = await supabase
-        .from("client_payments")
+        .from("payments")
         .select("*")
         .eq("client_id", clientId)
         .order("payment_date", { ascending: false });
 
       if (error) throw new Error(error.message);
 
-      const rows = (data || []) as Database["public"]["Tables"]["client_payments"]["Row"][];
+      const rows = (data || []) as Database["public"]["Tables"]["payments"]["Row"][];
       const alerts: PaymentAlert[] = [];
       const now = new Date();
       const activePeriods = rows.filter((row) => row.status === "paid" && row.period_start && row.period_end);
@@ -3906,7 +3904,7 @@ export async function listClientPaymentsAction(clientId: string) {
   });
 }
 
-function derivePaymentDescription(row: Database["public"]["Tables"]["client_payments"]["Row"]) {
+function derivePaymentDescription(row: Database["public"]["Tables"]["payments"]["Row"]) {
   const note = (row.notes || "").trim();
   if (!note) return "Client payment";
   const firstLine = note.split("\n").find((line) => line.trim().length > 0);
@@ -3939,7 +3937,7 @@ function computeNextMonthlyBillingDate(cycleDay: number | null, todayIso: string
 }
 
 function paymentIsOverdue(
-  row: Pick<Database["public"]["Tables"]["client_payments"]["Row"], "status" | "payment_date">,
+  row: Pick<Database["public"]["Tables"]["payments"]["Row"], "status" | "payment_date">,
   todayIso: string
 ) {
   return row.status === "pending" && row.payment_date < todayIso;
@@ -4024,7 +4022,7 @@ export async function listCoachPaymentsDashboardAction(
 
       const escapedSearch = escapeLikePattern((payload.search || "").trim()).slice(0, 120);
       let transactionsQuery = supabase
-        .from("client_payments")
+        .from("payments")
         .select(
           "id, client_id, amount, currency, status, payment_date, method, notes, created_at, updated_at",
           { count: "exact" }
@@ -4067,7 +4065,7 @@ export async function listCoachPaymentsDashboardAction(
       ] = await Promise.all([
         transactionsQuery,
         supabase
-          .from("client_payments")
+          .from("payments")
           .select("client_id, amount, status, payment_date, period_end")
           .eq("coach_id", user.id)
           .order("payment_date", { ascending: false })
@@ -4105,10 +4103,10 @@ export async function listCoachPaymentsDashboardAction(
         todayLogsResult.missing || weekLogsCountResult.missing || monthLogsCountResult.missing;
 
       const transactionRows =
-        (transactionsRes.data || []) as Array<Database["public"]["Tables"]["client_payments"]["Row"]>;
+        (transactionsRes.data || []) as Array<Database["public"]["Tables"]["payments"]["Row"]>;
       const allPayments = (metricsRes.data || []) as Array<
         Pick<
-          Database["public"]["Tables"]["client_payments"]["Row"],
+          Database["public"]["Tables"]["payments"]["Row"],
           "client_id" | "amount" | "status" | "payment_date" | "period_end"
         >
       >;

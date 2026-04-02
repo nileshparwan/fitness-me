@@ -7,9 +7,9 @@ import { getClientPortalContext } from "@/lib/client-portal/session";
 
 const MODULE_NAV = [
   { key: "workouts", href: "/client/workouts", label: "Workouts" },
-  { key: "training_plan", href: "/client/training", label: "Training Plan" },
-  { key: "meal_plan", href: "/client/meal-plan", label: "Meal Plan" },
-  { key: "meal_logging", href: "/client/nutrition", label: "Nutrition" },
+  { key: "program", href: "/client/training", label: "Program" },
+  { key: "nutrition_plan", href: "/client/meal-plan", label: "Nutrition Plan" },
+  { key: "diary", href: "/client/nutrition", label: "Diary" },
   { key: "steps_tracking", href: "/client/steps", label: "Steps" },
   { key: "goals", href: "/client/goals", label: "Goals" },
   { key: "check_ins", href: "/client/check-ins", label: "Check-ins" },
@@ -72,4 +72,3 @@ export default async function ClientPortalLayout({
     </main>
   );
 }
-

@@ -9,7 +9,7 @@ import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/types/database";
 
 type TicketVisibilityRow = Pick<
-  Database["public"]["Tables"]["tickets"]["Row"],
+  Database["public"]["Tables"]["support_tickets"]["Row"],
   "id" | "user_id" | "is_public" | "status"
 >;
 
@@ -48,7 +48,7 @@ async function requireActor() {
 async function getTicketContext(ticketId: string): Promise<TicketVisibilityRow | null> {
   const admin = createAdminClient();
   const { data, error } = await admin
-    .from("tickets")
+    .from("support_tickets")
     .select("id, user_id, is_public, status")
     .eq("id", ticketId)
     .maybeSingle();
@@ -74,7 +74,7 @@ export async function getTicketSubscriptionStateAction(ticketId: string): Promis
       }
 
       const { data, error } = await supabase
-        .from("ticket_subscriptions")
+        .from("support_subscriptions")
         .select("ticket_id")
         .eq("ticket_id", safeTicketId)
         .eq("user_id", user.id)
@@ -101,10 +101,10 @@ export async function subscribeToTicketAction(ticketId: string): Promise<void> {
         throw new Error("Ticket not found or unavailable");
       }
       if (ticket.status === "closed") {
-        throw new Error("Closed tickets cannot be subscribed");
+        throw new Error("Closed support_tickets cannot be subscribed");
       }
 
-      const { error } = await supabase.from("ticket_subscriptions").upsert(
+      const { error } = await supabase.from("support_subscriptions").upsert(
         {
           ticket_id: safeTicketId,
           user_id: user.id,
@@ -137,7 +137,7 @@ export async function unsubscribeFromTicketAction(ticketId: string): Promise<voi
       }
 
       const { error } = await supabase
-        .from("ticket_subscriptions")
+        .from("support_subscriptions")
         .delete()
         .eq("ticket_id", safeTicketId)
         .eq("user_id", user.id);

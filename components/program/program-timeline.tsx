@@ -16,7 +16,7 @@ import { removeItemsFromProgram } from "@/app/actions/program";
 import { Database } from "@/types/database";
 import { withToastFeedback } from "@/lib/ui/toast-feedback";
 
-type Workout = Database['public']['Tables']['training_sessions']['Row'];
+type Workout = Database['public']['Tables']['workouts']['Row'];
 
 interface UIProgramItem {
   id: string;
@@ -83,9 +83,9 @@ const TimelineItem = memo(function TimelineItem({ item, index, programId }: { it
   };
 
   const workoutWithStrengthSets = item.workouts as
-    | ({ strength_sets?: Array<{ count: number | null }> } & typeof item.workouts)
+    | ({ workout_sets?: Array<{ count: number | null }> } & typeof item.workouts)
     | undefined;
-  const exerciseCount = workoutWithStrengthSets?.strength_sets?.[0]?.count ?? 0;
+  const exerciseCount = workoutWithStrengthSets?.workout_sets?.[0]?.count ?? 0;
 
   const handleRemove = async (e: React.MouseEvent) => {
     e.preventDefault();   // Prevent default link behavior

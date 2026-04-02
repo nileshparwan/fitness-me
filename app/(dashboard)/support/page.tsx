@@ -162,7 +162,7 @@ export default function SupportDashboardPage() {
                   setPublicSearch(event.target.value);
                   setPublicPage(0);
                 }}
-                placeholder="Search community tickets..."
+                placeholder="Search community support_tickets..."
                 className="h-9 pl-8"
               />
             </div>
@@ -233,12 +233,12 @@ export default function SupportDashboardPage() {
             {publicQuery.isLoading && !publicQuery.data ? (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Loading tickets...
+                Loading support_tickets...
               </div>
             ) : null}
             {publicQuery.isError ? (
               <p className="text-sm text-destructive">
-                {publicQuery.error instanceof Error ? publicQuery.error.message : "Failed to load tickets"}
+                {publicQuery.error instanceof Error ? publicQuery.error.message : "Failed to load support_tickets"}
               </p>
             ) : null}
             {publicQuery.isPlaceholderData ? (
@@ -256,7 +256,7 @@ export default function SupportDashboardPage() {
                   rows={publicQuery.data?.rows || []}
                   mode="public"
                   isLoading={publicQuery.isLoading}
-                  emptyText="No matching public tickets."
+                  emptyText="No matching public support_tickets."
                   hasMore={false}
                   onLoadMore={() => {}}
                   loadingMore={false}
@@ -311,7 +311,7 @@ export default function SupportDashboardPage() {
                   setMySearch(event.target.value);
                   setMyPage(0);
                 }}
-                placeholder="Search your tickets..."
+                placeholder="Search your support_tickets..."
                 className="h-9 pl-8"
               />
             </div>
@@ -358,12 +358,12 @@ export default function SupportDashboardPage() {
             {myQuery.isLoading && !myQuery.data ? (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Loading your tickets...
+                Loading your support_tickets...
               </div>
             ) : null}
             {myQuery.isError ? (
               <p className="text-sm text-destructive">
-                {myQuery.error instanceof Error ? myQuery.error.message : "Failed to load tickets"}
+                {myQuery.error instanceof Error ? myQuery.error.message : "Failed to load support_tickets"}
               </p>
             ) : null}
             {myQuery.isPlaceholderData ? (
@@ -381,7 +381,7 @@ export default function SupportDashboardPage() {
                   rows={myQuery.data?.rows || []}
                   mode="mine"
                   isLoading={myQuery.isLoading}
-                  emptyText="You have not submitted tickets yet."
+                  emptyText="You have not submitted support_tickets yet."
                   hasMore={false}
                   onLoadMore={() => {}}
                   loadingMore={false}

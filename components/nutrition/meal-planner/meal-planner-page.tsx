@@ -23,6 +23,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { Textarea } from "@/components/ui/textarea";
 import {
   resolveNutritionSubject,
+  useNutritionDefaultMealGroupPreference,
   useNutritionGroupMutations,
   useNutritionMealGroup,
   useNutritionMealGroupOptions,
@@ -175,6 +176,8 @@ export function MealPlannerPage() {
   const upsertGroupMutateAsync = mutations.upsertGroup.mutateAsync;
   const selectedMealGroupId = useNutritionSelectedMealGroupId();
   const setSelectedMealGroupId = useSetNutritionSelectedMealGroupId();
+  const { defaultMealGroupId, persistDefaultMealGroupId, clearDefaultMealGroupId } =
+    useNutritionDefaultMealGroupPreference();
   const selectedDay = useNutritionSelectedPlannerDay();
   const { activeSubjectType, activeSubjectId } = useNutritionActiveSubject();
   const customSectionOrderByDay = useNutritionPlannerMealTypeOrder(selectedDay);
@@ -226,6 +229,7 @@ export function MealPlannerPage() {
         });
         if (result?.id) {
           setSelectedMealGroupId(result.id);
+          void persistDefaultMealGroupId(result.id).catch(() => null);
         }
         if (!silent) {
           toast.success("Meal planner created");
@@ -236,13 +240,13 @@ export function MealPlannerPage() {
         return null;
       }
     },
-    [setSelectedMealGroupId, upsertGroupMutateAsync]
+    [persistDefaultMealGroupId, setSelectedMealGroupId, upsertGroupMutateAsync]
   );
 
   const resetPlanner = useCallback(async () => {
     if (!groupId) return;
     try {
-      const deleted = await withToastFeedback(mutations.deleteGroup.mutateAsync({ meal_group_id: groupId }), {
+      const deleted = await withToastFeedback(mutations.deleteGroup.mutateAsync({ nutrition_plan_id: groupId }), {
         loading: "Resetting planner...",
         success: "Planner reset",
         error: "Unable to reset planner",
@@ -267,6 +271,13 @@ export function MealPlannerPage() {
     if (groupsQuery.data?.has_more) return;
     setSelectedMealGroupId("");
   }, [selectedMealGroupId, groups, groupsQuery.data?.has_more, setSelectedMealGroupId]);
+
+  useEffect(() => {
+    if (!defaultMealGroupId) return;
+    if (groups.some((row) => row.id === defaultMealGroupId)) return;
+    if (groupsQuery.data?.has_more) return;
+    void clearDefaultMealGroupId().catch(() => null);
+  }, [clearDefaultMealGroupId, defaultMealGroupId, groups, groupsQuery.data?.has_more]);
 
   useEffect(() => {
     if (groupId) return;
@@ -474,7 +485,7 @@ export function MealPlannerPage() {
 
       if (!editingItemId) {
         await mutations.createItem.mutateAsync({
-          meal_plan_id: dayPlan.id,
+          plan_day_id: dayPlan.id,
           type: mealType,
           title,
           quantity: value.quantity,
@@ -527,7 +538,7 @@ export function MealPlannerPage() {
     if (!selectedPlan) return;
     await withToastFeedback(
       mutations.updatePlanNote.mutateAsync({
-        meal_plan_id: selectedPlan.id,
+        plan_day_id: selectedPlan.id,
         notes: notesDraft.trim() || null,
       }),
       {
@@ -542,7 +553,7 @@ export function MealPlannerPage() {
     if (!groupId) return;
     try {
       const result = await mutations.copyDay.mutateAsync({
-        meal_group_id: groupId,
+        nutrition_plan_id: groupId,
         source_day: copyFromDay,
         target_day: selectedDay,
       });
@@ -572,7 +583,7 @@ export function MealPlannerPage() {
     if (!selectedPlan) return;
     try {
       await mutations.createItem.mutateAsync({
-        meal_plan_id: selectedPlan.id,
+        plan_day_id: selectedPlan.id,
         type: favoriteType,
         title: item.item_name,
         quantity: item.quantity,

@@ -17,7 +17,7 @@ import type {
 import { resolveGoalTargetForDate, type SubjectRef } from "@/app/actions/_lib/resolve-nutrition-targets";
 
 type MealLogRangeRow = Pick<
-  Database["public"]["Tables"]["meal_logs"]["Row"],
+  Database["public"]["Tables"]["diary_entries"]["Row"],
   | "id"
   | "performed_on"
   | "total_calories"
@@ -29,12 +29,12 @@ type MealLogRangeRow = Pick<
 >;
 
 type MealLogItemProgressRow = Pick<
-  Database["public"]["Tables"]["meal_log_items"]["Row"],
+  Database["public"]["Tables"]["diary_items"]["Row"],
   "meal_log_id" | "item_name" | "calories" | "consumed_time" | "is_quick_add"
 >;
 
 type MealComplianceRow = Pick<
-  Database["public"]["Tables"]["daily_macro_compliance"]["Row"],
+  Database["public"]["Tables"]["diary_compliance"]["Row"],
   | "performed_on"
   | "overall_compliant"
   | "basis"
@@ -393,7 +393,7 @@ async function listMealLogItemsByIds(
   const results = await Promise.all(
     chunks.map((chunk) =>
       supabase
-        .from("meal_log_items")
+        .from("diary_items")
         .select("meal_log_id, item_name, calories, consumed_time, is_quick_add")
         .in("meal_log_id", chunk)
     )
@@ -799,7 +799,7 @@ export async function getNutritionProgressAction(
       const daysInRange = Math.max(1, daysBetweenInclusive(startDate, endDate));
 
       let logsQuery = supabase
-        .from("meal_logs")
+        .from("diary_entries")
         .select(
           "id, performed_on, total_calories, total_protein_g, total_carbs_g, total_fat_g, total_fiber_g, meal_type"
         )
@@ -818,7 +818,7 @@ export async function getNutritionProgressAction(
       let complianceFactsAvailable = false;
 
       let complianceQuery = supabase
-        .from("daily_macro_compliance")
+        .from("diary_compliance")
         .select(
           "performed_on, overall_compliant, basis, target_source, calories_compliant, protein_compliant, carbs_compliant, fat_compliant"
         )
@@ -945,7 +945,7 @@ export async function getNutritionProgressAction(
         const priorStartDate = subtractDays(startDate, daysInRange);
 
         let priorLogsQuery = supabase
-          .from("meal_logs")
+          .from("diary_entries")
           .select(
             "id, performed_on, total_calories, total_protein_g, total_carbs_g, total_fat_g, total_fiber_g, meal_type"
           )
@@ -962,7 +962,7 @@ export async function getNutritionProgressAction(
         let priorComplianceRows: MealComplianceRow[] = [];
         if (complianceFactsAvailable) {
           let priorComplianceQuery = supabase
-            .from("daily_macro_compliance")
+            .from("diary_compliance")
             .select(
               "performed_on, overall_compliant, basis, target_source, calories_compliant, protein_compliant, carbs_compliant, fat_compliant"
             )

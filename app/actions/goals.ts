@@ -55,7 +55,7 @@ export async function listExercisesForGoalAction(
       const { supabase } = await requireGoalSearchActor();
 
       let query = supabase
-        .from("exercise_catalog")
+        .from("exercises")
         .select("id, name, category")
         .order("name", { ascending: true })
         .order("id", { ascending: true })
@@ -103,7 +103,7 @@ export async function listProgramsForGoalAction(
       const { supabase, user } = await requireGoalSearchActor();
 
       let query = supabase
-        .from("training_plans")
+        .from("programs")
         .select("id, name, updated_at")
         .eq("user_id", user.id)
         .order("updated_at", { ascending: false })

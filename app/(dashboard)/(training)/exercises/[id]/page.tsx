@@ -27,7 +27,7 @@ export default async function ExerciseDetailPage({ params }: PageProps) {
 
   // 1. Fetch Basic Info
   const { data: exercise, error } = await supabase
-    .from("exercise_catalog")
+    .from("exercises")
     .select("*")
     .eq("id", id)
     .single();

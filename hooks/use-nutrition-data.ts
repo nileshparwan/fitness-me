@@ -1,11 +1,17 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { getNutritionDiaryDayAction } from "@/app/actions/nutrition-manual";
 import { listMealGroupsAction } from "@/app/actions/meal-groups";
-import { useMealGroupAssignments, useMealGroupDetail, useMealGroupMutations, useMealGroups } from "@/hooks/use-meal-groups";
+import {
+  useDefaultMealGroupPreference,
+  useMealGroupAssignments,
+  useMealGroupDetail,
+  useMealGroupMutations,
+  useMealGroups,
+} from "@/hooks/use-meal-groups";
 import { useNutritionDashboard } from "@/hooks/use-nutrition-dashboard";
 import type { MealGroupSubject } from "@/lib/query-keys-nutrition";
 import {
@@ -52,6 +58,35 @@ export function useNutritionGroupMutations() {
   return useMealGroupMutations();
 }
 
+export function useNutritionDefaultMealGroupPreference() {
+  const selectedMealGroupId = useNutritionSelectedMealGroupId();
+  const setSelectedMealGroupId = useSetNutritionSelectedMealGroupId();
+  const hydrationFiredRef = useRef(false);
+  const {
+    defaultMealGroupId,
+    isLoadingDefaultMealGroup,
+    isSavingDefaultMealGroup,
+    setDefaultMealGroupId,
+  } = useDefaultMealGroupPreference();
+
+  useEffect(() => {
+    if (hydrationFiredRef.current) return;
+    if (isLoadingDefaultMealGroup) return;
+    hydrationFiredRef.current = true;
+    setSelectedMealGroupId(defaultMealGroupId);
+  }, [defaultMealGroupId, isLoadingDefaultMealGroup, setSelectedMealGroupId]);
+
+  return {
+    defaultMealGroupId,
+    isLoadingDefaultMealGroup,
+    isSavingDefaultMealGroup,
+    persistDefaultMealGroupId: setDefaultMealGroupId,
+    clearDefaultMealGroupId: () => setDefaultMealGroupId(null),
+    hydrateSelectedMealGroupFromDefault: () => setSelectedMealGroupId(defaultMealGroupId),
+    selectedMealGroupId,
+  };
+}
+
 export function useNutritionDashboardData() {
   return useNutritionDashboard();
 }
@@ -64,7 +99,7 @@ type AutoMealGroupSelectionParams = {
 function pickCurrentAssignmentGroupId(
   assignments:
     | Array<{
-        meal_group_id: string;
+        nutrition_plan_id: string;
         start_date: string;
         end_date: string;
       }>
@@ -73,8 +108,8 @@ function pickCurrentAssignmentGroupId(
   if (!assignments || assignments.length === 0) return "";
   const today = toDateInput(new Date());
   const current = assignments.find((assignment) => assignment.start_date <= today && assignment.end_date >= today);
-  if (current?.meal_group_id) return current.meal_group_id.trim();
-  return assignments.find((assignment) => Boolean(assignment.meal_group_id))?.meal_group_id?.trim() || "";
+  if (current?.nutrition_plan_id) return current.nutrition_plan_id.trim();
+  return assignments.find((assignment) => Boolean(assignment.nutrition_plan_id))?.nutrition_plan_id?.trim() || "";
 }
 
 export function useNutritionAutoMealGroupSelection(params?: AutoMealGroupSelectionParams) {
@@ -83,6 +118,7 @@ export function useNutritionAutoMealGroupSelection(params?: AutoMealGroupSelecti
   const subject = params?.subject ?? storeSubject;
   const selectedMealGroupId = useNutritionSelectedMealGroupId();
   const setSelectedMealGroupId = useSetNutritionSelectedMealGroupId();
+  const { defaultMealGroupId } = useNutritionDefaultMealGroupPreference();
   const groupsQuery = useNutritionMealGroupOptions();
 
   const assignmentsQuery = useNutritionMealGroupAssignments({
@@ -105,10 +141,18 @@ export function useNutritionAutoMealGroupSelection(params?: AutoMealGroupSelecti
     if (!enabled) return;
     if (selectedMealGroupId) return;
     if (assignmentsQuery.isLoading) return;
-    const nextGroupId = activeAssignmentGroupId || fallbackActiveGroupId;
+    const nextGroupId = defaultMealGroupId || activeAssignmentGroupId || fallbackActiveGroupId;
     if (!nextGroupId) return;
     setSelectedMealGroupId(nextGroupId);
-  }, [activeAssignmentGroupId, assignmentsQuery.isLoading, enabled, fallbackActiveGroupId, selectedMealGroupId, setSelectedMealGroupId]);
+  }, [
+    activeAssignmentGroupId,
+    assignmentsQuery.isLoading,
+    defaultMealGroupId,
+    enabled,
+    fallbackActiveGroupId,
+    selectedMealGroupId,
+    setSelectedMealGroupId,
+  ]);
 
   return {
     assignmentsQuery,
@@ -143,7 +187,7 @@ export function useNutritionPrefetch() {
         getNutritionDiaryDayAction({
           performed_on: today,
           subject,
-          meal_group_id: undefined,
+          nutrition_plan_id: undefined,
         }),
       staleTime: 60_000,
     });

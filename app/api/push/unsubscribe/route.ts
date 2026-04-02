@@ -22,7 +22,7 @@ export async function POST(request: Request) {
     }
 
     const { error } = await supabase
-      .from("push_subscriptions")
+      .from("device_tokens")
       .delete()
       .eq("endpoint", body.endpoint)
       .eq("user_id", user.id);

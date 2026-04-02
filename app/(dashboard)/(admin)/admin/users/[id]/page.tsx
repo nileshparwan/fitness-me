@@ -61,7 +61,7 @@ export default function AdminUserDetailPage() {
                 <CardTitle className="text-sm text-muted-foreground">Meal Templates</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-2xl font-bold">{data?.meal_groups.length ?? 0}</p>
+                <p className="text-2xl font-bold">{data?.nutrition_plans.length ?? 0}</p>
               </CardContent>
             </Card>
           </section>
@@ -91,7 +91,7 @@ export default function AdminUserDetailPage() {
                 <CardTitle>Recent Meal Templates</CardTitle>
               </CardHeader>
               <CardContent className="space-y-2">
-                {(data?.meal_groups || []).slice(0, 8).map((plan) => (
+                {(data?.nutrition_plans || []).slice(0, 8).map((plan) => (
                   <div key={plan.id} className="rounded-lg border p-3">
                     <p className="font-medium">{plan.name || "Untitled Plan"}</p>
                     <p className="text-sm text-muted-foreground">
@@ -99,7 +99,7 @@ export default function AdminUserDetailPage() {
                     </p>
                   </div>
                 ))}
-                {(data?.meal_groups.length || 0) === 0 && (
+                {(data?.nutrition_plans.length || 0) === 0 && (
                   <p className="text-sm text-muted-foreground">No meal templates found.</p>
                 )}
               </CardContent>

@@ -8,10 +8,10 @@ import { escapeLikePattern } from "@/lib/utils/search";
 import { createClient } from "@/lib/supabase/server";
 import { Database } from "@/types/database";
 
-type ProgramRow = Database["public"]["Tables"]["training_plans"]["Row"];
-type ProgramInsert = Database["public"]["Tables"]["training_plans"]["Insert"];
-type ProgramUpdate = Database["public"]["Tables"]["training_plans"]["Update"];
-type ProgramItemInsert = Database["public"]["Tables"]["training_plan_items"]["Insert"];
+type ProgramRow = Database["public"]["Tables"]["programs"]["Row"];
+type ProgramInsert = Database["public"]["Tables"]["programs"]["Insert"];
+type ProgramUpdate = Database["public"]["Tables"]["programs"]["Update"];
+type ProgramItemInsert = Database["public"]["Tables"]["program_workouts"]["Insert"];
 type ClientRow = Database["public"]["Tables"]["clients"]["Row"];
 
 const listProgramAssigneesSchema = z.object({
@@ -67,7 +67,7 @@ async function requireProgramAccess(programId: string): Promise<{
   if (!user) throw new Error("Unauthorized");
 
   const { data: program, error: programError } = await supabase
-    .from("training_plans")
+    .from("programs")
     .select("id, user_id")
     .eq("id", programId)
     .maybeSingle();
@@ -95,20 +95,20 @@ export async function createProgram(formData: FormData) {
         description: (formData.get("description") as string) || null,
       };
 
-      const { error } = await supabase.from("training_plans").insert(payload);
+      const { error } = await supabase.from("programs").insert(payload);
       if (error) throw new Error(error.message);
       revalidatePath("/programs");
     },
   });
 }
 
-export async function updateProgram(id: string, data: Database["public"]["Tables"]["training_plans"]["Update"]) {
+export async function updateProgram(id: string, data: Database["public"]["Tables"]["programs"]["Update"]) {
   return runTrackedAction({
     eventName: "program.update",
     payload: { program_id: id },
     action: async () => {
       const supabase = await createClient();
-      const { error } = await supabase.from("training_plans").update(data).eq("id", id);
+      const { error } = await supabase.from("programs").update(data).eq("id", id);
 
       if (error) throw new Error(error.message);
       revalidatePath("/programs");
@@ -216,7 +216,7 @@ export async function assignProgramToClientAction(input: z.input<typeof assignPr
       if (payload.self) {
         const updatePayload: ProgramUpdate = { assigned_client_id: null };
         const { error: assignSelfError } = await supabase
-          .from("training_plans")
+          .from("programs")
           .update(updatePayload)
           .eq("id", payload.program_id);
         if (assignSelfError) throw new Error(assignSelfError.message);
@@ -256,7 +256,7 @@ export async function assignProgramToClientAction(input: z.input<typeof assignPr
         assigned_client_id: targetClient.id,
       };
       const { error: assignError } = await supabase
-        .from("training_plans")
+        .from("programs")
         .update(updatePayload)
         .eq("id", payload.program_id);
       if (assignError) throw new Error(assignError.message);
@@ -280,7 +280,7 @@ export async function deletePrograms(ids: string[]) {
     payload: { count: ids.length },
     action: async () => {
       const supabase = await createClient();
-      const { error } = await supabase.from("training_plans").delete().in("id", ids);
+      const { error } = await supabase.from("programs").delete().in("id", ids);
 
       if (error) throw new Error(error.message);
       revalidatePath("/programs");
@@ -299,7 +299,7 @@ export async function addWorkoutsToProgram(programId: string, workoutIds: string
       if (uniqueWorkoutIds.length === 0) return;
 
       const { data: existingItems } = await supabase
-        .from("training_plan_items")
+        .from("program_workouts")
         .select("workout_id")
         .eq("program_id", programId)
         .in("workout_id", uniqueWorkoutIds);
@@ -310,7 +310,7 @@ export async function addWorkoutsToProgram(programId: string, workoutIds: string
       if (workoutIdsToInsert.length === 0) return;
 
       const { count } = await supabase
-        .from("training_plan_items")
+        .from("program_workouts")
         .select("*", { count: "exact", head: true })
         .eq("program_id", programId);
 
@@ -324,7 +324,7 @@ export async function addWorkoutsToProgram(programId: string, workoutIds: string
         day_label: "Unscheduled",
       }));
 
-      const { error } = await supabase.from("training_plan_items").insert(items);
+      const { error } = await supabase.from("program_workouts").insert(items);
       if (error) throw new Error(error.message);
 
       revalidatePath(`/programs/${programId}`);
@@ -338,7 +338,7 @@ export async function removeItemsFromProgram(itemIds: string[], programId: strin
     payload: { program_id: programId, count: itemIds.length },
     action: async () => {
       const supabase = await createClient();
-      const { error } = await supabase.from("training_plan_items").delete().in("id", itemIds);
+      const { error } = await supabase.from("program_workouts").delete().in("id", itemIds);
 
       if (error) throw new Error(error.message);
       revalidatePath(`/programs/${programId}`);
@@ -365,7 +365,7 @@ export async function updateProgramItemOrder(
       }));
 
       const { error } = await supabase
-        .from("training_plan_items")
+        .from("program_workouts")
         .upsert(updates as ProgramItemInsert[], { onConflict: "id" });
 
       if (error) throw new Error(error.message);
@@ -385,7 +385,7 @@ export async function linkWorkoutToPrograms(workoutId: string, programIds: strin
       if (uniqueProgramIds.length === 0) return;
 
       const { data: existingItems } = await supabase
-        .from("training_plan_items")
+        .from("program_workouts")
         .select("program_id")
         .in("program_id", uniqueProgramIds)
         .eq("workout_id", workoutId);
@@ -403,7 +403,7 @@ export async function linkWorkoutToPrograms(workoutId: string, programIds: strin
         order_index: 999,
       }));
 
-      const { error } = await supabase.from("training_plan_items").insert(items);
+      const { error } = await supabase.from("program_workouts").insert(items);
       if (error) throw new Error("Failed to link programs");
     },
   });

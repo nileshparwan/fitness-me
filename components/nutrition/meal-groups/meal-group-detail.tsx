@@ -44,8 +44,8 @@ import { withToastFeedback } from "@/lib/ui/toast-feedback";
 import type { Database } from "@/types/database";
 import { cn } from "@/utils";
 
-type MealItemRow = Database["public"]["Tables"]["meal_group_items"]["Row"];
-type MealDayOfWeek = Database["public"]["Enums"]["meal_day_of_week"];
+type MealItemRow = Database["public"]["Tables"]["nutrition_plan_items"]["Row"];
+type MealDayOfWeek = Database["public"]["Enums"]["day_of_week"];
 
 function formatDateRange(start: string | null, end: string | null) {
   if (!start && !end) return "No duration";
@@ -126,7 +126,7 @@ export function MealGroupDetail({ mealGroupId }: { mealGroupId: string }) {
     return (
       rows.find(
         (assignment) =>
-          assignment.template_group_id === group.id &&
+          assignment.template_plan_id === group.id &&
           (assignment.status === "active" || assignment.status === "paused")
       ) || null
     );
@@ -273,7 +273,7 @@ export function MealGroupDetail({ mealGroupId }: { mealGroupId: string }) {
     if (!dayPlan) return;
     await withToastFeedback(
       mutations.updatePlanNote.mutateAsync({
-        meal_plan_id: dayPlan.id,
+        plan_day_id: dayPlan.id,
         notes: dayNotesDraft.trim() || null,
       }),
       {
@@ -353,7 +353,7 @@ export function MealGroupDetail({ mealGroupId }: { mealGroupId: string }) {
         ).catch(() => null)
       : await withToastFeedback(
           mutations.createItem.mutateAsync({
-            meal_plan_id: dayPlan.id,
+            plan_day_id: dayPlan.id,
             type: mealType,
             title: normalizedTitle,
             quantity: value.quantity,
@@ -405,7 +405,7 @@ export function MealGroupDetail({ mealGroupId }: { mealGroupId: string }) {
   const onCopyFromDay = async () => {
     try {
       const result = await mutations.copyDay.mutateAsync({
-        meal_group_id: group.id,
+        nutrition_plan_id: group.id,
         source_day: copyFromDay,
         target_day: selectedDay,
       });
@@ -449,7 +449,7 @@ export function MealGroupDetail({ mealGroupId }: { mealGroupId: string }) {
     if (!dayPlan) return;
     try {
       await mutations.createItem.mutateAsync({
-        meal_plan_id: dayPlan.id,
+        plan_day_id: dayPlan.id,
         type: favoriteType,
         title: item.item_name,
         quantity: item.quantity,
@@ -559,7 +559,7 @@ export function MealGroupDetail({ mealGroupId }: { mealGroupId: string }) {
 
     const assigned = await withToastFeedback(
       mutations.assignGroup.mutateAsync({
-        meal_group_id: group.id,
+        nutrition_plan_id: group.id,
         subject: nextSubject,
         start_date: startDate,
         end_date: endDate,

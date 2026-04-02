@@ -8,7 +8,7 @@ import { trackEvent } from "@/lib/events/dispatcher";
 import { Database } from "@/types/database";
 import { AppEventName } from "@/types/events";
 
-type DeletionInsert = Database["public"]["Tables"]["account_deletion_requests"]["Insert"];
+type DeletionInsert = Database["public"]["Tables"]["deletion_requests"]["Insert"];
 
 const RECOVERY_WINDOW_DAYS = 30;
 const CHALLENGE_TTL_SECONDS = 5 * 60;
@@ -300,7 +300,7 @@ export async function requestSoftDeleteAccount(challengeToken: string, challenge
     };
 
     const { error: deletionError } = await admin
-      .from("account_deletion_requests")
+      .from("deletion_requests")
       .upsert(payload, { onConflict: "user_id" });
     if (deletionError) throw deletionError;
 
@@ -377,7 +377,7 @@ export async function restoreSoftDeletedAccount(email: string, password: string)
     if (profileError) throw profileError;
 
     await admin
-      .from("account_deletion_requests")
+      .from("deletion_requests")
       .update({
         restored_at: nowIso,
         updated_at: nowIso,
@@ -451,7 +451,7 @@ export async function restoreCurrentSoftDeletedAccount() {
     if (profileError) throw profileError;
 
     await admin
-      .from("account_deletion_requests")
+      .from("deletion_requests")
       .update({
         restored_at: nowIso,
         updated_at: nowIso,

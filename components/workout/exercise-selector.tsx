@@ -16,7 +16,7 @@ import { useInfiniteQueryExercises } from "@/hooks/use-exercise";
 import { useDebounce } from "@/hooks/use-debounce";
 import { Database } from "@/types/database";
 
-type Exercise = Database["public"]["Tables"]["exercise_catalog"]["Row"];
+type Exercise = Database["public"]["Tables"]["exercises"]["Row"];
 
 interface ExerciseSelectorProps {
   onSelect: (exercise: { id: string; name: string }) => void;

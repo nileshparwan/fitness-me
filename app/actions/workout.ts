@@ -14,15 +14,15 @@ import {
 import { z } from "zod";
 
 // 1. DERIVED TYPES FROM DATABASE
-type WorkoutInsert = Database['public']['Tables']['training_sessions']['Insert'];
-type WorkoutLogInsert = Database['public']['Tables']['strength_sets']['Insert'] & {
+type WorkoutInsert = Database['public']['Tables']['workouts']['Insert'];
+type WorkoutLogInsert = Database['public']['Tables']['workout_sets']['Insert'] & {
   execution_id?: string | null;
 };
-type CardioLogInsert = Database['public']['Tables']['cardio_sessions']['Insert'] & {
+type CardioLogInsert = Database['public']['Tables']['workout_cardio']['Insert'] & {
   execution_id?: string | null;
 };
-type WorkoutRow = Database["public"]["Tables"]["training_sessions"]["Row"];
-type StrengthSetRow = Database["public"]["Tables"]["strength_sets"]["Row"];
+type WorkoutRow = Database["public"]["Tables"]["workouts"]["Row"];
+type StrengthSetRow = Database["public"]["Tables"]["workout_sets"]["Row"];
 type WorkoutExecutionSource = "quick_log" | "session_create" | "session_backfill" | "coach_log" | "client_portal";
 type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
 type WorkoutActor = { id: string };
@@ -31,7 +31,7 @@ type StrengthSetWithWorkout = Pick<
   StrengthSetRow,
   "exercise_name" | "weight" | "reps" | "set_number" | "workout_id"
 > & {
-  training_sessions: Pick<WorkoutRow, "id" | "date" | "performed_on" | "user_id"> | null;
+  workouts: Pick<WorkoutRow, "id" | "date" | "performed_on" | "subject_user_id"> | null;
 };
 
 export type WorkoutExerciseLastSession = {
@@ -102,7 +102,7 @@ async function findExistingQuickLogExecution(input: {
 }) {
   const query = applyQuickLogSubjectFilter(
     input.supabaseAny
-      .from("workout_executions")
+      .from("workout_logs")
       .select("id")
       .eq("template_workout_id", input.templateWorkoutId)
       .eq("performed_on", input.performedOn)
@@ -149,7 +149,7 @@ async function createWorkoutExecutionRecord(input: {
   };
 
   const { data, error } = await supabaseAny
-    .from("workout_executions")
+    .from("workout_logs")
     .insert(insertPayload)
     .select("id")
     .single();
@@ -177,11 +177,11 @@ async function syncExecutionExercisesFromWorkout(input: {
   const supabaseAny = input.supabase as any;
   const [{ data: strengthRows, error: strengthError }, { data: cardioRows, error: cardioError }] = await Promise.all([
     supabaseAny
-      .from("strength_sets")
+      .from("workout_sets")
       .select("exercise_id, exercise_name, weight, reps")
       .eq("workout_id", input.workoutId),
     supabaseAny
-      .from("cardio_sessions")
+      .from("workout_cardio")
       .select("activity_type, distance, duration_minutes")
       .eq("workout_id", input.workoutId),
   ]);
@@ -254,13 +254,13 @@ async function syncExecutionExercisesFromWorkout(input: {
   ];
 
   const { error: clearError } = await supabaseAny
-    .from("workout_execution_exercises")
+    .from("workout_log_exercises")
     .delete()
     .eq("execution_id", input.executionId);
   if (clearError) throw new Error(clearError.message);
 
   if (exerciseRows.length > 0) {
-    const { error: insertError } = await supabaseAny.from("workout_execution_exercises").insert(exerciseRows);
+    const { error: insertError } = await supabaseAny.from("workout_log_exercises").insert(exerciseRows);
     if (insertError) throw new Error(insertError.message);
   }
 }
@@ -415,7 +415,6 @@ function buildWorkoutLogs(
       cardioLogs.push({
         workout_id: workoutId,
         execution_id: executionId,
-        user_id: userId,
         date: dateISO,
         entry_sequence: entryIndex,
         activity_type: ex.name,
@@ -496,13 +495,14 @@ export async function getWorkoutExerciseLastSessionAction(input: {
       }
 
       let query = supabase
-        .from("strength_sets")
+        .from("workout_sets")
         .select(
-          "exercise_name, weight, reps, set_number, workout_id, training_sessions!inner(id, date, performed_on, user_id)"
+          "exercise_name, weight, reps, set_number, workout_id, workouts!inner(id, date, performed_on, subject_user_id, subject_client_id)"
         )
         .in("exercise_name", normalizedNames)
-        .eq("training_sessions.user_id", user.id)
-        .order("date", { ascending: false, referencedTable: "training_sessions" })
+        .eq("workouts.subject_user_id", user.id)
+        .is("workouts.subject_client_id", null)
+        .order("date", { ascending: false, referencedTable: "workouts" })
         .order("weight", { ascending: false })
         .order("set_number", { ascending: true })
         .limit(Math.max(60, normalizedNames.length * 25));
@@ -521,8 +521,8 @@ export async function getWorkoutExerciseLastSessionAction(input: {
         const key = row.exercise_name.trim().toLowerCase();
         if (bestByExercise.has(key)) continue;
         const workoutDate =
-          row.training_sessions?.performed_on ||
-          row.training_sessions?.date?.slice(0, 10) ||
+          row.workouts?.performed_on ||
+          row.workouts?.date?.slice(0, 10) ||
           toDateInput(new Date());
         const daysAgo = daysAgoFromDate(workoutDate);
 
@@ -555,8 +555,8 @@ export async function createWorkoutAction(data: WorkoutActionInput) {
       const { supabase, user } = await requireWorkoutActor("Not authenticated");
 
       const workoutPayload: WorkoutInsert = {
-        user_id: user.id,
         created_by_user_id: user.id,
+        created_by_client_id: null,
         subject_user_id: user.id,
         subject_client_id: null,
         name: data.name,
@@ -573,7 +573,7 @@ export async function createWorkoutAction(data: WorkoutActionInput) {
       };
 
       const { data: workout, error: wError } = await supabase
-        .from("training_sessions")
+        .from("workouts")
         .insert(workoutPayload)
         .select()
         .single();
@@ -645,14 +645,15 @@ export async function updateWorkoutAction(id: string, data: Partial<WorkoutActio
       const { supabase, user } = await requireWorkoutActor();
 
       const { data: ownedWorkout } = await supabase
-        .from("training_sessions")
+        .from("workouts")
         .select("id, subject_user_id, subject_client_id, performed_on")
         .eq("id", id)
-        .eq("user_id", user.id)
+        .eq("subject_user_id", user.id)
+        .is("subject_client_id", null)
         .maybeSingle();
       if (!ownedWorkout) throw new Error("Forbidden");
 
-      const updateData: Database["public"]["Tables"]["training_sessions"]["Update"] = {};
+      const updateData: Database["public"]["Tables"]["workouts"]["Update"] = {};
       if (data.name) updateData.name = data.name;
       if (data.date) {
         updateData.date = data.date.toISOString();
@@ -667,14 +668,19 @@ export async function updateWorkoutAction(id: string, data: Partial<WorkoutActio
       if (data.template_id !== undefined) updateData.template_id = data.template_id || null;
 
       if (Object.keys(updateData).length > 0) {
-        const { error } = await supabase.from("training_sessions").update(updateData).eq("id", id).eq("user_id", user.id);
+        const { error } = await supabase
+          .from("workouts")
+          .update(updateData)
+          .eq("id", id)
+          .eq("subject_user_id", user.id)
+          .is("subject_client_id", null);
         if (error) throw new Error(error.message);
       }
 
       if (data.exercises) {
         const supabaseAny = supabase as any;
         const { data: latestExecution } = await supabaseAny
-          .from("workout_executions")
+          .from("workout_logs")
           .select("id")
           .eq("template_workout_id", id)
           .order("logged_at", { ascending: false })
@@ -833,8 +839,8 @@ export async function logWorkoutExecutionAction(input: z.input<typeof logWorkout
       const [{ data: actorProfile, error: actorError }, { data: workout, error: workoutError }] = await Promise.all([
         supabase.from("profiles").select("role").eq("id", user.id).maybeSingle(),
         supabase
-          .from("training_sessions")
-          .select("id, user_id, created_by_user_id, subject_user_id, subject_client_id, performed_on")
+          .from("workouts")
+          .select("id, created_by_user_id, subject_user_id, subject_client_id, performed_on")
           .eq("id", payload.workout_id)
           .maybeSingle(),
       ]);
@@ -845,7 +851,6 @@ export async function logWorkoutExecutionAction(input: z.input<typeof logWorkout
 
       const actorIsSysadmin = actorProfile?.role === "sysadmin";
       const ownsWorkout =
-        workout.user_id === user.id ||
         workout.created_by_user_id === user.id ||
         workout.subject_user_id === user.id;
 
@@ -916,9 +921,10 @@ export async function deleteWorkoutAction(ids: string | string[]) {
       const idArray = Array.isArray(ids) ? ids : [ids];
 
       const { error } = await supabase
-        .from("training_sessions")
+        .from("workouts")
         .delete()
-        .eq("user_id", user.id)
+        .eq("subject_user_id", user.id)
+        .is("subject_client_id", null)
         .in("id", idArray);
       if (error) throw new Error(error.message);
 

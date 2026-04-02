@@ -17,18 +17,18 @@ import { groupLogsByExercise } from "@/utils/log";
 import type { Database } from "@/types/database";
 import type { WorkoutFormValues } from "@/types/workout";
 
-type WorkoutLog = Database["public"]["Tables"]["strength_sets"]["Row"];
-type CardioLog = Database["public"]["Tables"]["cardio_sessions"]["Row"];
+type WorkoutLog = Database["public"]["Tables"]["workout_sets"]["Row"];
+type CardioLog = Database["public"]["Tables"]["workout_cardio"]["Row"];
 type ActiveTab = "builder" | "preview" | "ai";
 
 function buildInitialData(
-  workout: Database["public"]["Tables"]["training_sessions"]["Row"] & {
-    strength_sets?: WorkoutLog[] | null;
-    cardio_sessions?: CardioLog[] | null;
+  workout: Database["public"]["Tables"]["workouts"]["Row"] & {
+    workout_sets?: WorkoutLog[] | null;
+    workout_cardio?: CardioLog[] | null;
   }
 ): WorkoutFormValues {
-  const groupedExercises = groupLogsByExercise((workout.strength_sets as WorkoutLog[]) || []);
-  const cardioLogs = (workout.cardio_sessions || []) as CardioLog[];
+  const groupedExercises = groupLogsByExercise((workout.workout_sets as WorkoutLog[]) || []);
+  const cardioLogs = (workout.workout_cardio || []) as CardioLog[];
 
   const orderedEntries = [
     ...groupedExercises.map((exercise) => ({

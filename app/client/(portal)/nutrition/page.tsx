@@ -2,7 +2,7 @@ import { ClientPortalNutritionView } from "@/components/client-portal/portal-mod
 import { requireClientModuleAccess } from "@/lib/client-portal/guards";
 
 export default async function ClientPortalNutritionPage() {
-  const { readOnly } = await requireClientModuleAccess("meal_logging");
+  const { readOnly } = await requireClientModuleAccess("diary");
   return <ClientPortalNutritionView readOnly={readOnly} />;
 }
 

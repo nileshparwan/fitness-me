@@ -17,7 +17,7 @@ import { withToastFeedback } from "@/lib/ui/toast-feedback";
 import type { Database } from "@/types/database";
 import { cn } from "@/utils";
 
-type SupplementCatalogRow = Database["public"]["Tables"]["supplement_catalog"]["Row"];
+type SupplementCatalogRow = Database["public"]["Tables"]["supplements"]["Row"];
 
 const CATEGORY_OPTIONS: Array<{
   value: "vitamin" | "mineral" | "omega" | "protein" | "electrolyte" | "herbal" | "other";

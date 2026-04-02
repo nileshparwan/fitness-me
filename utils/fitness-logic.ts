@@ -2,7 +2,7 @@ import { Database } from "@/types/database";
 import { differenceInYears } from "date-fns";
 import { KM_PER_MILE, type UnitSystem } from "@/utils/unit-conversion";
 
-type CardioLog = Database["public"]["Tables"]["cardio_sessions"]["Row"];
+type CardioLog = Database["public"]["Tables"]["workout_cardio"]["Row"];
 
 export const calculatePace = (distanceKm: number, durationMinutes: number, system: UnitSystem = "metric") => {
   if (distanceKm <= 0 || durationMinutes <= 0) return 0;

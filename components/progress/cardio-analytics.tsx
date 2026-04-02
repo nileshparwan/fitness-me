@@ -8,7 +8,7 @@ import { calculatePace, formatPace as formatPaceMinutes } from "@/utils/fitness-
 import { useUnitLabels, useUnitSystem } from "@/stores/use-settings-store";
 import { displayDistance } from "@/utils/unit-conversion";
 
-type CardioLog = Database['public']['Tables']['cardio_sessions']['Row'];
+type CardioLog = Database['public']['Tables']['workout_cardio']['Row'];
 type StatTileProps = {
   label: string;
   value: string;

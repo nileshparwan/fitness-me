@@ -58,7 +58,7 @@ export const sendDailyReminders = inngest.createFunction(
 
     const rows = await step.run("load-notification-preferences", async () => {
       const { data, error } = await admin
-        .from("notification_preferences")
+        .from("notification_settings")
         .select(
           "user_id, timezone, meal_bell_enabled, meal_push_enabled, meal_reminder_time, checkin_bell_enabled, checkin_push_enabled, checkin_reminder_time"
         )
@@ -104,7 +104,7 @@ export const handleSendReminder = inngest.createFunction(
 
     const prefs = await step.run("load-user-preferences", async () => {
       const { data, error } = await admin
-        .from("notification_preferences")
+        .from("notification_settings")
         .select(
           "user_id, meal_bell_enabled, meal_push_enabled, checkin_bell_enabled, checkin_push_enabled"
         )
@@ -143,7 +143,7 @@ export const handleSendReminder = inngest.createFunction(
     if (pushEnabled && isPushConfigured()) {
       const subscriptions = await step.run("load-push-subscriptions", async () => {
         const { data, error } = await admin
-          .from("push_subscriptions")
+          .from("device_tokens")
           .select("id, endpoint, public_key, auth_secret")
           .eq("user_id", event.data.user_id);
 
@@ -158,7 +158,7 @@ export const handleSendReminder = inngest.createFunction(
             if (isActive) continue;
 
             const { error } = await admin
-              .from("push_subscriptions")
+              .from("device_tokens")
               .delete()
               .eq("id", subscription.id)
               .eq("user_id", event.data.user_id);

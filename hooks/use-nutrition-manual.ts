@@ -83,7 +83,7 @@ function withOptimisticItemAdd(
   key: QueryKey,
   payload: {
     meal_type: MealType;
-    meal_group_id?: string | null;
+    nutrition_plan_id?: string | null;
     item: {
       item_name: string;
       quantity?: number | null;
@@ -103,13 +103,13 @@ function withOptimisticItemAdd(
   if (!current) return;
 
   const targetMealType = payload.meal_type;
-  const existingLog = current.logs.find((log) => log.meal_type === targetMealType);
+  const normalizedMealType: NutritionDiaryDay["logs"][number]["meal_type"] =
+    targetMealType === "snacks" ? "snack" : targetMealType;
+  const existingLog = current.logs.find((log) => log.meal_type === normalizedMealType);
 
   const optimisticItem: ManualDiaryItem = {
     id: `optimistic-${Date.now()}`,
     meal_log_id: existingLog?.id || `optimistic-log-${targetMealType}`,
-    created_by_user_id: existingLog?.created_by_user_id || current.subject.subject_user_id || null,
-    created_by_client_id: existingLog?.created_by_client_id || current.subject.subject_client_id || null,
     item_name: payload.item.item_name,
     quantity: payload.item.quantity ?? null,
     unit: payload.item.unit ?? null,
@@ -144,9 +144,9 @@ function withOptimisticItemAdd(
       subject_client_id: current.subject.subject_client_id,
       created_by_user_id: current.subject.subject_user_id || null,
       created_by_client_id: current.subject.subject_client_id || null,
-      meal_group_id: payload.meal_group_id ?? null,
+      nutrition_plan_id: payload.nutrition_plan_id ?? null,
       performed_on: current.performed_on,
-      meal_type: targetMealType,
+      meal_type: normalizedMealType,
       notes: null,
       total_calories: Number(optimisticItem.calories || 0),
       total_protein_g: Number(optimisticItem.protein_g || 0),
@@ -169,7 +169,7 @@ export function useNutritionDiary(performedOn: string, subject?: NutritionSubjec
       getNutritionDiaryDayAction({
         performed_on: performedOn,
         subject,
-        meal_group_id: mealGroupId ?? undefined,
+        nutrition_plan_id: mealGroupId ?? undefined,
       }),
     enabled: Boolean(performedOn),
     staleTime: 45_000,
@@ -293,7 +293,7 @@ export function useNutritionMutations(performedOn: string, subject?: NutritionSu
       const previous = queryClient.getQueryData<NutritionDiaryDay>(dayKey);
       withOptimisticItemAdd(queryClient, dayKey, {
         meal_type: payload.meal_type,
-        meal_group_id: payload.meal_group_id,
+        nutrition_plan_id: payload.nutrition_plan_id,
         item: payload.item,
       });
       return { previous };

@@ -15,7 +15,7 @@ export type ResolvedNutritionTarget = {
   source: "fitness_goal" | "profile_default" | "none";
 };
 
-async function resolveHistorySubjectUserId(
+async function resolveTargetSubjectUserId(
   supabase: SupabaseClient<Database>,
   subject: SubjectRef
 ) {
@@ -37,13 +37,13 @@ export async function resolveGoalTargetForDate(
   subject: SubjectRef,
   performedOn: string
 ): Promise<ResolvedNutritionTarget> {
-  const targetUserId = await resolveHistorySubjectUserId(supabase, subject);
+  const targetUserId = await resolveTargetSubjectUserId(supabase, subject);
   if (!targetUserId) {
     return { calories: null, protein_g: null, carbs_g: null, fat_g: null, source: "none" };
   }
 
-  const { data: historyRow, error } = await supabase
-    .from("nutrition_target_history")
+  const { data: targetRow, error } = await supabase
+    .from("nutrition_targets")
     .select("calories, protein_g, carbs_g, fat_g")
     .eq("subject_user_id", targetUserId)
     .lte("effective_from", performedOn)
@@ -53,7 +53,7 @@ export async function resolveGoalTargetForDate(
     .maybeSingle();
 
   if (error) throw new Error(error.message);
-  if (!historyRow) {
+  if (!targetRow) {
     const { data: profile, error: profileError } = await supabase
       .from("profiles")
       .select("default_calories, default_protein, default_carbs, default_fat")
@@ -82,10 +82,10 @@ export async function resolveGoalTargetForDate(
   }
 
   return {
-    calories: historyRow.calories,
-    protein_g: historyRow.protein_g,
-    carbs_g: historyRow.carbs_g,
-    fat_g: historyRow.fat_g,
+    calories: targetRow.calories,
+    protein_g: targetRow.protein_g,
+    carbs_g: targetRow.carbs_g,
+    fat_g: targetRow.fat_g,
     source: "fitness_goal",
   };
 }

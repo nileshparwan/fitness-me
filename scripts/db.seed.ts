@@ -127,13 +127,13 @@ const DAY_LABELS: Record<(typeof DAY_ORDER)[number], string> = {
 
 const MODULE_KEYS = [
   "workouts",
-  "training_plan",
-  "meal_plan",
-  "meal_logging",
+  "program",
+  "nutrition_plan",
+  "diary",
   "steps_tracking",
   "goals",
   "check_ins",
-  "coach_notes",
+  "client_notes",
   "tasks",
 ] as const;
 
@@ -201,7 +201,7 @@ async function run() {
         bio: "Primary seeded profile for full app flows",
         preferred_units: "metric",
         role: "user",
-        onboarding_completed: true,
+        is_onboarding_completed: true,
         is_active: true,
         sport_focus: ["strength", "hypertrophy", "conditioning"],
         height_cm: 178,
@@ -216,7 +216,7 @@ async function run() {
         bio: "Secondary seeded member profile",
         preferred_units: "metric",
         role: "user",
-        onboarding_completed: true,
+        is_onboarding_completed: true,
         is_active: true,
         sport_focus: ["running", "general_fitness"],
         height_cm: 171,
@@ -230,7 +230,7 @@ async function run() {
   );
 
   await upsertMany(
-    "exercise_catalog",
+    "exercises",
     [
       {
         id: IDS.exA,
@@ -276,7 +276,7 @@ async function run() {
   );
 
   await upsertMany(
-    "training_plans",
+    "programs",
     [
       {
         id: IDS.planA,
@@ -349,7 +349,7 @@ async function run() {
     "id"
   );
 
-  await upsertOne("coach_plan_templates", {
+  await upsertOne("program_templates", {
     id: IDS.coachTemplateA,
     coach_id: PRIMARY_USER.id,
     name: "General Strength Template",
@@ -361,12 +361,12 @@ async function run() {
   });
 
   const templateSessionsLookup = await supabase
-    .from("coach_plan_template_sessions")
+    .from("program_template_workouts")
     .select("id, sequence_no")
     .eq("template_id", IDS.coachTemplateA)
     .in("sequence_no", [1, 2]);
   if (templateSessionsLookup.error) {
-    throw new Error(`[coach_plan_template_sessions lookup] ${templateSessionsLookup.error.message}`);
+    throw new Error(`[program_template_workouts lookup] ${templateSessionsLookup.error.message}`);
   }
 
   const coachTemplateSessionAId =
@@ -375,7 +375,7 @@ async function run() {
     templateSessionsLookup.data?.find((row) => row.sequence_no === 2)?.id ?? IDS.coachTemplateSessionB;
 
   await upsertMany(
-    "coach_plan_template_sessions",
+    "program_template_workouts",
     [
       {
         id: coachTemplateSessionAId,
@@ -408,7 +408,7 @@ async function run() {
   );
 
   await upsertMany(
-    "client_plan_assignments",
+    "program_assignments",
     [
       {
         id: IDS.clientPlanAssignA,
@@ -440,12 +440,12 @@ async function run() {
   );
 
   const assignmentSessionsLookup = await supabase
-    .from("client_plan_assignment_sessions")
+    .from("program_assignment_workouts")
     .select("id, sequence_no")
     .eq("assignment_id", IDS.clientPlanAssignA)
     .in("sequence_no", [1, 2]);
   if (assignmentSessionsLookup.error) {
-    throw new Error(`[client_plan_assignment_sessions lookup] ${assignmentSessionsLookup.error.message}`);
+    throw new Error(`[program_assignment_workouts lookup] ${assignmentSessionsLookup.error.message}`);
   }
 
   const clientPlanSessionAId =
@@ -454,7 +454,7 @@ async function run() {
     assignmentSessionsLookup.data?.find((row) => row.sequence_no === 2)?.id ?? IDS.clientPlanSessionB;
 
   await upsertMany(
-    "client_plan_assignment_sessions",
+    "program_assignment_workouts",
     [
       {
         id: clientPlanSessionAId,
@@ -489,7 +489,7 @@ async function run() {
   );
 
   await upsertMany(
-    "training_sessions",
+    "workouts",
     [
       {
         id: IDS.workoutUserA,
@@ -501,7 +501,7 @@ async function run() {
         status: "completed",
         performed_on: dateOffset(-1),
         date: nowIso,
-        session_slot: "morning",
+        workout_slot: "morning",
         session_label: "Primary Lift Session",
         started_at: new Date(now.getTime() - 90 * 60 * 1000).toISOString(),
         completed_at: new Date(now.getTime() - 20 * 60 * 1000).toISOString(),
@@ -526,7 +526,7 @@ async function run() {
         status: "completed",
         performed_on: dateOffset(0),
         date: nowIso,
-        session_slot: "evening",
+        workout_slot: "evening",
         session_label: "Conditioning Block",
         started_at: new Date(now.getTime() - 50 * 60 * 1000).toISOString(),
         completed_at: new Date(now.getTime() - 10 * 60 * 1000).toISOString(),
@@ -551,7 +551,7 @@ async function run() {
         status: "completed",
         performed_on: dateOffset(0),
         date: nowIso,
-        session_slot: "afternoon",
+        workout_slot: "afternoon",
         session_label: "Coach-guided session",
         started_at: new Date(now.getTime() - 120 * 60 * 1000).toISOString(),
         completed_at: new Date(now.getTime() - 50 * 60 * 1000).toISOString(),
@@ -567,7 +567,7 @@ async function run() {
   );
 
   await upsertMany(
-    "strength_sets",
+    "workout_sets",
     [
       {
         id: IDS.strengthA,
@@ -638,7 +638,7 @@ async function run() {
   );
 
   await upsertMany(
-    "cardio_sessions",
+    "workout_cardio",
     [
       {
         id: IDS.cardioA,
@@ -677,7 +677,7 @@ async function run() {
   );
 
   await upsertMany(
-    "training_plan_items",
+    "program_workouts",
     [
       {
         id: IDS.planItemA,
@@ -702,7 +702,7 @@ async function run() {
   );
 
   await upsertMany(
-    "body_measurements",
+    "measurements",
     [
       {
         id: IDS.bodyA,
@@ -754,7 +754,7 @@ async function run() {
   );
 
   await upsertMany(
-    "fitness_goals",
+    "goals",
     [
       {
         id: IDS.goalA,
@@ -820,7 +820,7 @@ async function run() {
   );
 
   await upsertMany(
-    "meal_logs",
+    "diary_entries",
     [
       {
         id: IDS.mealLogA,
@@ -857,7 +857,7 @@ async function run() {
   );
 
   await upsertMany(
-    "meal_log_items",
+    "diary_items",
     [
       {
         id: IDS.mealLogItemA,
@@ -947,7 +947,7 @@ async function run() {
   );
 
   await upsertMany(
-    "meal_item_favorites",
+    "diary_favorites",
     [
       {
         id: IDS.mealFavA,
@@ -988,7 +988,7 @@ async function run() {
   );
 
   await upsertMany(
-    "client_auth",
+    "client_credentials",
     [
       {
         client_id: IDS.clientA,
@@ -1022,7 +1022,7 @@ async function run() {
     "client_id"
   );
 
-  await upsertOne("client_sessions", {
+  await upsertOne("client_auth_sessions", {
     id: IDS.clientSessionA,
     client_id: IDS.clientA,
     token_hash: `seed-token-${PRIMARY_USER.id}`,
@@ -1035,7 +1035,7 @@ async function run() {
   });
 
   await upsertMany(
-    "client_feature_access",
+    "feature_access",
     [
       ...MODULE_KEYS.map((module_key) => ({
         client_id: IDS.clientA,
@@ -1048,7 +1048,7 @@ async function run() {
       ...MODULE_KEYS.map((module_key) => ({
         client_id: IDS.clientB,
         module_key,
-        access_level: module_key === "meal_plan" || module_key === "coach_notes" ? "read_only" : "disabled",
+        access_level: module_key === "nutrition_plan" || module_key === "client_notes" ? "read_only" : "disabled",
         configured_by_user_id: PRIMARY_USER.id,
         created_at: nowIso,
         updated_at: nowIso,
@@ -1058,7 +1058,7 @@ async function run() {
   );
 
   await upsertMany(
-    "client_tasks",
+    "tasks",
     [
       {
         id: IDS.clientTaskA,
@@ -1099,7 +1099,7 @@ async function run() {
   );
 
   await upsertMany(
-    "client_steps_logs",
+    "client_activity",
     [
       {
         id: IDS.clientStepsA,
@@ -1177,7 +1177,7 @@ async function run() {
   );
 
   await upsertMany(
-    "client_checkins",
+    "client_reviews",
     [
       {
         id: IDS.clientCheckinA,
@@ -1209,7 +1209,7 @@ async function run() {
   );
 
   await upsertMany(
-    "coach_notes",
+    "client_notes",
     [
       {
         id: IDS.coachNoteA,
@@ -1240,7 +1240,7 @@ async function run() {
   );
 
   await upsertMany(
-    "client_payments",
+    "payments",
     [
       {
         id: IDS.clientPaymentA,
@@ -1277,7 +1277,7 @@ async function run() {
   );
 
   await upsertMany(
-    "client_billing_plans",
+    "billing_plans",
     [
       {
         id: IDS.billingPlanA,
@@ -1322,7 +1322,7 @@ async function run() {
   );
 
   await upsertMany(
-    "payment_logs",
+    "payment_events",
     [
       {
         id: IDS.paymentLogA,
@@ -1419,7 +1419,7 @@ async function run() {
   );
 
   await upsertMany(
-    "meal_groups",
+    "nutrition_plans",
     [
       {
         id: IDS.mealGroupTemplateA,
@@ -1429,9 +1429,9 @@ async function run() {
         end_date: dateOffset(35),
         status: "active",
         notes: "Template used for assignments",
-        owner_user_id: PRIMARY_USER.id,
+        created_by_user_id: PRIMARY_USER.id,
         is_snapshot: false,
-        source_group_id: null,
+        source_plan_id: null,
       },
       {
         id: IDS.mealGroupSnapshotA,
@@ -1441,55 +1441,55 @@ async function run() {
         end_date: dateOffset(21),
         status: "active",
         notes: "Snapshot copy for assignments",
-        owner_user_id: PRIMARY_USER.id,
+        created_by_user_id: PRIMARY_USER.id,
         is_snapshot: true,
-        source_group_id: IDS.mealGroupTemplateA,
+        source_plan_id: IDS.mealGroupTemplateA,
       },
     ],
     "id"
   );
 
   await upsertMany(
-    "meal_group_plans",
+    "nutrition_plan_days",
     DAY_ORDER.flatMap((day) => [
       {
-        meal_group_id: IDS.mealGroupTemplateA,
+        nutrition_plan_id: IDS.mealGroupTemplateA,
         day_of_week: day,
         label: DAY_LABELS[day],
         notes: day === "sun" ? "Higher flexibility day" : null,
         created_by_user_id: PRIMARY_USER.id,
       },
       {
-        meal_group_id: IDS.mealGroupSnapshotA,
+        nutrition_plan_id: IDS.mealGroupSnapshotA,
         day_of_week: day,
         label: DAY_LABELS[day],
         notes: day === "sun" ? "Snapshot: flexible intake" : null,
         created_by_user_id: PRIMARY_USER.id,
       },
     ]),
-    "meal_group_id,day_of_week"
+    "nutrition_plan_id,day_of_week"
   );
 
   const templatePlansRes = await supabase
-    .from("meal_group_plans")
+    .from("nutrition_plan_days")
     .select("id, day_of_week")
-    .eq("meal_group_id", IDS.mealGroupTemplateA);
-  if (templatePlansRes.error) throw new Error(`[meal_group_plans] ${templatePlansRes.error.message}`);
+    .eq("nutrition_plan_id", IDS.mealGroupTemplateA);
+  if (templatePlansRes.error) throw new Error(`[nutrition_plan_days] ${templatePlansRes.error.message}`);
   const snapshotPlansRes = await supabase
-    .from("meal_group_plans")
+    .from("nutrition_plan_days")
     .select("id, day_of_week")
-    .eq("meal_group_id", IDS.mealGroupSnapshotA);
-  if (snapshotPlansRes.error) throw new Error(`[meal_group_plans] ${snapshotPlansRes.error.message}`);
+    .eq("nutrition_plan_id", IDS.mealGroupSnapshotA);
+  if (snapshotPlansRes.error) throw new Error(`[nutrition_plan_days] ${snapshotPlansRes.error.message}`);
 
   const templateByDay = new Map(templatePlansRes.data?.map((p) => [p.day_of_week, p.id]) || []);
   const snapshotByDay = new Map(snapshotPlansRes.data?.map((p) => [p.day_of_week, p.id]) || []);
 
   await upsertMany(
-    "meal_group_items",
+    "nutrition_plan_items",
     [
       {
         id: IDS.mealGroupItemA,
-        meal_plan_id: ensure(templateByDay.get("mon"), "Missing Monday template meal plan"),
+        plan_day_id: ensure(templateByDay.get("mon"), "Missing Monday template meal plan"),
         type: "breakfast",
         title: "Template Monday Breakfast",
         calories: 650,
@@ -1502,7 +1502,7 @@ async function run() {
       },
       {
         id: IDS.mealGroupItemB,
-        meal_plan_id: ensure(templateByDay.get("mon"), "Missing Monday template meal plan"),
+        plan_day_id: ensure(templateByDay.get("mon"), "Missing Monday template meal plan"),
         type: "lunch",
         title: "Template Monday Lunch",
         calories: 780,
@@ -1515,7 +1515,7 @@ async function run() {
       },
       {
         id: IDS.mealGroupItemC,
-        meal_plan_id: ensure(templateByDay.get("tue"), "Missing Tuesday template meal plan"),
+        plan_day_id: ensure(templateByDay.get("tue"), "Missing Tuesday template meal plan"),
         type: "dinner",
         title: "Template Tuesday Dinner",
         calories: 740,
@@ -1528,7 +1528,7 @@ async function run() {
       },
       {
         id: IDS.mealGroupItemD,
-        meal_plan_id: ensure(snapshotByDay.get("mon"), "Missing Monday snapshot meal plan"),
+        plan_day_id: ensure(snapshotByDay.get("mon"), "Missing Monday snapshot meal plan"),
         type: "breakfast",
         title: "Snapshot Monday Breakfast",
         calories: 620,
@@ -1541,7 +1541,7 @@ async function run() {
       },
       {
         id: IDS.mealGroupItemE,
-        meal_plan_id: ensure(snapshotByDay.get("mon"), "Missing Monday snapshot meal plan"),
+        plan_day_id: ensure(snapshotByDay.get("mon"), "Missing Monday snapshot meal plan"),
         type: "protein_drink",
         title: "Snapshot Post-Workout Shake",
         calories: 280,
@@ -1557,12 +1557,12 @@ async function run() {
   );
 
   await upsertMany(
-    "meal_group_assignments",
+    "nutrition_plan_assignments",
     [
       {
         id: IDS.mealGroupAssignUserA,
-        template_group_id: IDS.mealGroupTemplateA,
-        meal_group_id: IDS.mealGroupSnapshotA,
+        template_plan_id: IDS.mealGroupTemplateA,
+        nutrition_plan_id: IDS.mealGroupSnapshotA,
         subject_user_id: PRIMARY_USER.id,
         assigned_by_user_id: PRIMARY_USER.id,
         start_date: dateOffset(0),
@@ -1572,8 +1572,8 @@ async function run() {
       },
       {
         id: IDS.mealGroupAssignClientA,
-        template_group_id: IDS.mealGroupTemplateA,
-        meal_group_id: IDS.mealGroupSnapshotA,
+        template_plan_id: IDS.mealGroupTemplateA,
+        nutrition_plan_id: IDS.mealGroupSnapshotA,
         subject_client_id: IDS.clientA,
         assigned_by_user_id: PRIMARY_USER.id,
         start_date: dateOffset(0),
@@ -1586,7 +1586,7 @@ async function run() {
   );
 
   await upsertMany(
-    "tickets",
+    "support_tickets",
     [
       {
         id: IDS.ticketA,
@@ -1635,7 +1635,7 @@ async function run() {
   );
 
   await upsertMany(
-    "ticket_comments",
+    "support_replies",
     [
       {
         id: IDS.ticketCommentA,
@@ -1663,7 +1663,7 @@ async function run() {
   );
 
   await upsertMany(
-    "ticket_upvotes",
+    "support_votes",
     [
       { ticket_id: IDS.ticketA, user_id: PRIMARY_USER.id, created_at: nowIso },
       { ticket_id: IDS.ticketA, user_id: MEMBER_USER.id, created_at: nowIso },
@@ -1673,7 +1673,7 @@ async function run() {
   );
 
   await upsertOne(
-    "account_deletion_requests",
+    "deletion_requests",
     {
       id: IDS.accountDeletion,
       user_id: PRIMARY_USER.id,

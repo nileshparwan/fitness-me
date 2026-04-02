@@ -9,15 +9,15 @@ import { createClient } from "@/lib/supabase/server";
 import { escapeLikePattern } from "@/lib/utils/search";
 import type { Database } from "@/types/database";
 
-type SupplementCatalogRow = Database["public"]["Tables"]["supplement_catalog"]["Row"];
-type SupplementCatalogInsert = Database["public"]["Tables"]["supplement_catalog"]["Insert"];
-type SupplementCatalogUpdate = Database["public"]["Tables"]["supplement_catalog"]["Update"];
-type SupplementAssignmentRowDb = Database["public"]["Tables"]["supplement_assignments"]["Row"];
-type SupplementAssignmentInsert = Database["public"]["Tables"]["supplement_assignments"]["Insert"];
-type SupplementAssignmentUpdate = Database["public"]["Tables"]["supplement_assignments"]["Update"];
-type SupplementSubjectProfileRow = Database["public"]["Tables"]["supplement_subject_profiles"]["Row"];
-type SupplementSubjectProfileInsert = Database["public"]["Tables"]["supplement_subject_profiles"]["Insert"];
-type SupplementSubjectProfileUpdate = Database["public"]["Tables"]["supplement_subject_profiles"]["Update"];
+type SupplementCatalogRow = Database["public"]["Tables"]["supplements"]["Row"];
+type SupplementCatalogInsert = Database["public"]["Tables"]["supplements"]["Insert"];
+type SupplementCatalogUpdate = Database["public"]["Tables"]["supplements"]["Update"];
+type SupplementAssignmentRowDb = Database["public"]["Tables"]["supplement_prescriptions"]["Row"];
+type SupplementAssignmentInsert = Database["public"]["Tables"]["supplement_prescriptions"]["Insert"];
+type SupplementAssignmentUpdate = Database["public"]["Tables"]["supplement_prescriptions"]["Update"];
+type SupplementSubjectProfileRow = Database["public"]["Tables"]["supplement_profiles"]["Row"];
+type SupplementSubjectProfileInsert = Database["public"]["Tables"]["supplement_profiles"]["Insert"];
+type SupplementSubjectProfileUpdate = Database["public"]["Tables"]["supplement_profiles"]["Update"];
 type ProfileRow = Database["public"]["Tables"]["profiles"]["Row"];
 type ClientRow = Database["public"]["Tables"]["clients"]["Row"];
 type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
@@ -279,7 +279,7 @@ function toSubjectRef(row: { subject_user_id: string | null; subject_client_id: 
 
 async function getAssignmentSubjectRefById(supabase: SupabaseServerClient, assignmentId: string): Promise<SubjectRef> {
   const { data: existing, error: existingError } = await supabase
-    .from("supplement_assignments")
+    .from("supplement_prescriptions")
     .select("id, subject_user_id, subject_client_id")
     .eq("id", assignmentId)
     .maybeSingle();
@@ -290,7 +290,7 @@ async function getAssignmentSubjectRefById(supabase: SupabaseServerClient, assig
 
 async function getSubjectProfileRefById(supabase: SupabaseServerClient, profileId: string): Promise<SubjectRef> {
   const { data: existingProfile, error: existingProfileError } = await supabase
-    .from("supplement_subject_profiles")
+    .from("supplement_profiles")
     .select("id, subject_user_id, subject_client_id")
     .eq("id", profileId)
     .maybeSingle();
@@ -317,7 +317,7 @@ async function ensureSubjectProfile(
 
   if (input.profile_id) {
     let profileQuery = supabase
-      .from("supplement_subject_profiles")
+      .from("supplement_profiles")
       .select("id")
       .eq("id", input.profile_id)
       .limit(1)
@@ -344,7 +344,7 @@ async function ensureSubjectProfile(
       if (input.status !== undefined) updates.status = input.status;
 
       const { error: updateError } = await supabase
-        .from("supplement_subject_profiles")
+        .from("supplement_profiles")
         .update(updates)
         .eq("id", existingProfile.id);
       if (updateError) throw new Error(updateError.message);
@@ -364,7 +364,7 @@ async function ensureSubjectProfile(
   };
 
   const { data: createdProfile, error: createProfileError } = await supabase
-    .from("supplement_subject_profiles")
+    .from("supplement_profiles")
     .insert(row)
     .select("id")
     .single();
@@ -421,9 +421,9 @@ export async function listSupplementCatalogAction(
     action: async () => {
       const { supabase, user } = await requireActor();
       let query = supabase
-        .from("supplement_catalog")
+        .from("supplements")
         .select("*")
-        .or(`is_global.eq.true,owner_user_id.eq.${user.id}`)
+        .or(`is_global.eq.true,created_by_user_id.eq.${user.id}`)
         .order("is_global", { ascending: false })
         .order("name", { ascending: true })
         .limit(400);
@@ -464,11 +464,11 @@ export async function createCustomSupplementAction(
         name: normalizedName,
         categories,
         is_global: false,
-        owner_user_id: user.id,
+        created_by_user_id: user.id,
       };
 
       const { data, error } = await supabase
-        .from("supplement_catalog")
+        .from("supplements")
         .insert(row)
         .select("id")
         .single();
@@ -499,11 +499,11 @@ export async function updateCustomSupplementAction(
         name: normalizedName,
         categories,
         is_global: false,
-        owner_user_id: user.id,
+        created_by_user_id: user.id,
       };
 
       const { data, error } = await supabase
-        .from("supplement_catalog")
+        .from("supplements")
         .update(updates)
         .eq("id", payload.id)
         .select("id")
@@ -560,14 +560,14 @@ export async function listSupplementProgramOptionsAction(
 
       const workoutQuery = subject.subject_client_id
         ? supabase
-            .from("training_plans")
+            .from("programs")
             .select("id, name")
             .eq("assigned_client_id", subject.subject_client_id)
             .eq("is_active", true)
             .order("updated_at", { ascending: false })
             .limit(100)
         : supabase
-            .from("training_plans")
+            .from("programs")
             .select("id, name")
             .eq("user_id", user.id)
             .is("assigned_client_id", null)
@@ -576,8 +576,8 @@ export async function listSupplementProgramOptionsAction(
             .limit(100);
 
       let nutritionAssignmentsQuery = supabase
-        .from("meal_group_assignments")
-        .select("id, meal_group_id")
+        .from("nutrition_plan_assignments")
+        .select("id, nutrition_plan_id")
         .eq("status", "active")
         .order("updated_at", { ascending: false })
         .limit(150);
@@ -590,13 +590,13 @@ export async function listSupplementProgramOptionsAction(
       if (nutritionAssignmentsError) throw new Error(nutritionAssignmentsError.message);
 
       const mealGroupIds = Array.from(
-        new Set((nutritionAssignmentRows || []).map((row) => row.meal_group_id).filter((value): value is string => Boolean(value)))
+        new Set((nutritionAssignmentRows || []).map((row) => row.nutrition_plan_id).filter((value): value is string => Boolean(value)))
       );
 
       const mealGroupsById = new Map<string, string>();
       if (mealGroupIds.length > 0) {
         const { data: mealGroups, error: mealGroupsError } = await supabase
-          .from("meal_groups")
+          .from("nutrition_plans")
           .select("id, name")
           .in("id", mealGroupIds);
         if (mealGroupsError) throw new Error(mealGroupsError.message);
@@ -615,7 +615,7 @@ export async function listSupplementProgramOptionsAction(
       }
 
       for (const row of nutritionAssignmentRows || []) {
-        const name = mealGroupsById.get(row.meal_group_id);
+        const name = mealGroupsById.get(row.nutrition_plan_id);
         if (!name) continue;
         rows.push({
           id: `nutrition:${row.id}`,
@@ -649,13 +649,13 @@ export async function listSupplementSubjectsAction(): Promise<SupplementSubjectR
 
       const [subjectProfileUserRes, subjectProfileClientRes] = await Promise.all([
         supabase
-          .from("supplement_subject_profiles")
+          .from("supplement_profiles")
           .select("id, subject_user_id, subject_client_id, status, title, workout_program, nutrition_program, updated_at")
           .eq("subject_user_id", user.id)
           .is("subject_client_id", null)
           .order("updated_at", { ascending: false }),
         supabase
-          .from("supplement_subject_profiles")
+          .from("supplement_profiles")
           .select("id, subject_user_id, subject_client_id, status, title, workout_program, nutrition_program, updated_at")
           .not("subject_client_id", "is", null)
           .order("updated_at", { ascending: false }),
@@ -683,7 +683,7 @@ export async function listSupplementSubjectsAction(): Promise<SupplementSubjectR
 
       const profileIds = profileRows.map((row) => row.id);
       const { data: assignmentRows, error: assignmentError } = await supabase
-        .from("supplement_assignments")
+        .from("supplement_prescriptions")
         .select("subject_profile_id, updated_at")
         .eq("is_active", true)
         .in("subject_profile_id", profileIds)
@@ -746,8 +746,8 @@ export async function listAssignmentsAction(
       const subject = resolveSubject(payload.subject, user.id);
 
       let query = supabase
-        .from("supplement_assignments")
-        .select("id, supplement_id, default_servings, unit, updated_at, supplement:supplement_catalog(id, name, categories)")
+        .from("supplement_prescriptions")
+        .select("id, supplement_id, default_servings, unit, updated_at, supplement:supplements(id, name, categories)")
         .eq("is_active", true)
         .order("updated_at", { ascending: false })
         .order("created_at", { ascending: false });
@@ -788,7 +788,7 @@ export async function addSupplementAssignmentAction(
       const subject = resolveSubject(payload.subject, user.id);
 
       const { data: supplement, error: supplementError } = await supabase
-        .from("supplement_catalog")
+        .from("supplements")
         .select("id")
         .eq("id", payload.supplement_id)
         .maybeSingle();
@@ -804,7 +804,7 @@ export async function addSupplementAssignmentAction(
       });
 
       const { data: existing, error: existingError } = await supabase
-        .from("supplement_assignments")
+        .from("supplement_prescriptions")
         .select("id")
         .eq("subject_profile_id", profileId)
         .eq("supplement_id", payload.supplement_id)
@@ -821,7 +821,7 @@ export async function addSupplementAssignmentAction(
         };
 
         const { data: updated, error: updateError } = await supabase
-          .from("supplement_assignments")
+          .from("supplement_prescriptions")
           .update(updates)
           .eq("id", existing.id)
           .select("id")
@@ -845,7 +845,7 @@ export async function addSupplementAssignmentAction(
       };
 
       const { data: inserted, error: insertError } = await supabase
-        .from("supplement_assignments")
+        .from("supplement_prescriptions")
         .insert(insertRow)
         .select("id")
         .single();
@@ -883,7 +883,7 @@ export async function addSupplementAssignmentsBulkAction(
 
       const supplementIds = Array.from(new Set(payload.supplement_ids));
       const { data: supplements, error: supplementsError } = await supabase
-        .from("supplement_catalog")
+        .from("supplements")
         .select("id")
         .in("id", supplementIds);
       if (supplementsError) throw new Error(supplementsError.message);
@@ -895,7 +895,7 @@ export async function addSupplementAssignmentsBulkAction(
       }
 
       const { data: existingAssignments, error: existingAssignmentsError } = await supabase
-        .from("supplement_assignments")
+        .from("supplement_prescriptions")
         .select("id, supplement_id")
         .eq("subject_profile_id", profileId)
         .in("supplement_id", supplementIds)
@@ -936,12 +936,12 @@ export async function addSupplementAssignmentsBulkAction(
       }
 
       for (const row of updateRows) {
-        const { error } = await supabase.from("supplement_assignments").update(row.updates).eq("id", row.id);
+        const { error } = await supabase.from("supplement_prescriptions").update(row.updates).eq("id", row.id);
         if (error) throw new Error(error.message);
       }
 
       if (insertRows.length > 0) {
-        const { error: insertError } = await supabase.from("supplement_assignments").insert(insertRows);
+        const { error: insertError } = await supabase.from("supplement_prescriptions").insert(insertRows);
         if (insertError) throw new Error(insertError.message);
       }
 
@@ -971,7 +971,7 @@ export async function updateSupplementAssignmentAction(
       if (payload.unit !== undefined) updates.unit = payload.unit || null;
       if (payload.is_active !== undefined) updates.is_active = payload.is_active;
 
-      const { error } = await supabase.from("supplement_assignments").update(updates).eq("id", payload.id);
+      const { error } = await supabase.from("supplement_prescriptions").update(updates).eq("id", payload.id);
       if (error) throw new Error(error.message);
 
       revalidateSupplementPaths(subject);
@@ -988,7 +988,7 @@ export async function removeSupplementAssignmentAction(id: string): Promise<void
       const { supabase } = await requireActor();
       const subject = await getAssignmentSubjectRefById(supabase, assignmentId);
 
-      const { error: deleteError } = await supabase.from("supplement_assignments").delete().eq("id", assignmentId);
+      const { error: deleteError } = await supabase.from("supplement_prescriptions").delete().eq("id", assignmentId);
       if (deleteError) throw new Error(deleteError.message);
 
       revalidateSupplementPaths(subject);
@@ -1008,7 +1008,7 @@ export async function removeSupplementStackAction(
       const subject = await getSubjectProfileRefById(supabase, payload.profile_id);
 
       const { error: deleteError } = await supabase
-        .from("supplement_subject_profiles")
+        .from("supplement_profiles")
         .delete()
         .eq("id", payload.profile_id);
       if (deleteError) throw new Error(deleteError.message);

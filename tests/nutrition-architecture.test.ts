@@ -227,28 +227,28 @@ test("nutrition dashboard activity utilities classify and filter scoped activiti
 
   assert.equal(
     shouldIncludeNutritionActivityForScope(
-      { subject_user_id: null, subject_client_id: "client-1", meal_group_id: null },
+      { subject_user_id: null, subject_client_id: "client-1", nutrition_plan_id: null },
       { subject_client_id: "client-1" }
     ),
     true
   );
   assert.equal(
     shouldIncludeNutritionActivityForScope(
-      { subject_user_id: "user-2", subject_client_id: null, meal_group_id: null },
+      { subject_user_id: "user-2", subject_client_id: null, nutrition_plan_id: null },
       { subject_user_id: "user-1" }
     ),
     false
   );
   assert.equal(
     shouldIncludeNutritionActivityForScope(
-      { subject_user_id: null, subject_client_id: "client-2", meal_group_id: "group-1" },
-      { subject_client_id: "client-9", meal_group_id: "group-1" }
+      { subject_user_id: null, subject_client_id: "client-2", nutrition_plan_id: "group-1" },
+      { subject_client_id: "client-9", nutrition_plan_id: "group-1" }
     ),
     true
   );
   assert.equal(
     shouldIncludeNutritionActivityForScope(
-      { subject_user_id: null, subject_client_id: null, meal_group_id: null },
+      { subject_user_id: null, subject_client_id: null, nutrition_plan_id: null },
       { subject_user_id: "user-1" }
     ),
     true

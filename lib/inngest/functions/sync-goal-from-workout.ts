@@ -3,9 +3,9 @@ import type { Database } from "@/types/database";
 import { inngest } from "../client";
 
 type GoalRow = Pick<
-  Database["public"]["Tables"]["fitness_goals"]["Row"],
+  Database["public"]["Tables"]["goals"]["Row"],
   | "id"
-  | "user_id"
+  | "created_by_user_id"
   | "linked_exercise_id"
   | "custom_description"
   | "goal_type"
@@ -18,7 +18,7 @@ type GoalRow = Pick<
 >;
 
 type StrengthSetRow = Pick<
-  Database["public"]["Tables"]["strength_sets"]["Row"],
+  Database["public"]["Tables"]["workout_sets"]["Row"],
   "exercise_id" | "weight"
 >;
 
@@ -97,7 +97,7 @@ export const syncGoalFromWorkout = inngest.createFunction(
 
     const setsWithMaxWeightByExercise = await step.run("fetch-sets", async () => {
       const executionId = (event.data as { execution_id?: string | null }).execution_id;
-      let setsQuery = admin.from("strength_sets").select("exercise_id, weight");
+      let setsQuery = admin.from("workout_sets").select("exercise_id, weight");
       setsQuery = executionId ? setsQuery.eq("execution_id", executionId) : setsQuery.eq("workout_id", event.data.workout_id);
       const { data, error } = await setsQuery;
       if (error) throw new Error(error.message);
@@ -147,11 +147,11 @@ export const syncGoalFromWorkout = inngest.createFunction(
 
     const matchingGoals = await step.run("find-matching-goals", async () => {
       const { data, error } = await admin
-        .from("fitness_goals")
+        .from("goals")
         .select(
-          "id, user_id, linked_exercise_id, custom_description, goal_type, current_value, target_value, start_value, unit, goal_direction, status"
+          "id, created_by_user_id, linked_exercise_id, custom_description, goal_type, current_value, target_value, start_value, unit, goal_direction, status"
         )
-        .eq("user_id", effectiveUserId)
+        .eq("created_by_user_id", effectiveUserId)
         .in("linked_exercise_id", exerciseIds)
         .in("status", [...ACTIVE_SYNC_GOAL_STATUSES]);
       if (error) throw new Error(error.message);
@@ -214,13 +214,13 @@ export const syncGoalFromWorkout = inngest.createFunction(
 
         const nowIso = new Date().toISOString();
         const { error: updateError } = await admin
-          .from("fitness_goals")
+          .from("goals")
           .update({
             current_value: maxWeight,
             updated_at: nowIso,
           })
           .eq("id", goal.id)
-          .eq("user_id", goal.user_id);
+          .eq("created_by_user_id", goal.created_by_user_id);
         if (updateError) throw new Error(updateError.message);
 
         const goalAchieved =
@@ -245,9 +245,9 @@ export const syncGoalFromWorkout = inngest.createFunction(
           };
         }
 
-        const historyPayload: Database["public"]["Tables"]["goal_progress_history"]["Insert"] = {
+        const historyPayload: Database["public"]["Tables"]["goal_history"]["Insert"] = {
           goal_id: goal.id,
-          user_id: goal.user_id,
+          user_id: goal.created_by_user_id,
           progress_percent: progressPercent,
           current_value: maxWeight,
           target_value: goal.target_value,
@@ -257,7 +257,7 @@ export const syncGoalFromWorkout = inngest.createFunction(
           snapshot_at: nowIso,
         };
 
-        const { error: historyError } = await admin.from("goal_progress_history").insert(historyPayload);
+        const { error: historyError } = await admin.from("goal_history").insert(historyPayload);
         if (historyError) throw new Error(historyError.message);
 
         return {
@@ -278,7 +278,7 @@ export const syncGoalFromWorkout = inngest.createFunction(
           const { count, error: dedupeError } = await admin
             .from("notifications")
             .select("id", { count: "exact", head: true })
-            .eq("user_id", goal.user_id)
+            .eq("user_id", goal.created_by_user_id)
             .eq("type", "goal_achieved")
             .contains("data", { goal_id: goal.id })
             .gt("created_at", cutoff);
@@ -289,7 +289,7 @@ export const syncGoalFromWorkout = inngest.createFunction(
           const unitLabel = goal.unit?.trim() ? ` ${goal.unit.trim()}` : "";
 
           const { error: insertNotificationError } = await admin.from("notifications").insert({
-            user_id: goal.user_id,
+            user_id: goal.created_by_user_id,
             type: "goal_achieved",
             title: "Goal achieved!",
             body: `You reached your target of ${targetValueLabel}${unitLabel}.`,
@@ -306,14 +306,14 @@ export const syncGoalFromWorkout = inngest.createFunction(
 
         await step.run(`complete-goal-${goal.id}`, async () => {
           const { error: completeError } = await admin
-            .from("fitness_goals")
+            .from("goals")
             .update({
               status: "completed",
               check_in_interval_days: null,
               updated_at: new Date().toISOString(),
             })
             .eq("id", goal.id)
-            .eq("user_id", goal.user_id)
+            .eq("created_by_user_id", goal.created_by_user_id)
             .in("status", [...ACTIVE_SYNC_GOAL_STATUSES]);
           if (completeError) throw new Error(completeError.message);
         });

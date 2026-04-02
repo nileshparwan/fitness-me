@@ -195,7 +195,7 @@ export async function logDailyHealthAction(
       const sleepTask =
         payload.sleep_hours != null || payload.sleep_score != null
           ? (async () => {
-              const sleepResult = await supabaseAny.from("sleep_log").upsert(
+              const sleepResult = await supabaseAny.from("checkin_sleep").upsert(
                 {
                   ...commonRef,
                   date: payload.date,
@@ -220,7 +220,7 @@ export async function logDailyHealthAction(
         payload.hrv_ms != null || payload.resting_heart_rate != null
           ? (async () => {
               let existingVitalsQuery = supabaseAny
-                .from("vitals_log")
+                .from("checkin_vitals")
                 .select("id, recorded_at")
                 .gte("recorded_at", `${payload.date}T00:00:00.000Z`)
                 .lte("recorded_at", `${payload.date}T23:59:59.999Z`);
@@ -246,7 +246,7 @@ export async function logDailyHealthAction(
                   vitalsUpdate.resting_heart_rate = payload.resting_heart_rate;
 
                 const updateResult = await supabaseAny
-                  .from("vitals_log")
+                  .from("checkin_vitals")
                   .update(vitalsUpdate)
                   .eq("id", existingRow.id);
                 if (updateResult.error && !isMissingSchemaDependencyError(updateResult.error)) {
@@ -255,7 +255,7 @@ export async function logDailyHealthAction(
                 return;
               }
 
-              const insertResult = await supabaseAny.from("vitals_log").insert({
+              const insertResult = await supabaseAny.from("checkin_vitals").insert({
                 ...commonRef,
                 recorded_at: `${payload.date}T07:00:00.000Z`,
                 hrv_ms: payload.hrv_ms ?? null,
@@ -271,7 +271,7 @@ export async function logDailyHealthAction(
       const dailyActivityTask =
         payload.steps != null || payload.energy_level != null || payload.sleep_hours != null
           ? (async () => {
-              const dailyResult = await supabaseAny.from("daily_activity").upsert(
+              const dailyResult = await supabaseAny.from("checkins").upsert(
                 {
                   ...commonRef,
                   date: payload.date,
@@ -314,7 +314,7 @@ export async function getHealthCheckIns(
       const today = toDateInput(new Date());
 
       let sleepQuery = supabaseAny
-        .from("sleep_log")
+        .from("checkin_sleep")
         .select("date, total_duration_minutes, sleep_score")
         .order("date", { ascending: false });
       sleepQuery = applySubjectFilters(sleepQuery, subjectRef);
@@ -323,7 +323,7 @@ export async function getHealthCheckIns(
       }
 
       let vitalsQuery = supabaseAny
-        .from("vitals_log")
+        .from("checkin_vitals")
         .select("recorded_at, hrv_ms, resting_heart_rate")
         .order("recorded_at", { ascending: false });
       vitalsQuery = applySubjectFilters(vitalsQuery, subjectRef);
@@ -334,7 +334,7 @@ export async function getHealthCheckIns(
       }
 
       let dailyActivityQuery = supabaseAny
-        .from("daily_activity")
+        .from("checkins")
         .select("date, steps, energy_level, sleep_hours")
         .order("date", { ascending: false });
       dailyActivityQuery = applySubjectFilters(dailyActivityQuery, subjectRef);
@@ -435,21 +435,21 @@ export async function getHealthCheckInForDate(
       const subjectRef = resolveSubject(subject, user.id);
 
       let sleepQuery = supabaseAny
-        .from("sleep_log")
+        .from("checkin_sleep")
         .select("date, total_duration_minutes, sleep_score")
         .eq("date", date);
       sleepQuery = applySubjectFilters(sleepQuery, subjectRef);
       sleepQuery = sleepQuery.limit(1);
 
       let dailyActivityQuery = supabaseAny
-        .from("daily_activity")
+        .from("checkins")
         .select("date, steps, energy_level, sleep_hours")
         .eq("date", date);
       dailyActivityQuery = applySubjectFilters(dailyActivityQuery, subjectRef);
       dailyActivityQuery = dailyActivityQuery.limit(1);
 
       let vitalsQuery = supabaseAny
-        .from("vitals_log")
+        .from("checkin_vitals")
         .select("recorded_at, hrv_ms, resting_heart_rate")
         .gte("recorded_at", `${date}T00:00:00.000Z`)
         .lte("recorded_at", `${date}T23:59:59.999Z`);
@@ -521,7 +521,7 @@ export async function getDailyActivityForDateAction(
   const { date } = getSingleDateSchema.parse({ date: dateInput });
 
   return runTrackedAction({
-    eventName: "daily_activity.detail",
+    eventName: "checkins.detail",
     payload: { subject_type: subject.type, date },
     action: async () => {
       const { supabase, user } = await requireActor();
@@ -529,7 +529,7 @@ export async function getDailyActivityForDateAction(
       const subjectRef = resolveSubject(subject, user.id);
 
       let query = supabaseAny
-        .from("daily_activity")
+        .from("checkins")
         .select("date, water_intake_ml")
         .eq("date", date);
       query = applySubjectFilters(query, subjectRef);
@@ -559,7 +559,7 @@ export async function updateDailyActivityAction(
   const payload = updateDailyActivitySchema.parse(input);
 
   return runTrackedAction({
-    eventName: "daily_activity.upsert",
+    eventName: "checkins.upsert",
     payload: { subject_type: subject.type, date: payload.date },
     action: async () => {
       const { supabase, user } = await requireActor();
@@ -572,7 +572,7 @@ export async function updateDailyActivityAction(
       const upsertConflict =
         subject.type === "me" ? "subject_user_id,date" : "subject_client_id,date";
 
-      const result = await supabaseAny.from("daily_activity").upsert(
+      const result = await supabaseAny.from("checkins").upsert(
         {
           ...commonRef,
           date: payload.date,

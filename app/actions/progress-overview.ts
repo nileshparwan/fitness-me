@@ -190,14 +190,14 @@ type SessionRow = {
 };
 
 type StrengthSetRow = Pick<
-  Database["public"]["Tables"]["strength_sets"]["Row"],
+  Database["public"]["Tables"]["workout_sets"]["Row"],
   "id" | "workout_id" | "exercise_name" | "weight" | "reps" | "rpe" | "calculated_1rm" | "created_at"
 > & {
   execution_id: string | null;
 };
 
 type CardioRow = Pick<
-  Database["public"]["Tables"]["cardio_sessions"]["Row"],
+  Database["public"]["Tables"]["workout_cardio"]["Row"],
   | "id"
   | "workout_id"
   | "date"
@@ -211,7 +211,7 @@ type CardioRow = Pick<
 };
 
 type BodyMeasurementRow = Pick<
-  Database["public"]["Tables"]["body_measurements"]["Row"],
+  Database["public"]["Tables"]["measurements"]["Row"],
   | "date"
   | "weight"
   | "body_fat_percent"
@@ -428,7 +428,7 @@ async function fetchExecutionWindowData(
   );
   const { data: templatesData, error: templatesError } = templateIds.length
     ? await supabase
-        .from("training_sessions")
+        .from("workouts")
         .select("id, perceived_exertion, duration_minutes, name")
         .in("id", templateIds)
     : { data: [], error: null };
@@ -457,11 +457,11 @@ async function fetchExecutionWindowData(
   const [{ data: strengthData, error: strengthError }, { data: cardioData, error: cardioError }] =
     await Promise.all([
       supabaseAny
-        .from("strength_sets")
+        .from("workout_sets")
         .select("id, execution_id, workout_id, exercise_name, weight, reps, rpe, calculated_1rm, created_at")
         .in("execution_id", executionIds),
       supabaseAny
-        .from("cardio_sessions")
+        .from("workout_cardio")
         .select("id, execution_id, workout_id, date, distance, duration_minutes, average_heart_rate, activity_type, vo2max_estimate")
         .in("execution_id", executionIds),
     ]);
@@ -599,7 +599,7 @@ export async function getProgressSummaryStats(
       const [{ data: weightRows, error: weightError }, { data: priorWeightRows, error: priorWeightError }] =
         await Promise.all([
           supabase
-            .from("body_measurements")
+            .from("measurements")
             .select("date, weight")
             .eq("subject_user_id", userId)
             .is("subject_client_id", null)
@@ -609,7 +609,7 @@ export async function getProgressSummaryStats(
             .order("date", { ascending: false })
             .limit(1),
           supabase
-            .from("body_measurements")
+            .from("measurements")
             .select("date, weight")
             .eq("subject_user_id", userId)
             .is("subject_client_id", null)
@@ -631,7 +631,7 @@ export async function getProgressSummaryStats(
       const supabaseAny = supabase as any;
       let avgStepsPerDay: number | null = null;
       const stepsResult = await supabaseAny
-        .from("daily_activity")
+        .from("checkins")
         .select("date, steps")
         .eq("subject_user_id", userId)
         .is("subject_client_id", null)
@@ -1113,14 +1113,14 @@ export async function getProgressInsights(
       const supabaseAny = supabase as any;
       const [sleepResult, vitalsResult] = await Promise.all([
         supabaseAny
-          .from("sleep_log")
+          .from("checkin_sleep")
           .select("date, total_duration_minutes, sleep_score")
           .eq("subject_user_id", userId)
           .is("subject_client_id", null)
           .gte("date", currentWindow.startDate)
           .lte("date", currentWindow.endDate),
         supabaseAny
-          .from("vitals_log")
+          .from("checkin_vitals")
           .select("recorded_at, resting_heart_rate")
           .eq("subject_user_id", userId)
           .is("subject_client_id", null)
@@ -1192,7 +1192,7 @@ export async function getProgressInsights(
       const exerciseNames = Array.from(new Set(currentStrength.map((row) => row.exercise_name))).filter(Boolean);
       if (exerciseNames.length > 0) {
         const { data: exerciseRows, error: exerciseError } = await supabase
-          .from("exercise_catalog")
+          .from("exercises")
           .select("name, muscle_groups")
           .in("name", exerciseNames);
 
@@ -1253,7 +1253,7 @@ export async function getProgressInsights(
 
       // Weight progress (30-day delta)
       const { data: weightRows, error: weightError } = await supabase
-        .from("body_measurements")
+        .from("measurements")
         .select("date, weight")
         .eq("subject_user_id", userId)
         .is("subject_client_id", null)
@@ -1348,7 +1348,7 @@ export async function getBodyCompositionSeries(
       const window = getPeriodBounds(range, offsetPeriods);
       const supabase = await createClient();
       const { data, error } = await supabase
-        .from("body_measurements")
+        .from("measurements")
         .select("date, weight, body_fat_percent, waist, hips, chest, neck, bicep_left, bicep_right, thigh_left, thigh_right, calf")
         .eq("subject_user_id", userId)
         .is("subject_client_id", null)
@@ -1393,15 +1393,17 @@ export async function getStrengthProgressSeries(
       const [{ data: topSessions, error: topSessionsError }, { data: rangeSessions, error: rangeSessionsError }] =
         await Promise.all([
           supabase
-            .from("training_sessions")
+            .from("workouts")
             .select("id, performed_on")
-            .eq("user_id", userId)
+            .eq("subject_user_id", userId)
+            .is("subject_client_id", null)
             .gte("performed_on", topWindowStart)
             .lte("performed_on", window.endDate),
           supabase
-            .from("training_sessions")
+            .from("workouts")
             .select("id, performed_on")
-            .eq("user_id", userId)
+            .eq("subject_user_id", userId)
+            .is("subject_client_id", null)
             .gte("performed_on", window.startDate)
             .lte("performed_on", window.endDate),
         ]);
@@ -1426,11 +1428,11 @@ export async function getStrengthProgressSeries(
       const [{ data: topStrengthRows, error: topStrengthError }, { data: rangeStrengthRows, error: rangeStrengthError }] =
         await Promise.all([
           supabase
-            .from("strength_sets")
+            .from("workout_sets")
             .select("workout_id, exercise_name")
             .in("workout_id", topSessionIds),
           supabase
-            .from("strength_sets")
+            .from("workout_sets")
             .select("workout_id, exercise_name, weight, reps, calculated_1rm, created_at")
             .in("workout_id", rangeSessionIds),
         ]);
@@ -1440,7 +1442,7 @@ export async function getStrengthProgressSeries(
 
       const countByExercise = new Map<string, number>();
       for (const row of (topStrengthRows || []) as Array<
-        Pick<Database["public"]["Tables"]["strength_sets"]["Row"], "exercise_name">
+        Pick<Database["public"]["Tables"]["workout_sets"]["Row"], "exercise_name">
       >) {
         const key = row.exercise_name;
         countByExercise.set(key, (countByExercise.get(key) || 0) + 1);
@@ -1465,7 +1467,7 @@ export async function getStrengthProgressSeries(
 
       for (const row of (rangeStrengthRows || []) as Array<
         Pick<
-          Database["public"]["Tables"]["strength_sets"]["Row"],
+          Database["public"]["Tables"]["workout_sets"]["Row"],
           "workout_id" | "exercise_name" | "weight" | "reps" | "calculated_1rm" | "created_at"
         >
       >) {
@@ -1490,16 +1492,17 @@ export async function getStrengthProgressSeries(
 
       // Recent PRs
       const { data: priorSessions, error: priorSessionsError } = await supabase
-        .from("training_sessions")
+        .from("workouts")
         .select("id")
-        .eq("user_id", userId)
+        .eq("subject_user_id", userId)
+        .is("subject_client_id", null)
         .lt("performed_on", window.startDate);
       if (priorSessionsError) throw new Error(priorSessionsError.message);
 
       const priorSessionIds = (priorSessions || []).map((row) => row.id);
       const { data: priorStrengthRows, error: priorStrengthError } = priorSessionIds.length
         ? await supabase
-            .from("strength_sets")
+            .from("workout_sets")
             .select("exercise_name, weight, reps, calculated_1rm")
             .in("workout_id", priorSessionIds)
             .in("exercise_name", topExercises)
@@ -1509,7 +1512,7 @@ export async function getStrengthProgressSeries(
 
       const priorBest = new Map<string, number>();
       for (const row of (priorStrengthRows || []) as Array<
-        Pick<Database["public"]["Tables"]["strength_sets"]["Row"], "exercise_name" | "weight" | "reps" | "calculated_1rm">
+        Pick<Database["public"]["Tables"]["workout_sets"]["Row"], "exercise_name" | "weight" | "reps" | "calculated_1rm">
       >) {
         const estimate = safeNumber(row.calculated_1rm) || estimateOneRepMax(safeNumber(row.weight), safeNumber(row.reps));
         const existing = priorBest.get(row.exercise_name) || 0;
@@ -1519,7 +1522,7 @@ export async function getStrengthProgressSeries(
       const currentBest = new Map<string, { value: number; date: string }>();
       for (const row of (rangeStrengthRows || []) as Array<
         Pick<
-          Database["public"]["Tables"]["strength_sets"]["Row"],
+          Database["public"]["Tables"]["workout_sets"]["Row"],
           "exercise_name" | "weight" | "reps" | "calculated_1rm" | "workout_id" | "created_at"
         >
       >) {
@@ -1549,7 +1552,7 @@ export async function getStrengthProgressSeries(
 
       // Muscle volume
       const rangeRows = (rangeStrengthRows || []) as Array<
-        Pick<Database["public"]["Tables"]["strength_sets"]["Row"], "exercise_name" | "weight" | "reps">
+        Pick<Database["public"]["Tables"]["workout_sets"]["Row"], "exercise_name" | "weight" | "reps">
       >;
       const exerciseNames = Array.from(
         new Set(rangeRows.map((row) => row.exercise_name).filter(Boolean))
@@ -1557,7 +1560,7 @@ export async function getStrengthProgressSeries(
 
       const { data: exerciseRows, error: exerciseError } = exerciseNames.length
         ? await supabase
-            .from("exercise_catalog")
+            .from("exercises")
             .select("name, muscle_groups")
             .in("name", exerciseNames)
         : { data: [], error: null };
@@ -1857,32 +1860,32 @@ export async function getComplianceRecovery(
       const [goalsRes, historyRes, sleepRes, vitalsRes, dailyActivityRes, biofeedbackRows] =
         await Promise.all([
           supabase
-          .from("fitness_goals")
+          .from("goals")
           .select("id, goal_type, custom_description, notes, status, is_personal_goal")
-          .eq("user_id", userId)
+          .eq("created_by_user_id", userId)
           .eq("is_personal_goal", true),
           supabase
-          .from("goal_progress_history")
+          .from("goal_history")
           .select("goal_id, snapshot_at")
           .eq("user_id", userId)
           .gte("snapshot_at", `${window.startDate}T00:00:00.000Z`)
           .lte("snapshot_at", `${window.endDate}T23:59:59.999Z`),
         supabaseAny
-          .from("sleep_log")
+          .from("checkin_sleep")
           .select("date, total_duration_minutes, sleep_score, deep_sleep_minutes, rem_sleep_minutes, light_sleep_minutes, awake_minutes")
           .eq("subject_user_id", userId)
           .is("subject_client_id", null)
           .gte("date", subtractDays(window.endDate, 13))
           .lte("date", window.endDate),
         supabaseAny
-          .from("vitals_log")
+          .from("checkin_vitals")
           .select("recorded_at, hrv_ms, resting_heart_rate")
           .eq("subject_user_id", userId)
           .is("subject_client_id", null)
           .gte("recorded_at", `${subtractDays(window.endDate, 13)}T00:00:00.000Z`)
           .lte("recorded_at", `${window.endDate}T23:59:59.999Z`),
         supabaseAny
-          .from("daily_activity")
+          .from("checkins")
           .select("date, sleep_hours")
           .eq("subject_user_id", userId)
           .is("subject_client_id", null)
@@ -1926,7 +1929,7 @@ export async function getComplianceRecovery(
 
       const goals = (goalsRes.data || []) as Array<
         Pick<
-          Database["public"]["Tables"]["fitness_goals"]["Row"],
+          Database["public"]["Tables"]["goals"]["Row"],
           "id" | "goal_type" | "custom_description" | "notes" | "status" | "is_personal_goal"
         >
       >;
@@ -2072,7 +2075,7 @@ export async function getComplianceRecovery(
       const executionIds = calendarExecutions.map((row) => row.id);
       const { data: executionExerciseData, error: executionExerciseError } = executionIds.length
         ? await supabaseAny
-            .from("workout_execution_exercises")
+            .from("workout_log_exercises")
             .select("execution_id, exercise_type")
             .in("execution_id", executionIds)
         : { data: [], error: null };

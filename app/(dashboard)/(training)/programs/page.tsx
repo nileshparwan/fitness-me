@@ -73,7 +73,7 @@ const ProgramGridCard = ({
      {/* Footer: Count */}
      <div className="mt-2 pt-2 border-t flex items-center gap-1.5 text-[10px] text-muted-foreground font-medium uppercase tracking-wider">
        <Dumbbell className="h-3 w-3" />
-       <span>{program.training_plan_items?.[0]?.count || 0} Items</span>
+       <span>{program.program_workouts?.[0]?.count || 0} Items</span>
      </div>
 
    </CardContent>

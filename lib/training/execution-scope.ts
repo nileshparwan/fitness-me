@@ -26,7 +26,7 @@ export async function fetchExecutionRowsForUserScope<T extends { id: string }>(i
 }) {
   const orderByPerformedOnAsc = input.orderByPerformedOnAsc ?? true;
   let userQuery = input.supabaseAny
-    .from("workout_executions")
+    .from("workout_logs")
     .select(input.select)
     .eq("subject_user_id", input.userId)
     .gte("performed_on", input.startDate)
@@ -38,7 +38,7 @@ export async function fetchExecutionRowsForUserScope<T extends { id: string }>(i
   let clientPromise: Promise<{ data: T[]; error: { message: string } | null }>;
   if ((input.linkedClientIds || []).length > 0) {
     let clientQuery = input.supabaseAny
-      .from("workout_executions")
+      .from("workout_logs")
       .select(input.select)
       .in("subject_client_id", input.linkedClientIds)
       .gte("performed_on", input.startDate)

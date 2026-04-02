@@ -59,7 +59,7 @@ export function ShareMealGroupSheet({
   const handleTogglePublicShare = async () => {
     const result = await withToastFeedback(
       mutations.togglePublicShare.mutateAsync({
-        meal_group_id: mealGroupId,
+        nutrition_plan_id: mealGroupId,
         is_public: !isPublic,
       }),
       {

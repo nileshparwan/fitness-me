@@ -20,9 +20,9 @@ export type HistoryEntry = {
     duration_minutes: number | null;
   };
 
-type WorkoutLogRow = Database["public"]["Tables"]["strength_sets"]["Row"];
-type CardioLogRow = Database["public"]["Tables"]["cardio_sessions"]["Row"];
-type WorkoutRow = Database["public"]["Tables"]["training_sessions"]["Row"];
+type WorkoutLogRow = Database["public"]["Tables"]["workout_sets"]["Row"];
+type CardioLogRow = Database["public"]["Tables"]["workout_cardio"]["Row"];
+type WorkoutRow = Database["public"]["Tables"]["workouts"]["Row"];
 type ExerciseCategory = Database["public"]["Enums"]["exercise_category"];
 
 const EXERCISE_CATEGORIES = new Set<ExerciseCategory>(["strength", "cardio", "mind_body", "mobility"]);
@@ -47,9 +47,10 @@ export async function getExerciseHistory(exerciseName: string) {
     if (!user) return [];
 
     const { data: userWorkouts, error: workoutError } = await supabase
-      .from("training_sessions")
+      .from("workouts")
       .select("id")
-      .eq("user_id", user.id);
+      .eq("subject_user_id", user.id)
+      .is("subject_client_id", null);
 
     if (workoutError) {
       console.error("Error fetching workouts:", workoutError);
@@ -61,7 +62,7 @@ export async function getExerciseHistory(exerciseName: string) {
     let strengthLogs: Pick<WorkoutLogRow, "created_at" | "weight" | "reps" | "calculated_1rm">[] = [];
     if (workoutIds.length > 0) {
       const { data: strengthData, error: strengthError } = await supabase
-        .from("strength_sets")
+        .from("workout_sets")
         .select("created_at, weight, reps, calculated_1rm")
         .eq("exercise_name", exerciseName)
         .in("workout_id", workoutIds)
@@ -74,19 +75,21 @@ export async function getExerciseHistory(exerciseName: string) {
       strengthLogs = strengthData || [];
     }
 
-    const { data: cardioData, error: cardioError } = await supabase
-      .from("cardio_sessions")
-      .select("date, distance, duration_minutes")
-      .eq("user_id", user.id)
-      .eq("activity_type", exerciseName)
-      .order("date", { ascending: false });
+    let cardioLogs: Pick<CardioLogRow, "date" | "distance" | "duration_minutes">[] = [];
+    if (workoutIds.length > 0) {
+      const { data: cardioData, error: cardioError } = await supabase
+        .from("workout_cardio")
+        .select("date, distance, duration_minutes")
+        .eq("activity_type", exerciseName)
+        .in("workout_id", workoutIds)
+        .order("date", { ascending: false });
 
-    if (cardioError) {
-      console.error("Error fetching cardio history:", cardioError);
-      return [];
+      if (cardioError) {
+        console.error("Error fetching cardio history:", cardioError);
+        return [];
+      }
+      cardioLogs = (cardioData || []) as Pick<CardioLogRow, "date" | "distance" | "duration_minutes">[];
     }
-
-    const cardioLogs = (cardioData || []) as Pick<CardioLogRow, "date" | "distance" | "duration_minutes">[];
 
     const strengthEntries: HistoryEntry[] = strengthLogs.map((log) => ({
       date: log.created_at || new Date(0).toISOString(),
@@ -131,7 +134,7 @@ export async function getExercises({
     const supabase = await createClient();
 
     let query = supabase
-        .from("exercise_catalog")
+        .from("exercises")
         .select("*", { count: "exact" })
         .order("name", { ascending: true })
         .range(pageParam * PAGE_SIZE, (pageParam + 1) * PAGE_SIZE - 1);
@@ -173,7 +176,7 @@ export async function createExercise(values: ExerciseFormValues) {
       throw new Error("Muscle groups must include one focus tag: push, pull, core, or legs.");
     }
 
-    const { error } = await supabase.from("exercise_catalog").insert({
+    const { error } = await supabase.from("exercises").insert({
         name: values.name,
         category: normalizedCategory,
         muscle_groups: normalizedMuscleGroups,
@@ -199,7 +202,7 @@ export async function deleteExercise(id: string) {
 
     // FIX: Add select() or count explicitly to verify execution
     const { error, count } = await supabase
-        .from("exercise_catalog")
+        .from("exercises")
         .delete({ count: "exact" }) // Request the count of deleted rows
         .eq("id", id);
 
@@ -231,7 +234,7 @@ export async function updateExercise(id: string, values: ExerciseFormValues) {
     }
 
     const { error, count } = await supabase
-        .from("exercise_catalog")
+        .from("exercises")
         .update({
             name: values.name,
             category: normalizedCategory,

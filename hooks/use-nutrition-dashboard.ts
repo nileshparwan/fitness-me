@@ -51,7 +51,7 @@ export function useNutritionDashboard() {
       getNutritionDiaryDayAction({
         performed_on: today,
         subject,
-        meal_group_id: undefined,
+        nutrition_plan_id: undefined,
       }),
     enabled: Boolean(today),
     staleTime: 120_000,
@@ -66,7 +66,7 @@ export function useNutritionDashboard() {
       listNutritionDashboardActivityAction({
         subject,
         limit: 10,
-        meal_group_id: undefined,
+        nutrition_plan_id: undefined,
       }),
     staleTime: 60_000,
     gcTime: 5 * 60_000,

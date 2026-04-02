@@ -6,9 +6,9 @@ import { WorkoutPrintView } from "@/components/workout/workout-print-view";
 import { WorkoutActions } from "@/components/workout/workout-actions";
 import { Database } from "@/types/database";
 
-type Workout = Database["public"]["Tables"]["training_sessions"]["Row"];
-type WorkoutLog = Database["public"]["Tables"]["strength_sets"]["Row"];
-type CardioLog = Database["public"]["Tables"]["cardio_sessions"]["Row"];
+type Workout = Database["public"]["Tables"]["workouts"]["Row"];
+type WorkoutLog = Database["public"]["Tables"]["workout_sets"]["Row"];
+type CardioLog = Database["public"]["Tables"]["workout_cardio"]["Row"];
 
 export const dynamic = "force-dynamic";
 
@@ -20,7 +20,7 @@ export default async function PublicWorkoutPage({ params }: { params: Promise<{ 
     // We removed "user:users(email)" from the select to prevent runtime errors 
     // if you don't have a public profiles table setup.
     const { data: workout, error } = await supabase
-        .from("training_sessions")
+        .from("workouts")
         .select("*")
         .eq("id", id)
         .single();
@@ -29,14 +29,14 @@ export default async function PublicWorkoutPage({ params }: { params: Promise<{ 
 
     // 2. Fetch Logs
     const { data: strengthLogs } = await supabase
-        .from("strength_sets")
+        .from("workout_sets")
         .select("*")
         .eq("workout_id", id)
         .order("entry_sequence", { ascending: true })
         .order("set_number");
 
     const { data: cardioLogs } = await supabase
-        .from("cardio_sessions")
+        .from("workout_cardio")
         .select("*")
         .eq("workout_id", id)
         .order("entry_sequence", { ascending: true });

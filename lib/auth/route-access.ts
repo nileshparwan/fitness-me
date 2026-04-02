@@ -181,7 +181,7 @@ const SYSADMIN_SECTIONS: SidebarSectionConfig[] = [
           { title: "Training", href: "/admin/training", icon: "dumbbell" },
           { title: "Nutrition", href: "/admin/nutrition", icon: "nutrition" },
           { title: "Analytics", href: "/admin/analytics", icon: "trend" },
-          { title: "Tickets", href: "/admin/tickets", icon: "support" },
+          { title: "Tickets", href: "/admin/support_tickets", icon: "support" },
           { title: "System", href: "/admin/system", icon: "settings" },
           { title: "Settings", href: "/admin/settings", icon: "settings" },
         ],
@@ -208,7 +208,7 @@ const MOBILE_MENU_TAB: MobileNavTabConfig = {
 const MOBILE_TABS_DEFAULT: MobileNavTabConfig[] = [
   { key: "dashboard", label: "Home", href: "/dashboard", icon: "home" },
   { key: "progress", label: "Progress", href: "/progress", icon: "trend" },
-  { key: "tickets", label: "Tickets", href: "/support", icon: "book" },
+  { key: "support_tickets", label: "Tickets", href: "/support", icon: "book" },
   { key: "goals", label: "Goals", href: "/goals", icon: "target" },
   MOBILE_MENU_TAB,
 ];

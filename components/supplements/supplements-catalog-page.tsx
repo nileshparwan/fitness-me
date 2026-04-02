@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { useSupplementCatalog } from "@/hooks/use-supplements";
 import type { Database } from "@/types/database";
 
-type SupplementCatalogRow = Database["public"]["Tables"]["supplement_catalog"]["Row"];
+type SupplementCatalogRow = Database["public"]["Tables"]["supplements"]["Row"];
 
 export function SupplementsCatalogPage() {
   const catalogQuery = useSupplementCatalog();

@@ -2,7 +2,7 @@ import { EventSchemas } from "inngest";
 
 type TrainingWorkoutCompletedEvent = {
   data: {
-    workout_id: string; // training_sessions.id
+    workout_id: string; // workouts.id
     user_id: string; // who logged the workout
     subject_user_id: string | null; // workout subject user id
     subject_client_id: string | null; // workout subject client id

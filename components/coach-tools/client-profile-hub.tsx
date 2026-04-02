@@ -110,7 +110,7 @@ const PROFILE_TABS: Array<{ key: ProfileTab; label: string; icon: React.Componen
   { key: "access", label: "Access", icon: Shield },
 ];
 
-type ClientPaymentRow = Database["public"]["Tables"]["client_payments"]["Row"];
+type ClientPaymentRow = Database["public"]["Tables"]["payments"]["Row"];
 type ClientPaymentStatusFilter = "all" | PaymentStatus;
 type PaymentTableSortId = "created_at" | "amount" | "status";
 const PAYMENT_COLUMN_LABELS: Record<string, string> = {
@@ -453,7 +453,7 @@ export function ClientProfileHub({ clientId, initialTab = "overview" }: { client
     for (const row of checkinsQuery.data || []) {
       activityRows.push({
         id: `checkin-${row.id}`,
-        label: `${row.status === "pending" ? "Pending" : "Updated"} check-in`,
+        label: `${row.status === "pending_review" ? "Pending" : "Updated"} check-in`,
         at: row.submitted_at,
       });
     }
@@ -611,7 +611,7 @@ export function ClientProfileHub({ clientId, initialTab = "overview" }: { client
         client_id: clientId,
         name: logName.trim(),
         performed_on: new Date().toISOString().slice(0, 10),
-        session_slot: logSlot,
+        workout_slot: logSlot,
         location_type: logLocationType,
         location_label: logLocationLabel.trim() || null,
         started_at: new Date().toISOString(),

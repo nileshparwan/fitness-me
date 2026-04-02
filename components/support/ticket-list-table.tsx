@@ -58,7 +58,7 @@ export function TicketListTable({
     <div className="space-y-3">
       <div className="space-y-2 md:hidden">
         {isLoading && safeRows.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Loading tickets...</p>
+          <p className="text-sm text-muted-foreground">Loading support_tickets...</p>
         ) : null}
         {!isLoading && safeRows.length === 0 ? (
           <p className="text-sm text-muted-foreground">{emptyText}</p>

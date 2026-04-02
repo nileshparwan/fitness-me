@@ -27,7 +27,7 @@ const subjectSchema = z
 const listActivitySchema = z.object({
   limit: z.number().int().min(1).max(10).default(10),
   subject: subjectSchema,
-  meal_group_id: z.string().uuid().optional(),
+  nutrition_plan_id: z.string().uuid().optional(),
 });
 
 type NutritionDashboardActivityType = "meal" | "assignment" | "group" | "progress" | "client";
@@ -52,7 +52,7 @@ export async function listNutritionDashboardActivityAction(input: z.input<typeof
       limit: payload.limit,
       subject_client_id: payload.subject?.subject_client_id ?? null,
       subject_user_id: payload.subject?.subject_user_id ?? null,
-      meal_group_id: payload.meal_group_id ?? null,
+      nutrition_plan_id: payload.nutrition_plan_id ?? null,
     },
     action: async () => {
       const supabase = await createClient();
@@ -84,9 +84,9 @@ export async function listNutritionDashboardActivityAction(input: z.input<typeof
         const eventSubject = {
           subject_user_id: activityMetadataString(metadata, "subject_user_id"),
           subject_client_id: activityMetadataString(metadata, "subject_client_id") || activityMetadataString(metadata, "client_id"),
-          meal_group_id: activityMetadataString(metadata, "meal_group_id"),
+          nutrition_plan_id: activityMetadataString(metadata, "nutrition_plan_id"),
         };
-        if (!shouldIncludeNutritionActivityForScope(eventSubject, { ...payload.subject, meal_group_id: payload.meal_group_id })) continue;
+        if (!shouldIncludeNutritionActivityForScope(eventSubject, { ...payload.subject, nutrition_plan_id: payload.nutrition_plan_id })) continue;
 
         filtered.push({
           id: row.id,
