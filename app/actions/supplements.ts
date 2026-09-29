@@ -73,7 +73,6 @@ export type SupplementAssignmentRow = {
   id: string;
   supplement_id: string;
   supplement_name: string;
-  category: SupplementCategory;
   categories: SupplementCategory[];
   default_servings: number;
   unit: string | null;
@@ -400,7 +399,6 @@ function assignmentToUiRow(row: AssignmentWithCatalog): SupplementAssignmentRow 
     id: row.id,
     supplement_id: row.supplement_id,
     supplement_name: supplement.name,
-    category: categories[0] || "other",
     categories,
     default_servings: Number(row.default_servings || 1),
     unit: row.unit || null,

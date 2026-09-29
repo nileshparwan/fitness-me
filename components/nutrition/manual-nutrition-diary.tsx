@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { addDays, format, subDays } from "date-fns";
 import {
   CalendarDays,
@@ -18,6 +19,7 @@ import {
 import { toast } from "sonner";
 
 import type { ManualDiaryItem, ManualDiaryLog, MealType } from "@/app/actions/nutrition-manual";
+import { getBodyHealthMetrics } from "@/app/actions/body-health";
 import { MEAL_TYPE_ICONS, MEAL_TYPE_LABELS } from "@/components/nutrition/meal-groups/meal-group-types";
 import { DeleteConfirmSheet } from "@/components/nutrition/shared/delete-confirm-sheet";
 import { MealItemEditorSheet, type MealItemEditorValue } from "@/components/nutrition/shared/meal-item-editor-sheet";
@@ -175,12 +177,14 @@ function ProgressBar({
   value,
   target,
   pct,
+  detail,
 }: {
   metric: NutritionProgressMetric;
   label: string;
   value: number;
   target: number | null;
   pct: number | null;
+  detail?: React.ReactNode;
 }) {
   const percent = computeNutritionVisualPercent({
     metric,
@@ -200,6 +204,7 @@ function ProgressBar({
           {target ? ` / ${Math.round(target)}` : ""}
         </span>
       </div>
+      {detail ? <div className="flex items-center justify-between gap-3 text-xs">{detail}</div> : null}
       <Progress
         value={percent}
         max={160}
@@ -279,6 +284,13 @@ export function ManualNutritionDiary({
   const pushRecentDiaryItem = usePushNutritionRecentDiaryItem();
 
   const diaryQuery = useNutritionDiary(performedOn, resolvedSubject, selectedMealGroupId || null);
+  const bodyHealthQuery = useQuery({
+    queryKey: ["body-health", resolvedSubject?.subject_user_id || "self", resolvedSubject?.subject_client_id || "none"],
+    queryFn: () => getBodyHealthMetrics(resolvedSubject),
+    staleTime: 1000 * 60 * 5,
+    gcTime: 1000 * 60 * 10,
+    refetchOnWindowFocus: false,
+  });
   const allFavoritesQuery = useFavoriteMealItems(100, null, { enabled: favoritesLookupEnabled || favoritesOpen });
   const favoritesQuery = useFavoriteMealItems(40, selectedFavoriteMealType, { enabled: favoritesOpen });
   const templatesQuery = useMealPlanTemplates();
@@ -365,6 +377,32 @@ export function ManualNutritionDiary({
     }
     return map;
   }, [allFavoritesQuery.data, favoriteOverrides]);
+
+  const calorieVsTdee = useMemo(() => {
+    const tdee = bodyHealthQuery.data?.tdee ?? null;
+    if (tdee === null) return null;
+    const intake = diaryQuery.data?.totals.calories ?? 0;
+    const delta = Math.round(intake - tdee);
+    if (Math.abs(delta) <= 25) {
+      return {
+        tdee,
+        label: "On target",
+        className: "border-emerald-400/30 bg-emerald-500/10 text-emerald-200",
+      };
+    }
+    if (delta > 0) {
+      return {
+        tdee,
+        label: `+${delta} surplus`,
+        className: "border-amber-400/30 bg-amber-500/10 text-amber-200",
+      };
+    }
+    return {
+      tdee,
+      label: `${Math.abs(delta)} deficit`,
+      className: "border-sky-400/30 bg-sky-500/10 text-sky-200",
+    };
+  }, [bodyHealthQuery.data?.tdee, diaryQuery.data?.totals.calories]);
 
   const logsBySection = useMemo(() => {
     const map = new Map<DiaryMealSection, ManualDiaryLog>();
@@ -1052,6 +1090,18 @@ export function ManualNutritionDiary({
                   value={diaryQuery.data.totals.calories}
                   target={diaryQuery.data.active_plan.daily_calorie_target}
                   pct={diaryQuery.data.progress.calories_pct}
+                  detail={
+                    calorieVsTdee ? (
+                      <>
+                        <span className="text-muted-foreground">
+                          {Math.round(diaryQuery.data.totals.calories)} / {Math.round(calorieVsTdee.tdee)} kcal
+                        </span>
+                        <span className={cn("rounded-full border px-2 py-0.5 font-medium", calorieVsTdee.className)}>
+                          {calorieVsTdee.label}
+                        </span>
+                      </>
+                    ) : undefined
+                  }
                 />
                 <ProgressBar
                   metric="protein"

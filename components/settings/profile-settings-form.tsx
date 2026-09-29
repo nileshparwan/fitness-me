@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -23,6 +23,8 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
+import { BodyHealthMetricsPanel } from "@/components/progress/body/body-health-metrics-panel";
+import { computeAgeFromBirthDate, computeBodyHealthMetrics } from "@/lib/calculations/body-health";
 import { withToastFeedback } from "@/lib/ui/toast-feedback";
 import { profileSchema, type ProfileFormValues } from "@/lib/validations/settings";
 import { compressToBase64, dataUrlSizeBytes } from "@/utils/image";
@@ -123,6 +125,7 @@ export function ProfileSettingsForm({ profile }: ProfileSettingsFormProps) {
       full_name: profile.full_name || "",
       phone: profile.phone || null,
       date_of_birth: profile.date_of_birth || null,
+      height: profile.height ?? null,
       bio: profile.bio || null,
       avatar_url: profile.avatar_url || null,
       gender: profile.gender || null,
@@ -135,6 +138,20 @@ export function ProfileSettingsForm({ profile }: ProfileSettingsFormProps) {
     },
   });
   const roleIsCoach = profile.role === "sysadmin";
+  const height = form.watch("height");
+  const dateOfBirth = form.watch("date_of_birth");
+  const gender = form.watch("gender");
+  const metabolicMetrics = useMemo(
+    () =>
+      computeBodyHealthMetrics({
+        gender: gender ?? null,
+        age: computeAgeFromBirthDate(dateOfBirth ?? null),
+        height_cm: height ?? null,
+        weight_kg: profile.latest_weight ?? null,
+        activity_level: "moderate",
+      }),
+    [dateOfBirth, gender, height, profile.latest_weight]
+  );
 
   const onSubmit = (values: ProfileFormValues) => {
     startTransition(async () => {
@@ -198,23 +215,43 @@ export function ProfileSettingsForm({ profile }: ProfileSettingsFormProps) {
             />
           </div>
 
-          <FormField
-            control={form.control}
-            name="date_of_birth"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Date of Birth</FormLabel>
-                <FormControl>
-                  <Input
-                    type="date"
-                    value={field.value || ""}
-                    onChange={(event) => field.onChange(event.target.value || null)}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+          <div className="grid gap-4 md:grid-cols-2">
+            <FormField
+              control={form.control}
+              name="date_of_birth"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Date of Birth</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="date"
+                      value={field.value || ""}
+                      onChange={(event) => field.onChange(event.target.value || null)}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="height"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Height (cm)</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="number"
+                      value={field.value ?? ""}
+                      onChange={(event) => field.onChange(event.target.value ? Number(event.target.value) : null)}
+                      placeholder="175"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
 
           <div className="space-y-3">
             <FormLabel>Gender</FormLabel>
@@ -295,6 +332,16 @@ export function ProfileSettingsForm({ profile }: ProfileSettingsFormProps) {
                 )}
               />
             ) : null}
+          </div>
+
+          <div className="rounded-2xl border border-border/60 bg-background/40 p-4">
+            <div className="mb-4 space-y-1">
+              <h4 className="text-sm font-semibold">Your Metabolic Profile</h4>
+              <p className="text-xs text-muted-foreground">
+                Live estimate from your gender, age, height, and latest logged body weight.
+              </p>
+            </div>
+            <BodyHealthMetricsPanel metrics={metabolicMetrics} compact={false} />
           </div>
 
           <div className="grid gap-4 rounded-2xl border border-border/60 bg-background/40 p-4 md:grid-cols-2">

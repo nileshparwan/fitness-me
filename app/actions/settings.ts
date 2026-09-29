@@ -23,6 +23,7 @@ export type SettingsProfilePayload = {
   phone: string | null;
   date_of_birth: string | null;
   height: number | null;
+  latest_weight: number | null;
   bio: string | null;
   avatar_url: string | null;
   preferred_units: "metric" | "imperial";
@@ -101,6 +102,16 @@ export async function getSettingsProfile(): Promise<SettingsProfilePayload> {
 
       if (profileError) throw profileError;
 
+      const { data: latestMeasurement, error: measurementError } = await supabase
+        .from("measurements")
+        .select("weight")
+        .eq("subject_user_id", user.id)
+        .is("subject_client_id", null)
+        .order("date", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (measurementError) throw measurementError;
+
       return {
         full_name: profileData?.full_name ?? null,
         email: user.email ?? null,
@@ -108,6 +119,7 @@ export async function getSettingsProfile(): Promise<SettingsProfilePayload> {
         phone: profileData?.phone ?? null,
         date_of_birth: profileData?.date_of_birth ?? null,
         height: profileData?.height ?? null,
+        latest_weight: latestMeasurement?.weight ?? null,
         bio: profileData?.bio ?? null,
         avatar_url: profileData?.avatar_url ?? null,
         preferred_units: normalizeUnit(profileData?.preferred_units),
@@ -142,6 +154,7 @@ export async function updateProfile(data: ProfileFormValues) {
         id: user.id,
         full_name: parsed.full_name.trim(),
         date_of_birth: parsed.date_of_birth ?? null,
+        height: parsed.height ?? null,
         bio: toNullableText(parsed.bio),
         avatar_url: toNullableText(parsed.avatar_url),
         phone: toNullableText(parsed.phone),

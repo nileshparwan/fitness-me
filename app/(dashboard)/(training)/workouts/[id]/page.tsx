@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, type ComponentType } from "react";
+import { useMemo, useState, type ComponentType } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { format } from "date-fns";
+import { useQuery } from "@tanstack/react-query";
 import {
   Activity,
   ArrowLeft,
@@ -19,6 +20,7 @@ import {
 } from "lucide-react";
 
 import { EditableText } from "@/components/shared/editable-text";
+import { MuscleBodyMap } from "@/components/progress/body/muscle-body-map";
 import { LogWorkoutDialog } from "@/components/workout/log-workout-dialog";
 import { WorkoutDetailSkeleton } from "./_components/workout-detailed-skeleton";
 import { Badge } from "@/components/ui/badge";
@@ -43,6 +45,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useWorkout, useWorkouts } from "@/hooks/use-workout";
+import { createClient } from "@/lib/supabase/client";
+import { buildExerciseData } from "@/lib/progress/body-map";
 import { useUnitLabels, useUnitSystem } from "@/stores/use-settings-store";
 import type { Database } from "@/types/database";
 import { groupLogsByExercise } from "@/utils/log";
@@ -144,14 +148,50 @@ export default function WorkoutDetailPage() {
   const { deleteWorkout, updateWorkout } = useWorkouts();
   const { data: workout, isLoading } = useWorkout(id);
 
+  const strengthLogs = useMemo(() => ((workout?.workout_sets || []) as StrengthSetRow[]), [workout?.workout_sets]);
+  const cardioLogs = useMemo(() => ((workout?.workout_cardio || []) as CardioLogRow[]), [workout?.workout_cardio]);
+  const workoutExerciseNames = useMemo(
+    () => Array.from(new Set(strengthLogs.map((row) => row.exercise_name).filter(Boolean))),
+    [strengthLogs]
+  );
+  const supabase = createClient();
+  const exerciseMetaQuery = useQuery({
+    queryKey: ["workout-muscle-map", id, workoutExerciseNames],
+    queryFn: async () => {
+      if (workoutExerciseNames.length === 0) return [];
+      const { data, error } = await supabase
+        .from("exercises")
+        .select("name, muscle_groups")
+        .in("name", workoutExerciseNames);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: Boolean(workout) && workoutExerciseNames.length > 0,
+    staleTime: 5 * 60_000,
+    gcTime: 10 * 60_000,
+    refetchOnWindowFocus: false,
+  });
+  const workoutMuscleMapData = useMemo(() => {
+    const metaByName = new Map((exerciseMetaQuery.data || []).map((row) => [row.name, row.muscle_groups || []] as const));
+    const counts = new Map<string, number>();
+    for (const row of strengthLogs) {
+      counts.set(row.exercise_name, (counts.get(row.exercise_name) || 0) + 1);
+    }
+    return buildExerciseData(
+      Array.from(counts.entries()).map(([name, frequency]) => ({
+        name,
+        muscles: metaByName.get(name) || [],
+        frequency,
+      }))
+    );
+  }, [exerciseMetaQuery.data, strengthLogs]);
+
   if (isLoading) return <WorkoutDetailSkeleton />;
   if (!workout) {
     return <div className="page-shell text-center text-sm text-muted-foreground">Workout not found</div>;
   }
 
   const resolvedWorkout = workout;
-  const strengthLogs = (resolvedWorkout.workout_sets || []) as StrengthSetRow[];
-  const cardioLogs = (resolvedWorkout.workout_cardio || []) as CardioLogRow[];
   const groupedStrength = groupLogsByExercise(strengthLogs);
   const totalVolume = strengthLogs.reduce((sum, row) => sum + (row.weight || 0) * (row.reps || 0), 0);
   const totalStrengthSets = strengthLogs.length;
@@ -513,6 +553,22 @@ export default function WorkoutDetailPage() {
               <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">Session Notes</p>
               <p className="whitespace-pre-wrap text-sm text-foreground/80">{resolvedWorkout.notes}</p>
             </section>
+          ) : null}
+
+          {workoutMuscleMapData.length > 0 ? (
+            <Accordion type="single" collapsible className="w-full">
+              <AccordionItem value="workout-muscle-map" className="rounded-[12px] border border-white/10 bg-[#0f172b]/85 px-4">
+                <AccordionTrigger className="text-sm font-semibold">Workout Muscle Activation</AccordionTrigger>
+                <AccordionContent>
+                  <MuscleBodyMap
+                    title="Aggregate muscle activation"
+                    data={workoutMuscleMapData}
+                    showBothViews={true}
+                    className="border-0 bg-transparent p-0"
+                  />
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
           ) : null}
         </div>
 

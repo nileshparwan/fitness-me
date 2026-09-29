@@ -88,7 +88,7 @@ function SortHeader({
 }
 
 function readCategories(row: SupplementCatalogRow): SupplementCategory[] {
-  const raw = (row as SupplementCatalogRow & { categories?: unknown }).categories;
+  const raw = row.categories;
   if (Array.isArray(raw) && raw.length > 0) {
     const values = raw.filter((item): item is SupplementCategory => typeof item === "string") as SupplementCategory[];
     if (values.length > 0) return Array.from(new Set(values));

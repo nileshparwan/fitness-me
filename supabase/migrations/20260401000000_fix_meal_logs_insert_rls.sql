@@ -1,5 +1,5 @@
+-- supabase/migrations/20260401000000_fix_meal_logs_insert_rls.sql
 drop policy if exists meal_logs_insert_subject_access on public.meal_logs;
-
 create policy meal_logs_insert_subject_access
 on public.meal_logs
 for insert

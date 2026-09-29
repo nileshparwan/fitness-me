@@ -1,0 +1,9 @@
+export { ExerciseProfileSkeleton } from "./exercise-profile-skeleton";
+export { ProgressCoreSkeleton } from "./progress-core-skeleton";
+export { OverviewTabSkeleton } from "./overview-tab-skeleton";
+export { BodyTabSkeleton } from "./body-tab-skeleton";
+export { StrengthTabSkeleton } from "./strength-tab-skeleton";
+export { CardioTabSkeleton } from "./cardio-tab-skeleton";
+export { HealthTabSkeleton } from "./health-tab-skeleton";
+export { NutritionTabSkeleton } from "./nutrition-tab-skeleton";
+export { CycleTabSkeleton } from "./cycle-tab-skeleton";

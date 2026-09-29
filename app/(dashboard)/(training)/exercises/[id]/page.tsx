@@ -14,8 +14,10 @@ import { ExerciseHistory } from "@/components/exercises/exercise-history"; // No
 import { ExerciseRecords } from "@/components/exercises/exercise-records"; // Now real
 import { AddToWorkoutButton } from "@/components/exercises/add-to-workout-button";
 import { ShareExerciseButton } from "@/components/exercises/share-exercise-button";
+import { MuscleBodyMap } from "@/components/progress/body/muscle-body-map";
 import { getExerciseHistory } from "@/app/actions/exercises";
 import { formatCategoryWithMuscleFocus } from "@/lib/exercises/muscle-groups";
+import { buildExerciseData } from "@/lib/progress/body-map";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -45,6 +47,13 @@ export default async function ExerciseDetailPage({ params }: PageProps) {
     category: exercise.category,
     muscleGroups: exercise.muscle_groups,
   });
+  const exerciseMapData = buildExerciseData([
+    {
+      name: exercise.name,
+      muscles: exercise.muscle_groups ?? [],
+      frequency: 1,
+    },
+  ]);
 
   return (
     <div className="page-shell section-gap mx-auto flex h-full w-full max-w-7xl flex-col">
@@ -167,6 +176,19 @@ export default async function ExerciseDetailPage({ params }: PageProps) {
               </div>
 
               <Separator />
+
+              {exerciseMapData.length > 0 ? (
+                <>
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+                      <Target className="h-4 w-4 text-primary" />
+                      Body Map
+                    </div>
+                    <MuscleBodyMap data={exerciseMapData} showBothViews={true} compact={true} className="p-3" />
+                  </div>
+                  <Separator />
+                </>
+              ) : null}
 
               <div className="grid grid-cols-2 gap-4 pt-2">
                 <div>

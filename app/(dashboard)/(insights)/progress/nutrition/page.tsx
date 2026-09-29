@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation";
+import { NutrientsPageLayout } from "@/components/progress/NutrientsPageLayout";
 
 export default function NutritionProgressRoute() {
-  redirect("/progress?tab=nutrition");
+  return <NutrientsPageLayout backPath="/progress" />;
 }

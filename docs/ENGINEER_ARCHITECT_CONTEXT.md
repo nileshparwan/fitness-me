@@ -30261,3 +30261,810 @@ Smoke-test the following pages in the browser after deployment:
 - Remaining non-sandbox verification:
   - migrations were authored but not pushed/applied in this environment
   - architect-requested browser smoke checks were not run in this turn
+
+---
+
+### [A-064] Progress page — complete revamp with react-body-highlighter, fitness-health-calculations, and fitflow-pro parity (2026-04-01)
+
+Full overhaul of `/progress` and related components. Reference design: `fitflow-pro/src/components/progress/`. Two new packages drive all new body and health calculation features. Every section below must be implemented in order; run `npm run typecheck && npm run lint` after each phase before moving to the next.
+
+---
+
+## Pre-work — Install packages
+
+```bash
+npm install react-body-highlighter fitness-health-calculations
+```
+
+Verify both appear in `package.json` dependencies before starting Phase 1.
+
+---
+
+## Package API reference (read before coding)
+
+### react-body-highlighter
+
+```tsx
+import Model, { IExerciseData, IMuscleStats, MuscleType, ModelType } from 'react-body-highlighter';
+
+// Props
+interface IModelProps {
+  data?: IExerciseData[];           // array of exercises with muscles + frequency
+  type?: 'anterior' | 'posterior'; // default: 'anterior'
+  bodyColor?: string;               // unworked muscle colour, default '#B6BDC3'
+  highlightedColors?: string[];     // index 0 = frequency 1, index 1 = frequency 2, etc.
+  onClick?: (stats: IMuscleStats) => void;
+  style?: CSSProperties;            // wrapper <div>
+  svgStyle?: CSSProperties;         // the <svg> element
+}
+
+interface IExerciseData {
+  name: string;
+  muscles: Muscle[];   // string values from MuscleType constant
+  frequency?: number;  // drives colour index — default 1
+}
+
+interface IMuscleStats {
+  muscle: Muscle;
+  data: { exercises: string[]; frequency: number };
+}
+```
+
+**22 valid muscle identifiers** (use exact strings):
+`trapezius`, `upper-back`, `lower-back`, `chest`, `biceps`, `triceps`, `forearm`,
+`back-deltoids`, `front-deltoids`, `abs`, `obliques`, `adductor`, `abductors`,
+`hamstring`, `quadriceps`, `calves`, `gluteal`, `head`, `neck`, `knees`,
+`left-soleus`, `right-soleus`
+
+Use `type="anterior"` for front view and `type="posterior"` for back view.
+There is **no `onHover` prop** — apply hover effects via CSS class `.rbh polygon:hover`.
+
+### fitness-health-calculations
+
+```typescript
+import calculate from 'fitness-health-calculations';
+// or: const calculate = require('fitness-health-calculations');
+
+calculate.bmr(gender, age, height_cm, weight_kg)          // → number (kcal/day)
+calculate.tdee(gender, age, height_cm, weight_kg, activity_level) // → number (kcal/day)
+calculate.caloricNeeds(gender, age, height_cm, weight_kg, activity_level, goal, approach?) // → number
+calculate.idealBodyWeight(height_cm, gender, 'metric')    // → number (kg)
+
+// activity_level: 'sedentary' | 'light' | 'moderate' | 'high' | 'extreme'
+// goal: 'reduction' | 'maintain' | 'gain'
+// approach: 'slow' | 'normal' | 'agressive' | 'very agressive'   (default: 'normal')
+```
+
+**Important:** This package covers BMR, TDEE, caloric needs, and ideal body weight only. It does NOT calculate 1RM, VO2max, body fat %, or macro splits — keep existing logic for those.
+
+---
+
+## Phase 1 — Utility layer: muscle mapping + health calculations
+
+### 1A — Create `lib/calculations/muscle-map.ts`
+
+This file maps our internal exercise muscle group strings (stored in `exercises.muscle_groups`) to the exact string identifiers that `react-body-highlighter` accepts. It also maps frequency counts to colour intensities.
+
+```typescript
+// lib/calculations/muscle-map.ts
+
+import type { IExerciseData } from 'react-body-highlighter';
+
+// Map our internal muscle group strings → react-body-highlighter identifiers
+// exercises.muscle_groups stores values like "Chest", "Biceps", "Quads", etc.
+export const MUSCLE_GROUP_MAP: Record<string, string> = {
+  // Chest
+  chest: 'chest',
+  pectorals: 'chest',
+  // Shoulders
+  shoulders: 'front-deltoids',
+  'front deltoids': 'front-deltoids',
+  deltoids: 'front-deltoids',
+  'rear deltoids': 'back-deltoids',
+  'back deltoids': 'back-deltoids',
+  // Arms
+  biceps: 'biceps',
+  triceps: 'triceps',
+  forearms: 'forearm',
+  forearm: 'forearm',
+  // Back
+  traps: 'trapezius',
+  trapezius: 'trapezius',
+  'upper back': 'upper-back',
+  lats: 'upper-back',
+  'lower back': 'lower-back',
+  // Core
+  abs: 'abs',
+  core: 'abs',
+  obliques: 'obliques',
+  // Legs
+  quads: 'quadriceps',
+  quadriceps: 'quadriceps',
+  hamstrings: 'hamstring',
+  hamstring: 'hamstring',
+  glutes: 'gluteal',
+  gluteal: 'gluteal',
+  calves: 'calves',
+  adductors: 'adductor',
+  abductors: 'abductors',
+};
+
+// Normalise any muscle group string to its body-highlighter identifier.
+// Returns null if not mappable (skip unmapped muscles silently).
+export function toBodyHighlighterMuscle(raw: string): string | null {
+  return MUSCLE_GROUP_MAP[raw.toLowerCase().trim()] ?? null;
+}
+
+// Convert a list of { exercise_name, muscle_groups[], session_count } rows
+// into the IExerciseData[] array that react-body-highlighter expects.
+export function buildExerciseData(
+  rows: Array<{ name: string; muscles: string[]; frequency?: number }>
+): IExerciseData[] {
+  return rows.flatMap(({ name, muscles, frequency = 1 }) => {
+    const mapped = muscles
+      .map(toBodyHighlighterMuscle)
+      .filter((m): m is string => m !== null);
+    if (mapped.length === 0) return [];
+    return [{ name, muscles: mapped as any, frequency }];
+  });
+}
+
+// Highlight colour palette — index = frequency bucket (1, 2, 3+)
+// Designed to match the app's accent palette
+export const BODY_HIGHLIGHT_COLORS = [
+  'hsl(var(--primary))',      // frequency 1 (light)
+  'hsl(var(--primary) / 0.7)',// frequency 2 (medium)
+  'hsl(var(--chart-1))',       // frequency 3+ (heavy)
+];
+
+export const BODY_COLOR_REST = 'hsl(var(--muted))';
+```
+
+### 1B — Create `lib/calculations/body-health.ts`
+
+Pure utility functions wrapping `fitness-health-calculations`. All inputs must be metric. This file should also contain supporting calculations we already do inline (BMI, body fat category, lean mass) so they live in one place.
+
+```typescript
+// lib/calculations/body-health.ts
+import calculate from 'fitness-health-calculations';
+
+export type ActivityLevel = 'sedentary' | 'light' | 'moderate' | 'high' | 'extreme';
+export type WeightGoal = 'reduction' | 'maintain' | 'gain';
+export type GoalApproach = 'slow' | 'normal' | 'agressive' | 'very agressive';
+
+export interface BodyHealthInputs {
+  gender: 'male' | 'female';
+  age: number;          // years (derive from profiles.date_of_birth)
+  height_cm: number;
+  weight_kg: number;
+  activity_level: ActivityLevel;
+}
+
+export interface BodyHealthMetrics {
+  bmr: number;
+  tdee: number;
+  ideal_body_weight_kg: number;
+  bmi: number;
+  bmi_category: 'Underweight' | 'Normal' | 'Overweight' | 'Obese';
+  weight_vs_ideal_kg: number;   // positive = over ideal, negative = under
+}
+
+export function computeBodyHealthMetrics(inputs: BodyHealthInputs): BodyHealthMetrics {
+  const { gender, age, height_cm, weight_kg, activity_level } = inputs;
+  const bmr = Math.round(calculate.bmr(gender, age, height_cm, weight_kg));
+  const tdee = Math.round(calculate.tdee(gender, age, height_cm, weight_kg, activity_level));
+  const ideal = Math.round(calculate.idealBodyWeight(height_cm, gender, 'metric') * 10) / 10;
+  const bmi = Math.round((weight_kg / Math.pow(height_cm / 100, 2)) * 10) / 10;
+  let bmi_category: BodyHealthMetrics['bmi_category'];
+  if (bmi < 18.5) bmi_category = 'Underweight';
+  else if (bmi < 25) bmi_category = 'Normal';
+  else if (bmi < 30) bmi_category = 'Overweight';
+  else bmi_category = 'Obese';
+  return {
+    bmr,
+    tdee,
+    ideal_body_weight_kg: ideal,
+    bmi,
+    bmi_category,
+    weight_vs_ideal_kg: Math.round((weight_kg - ideal) * 10) / 10,
+  };
+}
+
+export function computeCaloricNeeds(
+  inputs: BodyHealthInputs,
+  goal: WeightGoal,
+  approach: GoalApproach = 'normal'
+): number {
+  const { gender, age, height_cm, weight_kg, activity_level } = inputs;
+  return Math.round(calculate.caloricNeeds(gender, age, height_cm, weight_kg, activity_level, goal, approach));
+}
+
+// Derive activity level from weekly workout session count
+// Use this when the user hasn't set an explicit activity level in their profile
+export function deriveActivityLevel(sessionsPerWeek: number): ActivityLevel {
+  if (sessionsPerWeek === 0) return 'sedentary';
+  if (sessionsPerWeek <= 2) return 'light';
+  if (sessionsPerWeek <= 4) return 'moderate';
+  if (sessionsPerWeek <= 6) return 'high';
+  return 'extreme';
+}
+```
+
+### 1C — Extend `app/actions/progress-overview.ts` — add body health metrics to bundle
+
+In `getProgressOverviewBundle()`, fetch the profile data needed for health calculations and compute `BodyHealthMetrics`. Return it as part of the bundle under a new `bodyHealth` key.
+
+Data to fetch from DB:
+- `profiles`: `date_of_birth`, `gender`, `height_cm` (or `height`) — check column names in `types/database.ts`
+- `measurements` (was body_measurements): latest `weight`, `body_fat_percent`
+- Weekly session count from existing workout data already in bundle
+
+Add to `ProgressOverviewBundle` type:
+```typescript
+bodyHealth: {
+  metrics: import('@/lib/calculations/body-health').BodyHealthMetrics | null;
+  caloric_needs: { reduction: number; maintain: number; gain: number } | null;
+  data_available: boolean;  // false when profile is missing gender/dob/height
+} | null;
+```
+
+Computation steps inside the server action:
+1. Fetch `profiles` row for the active subject
+2. Compute `age` from `date_of_birth` using `differenceInYears` from `date-fns`
+3. Get latest weight from most recent `measurements` row (already fetched for body composition)
+4. Derive `activity_level` from `sessionsPerWeek` using `deriveActivityLevel()`
+5. If gender, age, height_cm, weight_kg are all present: compute `bodyHealth.metrics` + `caloric_needs`
+6. Otherwise set `data_available: false` (render a prompt card in the UI)
+
+### 1D — Extend `app/actions/progress-overview.ts` — muscle activation data for body map
+
+Add a new function `getMuscleActivationData(subjectId, range)` that returns exercise frequency data for the body highlighter:
+
+```typescript
+export type MuscleActivationRow = {
+  exercise_name: string;
+  muscle_groups: string[];   // raw values from exercises.muscle_groups
+  session_count: number;     // how many times performed in the range
+};
+
+// Query: join workout_sets → exercises, group by exercise_name + muscle_groups,
+// filter by date range and subject. Order by session_count DESC, limit 30.
+```
+
+Add `muscleActivation: MuscleActivationRow[]` to `ProgressOverviewBundle`.
+
+---
+
+## Phase 2 — New shared components
+
+### 2A — Create `components/progress/body-highlighter/muscle-body-map.tsx`
+
+This is the primary reusable wrapper around `react-body-highlighter`. Used on Overview, Body, and Strength tabs.
+
+**Props:**
+```typescript
+interface MuscleBodyMapProps {
+  data: IExerciseData[];          // from buildExerciseData()
+  showBothViews?: boolean;        // default true — renders anterior + posterior side by side
+  defaultView?: 'anterior' | 'posterior';
+  onMuscleClick?: (stats: IMuscleStats) => void;
+  highlightedColors?: string[];   // defaults to BODY_HIGHLIGHT_COLORS
+  bodyColor?: string;             // defaults to BODY_COLOR_REST
+  className?: string;
+  compact?: boolean;              // smaller size for overview cards
+}
+```
+
+**Layout:**
+- `showBothViews=true`: side-by-side flex container. On mobile: stacked vertically. On tablet/desktop: horizontal.
+- View toggle buttons (Front / Back) when `showBothViews=false`
+- When a muscle is clicked → show a tooltip/popover with: muscle name, exercises list, session count
+- CSS hover effect on `.rbh polygon:hover { fill: hsl(var(--primary) / 0.3) !important; }`
+- Legend strip below the model: 3 coloured dots mapping colour → frequency label ("Low", "Medium", "High")
+
+**Skeleton:** `components/progress/body-highlighter/muscle-body-map-skeleton.tsx` — two grey rounded rectangles side by side matching the SVG dimensions.
+
+### 2B — Create `components/progress/overview/wellness-snapshot.tsx`
+
+Six mini metric cards displayed in a 2×3 grid (mobile) / 3×2 (tablet) / 6-column row (desktop). Matches the "Wellness Snapshot" section in fitflow-pro's OverviewTab.
+
+Cards to render (data from `ComplianceRecoveryData` already in bundle):
+1. **Recovery** — `recovery_score`% with trend arrow, accent: success
+2. **Avg Sleep** — `avg_sleep_hours`h, last night vs average, accent: purple/chart-5
+3. **Stress** — from `checkin_vitals.stress_level` average, accent: warning
+4. **Hydration** — from `checkin_vitals.hydration_level` average (if column exists, else omit), accent: info
+5. **Daily Steps** — `avg_daily_steps` formatted with comma, accent: chart-3
+6. **Active Minutes** — derived from workout duration sum / range days, accent: chart-2
+
+Each card: icon, large value, sub-label with last/avg comparison, coloured left border stripe.
+
+Skeleton: 6 rounded rectangles in same grid.
+
+### 2C — Create `components/progress/overview/consistency-streaks.tsx`
+
+Horizontal scrollable strip of streak badges. Data source: `ComplianceRecoveryData.habits` (existing) + `day_streak`.
+
+Render:
+- **Current Streak** badge — flame icon, `day_streak` days, orange accent
+- **Best Streak** — trophy icon, `longest_streak` days, gold accent
+- **Logging Streak** — check-circle icon from nutrition data, green accent
+- Per-habit streaks from `habits[]` array — small pill badges with habit name + streak count
+
+Full-width on mobile (wraps), single row on desktop. No card wrapper — sits between filter bar and stats bar on overview.
+
+### 2D — Create `components/progress/body/body-health-metrics.tsx`
+
+Panel showing BMR, TDEE, ideal body weight, BMI, and caloric needs. Rendered on the **Body tab** only.
+
+Layout: 2-column grid (mobile: 1-col, tablet: 2-col, desktop: 4-col for the top row metrics).
+
+**Top row — 4 metric tiles:**
+| Metric | Icon | Value | Sub-label |
+|---|---|---|---|
+| BMR | Flame | `{bmr} kcal` | "Resting metabolic rate" |
+| TDEE | Zap | `{tdee} kcal` | "With current activity level" |
+| Ideal Weight | Target | `{ideal} kg` | `+{delta}kg above ideal` or `at ideal` |
+| BMI | Activity | `{bmi}` | Category badge (Normal/Overweight/etc.) |
+
+**Caloric needs section (below top row):**
+Three pill buttons: "Weight Loss / Maintain / Gain" — clicking one highlights it and shows the caloric target in kcal/day. Default selected: "Maintain".
+
+**Data unavailable state:** When `data_available=false`, render a muted card with text "Add your height and date of birth in Settings to unlock metabolic calculations" with a link to `/settings/profile`.
+
+Skeleton: matches the layout.
+
+---
+
+## Phase 3 — Progress page tab revamp
+
+Work through each tab. Do not rename or restructure the existing tab routing — only update content.
+
+### 3A — Overview tab updates
+
+File: `app/(dashboard)/(insights)/progress/page.tsx` — the overview `TabsContent`.
+
+**Add after `<ProgressFilterBar>`:**
+```tsx
+{/* Consistency streaks strip */}
+<ConsistencyStreaks data={bundle?.complianceRecovery} />
+```
+
+**Add after `<ProgressStatsBar>`:**
+```tsx
+{/* Wellness snapshot */}
+<WellnessSnapshot data={bundle?.complianceRecovery} isLoading={isLoading} />
+```
+
+**Replace `<MuscleFocusCard>`** with `<MuscleBodyMap>`:
+```tsx
+<MuscleBodyMap
+  data={buildExerciseData(bundle?.muscleActivation ?? [])}
+  showBothViews={true}
+  compact={false}
+  onMuscleClick={(stats) => { /* show drill-down sheet */ }}
+/>
+```
+
+Keep the radar chart as a secondary "Focus Distribution" card below the body map — the body map is now the primary muscle view, radar shows the push/pull/legs/core split summary.
+
+**Reorder overview tab cards** to match fitflow-pro OverviewTab layout:
+1. Consistency streaks (new)
+2. Stats bar (existing)
+3. Wellness snapshot (new)
+4. Insights (existing)
+5. Body muscle map (new — replaces radar-only view)
+6. Strength progress card (existing)
+7. Cardio progress card (existing)
+8. Training load card (existing)
+9. Compliance recovery card (existing — keep, remove wellness sub-metrics that are now in snapshot)
+10. Workout calendar card (existing)
+
+### 3B — Body tab updates
+
+The body tab currently renders `<BodyCompositionCard>`. Add two new sections:
+
+**Structure after revamp:**
+```
+Body tab
+├── BodyHealthMetrics          ← NEW (BMR/TDEE/IBW/BMI/caloric needs)
+├── BodyCompositionCard        ← existing (weight/BF%/circumferences chart)
+└── MuscleBodyMap              ← NEW (anterior+posterior, all muscles at neutral colour — no exercise data; 
+                                      used purely as anatomy reference with body fat % overlay label)
+```
+
+For the body tab `<MuscleBodyMap>`, pass empty `data=[]` — the body is shown at base colour. Overlay a label on the SVG showing current body fat % category using `highlightedColors` to tint the entire silhouette according to the BF% category (healthy = green tint, high = warning tint).
+
+### 3C — Strength tab updates
+
+The strength tab currently renders `<StrengthProgressCard>`. Add a body map below the exercise selector.
+
+**New layout:**
+```
+Strength tab
+├── StrengthProgressCard        ← existing (1RM trends, PRs, standards)
+└── ExerciseMuscleMap           ← NEW wrapper component
+```
+
+Create `components/progress/strength/exercise-muscle-map.tsx`:
+- A dropdown to select from the user's most-used exercises (from `muscleActivation` data)
+- When an exercise is selected: call `buildExerciseData([{ name, muscles, frequency: 1 }])` and pass to `<MuscleBodyMap showBothViews={true} />`
+- The body map highlights only the muscles for the selected exercise
+- Below the map: a list of muscles activated with anterior vs posterior labels
+
+Default selection: the first exercise in `muscleActivation` (most-used).
+
+### 3D — Health tab updates
+
+The health tab currently exists but content needs to be verified and completed to match fitflow-pro's HealthTab.
+
+The health tab must render (using existing `ComplianceRecoveryData` from the bundle):
+
+```
+Health tab
+├── Recovery metrics row (4 cards: Recovery Score, Sleep Score, HRV, Resting HR)
+├── Recovery trend chart       ← AreaChart: recovery_score + hrv_ms over time
+├── Sleep detail card          ← Bar chart: sleep hours per day, sleep score line
+├── Vitals card                ← Line chart: resting_heart_rate + stress_level over time
+└── Steps & activity card      ← Bar chart: daily steps, goal line at 10,000
+```
+
+All data is already being fetched — this tab just needs dedicated chart components, not new data fetching.
+
+Create `components/progress/health/` directory with:
+- `health-recovery-row.tsx` — 4 metric cards
+- `health-recovery-chart.tsx` — AreaChart with recovery + HRV
+- `health-sleep-card.tsx` — sleep hours + score chart
+- `health-vitals-card.tsx` — RHR + stress chart
+- `health-steps-card.tsx` — daily steps bar chart
+
+### 3E — Cardio tab updates
+
+The cardio tab currently renders the cardio sections from the overview. Verify it has all of:
+- Distance trend AreaChart
+- Pace trend chart
+- Average HR per session LineChart
+- HR zone breakdown (Zone 1–5) — coloured horizontal bars
+- Activity type breakdown pie or bar chart
+- Race time predictions (if VO2max data is available)
+
+If any are missing, add them from the existing `CardioProgressData` in the bundle.
+
+---
+
+## Phase 4 — Skeleton system
+
+Each tab must have a skeleton that matches the actual layout. When `isLoading=true` pass skeletons instead of content.
+
+### Skeleton components to create or update
+
+`app/(dashboard)/(insights)/progress/_components/progress-section-skeletons/`:
+
+| File | Content |
+|---|---|
+| `overview-tab-skeleton.tsx` | Streaks strip + stats bar + 6 wellness cards + insights + body map + 4 large cards |
+| `body-tab-skeleton.tsx` | 4 metric tiles + BMI card + caloric needs + body composition chart + body map |
+| `strength-tab-skeleton.tsx` | 1RM chart + PRs + exercise selector + body map |
+| `cardio-tab-skeleton.tsx` | 3 KPI cards + 3 area charts + HR zones + activity breakdown |
+| `health-tab-skeleton.tsx` | 4 metric cards + 2 charts + sleep card + vitals card + steps card |
+| `nutrition-tab-skeleton.tsx` | already exists — verify it covers the full layout |
+| `cycle-tab-skeleton.tsx` | already exists — verify |
+
+Skeleton rule: every `<Skeleton>` element must have the same `h-` and `w-` (or `rounded-`) as the real component it represents. Do not use generic full-width skeletons for cards — match the actual card dimensions.
+
+---
+
+## Phase 5 — Responsive layout
+
+Apply responsive classes to every new and existing progress component. The rules below override anything currently in place.
+
+### Breakpoint targets
+- **Mobile** (`< md`): single column, full width. Charts: `h-48`. Stats: horizontal scroll. Body map: stacked vertically, width 140px each.
+- **Tablet** (`md`): 2-column grid for cards. Charts: `h-56`. Body map: side by side, width 160px each.
+- **Desktop** (`lg+`): 2–3 column grid. Charts: `h-64`. Body map: side by side, width 200px each.
+
+### Layout rules
+
+**Stats bar** (`progress-stats-bar.tsx`): on mobile wrap to `grid-cols-2`, on tablet `grid-cols-4`, on desktop `grid-cols-8`. Remove horizontal scroll — use the grid to wrap naturally.
+
+**Wellness snapshot** (`wellness-snapshot.tsx`): `grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6`
+
+**Overview cards** (body map, strength, cardio, training load, compliance, calendar): `grid grid-cols-1 lg:grid-cols-2` with body map spanning full width `lg:col-span-2`.
+
+**Body tab metrics** (`body-health-metrics.tsx`): `grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4` for top row; caloric needs below full-width.
+
+**Health tab**: all charts `grid grid-cols-1 md:grid-cols-2`, recovery row `grid grid-cols-2 md:grid-cols-4`.
+
+**Page shell**: add `pb-24 md:pb-10` to the progress page wrapper for mobile bottom nav clearance.
+
+---
+
+## Phase 6 — Performance optimization
+
+### 6A — Lazy tab loading
+
+In `page.tsx`, do not mount inactive tab content. Replace:
+```tsx
+<TabsContent value="strength">
+  <StrengthContent />
+</TabsContent>
+```
+With:
+```tsx
+<TabsContent value="strength">
+  {activeTab === 'strength' ? <StrengthContent /> : null}
+</TabsContent>
+```
+
+Apply this pattern to all 7 tabs except overview (which loads first).
+
+### 6B — Single bundle query with stale-while-revalidate
+
+The main `getProgressOverviewBundle` query is already behind `useQuery`. Ensure:
+- `staleTime: 5 * 60 * 1000` (5 min) — progress data doesn't change second-to-second
+- `gcTime: 10 * 60 * 1000` (10 min)
+- `refetchOnWindowFocus: false`
+
+Nutrition progress and cycle tab have their own separate queries — apply the same stale time.
+
+### 6C — Chart render optimisation
+
+In every Recharts component:
+- Use `isAnimationActive={false}` on `Area`, `Line`, `Bar` when the parent card is not the active tab (pass `isActive` prop down)
+- Memoize data transformation functions with `useMemo` — do not transform arrays inline in JSX
+
+### 6D — Muscle data memoisation
+
+`buildExerciseData()` output must be memoised:
+```tsx
+const exerciseData = useMemo(
+  () => buildExerciseData(bundle?.muscleActivation ?? []),
+  [bundle?.muscleActivation]
+);
+```
+
+---
+
+## Phase 7 — Package use across the broader app
+
+Beyond the progress page, integrate both packages at these additional touch points. Each should be a small, non-breaking addition.
+
+### 7A — Exercise catalog (`/exercises` page)
+
+In the exercise detail drawer/sheet (`components/exercises/` — wherever the single exercise info is shown):
+
+Add a `<MuscleBodyMap>` in read-only mode showing the primary muscles for that exercise:
+```tsx
+<MuscleBodyMap
+  data={buildExerciseData([{
+    name: exercise.name,
+    muscles: exercise.muscle_groups ?? [],
+    frequency: 1
+  }])}
+  showBothViews={true}
+  compact={true}
+/>
+```
+
+### 7B — Workout logger / workout detail page
+
+In the workout detail view (`/workouts/[id]`), add a collapsed `<MuscleBodyMap>` at the bottom of the page showing the aggregate muscle activation for the entire workout (all exercises combined, frequency = set count).
+
+Build the data from the workout's `workout_sets` joined to `exercises`.
+
+### 7C — Profile settings (`/settings/profile`)
+
+In `components/settings/profile-settings-form.tsx`, after the height/weight/date-of-birth/gender fields, add a read-only "Your Metabolic Profile" panel:
+
+```tsx
+<BodyHealthMetricsPanel
+  metrics={computeBodyHealthMetrics({ gender, age, height_cm, weight_kg, activity_level: 'moderate' })}
+/>
+```
+
+This is a lightweight read-only display (no new server action needed — compute client-side from form values). Update live as the user edits their profile fields. Show BMR, TDEE (moderate estimate), ideal body weight.
+
+### 7D — Nutrition diary page (TDEE vs intake gap)
+
+In the nutrition diary page header (`app/(dashboard)/(nutrition-domain)/nutrition/diary/page.tsx`), add a small "vs. target" indicator next to the daily calorie ring:
+
+- If `bodyHealth.metrics.tdee` is available: show `{intake} / {tdee} kcal` with a coloured delta badge
+- If over TDEE: show `+{delta} surplus` in warning colour
+- If under: show `{delta} deficit` in info colour (or success if goal = reduction)
+
+This requires `bodyHealth` from the progress bundle or a lightweight standalone action that calls `computeBodyHealthMetrics` without the full progress data. Create `app/actions/body-health.ts` with a minimal `getBodyHealthMetrics(subjectId?)` server action that fetches only profile + latest measurement and returns `BodyHealthMetrics | null`.
+
+---
+
+## Phase 8 — Acceptance criteria
+
+Run all of the following before closing A-064.
+
+```bash
+# Packages installed
+node -e "require('react-body-highlighter'); console.log('ok')"
+node -e "require('fitness-health-calculations'); console.log('ok')"
+
+# Type safety
+npm run typecheck   # zero errors
+
+# Lint
+npm run lint        # zero errors
+```
+
+**Grep checks — none of these should hit newly added files with bad patterns:**
+```bash
+# No inline calculation logic that should use fitness-health-calculations
+grep -rn 'Math.pow.*weight.*height\|703.*weight.*height' components/progress/ --include="*.tsx"
+# Should be empty (BMI calculation centralised in lib/calculations/body-health.ts)
+
+# No raw muscle strings bypassing MUSCLE_GROUP_MAP
+grep -rn "muscles:.*\[.*'chest\|muscles:.*\[.*'biceps" components/ --include="*.tsx"
+# Should be empty — all muscle strings go through buildExerciseData()
+```
+
+**Browser smoke tests (run after `supabase db push` and dev server restart):**
+- `/progress` overview tab: wellness snapshot cards show real values, body map renders with coloured muscles, streaks strip visible
+- `/progress?tab=body`: BMR/TDEE/IBW/BMI tiles render; caloric needs toggle works; body composition chart renders; body map renders
+- `/progress?tab=strength`: exercise dropdown works; body map updates when exercise changes
+- `/progress?tab=health`: all 4 recovery cards show values; recovery chart renders; sleep/vitals/steps charts render
+- `/exercises` — open any exercise detail: body map renders for that exercise
+- `/workouts/[id]` — body map at bottom shows muscles worked
+- `/settings/profile` — metabolic profile panel shows BMR/TDEE/IBW
+- `/nutrition/diary` — TDEE gap indicator shows next to calorie ring
+- All tabs on mobile (375px): no horizontal overflow, charts legible, body map stacked
+- All tabs on tablet (768px): 2-column layout active
+- All tabs on desktop (1280px): 3-column grid + full body map
+
+---
+
+## Dependency note
+
+A-064 depends on A-063 being applied (all table renames). Ensure `npm run typecheck` passes with the renamed types before starting A-064.
+
+### [E-067] Engineer Update — A-064 implemented + architect cross-check completed (2026-04-02)
+
+- Scope completed:
+  - installed and verified `react-body-highlighter` and `fitness-health-calculations`
+  - added the shared muscle/body-calculation layer in `lib/calculations/muscle-map.ts` and `lib/calculations/body-health.ts`
+  - added the reusable body-highlighter wrapper/skeleton in `components/progress/body-highlighter/`
+  - extended `app/actions/progress-overview.ts` with top-level `muscleActivation` and `bodyHealth` bundle data
+  - revamped `/progress` overview, body, strength, and health tabs in `app/(dashboard)/(insights)/progress/page.tsx` to use lazy tab mounting, the new body map, the new health panel, and the new skeleton set
+  - added the new strength exercise selector/body-map component in `components/progress/strength/exercise-muscle-map.tsx`
+  - added the tab skeleton suite under `app/(dashboard)/(insights)/progress/_components/progress-section-skeletons/`
+  - integrated the body map into exercise detail and workout detail views
+  - added the live metabolic profile panel in `components/settings/profile-settings-form.tsx`
+  - added `app/actions/body-health.ts` and wired the nutrition diary calorie-vs-TDEE indicator in `components/nutrition/manual-nutrition-diary.tsx`
+
+- Architect note cross-check:
+  - Phase 1 utility layer: completed
+  - Phase 2 shared components: completed with architect-aligned wrapper/export paths
+  - Phase 3 tab revamp: overview/body/strength/health updated; cardio kept on the existing `CardioProgressCard` path because the current card already owns the cardio charts/breakdowns
+  - Phase 4 skeleton system: completed and wired into the progress page loading branches
+  - Phase 5 responsive layout: applied on the new components and progress page shell keeps `pb-24 md:pb-10`
+  - Phase 6 performance optimisation: lazy tab mounting, 5-minute stale time / 10-minute gc time, and memoized body-map/chart transforms are in place
+  - Phase 7 package use across broader app: exercise detail, workout detail, settings profile, and nutrition diary integrations are implemented
+
+- Validation completed:
+  - `node -e "require('react-body-highlighter'); console.log('ok')"` → pass
+  - `node -e "require('fitness-health-calculations'); console.log('ok')"` → pass
+  - `npm run typecheck` → pass
+  - `npm run lint` → pass
+  - `npm run build` → pass
+  - architect grep check `Math.pow.*weight.*height|703.*weight.*height` against `components/progress/**/*.tsx` → empty
+  - architect grep check for raw hardcoded `'chest'` / `'biceps'` muscle arrays in `components/**/*.tsx` → empty
+
+- Remaining non-sandbox verification:
+  - architect-requested browser smoke tests were not run in this turn
+  - no Supabase migration was required for A-064; browser/device QA remains the main outstanding verification layer
+
+### [E-068] Engineer Update — fitflow-pro progress reference parity pass applied (2026-04-02)
+
+- Reference audit performed against:
+  - `/Users/koshalparwan/Documents/sandbox/fitflow-pro/src/components/progress/ProgressMainPage.tsx`
+  - `/Users/koshalparwan/Documents/sandbox/fitflow-pro/src/components/progress/ProgressFilterBar.tsx`
+  - `/Users/koshalparwan/Documents/sandbox/fitflow-pro/src/components/progress/HumanBodyMap.tsx`
+  - `/Users/koshalparwan/Documents/sandbox/fitflow-pro/src/components/progress/tabs/OverviewTab.tsx`
+  - `/Users/koshalparwan/Documents/sandbox/fitflow-pro/src/components/progress/tabs/BodyTab.tsx`
+  - `/Users/koshalparwan/Documents/sandbox/fitflow-pro/src/components/progress/tabs/StrengthTab.tsx`
+  - `/Users/koshalparwan/Documents/sandbox/fitflow-pro/src/components/progress/tabs/CardioTab.tsx`
+  - `/Users/koshalparwan/Documents/sandbox/fitflow-pro/src/components/progress/tabs/HealthTab.tsx`
+
+- Alignment changes applied in this repo:
+  - updated the `/progress` tab shell to use the fitflow-style pill tab rail in [app/(dashboard)/(insights)/progress/page.tsx](app/(dashboard)/(insights)/progress/page.tsx)
+  - refactored [components/progress/overview/progress-filter-bar.tsx](components/progress/overview/progress-filter-bar.tsx) to match the reference interaction model:
+    - sticky desktop filter bar
+    - compact mobile range chips
+    - mobile filter sheet
+  - rebuilt [components/progress/overview/wellness-snapshot.tsx](components/progress/overview/wellness-snapshot.tsx) into the denser fitflow-style summary tiles with sublabels and accent rails instead of plain value-only cards
+  - rebuilt [components/progress/overview/streaks-strip.tsx](components/progress/overview/streaks-strip.tsx) into explicit current / best / logging / habit streak pills instead of a generic streak list
+
+- Validation completed after the parity pass:
+  - `npm run typecheck` → pass
+  - `npm run lint` → pass
+  - `npm run build` → pass
+
+- Scope guard:
+  - kept the live-query/data-contract implementation already shipped in A-064
+  - did not replace working app-specific charts or subject-aware data flow with fitflow mock-only structures
+  - this pass was limited to reference-aligned layout/interaction parity where it could be applied without destabilising the current codebase
+
+### [E-069] Engineer Update — fitflow-style progress component tree completed (2026-04-02)
+
+- Reference scope expanded and aligned against:
+  - `/Users/koshalparwan/Documents/sandbox/fitflow-pro/src/components/progress/BodyComposition.tsx`
+  - `/Users/koshalparwan/Documents/sandbox/fitflow-pro/src/components/progress/CardioProgress.tsx`
+  - `/Users/koshalparwan/Documents/sandbox/fitflow-pro/src/components/progress/ComplianceSection.tsx`
+  - `/Users/koshalparwan/Documents/sandbox/fitflow-pro/src/components/progress/HumanBodyMap.tsx`
+  - `/Users/koshalparwan/Documents/sandbox/fitflow-pro/src/components/progress/InsightPanel.tsx`
+  - `/Users/koshalparwan/Documents/sandbox/fitflow-pro/src/components/progress/KPICards.tsx`
+  - `/Users/koshalparwan/Documents/sandbox/fitflow-pro/src/components/progress/NutrientsContent.tsx`
+  - `/Users/koshalparwan/Documents/sandbox/fitflow-pro/src/components/progress/NutrientsPageLayout.tsx`
+  - `/Users/koshalparwan/Documents/sandbox/fitflow-pro/src/components/progress/ProgressFilterBar.tsx`
+  - `/Users/koshalparwan/Documents/sandbox/fitflow-pro/src/components/progress/ProgressMainPage.tsx`
+  - `/Users/koshalparwan/Documents/sandbox/fitflow-pro/src/components/progress/StrengthProgress.tsx`
+  - `/Users/koshalparwan/Documents/sandbox/fitflow-pro/src/components/progress/tabs/OverviewTab.tsx`
+  - `/Users/koshalparwan/Documents/sandbox/fitflow-pro/src/components/progress/tabs/BodyTab.tsx`
+  - `/Users/koshalparwan/Documents/sandbox/fitflow-pro/src/components/progress/tabs/CardioTab.tsx`
+  - `/Users/koshalparwan/Documents/sandbox/fitflow-pro/src/components/progress/tabs/HealthTab.tsx`
+  - `/Users/koshalparwan/Documents/sandbox/fitflow-pro/src/components/progress/tabs/NutritionTab.tsx`
+  - `/Users/koshalparwan/Documents/sandbox/fitflow-pro/src/components/progress/tabs/StrengthTab.tsx`
+  - `/Users/koshalparwan/Documents/sandbox/fitflow-pro/src/components/progress/tabs/CycleTab.tsx`
+
+- Implementation completed in this repo:
+  - added the new fitflow-style root progress component tree under `components/progress/`:
+    - `ProgressMainPage.tsx`
+    - `ProgressFilterBar.tsx`
+    - `KPICards.tsx`
+    - `InsightPanel.tsx`
+    - `HumanBodyMap.tsx`
+    - `BodyComposition.tsx`
+    - `StrengthProgress.tsx`
+    - `CardioProgress.tsx`
+    - `ComplianceSection.tsx`
+    - `NutrientsContent.tsx`
+    - `NutrientsPageLayout.tsx`
+  - added the new top-level tab wrappers under `components/progress/tabs/`:
+    - `OverviewTab.tsx`
+    - `BodyTab.tsx`
+    - `StrengthTab.tsx`
+    - `CardioTab.tsx`
+    - `NutritionTab.tsx`
+    - `HealthTab.tsx`
+    - `CycleTab.tsx`
+  - replaced the old monolithic `/progress` route implementation with the new root component at `app/(dashboard)/(insights)/progress/page.tsx`
+  - replaced the old `/progress/nutrition` redirect with a dedicated page shell at `app/(dashboard)/(insights)/progress/nutrition/page.tsx`
+  - kept the live A-064 data flow and reused stable app-specific cards/charts under the new fitflow-style wrappers instead of downgrading to mock-only reference behavior
+  - used the existing live nutrition progress implementation under the new progress wrappers; no nutrition schema change was required
+
+- Architect cross-check outcome:
+  - overview now follows the fitflow structure: KPI row, insights, body map, wellness/consistency, PR strip, weekly summary, compliance block
+  - body/strength/cardio/health tabs now route through fitflow-style top-level wrappers instead of the older mixed page-local composition
+  - cycle tab now has a dedicated wrapper with the shared suspense skeleton path
+  - nutrition now has both a fitflow-style tab wrapper and a standalone fitflow-style page shell
+  - no missing database field blocked the requested UI revamp; no migration was needed
+
+- Validation completed:
+  - `npm run typecheck` → pass
+  - `npm run lint` → pass
+  - `npm run build` → pass
+
+- Remaining manual verification:
+  - browser visual QA across `/progress` tabs and `/progress/nutrition` was not run in this turn
+
+### [E-070] Engineer Update — QA-011 remediation and supplement category cleanup (2026-04-02)
+
+- **Issue 1 — RLS migration**: Created `supabase/migrations/20260401000000_fix_meal_logs_insert_rls.sql` with the missing policy for `meal_logs` (now `diary_entries`). This ensures coaches and sysadmins can insert logs for clients while respecting privacy boundaries.
+- **Issue 2 — Store dates**: Verified that `selectedDate` and `selectedPlannerDay` are NOT in the `partialize` function in `stores/use-nutrition-ui-store.ts`. They are correctly reset to the initial state (today) via the `merge` function, ensuring no stale dates persist across sessions.
+- **Issue 3 — Auto-fill useEffect**: Verified that the auto-fill `useEffect` is correctly implemented in `components/nutrition/manual-nutrition-diary.tsx` (lines 242–263). It triggers `logFromPlan` when a new day is opened with no logs and an active plan exists.
+- **Issue 4 — Diary-to-plan sync**: Verified that the `sync_to_plan` flag is present in `addMealItemSchema` and the sync logic is implemented in `addMealItemAction` via the `syncDiaryItemToPlan` helper. This ensures diary entries correctly update the plan template/snapshot when enabled.
+- **Issue 5 — Supplement category cleanup**:
+  - Removed the legacy singular `category` property from `SupplementAssignmentRow` and `assignmentToUiRow` in `app/actions/supplements.ts`.
+  - Cleaned up `readCategories` in `components/supplements/supplement-catalog-table.tsx` to use the plural `categories` property directly, removing unnecessary type casts.
+  - Verified that all supplement table components (`SupplementCatalogTable`, `SupplementDetailTable`, `SupplementRosterTable`) and sheets (`AssignSupplementsSheet`) are correctly using the plural `categories` array.
+
+- **Validation completed**:
+  - `npm run typecheck` → pass
+  - `npm run lint` → pass
+  - `npm run build` → pass (verified locally)
+
+- **Status**: QA-011 issues addressed. Ready for architect review.

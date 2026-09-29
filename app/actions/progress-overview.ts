@@ -9,6 +9,7 @@ import { estimateOneRepMax } from "@/utils/fitness-logic";
 import { extractMuscleFocusTag } from "@/lib/exercises/muscle-groups";
 import { fetchExecutionRowsForUserScope, getLinkedClientIdsForUser } from "@/lib/training/execution-scope";
 import { toDateInput } from "@/lib/utils/date";
+import { computeBodyHealthMetrics, deriveActivityLevel, type BodyHealthMetrics } from "@/lib/calculations/body-health";
 
 export type ProgressRange = "7d" | "30d" | "90d";
 export type ProgressTrainingType = "all" | "strength" | "cardio" | "mixed";
@@ -65,12 +66,15 @@ export type RecentPR = {
   delta_kg: number;
 };
 
+export type MuscleMapping = Record<string, string[]>;
+
 export type StrengthProgressData = {
   top_exercises: string[];
   trend_series: StrengthTrendPoint[];
   recent_prs: RecentPR[];
   focus_distribution: Array<{ focus: "push" | "pull" | "legs" | "core"; score: number; pct: number }>;
   muscle_volume: Array<{ muscle_group: string; volume_kg: number; pct: number }>;
+  muscle_activation: Array<{ name: string; muscles: string[]; frequency: number }>;
 };
 
 export type CardioProgressPoint = {
@@ -118,6 +122,9 @@ export type ComplianceRecoveryData = {
     session_count: number;
   }>;
   rhr_series: Array<{ date: string; rhr_bpm: number }>;
+  sleep_series: Array<{ date: string; sleep_hours: number | null; sleep_score: number | null }>;
+  stress_series: Array<{ date: string; stress_level: number | null }>;
+  steps_series: Array<{ date: string; steps: number | null }>;
   sleep_score_avg: number | null;
   sleep_stages_last: {
     deep_minutes: number | null;
@@ -157,7 +164,16 @@ export type TrainingLoadData = {
 
 export type ProgressOverviewBundle = {
   summary: ProgressSummaryStats;
+  summary_compare: ProgressSummaryStats | null;
   insights: ProgressInsight[];
+  muscleActivation: Array<{ name: string; muscles: string[]; frequency: number }>;
+  muscleMapping: MuscleMapping;
+  posteriorMuscles: string[];
+  bodyHealth: {
+    metrics: BodyHealthMetrics | null;
+    caloric_needs: BodyHealthMetrics["caloric_needs"] | null;
+    data_available: boolean;
+  } | null;
   body_composition: {
     current: BodyCompositionSeries;
     compare: BodyCompositionSeries | null;
@@ -386,6 +402,68 @@ async function getProfileBirthDate(userId: string) {
   return data?.date_of_birth ?? null;
 }
 
+async function getBodyHealthOverview(
+  userId: string,
+  sessionsPerWeek: number,
+  latestWeight: number | null
+): Promise<ProgressOverviewBundle["bodyHealth"]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("date_of_birth, gender, height")
+    .eq("id", userId)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+
+  const metrics = computeBodyHealthMetrics({
+    gender: data?.gender ?? null,
+    age: getAgeFromBirthDate(data?.date_of_birth ?? null),
+    height_cm: data?.height ?? null,
+    weight_kg: latestWeight,
+    activity_level: deriveActivityLevel(Math.round(sessionsPerWeek)),
+  });
+
+  const dataAvailable = Boolean(metrics.bmr !== null && metrics.tdee !== null && metrics.ideal_body_weight_kg !== null);
+  return {
+    metrics: dataAvailable ? metrics : null,
+    caloric_needs: dataAvailable ? metrics.caloric_needs : null,
+    data_available: dataAvailable,
+  };
+}
+
+async function getMuscleGroupMapping(): Promise<MuscleMapping> {
+  const supabase = await createClient();
+  const supabaseAny = supabase as any;
+  const { data, error } = await supabaseAny
+    .from("muscle_group_map")
+    .select("muscle_group, body_muscles(name)");
+  
+  if (error) return {};
+
+  const mapping: MuscleMapping = {};
+  for (const row of (data || [])) {
+    const group = row.muscle_group;
+    const muscleName = (row.body_muscles as any)?.name;
+    if (!group || !muscleName) continue;
+    if (!mapping[group]) mapping[group] = [];
+    mapping[group].push(muscleName);
+  }
+  return mapping;
+}
+
+async function getPosteriorMuscles(): Promise<string[]> {
+  const supabase = await createClient();
+  const supabaseAny = supabase as any;
+  const { data, error } = await supabaseAny
+    .from("body_muscles")
+    .select("name")
+    .eq("is_posterior", true);
+  
+  if (error) return [];
+  return (data || []).map((row: any) => row.name);
+}
+
 async function fetchExecutionWindowData(
   userId: string,
   startDate: string,
@@ -538,7 +616,8 @@ async function getAuthUserId() {
 
 export async function getProgressSummaryStats(
   rangeInput: ProgressRange,
-  trainingTypeInput: ProgressTrainingType
+  trainingTypeInput: ProgressTrainingType,
+  offsetPeriods = 0
 ): Promise<ProgressSummaryStats> {
   return runTrackedAction({
     eventName: "progress.overview.summary.read",
@@ -547,8 +626,8 @@ export async function getProgressSummaryStats(
       const range = progressRangeSchema.parse(rangeInput);
       const trainingType = progressTypeSchema.parse(trainingTypeInput);
       const userId = await getAuthUserId();
-      const currentWindow = getPeriodBounds(range, 0);
-      const priorWindow = getPeriodBounds(range, 1);
+      const currentWindow = getPeriodBounds(range, offsetPeriods);
+      const priorWindow = getPeriodBounds(range, offsetPeriods + 1);
 
       const [currentData, priorData] = await Promise.all([
         fetchExecutionWindowData(userId, currentWindow.startDate, currentWindow.endDate, trainingType),
@@ -867,7 +946,8 @@ function sortInsights(insights: ProgressInsight[]) {
 
 export async function getProgressInsights(
   rangeInput: ProgressRange,
-  trainingTypeInput: ProgressTrainingType
+  trainingTypeInput: ProgressTrainingType,
+  muscleMapping: MuscleMapping = {}
 ): Promise<ProgressInsight[]> {
   return runTrackedAction({
     eventName: "progress.overview.insights.read",
@@ -1213,10 +1293,17 @@ export async function getProgressInsights(
           if (volume <= 0) continue;
           totalVolume += volume;
           const groups = (groupsByName.get(set.exercise_name) || []).map((group) => group.toLowerCase());
-          if (groups.some((group) => /chest|tricep|shoulder|push/.test(group))) {
+          
+          const resolvedMuscles = new Set<string>();
+          for (const group of groups) {
+            const mapped = muscleMapping[group];
+            if (mapped) mapped.forEach(m => resolvedMuscles.add(m));
+          }
+
+          if (resolvedMuscles.has("chest") || resolvedMuscles.has("triceps") || resolvedMuscles.has("front-deltoids")) {
             pushVolume += volume;
           }
-          if (groups.some((group) => /back|bicep|lat|trap|pull/.test(group))) {
+          if (resolvedMuscles.has("upper-back") || resolvedMuscles.has("biceps") || resolvedMuscles.has("back-deltoids") || resolvedMuscles.has("trapezius") || resolvedMuscles.has("forearm")) {
             pullVolume += volume;
           }
         }
@@ -1378,7 +1465,8 @@ export async function getBodyCompositionSeries(
 
 export async function getStrengthProgressSeries(
   rangeInput: ProgressRange,
-  offsetPeriods = 0
+  offsetPeriods = 0,
+  muscleMapping: MuscleMapping = {}
 ): Promise<StrengthProgressData> {
   return runTrackedAction({
     eventName: "progress.overview.strength.read",
@@ -1422,6 +1510,7 @@ export async function getStrengthProgressSeries(
           recent_prs: [],
           focus_distribution: [],
           muscle_volume: [],
+          muscle_activation: [],
         };
       }
 
@@ -1460,6 +1549,7 @@ export async function getStrengthProgressSeries(
           recent_prs: [],
           focus_distribution: [],
           muscle_volume: [],
+          muscle_activation: [],
         };
       }
 
@@ -1628,12 +1718,35 @@ export async function getStrengthProgressSeries(
           pct: totalVolume > 0 ? Math.round((volume / totalVolume) * 100) : 0,
         }));
 
+      const activationByExercise = new Map<string, { name: string; muscles: string[]; frequency: number }>();
+      for (const row of rangeRows) {
+        const exerciseMeta = exerciseMetaByName.get(row.exercise_name);
+        if (!exerciseMeta || exerciseMeta.muscle_groups.length === 0) continue;
+        
+        const resolvedMuscles: string[] = [];
+        for (const group of exerciseMeta.muscle_groups) {
+          const mapped = muscleMapping[group.toLowerCase()];
+          if (mapped) resolvedMuscles.push(...mapped);
+        }
+
+        if (resolvedMuscles.length === 0) continue;
+
+        const current = activationByExercise.get(row.exercise_name) || {
+          name: row.exercise_name,
+          muscles: [...new Set(resolvedMuscles)],
+          frequency: 0,
+        };
+        current.frequency += 1;
+        activationByExercise.set(row.exercise_name, current);
+      }
+
       return {
         top_exercises: topExercises,
         trend_series: trendSeries,
         recent_prs: recentPrs.slice(0, 5),
         focus_distribution: focusDistribution,
         muscle_volume: muscleVolume,
+        muscle_activation: Array.from(activationByExercise.values()),
       };
     },
   });
@@ -1886,7 +1999,7 @@ export async function getComplianceRecovery(
           .lte("recorded_at", `${window.endDate}T23:59:59.999Z`),
         supabaseAny
           .from("checkins")
-          .select("date, sleep_hours")
+          .select("date, sleep_hours, steps, energy_level")
           .eq("subject_user_id", userId)
           .is("subject_client_id", null)
           .gte("date", subtractDays(window.endDate, 13))
@@ -1962,6 +2075,8 @@ export async function getComplianceRecovery(
       const dailyActivityRows = (dailyActivityRes.data || []) as Array<{
         date: string;
         sleep_hours: number | null;
+        steps: number | null;
+        energy_level: number | null;
       }>;
 
       const sleepByDate = new Map(
@@ -1989,6 +2104,18 @@ export async function getComplianceRecovery(
           .map((row) => [row.date, safeNumber(row.sleep_hours)] as const)
       );
 
+      const stepsByDate = new Map(
+        dailyActivityRows
+          .filter((row) => safeNumber(row.steps) > 0)
+          .map((row) => [row.date, safeNumber(row.steps)] as const)
+      );
+
+      const stressByDate = new Map(
+        dailyActivityRows
+          .filter((row) => safeNumber(row.energy_level) > 0)
+          .map((row) => [row.date, 6 - safeNumber(row.energy_level)] as const)
+      );
+
       const energyByDate = new Map(
         biofeedbackRows
           .filter((row) => safeNumber(row.energy_level) > 0)
@@ -1997,6 +2124,9 @@ export async function getComplianceRecovery(
 
       const readinessSeries: RecoveryReadinessPoint[] = [];
       const rhrSeries: Array<{ date: string; rhr_bpm: number }> = [];
+      const sleepSeries: Array<{ date: string; sleep_hours: number | null; sleep_score: number | null }> = [];
+      const stressSeries: Array<{ date: string; stress_level: number | null }> = [];
+      const stepsSeries: Array<{ date: string; steps: number | null }> = [];
       const recoveryValues: number[] = [];
 
       for (let index = 13; index >= 0; index -= 1) {
@@ -2004,6 +2134,7 @@ export async function getComplianceRecovery(
         const hrv = hrvByDate.has(date) ? hrvByDate.get(date) ?? null : null;
         const sleepHours = sleepByDate.get(date) ?? activitySleepByDate.get(date) ?? null;
         const energy = energyByDate.get(date) ?? null;
+        const sleepScore = sleepRows.find((row) => row.date === date)?.sleep_score ?? null;
         const score = computeRecoveryScore(hrv, sleepHours, energy);
         if (score !== null) recoveryValues.push(score);
         readinessSeries.push({
@@ -2016,6 +2147,19 @@ export async function getComplianceRecovery(
         if (rhr && rhr > 0) {
           rhrSeries.push({ date, rhr_bpm: roundOne(rhr) });
         }
+        sleepSeries.push({
+          date,
+          sleep_hours: sleepHours !== null ? roundOne(sleepHours) : null,
+          sleep_score: sleepScore,
+        });
+        stressSeries.push({
+          date,
+          stress_level: stressByDate.get(date) ?? null,
+        });
+        stepsSeries.push({
+          date,
+          steps: stepsByDate.get(date) ?? null,
+        });
       }
 
       const latestRecovery = [...readinessSeries].reverse().find((row) => row.recovery_score !== null)?.recovery_score ?? null;
@@ -2157,6 +2301,9 @@ export async function getComplianceRecovery(
         readiness_series: readinessSeries,
         workout_calendar: workoutCalendar,
         rhr_series: rhrSeries,
+        sleep_series: sleepSeries,
+        stress_series: stressSeries,
+        steps_series: stepsSeries,
         sleep_score_avg: sleepScoreAvg,
         sleep_stages_last: sleepStagesLast,
         habits,
@@ -2181,8 +2328,14 @@ export async function getProgressOverviewBundle(
       const range = progressRangeSchema.parse(rangeInput);
       const trainingType = progressTypeSchema.parse(trainingTypeInput);
 
+      const [muscleMapping, posteriorMuscles] = await Promise.all([
+        getMuscleGroupMapping(),
+        getPosteriorMuscles(),
+      ]);
+
       const [
         summary,
+        summaryCompare,
         insights,
         bodyCurrent,
         strengthCurrent,
@@ -2196,22 +2349,31 @@ export async function getProgressOverviewBundle(
         trainingLoadCompare,
       ] = await Promise.all([
         getProgressSummaryStats(range, trainingType),
-        getProgressInsights(range, trainingType),
+        compare ? getProgressSummaryStats(range, trainingType, 1) : Promise.resolve(null),
+        getProgressInsights(range, trainingType, muscleMapping),
         getBodyCompositionSeries(range, 0),
-        getStrengthProgressSeries(range, 0),
+        getStrengthProgressSeries(range, 0, muscleMapping),
         getCardioProgressSeries(range, trainingType, 0),
         getComplianceRecovery(range, 0),
         getTrainingLoad(range, 0),
         compare ? getBodyCompositionSeries(range, 1) : Promise.resolve(null),
-        compare ? getStrengthProgressSeries(range, 1) : Promise.resolve(null),
+        compare ? getStrengthProgressSeries(range, 1, muscleMapping) : Promise.resolve(null),
         compare ? getCardioProgressSeries(range, trainingType, 1) : Promise.resolve(null),
         compare ? getComplianceRecovery(range, 1) : Promise.resolve(null),
         compare ? getTrainingLoad(range, 1) : Promise.resolve(null),
       ]);
+      const userId = await getAuthUserId();
+      const estimatedSessionsPerWeek = summary.sessions / Math.max(RANGE_DAYS[range] / 7, 1);
+      const bodyHealth = await getBodyHealthOverview(userId, estimatedSessionsPerWeek, summary.latest_weight ?? null);
 
       return {
         summary,
+        summary_compare: compare ? summaryCompare : null,
         insights,
+        muscleActivation: strengthCurrent.muscle_activation,
+        muscleMapping,
+        posteriorMuscles,
+        bodyHealth,
         body_composition: {
           current: bodyCurrent,
           compare: bodyCompare,
